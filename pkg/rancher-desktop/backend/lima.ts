@@ -2020,8 +2020,27 @@ export default class LimaBackend extends events.EventEmitter implements VMBacken
 
       await fs.promises.writeFile(deploymentPath, yamlContent, 'utf-8');
       await this.lima('copy', deploymentPath, `${ MACHINE_NAME }:/tmp/sulla-deployments.yaml`);
-      await this.execCommand({ root: true }, 'k3s', 'kubectl', 'apply', '-f', '/tmp/sulla-deployments.yaml');
-      console.log('Sulla Desktop deployments applied successfully');
+
+      // Retry loop with backoff for kubectl apply
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          await this.execCommand({ root: true }, 'k3s', 'kubectl', 'apply', '--server-side', '--force-conflicts', '-f', '/tmp/sulla-deployments.yaml');
+          console.log(`Sulla Desktop deployments applied successfully (attempt ${ attempt })`);
+
+          // Log deployed pods and services
+          const status = await this.execCommand({ root: true, capture: true }, 'k3s', 'kubectl', 'get', 'pods,svc', '-n', 'sulla', '-o', 'wide');
+
+          console.log('Sulla pods/services:\n', status);
+
+          return;
+        } catch (err) {
+          console.warn(`Sulla deployment attempt ${ attempt } failed:`, err);
+          if (attempt === 3) {
+            throw err;
+          }
+          await new Promise(r => setTimeout(r, 5000));
+        }
+      }
     } catch (err) {
       console.error('Failed to apply Sulla deployments:', err);
     } finally {
