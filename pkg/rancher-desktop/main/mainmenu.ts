@@ -1,7 +1,8 @@
 import Electron, { Menu, MenuItem, MenuItemConstructorOptions, shell } from 'electron';
 
 import { getVersion, parseDocsVersion } from '@pkg/utils/version';
-import { openMain } from '@pkg/window';
+import { openDockerDashboard, openMain } from '@pkg/window';
+import { openDashboard } from '@pkg/window/dashboard';
 import { openPreferences } from '@pkg/window/preferences';
 
 const baseUrl = `https://docs.rancherdesktop.io`;
@@ -31,6 +32,48 @@ function getApplicationMenu(): MenuItem[] {
   default:
     throw new Error(`Unsupported platform: ${ process.platform }`);
   }
+}
+
+function getNeuralNetworkMenu(): MenuItem {
+  return new MenuItem({
+    label:   'Neural Network',
+    submenu: [
+      {
+        label: 'Docker',
+        click: openDockerDashboard,
+      },
+      {
+        label: 'Preferences…',
+        click: openPreferences,
+      },
+      { type: 'separator' },
+      {
+        id:      'k8s-state',
+        label:   'Kubernetes is starting',
+        enabled: false,
+      },
+      {
+        id:      'network-status',
+        label:   'Network status: checking',
+        enabled: false,
+      },
+      {
+        id:      'container-engine',
+        label:   'dockerd (moby)',
+        enabled: false,
+      },
+      { type: 'separator' },
+      {
+        label: 'Cluster Dashboard',
+        click: openDashboard,
+      },
+      {
+        id:      'k8s-contexts',
+        label:   'Kubernetes Contexts',
+        submenu: [],
+      },
+    ],
+  });
 }
 
 function getEditMenu(isMac: boolean): MenuItem {
@@ -112,19 +155,19 @@ function getHelpMenu(isMac: boolean): MenuItem {
     {
       label: 'File a &Bug',
       click() {
-        shell.openExternal('https://github.com/rancher-sandbox/rancher-desktop/issues');
+        shell.openExternal('https://github.com/sulla-ai/desktop/issues');
       },
     },
     {
       label: '&Project Page',
       click() {
-        shell.openExternal('https://rancherdesktop.io/');
+        shell.openExternal('https://github.com/sulla-ai/desktop');
       },
     },
     {
       label: '&Discuss',
       click() {
-        shell.openExternal('https://slack.rancher.io/');
+        shell.openExternal('https://github.com/sulla-ai/desktop/discussions');
       },
     },
   ];
@@ -154,11 +197,20 @@ function getMacApplicationMenu(): MenuItem[] {
       ],
     }),
     new MenuItem({
-      label: 'File',
-      role:  'fileMenu',
+      label:   'File',
+      submenu: [
+        {
+          label:       'Agent',
+          accelerator: 'CmdOrCtrl+Shift+A',
+          click:       openMain,
+        },
+        { type: 'separator' },
+        { role: 'close' },
+      ],
     }),
     getEditMenu(true),
     getViewMenu(),
+    getNeuralNetworkMenu(),
     new MenuItem({
       label: '&Window',
       role:  'windowMenu',
@@ -171,8 +223,13 @@ function getWindowsApplicationMenu(): MenuItem[] {
   return [
     new MenuItem({
       label:   '&File',
-      role:    'fileMenu',
       submenu: [
+        {
+          label:       '&Agent',
+          accelerator: 'CmdOrCtrl+Shift+A',
+          click:       openMain,
+        },
+        { type: 'separator' },
         ...getPreferencesMenuItem(),
         {
           role:  'quit',
@@ -182,6 +239,7 @@ function getWindowsApplicationMenu(): MenuItem[] {
     }),
     getEditMenu(false),
     getViewMenu(),
+    getNeuralNetworkMenu(),
     getHelpMenu(false),
   ];
 }
@@ -193,12 +251,12 @@ function getWindowsApplicationMenu(): MenuItem[] {
 function getPreferencesMenuItem(): MenuItemConstructorOptions[] {
   return [
     {
-      label:               'Cluster Dashboard…',
-      id:                  'cluster-dashboard',
+      label:               'Docker…',
+      id:                  'docker-dashboard',
       visible:             true,
       registerAccelerator: true,
       accelerator:         'CmdOrCtrl+,',
-      click:               openMain,
+      click:               openDockerDashboard,
     },
     {
       label:               'Preferences…',

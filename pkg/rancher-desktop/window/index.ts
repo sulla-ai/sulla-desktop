@@ -8,7 +8,6 @@ import Electron, {
 import * as K8s from '@pkg/backend/k8s';
 import { getSettings } from '@pkg/config/settingsImpl';
 import { IpcRendererEvents } from '@pkg/typings/electron-ipc';
-import { isDevBuild } from '@pkg/utils/environment';
 import Logging from '@pkg/utils/logging';
 import paths from '@pkg/utils/paths';
 import { CommandOrControl, Shortcuts } from '@pkg/utils/shortcuts';
@@ -23,7 +22,7 @@ const console = Logging[`window_${ process.type || 'unknown' }`];
  */
 export const windowMapping: Record<string, number> = {};
 
-export const webRoot = `app://${ isDevBuild ? '' : '.' }`;
+export const webRoot = 'app://.';
 
 /**
  * Restore or focus a window if it is already open
@@ -63,11 +62,15 @@ function isInternalURL(url: string) {
  * @param options A hash of options used by `new BrowserWindow(options)`
  */
 export function createWindow(name: string, url: string, options: Electron.BrowserWindowConstructorOptions) {
+  console.log('[createWindow] Called with name:', name, 'url:', url);
   let window = getWindow(name);
 
   if (restoreWindow(window)) {
+    console.log('[createWindow] Restoring existing window:', name, '- NOT loading new URL');
+
     return window;
   }
+  console.log('[createWindow] Creating NEW window:', name, 'url:', url);
 
   window = new BrowserWindow(options);
   window.webContents.on('console-message', (event) => {
@@ -102,24 +105,28 @@ export function createWindow(name: string, url: string, options: Electron.Browse
   return window;
 }
 
-const mainUrl = process.env.RD_ENV_PLUGINS_DEV ? 'https://localhost:8888' : `${ webRoot }/index.html`;
+const mainUrl = `${ webRoot }/agent.html`;
+const dockerDashboardUrl = `${ webRoot }/index.html`;
+
+console.log('[window/index] URLs configured:', { webRoot, mainUrl, dockerDashboardUrl });
 
 /**
- * Open the main window; if it is already open, focus it.
+ * Open the main window (Agent); if it is already open, focus it.
  */
 export function openMain() {
-  console.debug('openMain() webRoot:', webRoot);
+  console.log('[openMain] Called. mainUrl:', mainUrl, 'webRoot:', webRoot);
 
   const { width, height } = screen.getPrimaryDisplay().workAreaSize;
 
   const defaultWidth = Math.min(Math.trunc(width * 0.8), 1280);
   const defaultHeight = Math.min(Math.trunc(height * 0.8), 720);
 
+  console.log('[openMain] Creating window with name: main-agent, url:', mainUrl);
   const window = createWindow(
-    'main',
+    'main-agent',
     mainUrl,
     {
-      title:          'Cluster Dashboard',
+      title:          'Sulla Agent',
       width:          defaultWidth,
       height:         defaultHeight,
       resizable:      !process.env.RD_MOCK_FOR_SCREENSHOTS, // remove window's shadows while taking screenshots
@@ -187,6 +194,39 @@ export function openMain() {
   });
 
   app.dock?.show();
+}
+
+/**
+ * Open the Docker Dashboard window; if it is already open, focus it.
+ */
+export function openDockerDashboard() {
+  console.log('[openDockerDashboard] Called. dockerDashboardUrl:', dockerDashboardUrl, 'webRoot:', webRoot);
+
+  const { width, height } = screen.getPrimaryDisplay().workAreaSize;
+
+  const defaultWidth = Math.min(Math.trunc(width * 0.8), 1280);
+  const defaultHeight = Math.min(Math.trunc(height * 0.8), 720);
+
+  console.log('[openDockerDashboard] Creating window with name: docker-dashboard, url:', dockerDashboardUrl);
+  const window = createWindow(
+    'docker-dashboard',
+    dockerDashboardUrl,
+    {
+      title:          'Sulla Desktop - Docker',
+      width:          defaultWidth,
+      height:         defaultHeight,
+      resizable:      true,
+      icon:           path.join(paths.resources, 'icons', 'logo-square-512.png'),
+      webPreferences: {
+        devTools:         !app.isPackaged,
+        nodeIntegration:  true,
+        contextIsolation: false,
+      },
+    });
+
+  app.dock?.show();
+
+  return window;
 }
 
 let view: WebContentsView | undefined;

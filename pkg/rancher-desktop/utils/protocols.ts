@@ -4,7 +4,6 @@ import { URL, pathToFileURL } from 'url';
 import Electron from 'electron';
 
 import mainEvents from '@pkg/main/mainEvents';
-import { isDevBuild } from '@pkg/utils/environment';
 import Latch from '@pkg/utils/latch';
 import Logging from '@pkg/utils/logging';
 import paths from '@pkg/utils/paths';
@@ -14,19 +13,14 @@ const console = Logging['protocol-handler'];
 /**
  * Create a URL that consists of a base combined with the provided path
  * @param relPath The destination path for the requested resource
- * @returns A URL that consists of the combined base (http://localhost:8888)
- * and provided path
+ * @returns A file path or URL for the requested resource
  */
 function redirectedUrl(relPath: string) {
-  if (isDevBuild) {
-    return `http://localhost:8888${ relPath }`;
-  }
   if (Electron.app.isPackaged) {
     return path.join(Electron.app.getAppPath(), 'dist', 'app', relPath);
   }
 
-  // Unpackaged non-dev build; this normally means E2E tests, where
-  // `app.getAppPath()` is `.../dist/app.
+  // Dev build or E2E tests - serve from dist/app
   return path.join(process.cwd(), 'dist', 'app', relPath);
 }
 
@@ -46,13 +40,11 @@ function setupAppProtocolHandler() {
     'app',
     (request) => {
       const relPath = new URL(request.url).pathname;
-      const redirectUrl = redirectedUrl(relPath);
+      const filePath = redirectedUrl(relPath);
 
-      if (isDevBuild) {
-        return Electron.net.fetch(redirectUrl);
-      }
+      console.log('[app:// protocol] request.url:', request.url, '-> relPath:', relPath, '-> filePath:', filePath);
 
-      return Electron.net.fetch(pathToFileURL(redirectUrl).toString());
+      return Electron.net.fetch(pathToFileURL(filePath).toString());
     });
 }
 

@@ -85,5 +85,10 @@ export default {
       entry:    path.join(import.meta.dirname, 'entry', 'index.ts'),
       template: path.join(import.meta.dirname, 'public', 'index.html'),
     },
+    agent: {
+      entry:    path.join(import.meta.dirname, 'entry', 'agent.ts'),
+      template: path.join(import.meta.dirname, 'public', 'agent.html'),
+      filename: 'agent.html',
+    },
   },
 };

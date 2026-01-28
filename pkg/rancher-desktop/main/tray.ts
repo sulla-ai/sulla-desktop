@@ -42,54 +42,12 @@ export class Tray {
 
   protected contextMenuItems: Electron.MenuItemConstructorOptions[] = [
     {
-      id:      'state',
-      enabled: false,
-      label:   'Kubernetes is starting',
-      type:    'normal',
-      icon:    path.join(paths.resources, 'icons', 'kubernetes-icon-black.png'),
-    },
-    {
-      id:      'network-status',
-      enabled: false,
-      label:   `Network status: ${ this.currentNetworkStatus }`,
-      type:    'normal',
-      icon:    '',
-    },
-    {
-      id:      'container-engine',
-      enabled: false,
-      label:   '?',
-      type:    'normal',
-      icon:    '',
-    },
-    { type: 'separator' },
-    {
       id:    'main',
-      label: 'Open main window',
+      label: 'Open agent window',
       type:  'normal',
       click() {
         openMain();
       },
-    },
-    {
-      id:    'preferences',
-      label: 'Open preferences dialog',
-      type:  'normal',
-      click: openPreferences,
-    },
-    {
-      id:      'dashboard',
-      enabled: false,
-      label:   'Open cluster dashboard',
-      type:    'normal',
-      click:   openDashboard,
-    },
-    { type: 'separator' },
-    {
-      id:      'contexts',
-      label:   'Kubernetes Contexts',
-      type:    'submenu',
-      submenu: [],
     },
     { type: 'separator' },
     {
