@@ -45,3 +45,8 @@ stop:
 
 # Restart the development server
 restart: stop start
+
+pods:
+    LIMA_HOME=~/Library/Application\ Support/rancher-desktop/lima \
+    resources/darwin/lima/bin/limactl shell 0 -- \
+    sudo k3s kubectl get pods -n sulla

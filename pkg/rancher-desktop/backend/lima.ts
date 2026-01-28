@@ -46,6 +46,7 @@ import LOGROTATE_LIMA_GUESTAGENT_SCRIPT from '@pkg/assets/scripts/logrotate-lima
 import LOGROTATE_OPENRESTY_SCRIPT from '@pkg/assets/scripts/logrotate-openresty';
 import NERDCTL from '@pkg/assets/scripts/nerdctl';
 import NGINX_CONF from '@pkg/assets/scripts/nginx.conf';
+import SULLA_DEPLOYMENTS from '@pkg/assets/sulla-deployments.yaml';
 import { ContainerEngine, MountType, VMType } from '@pkg/config/settings';
 import { getServerCredentialsPath, ServerState } from '@pkg/main/credentialServer/httpCredentialHelperServer';
 import mainEvents from '@pkg/main/mainEvents';
@@ -1977,6 +1978,11 @@ export default class LimaBackend extends events.EventEmitter implements VMBacken
 
         await Promise.all(actions);
 
+        // Apply Sulla Desktop default Kubernetes deployments
+        if (config.kubernetes.enabled) {
+          await this.progressTracker.action('Deploying Sulla services', 50, this.applySullaDeployments());
+        }
+
         await this.setState(config.kubernetes.enabled ? State.STARTED : State.DISABLED);
       } catch (err) {
         console.error('Error starting lima:', err);
@@ -1997,6 +2003,30 @@ export default class LimaBackend extends events.EventEmitter implements VMBacken
     await this.progressTracker.action(`Starting ${ serviceName }`, 50, async() => {
       await this.execCommand({ root: true }, '/sbin/rc-service', '--ifnotstarted', serviceName, 'start');
     });
+  }
+
+  /**
+   * Apply Sulla Desktop default Kubernetes deployments.
+   * This runs after K8s is ready and deploys the sulla namespace and test services.
+   */
+  protected async applySullaDeployments(): Promise<void> {
+    const workdir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'sulla-deploy-'));
+
+    try {
+      const deploymentPath = path.join(workdir, 'sulla-deployments.yaml');
+
+      // SULLA_DEPLOYMENTS is parsed as JS objects by webpack, convert back to YAML
+      const yamlContent = (SULLA_DEPLOYMENTS as unknown[]).map(doc => yaml.stringify(doc)).join('---\n');
+
+      await fs.promises.writeFile(deploymentPath, yamlContent, 'utf-8');
+      await this.lima('copy', deploymentPath, `${ MACHINE_NAME }:/tmp/sulla-deployments.yaml`);
+      await this.execCommand({ root: true }, 'k3s', 'kubectl', 'apply', '-f', '/tmp/sulla-deployments.yaml');
+      console.log('Sulla Desktop deployments applied successfully');
+    } catch (err) {
+      console.error('Failed to apply Sulla deployments:', err);
+    } finally {
+      await fs.promises.rm(workdir, { recursive: true, force: true });
+    }
   }
 
   protected async installCACerts(): Promise<void> {
