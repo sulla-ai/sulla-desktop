@@ -1952,10 +1952,11 @@ export default class LimaBackend extends events.EventEmitter implements VMBacken
         switch (config.containerEngine.name) {
         case ContainerEngine.MOBY:
           this.#containerEngineClient = new MobyClient(this, `unix://${ path.join(paths.altAppHome, 'docker.sock') }`);
-          await this.progressTracker.action('Setting docker context', 50,
-            dockerDirManager.ensureDockerContextConfigured(
-              this.#adminAccess,
-              path.join(paths.altAppHome, 'docker.sock')));
+          // Disabled: Sulla Desktop runs in parallel without modifying user's docker context
+          // await this.progressTracker.action('Setting docker context', 50,
+          //   dockerDirManager.ensureDockerContextConfigured(
+          //     this.#adminAccess,
+          //     path.join(paths.altAppHome, 'docker.sock')));
           break;
         case ContainerEngine.CONTAINERD:
           await this.execCommand({ root: true }, '/sbin/rc-service', '--ifnotstarted', 'buildkitd', 'start');

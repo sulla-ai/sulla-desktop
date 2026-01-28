@@ -8,9 +8,8 @@ const dockerContextChecker: DiagnosticsChecker = {
   id:       'DOCKER_CONTEXT',
   category: DiagnosticsCategory.ContainerEngine,
   async applicable(): Promise<boolean> {
-    const settings = await mainEvents.invoke('settings-fetch');
-
-    return settings.containerEngine.name === ContainerEngine.MOBY;
+    // Disabled: Sulla Desktop runs in parallel without modifying user's docker context
+    return false;
   },
   async check(): Promise<DiagnosticsCheckerSingleResult[]> {
     const results: DiagnosticsCheckerSingleResult[] = [];

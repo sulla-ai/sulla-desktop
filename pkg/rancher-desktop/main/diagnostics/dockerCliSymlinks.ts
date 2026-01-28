@@ -30,7 +30,8 @@ export class CheckerDockerCLISymlink implements DiagnosticsChecker {
 
   readonly category = DiagnosticsCategory.Utilities;
   applicable() {
-    return Promise.resolve(['darwin', 'linux'].includes(os.platform()));
+    // Disabled: Sulla Desktop runs in parallel without modifying user's docker context
+    return Promise.resolve(false);
   }
 
   trigger?: ((checker: DiagnosticsChecker) => void) | undefined;
