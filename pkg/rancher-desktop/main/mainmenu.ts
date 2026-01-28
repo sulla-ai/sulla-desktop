@@ -1,6 +1,7 @@
 import Electron, { Menu, MenuItem, MenuItemConstructorOptions, shell } from 'electron';
 
 import { getVersion, parseDocsVersion } from '@pkg/utils/version';
+import { openMain } from '@pkg/window';
 import { openPreferences } from '@pkg/window/preferences';
 
 const baseUrl = `https://docs.rancherdesktop.io`;
@@ -192,10 +193,19 @@ function getWindowsApplicationMenu(): MenuItem[] {
 function getPreferencesMenuItem(): MenuItemConstructorOptions[] {
   return [
     {
-      label:               'Preferences',
+      label:               'Cluster Dashboard…',
+      id:                  'cluster-dashboard',
       visible:             true,
-      registerAccelerator: false,
+      registerAccelerator: true,
       accelerator:         'CmdOrCtrl+,',
+      click:               openMain,
+    },
+    {
+      label:               'Preferences…',
+      id:                  'preferences',
+      visible:             true,
+      registerAccelerator: true,
+      accelerator:         'CmdOrCtrl+Shift+,',
       click:               openPreferences,
     },
     { type: 'separator' },

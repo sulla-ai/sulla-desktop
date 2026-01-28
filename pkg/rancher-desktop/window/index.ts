@@ -119,7 +119,7 @@ export function openMain() {
     'main',
     mainUrl,
     {
-      title:          'Sulla Desktop',
+      title:          'Cluster Dashboard',
       width:          defaultWidth,
       height:         defaultHeight,
       resizable:      !process.env.RD_MOCK_FOR_SCREENSHOTS, // remove window's shadows while taking screenshots
