@@ -17,7 +17,7 @@ let isDirty = false;
  */
 export function openPreferences() {
   const window = createWindow('preferences', `${ webRoot }/index.html#preferences`, {
-    title:           'Rancher Desktop - Preferences',
+    title:           'Sulla Desktop - Preferences',
     width:           768,
     height:          512,
     autoHideMenuBar: true,
@@ -108,7 +108,7 @@ export function openPreferences() {
     const result = dialog.showMessageBoxSync(
       window,
       {
-        title:    'Rancher Desktop - Close Preferences',
+        title:    'Sulla Desktop - Close Preferences',
         type:     'warning',
         message:  'Close preferences without applying?',
         detail:   'There are preferences with changes that have not been applied. All unsaved preferences will be lost.',
