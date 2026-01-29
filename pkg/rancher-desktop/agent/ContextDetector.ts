@@ -4,7 +4,7 @@
 
 import type { SensoryInput, ThreadContext } from './types';
 import { getMemoryPedia } from './services/MemoryPedia';
-import { getOllamaModel, getOllamaBase } from './services/ConfigService';
+import { getOllamaService } from './services/OllamaService';
 
 // Minimum similarity score to consider a thread match (0-1, lower = more similar in Chroma)
 const SIMILARITY_THRESHOLD = 0.7;
@@ -185,21 +185,14 @@ export class ContextDetector {
    */
   private async generateSummary(text: string): Promise<string> {
     try {
-      const res = await fetch(`${ getOllamaBase() }/api/generate`, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({
-          model:  getOllamaModel(),
-          prompt: `Summarize this in 5 words or less: "${ text.substring(0, 200) }"`,
-          stream: false,
-        }),
-        signal: AbortSignal.timeout(5000),
-      });
+      const ollama = getOllamaService();
+      const response = await ollama.generate(
+        `Summarize this in 5 words or less: "${ text.substring(0, 200) }"`,
+        { timeout: 5000 },
+      );
 
-      if (res.ok) {
-        const data = await res.json();
-
-        return data.response?.trim() || text.substring(0, 50);
+      if (response) {
+        return response.trim() || text.substring(0, 50);
       }
     } catch {
       // Fall back to simple truncation

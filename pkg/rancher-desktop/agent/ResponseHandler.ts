@@ -3,7 +3,7 @@
 // Includes critique step for coherence refinement
 
 import type { AgentResponse } from './types';
-import { getOllamaModel, getOllamaBase } from './services/ConfigService';
+import { getOllamaService } from './services/OllamaService';
 
 export class ResponseHandler {
   /**
@@ -32,28 +32,18 @@ export class ResponseHandler {
     }
 
     try {
-      const res = await fetch(`${ getOllamaBase() }/api/generate`, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({
-          model:  getOllamaModel(),
-          prompt: `Refine this response for clarity and coherence. Keep it concise. Only output the refined response, nothing else:\n\n${ response.content }`,
-          stream: false,
-        }),
-        signal: AbortSignal.timeout(10000),
-      });
+      const ollama = getOllamaService();
+      const refined = await ollama.generate(
+        `Refine this response for clarity and coherence. Keep it concise. Only output the refined response, nothing else:\n\n${ response.content }`,
+        { timeout: 10000 },
+      );
 
-      if (res.ok) {
-        const data = await res.json();
-        const refined = data.response?.trim();
-
-        if (refined && refined.length > 0) {
-          return {
-            ...response,
-            content: refined,
-            refined: true,
-          };
-        }
+      if (refined && refined.length > 0) {
+        return {
+          ...response,
+          content: refined,
+          refined: true,
+        };
       }
     } catch {
       // Refinement failed, return original
