@@ -9,50 +9,6 @@ metadata:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: sulla-test
-  namespace: sulla
-  labels:
-    app: sulla-test
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: sulla-test
-  template:
-    metadata:
-      labels:
-        app: sulla-test
-    spec:
-      containers:
-      - name: nginx
-        image: nginx:alpine
-        ports:
-        - containerPort: 80
-        resources:
-          limits:
-            memory: "64Mi"
-            cpu: "100m"
-          requests:
-            memory: "32Mi"
-            cpu: "50m"
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: sulla-test
-  namespace: sulla
-spec:
-  selector:
-    app: sulla-test
-  ports:
-  - port: 80
-    targetPort: 80
-    nodePort: 30080
-  type: NodePort
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
   name: whisper-stt
   namespace: sulla
   labels:
