@@ -260,6 +260,7 @@ spec:
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 5432
+          hostPort: 30116
         env:
         - name: POSTGRES_USER
           value: "sulla"
@@ -323,6 +324,7 @@ spec:
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 6379
+          hostPort: 30117
         args:
         - "--appendonly"
         - !!str yes

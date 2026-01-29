@@ -79,12 +79,15 @@ stop:
     sleep 1
     echo "Sulla Desktop stopped."
 
-# Restart the development server (use --hard to rebuild)
+# Restart the development server (use --hard to wipe VM and images)
 restart hard="":
     #!/usr/bin/env bash
     just stop
     if [ "{{hard}}" = "--hard" ] || [ "{{hard}}" = "hard" ]; then
-        echo "Hard restart: rebuilding..."
+        echo "Hard restart: full rebuild (wiping VM and images)..."
+        just rebuild-hard
+    else
+        echo "Rebuilding (preserving VM and images)..."
         just rebuild
     fi
     just start
