@@ -259,6 +259,11 @@ export function openLanguageModelSettings() {
       },
     });
 
+  // Clean up window mapping when closed so it can be reopened
+  window.on('closed', () => {
+    delete windowMapping['language-model-settings'];
+  });
+
   app.dock?.show();
 
   return window;

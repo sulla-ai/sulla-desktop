@@ -798,12 +798,26 @@ export default defineComponent({
   padding: 0.75rem 1.5rem;
   background: transparent;
   border: none;
+  border-top: none;
+  border-left: none;
+  border-right: none;
   border-bottom: 2px solid transparent;
   margin-bottom: -2px;
   cursor: pointer;
   font-size: 0.95rem;
   color: var(--muted);
   transition: all 0.2s;
+  outline: none;
+
+  &:focus {
+    outline: none;
+    box-shadow: none;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--primary, #3b82f6);
+    outline-offset: -2px;
+  }
 
   &:hover {
     color: var(--body-text);
@@ -825,9 +839,18 @@ export default defineComponent({
   min-width: 200px;
 
   &.is-active {
-    background: var(--success, #22c55e);
-    border-color: var(--success, #22c55e);
+    background: var(--success, #22c55e) !important;
+    border-color: var(--success, #22c55e) !important;
+    color: white !important;
+    opacity: 1 !important;
     cursor: default;
+  }
+
+  &.is-active:disabled {
+    background: var(--success, #22c55e) !important;
+    border-color: var(--success, #22c55e) !important;
+    color: white !important;
+    opacity: 1 !important;
   }
 }
 
