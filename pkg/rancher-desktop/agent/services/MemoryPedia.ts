@@ -400,7 +400,7 @@ If nothing notable to extract, respond: { "entities": [], "topics": [] }`;
    * Store a conversation summary in Chroma
    */
   private async storeSummary(summary: ConversationSummary): Promise<void> {
-    const success = await this.chroma.add(
+    const success = await this.chroma.upsert(
       COLLECTIONS.SUMMARIES,
       [summary.threadId],
       [summary.summary],
@@ -473,7 +473,7 @@ If nothing notable to extract, respond: { "entities": [], "topics": [] }`;
   }
 
   private async createPage(page: MemoryPage): Promise<void> {
-    const success = await this.chroma.add(
+    const success = await this.chroma.upsert(
       COLLECTIONS.PAGES,
       [page.pageId],
       [page.content],
