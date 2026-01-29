@@ -115,9 +115,22 @@ redis:
     resources/darwin/lima/bin/limactl shell 0 -- \
     sudo k3s kubectl port-forward -n sulla svc/redis 6379:6379 --address=0.0.0.0
 
-# Query PostgreSQL conversations table
+# Query PostgreSQL conversations table (summary)
 pg-conversations:
     LIMA_HOME=~/Library/Application\ Support/rancher-desktop/lima \
     resources/darwin/lima/bin/limactl shell 0 -- \
     sudo k3s kubectl exec -n sulla deploy/postgres -- \
     psql -U sulla -c "SELECT thread_id, jsonb_array_length(messages) as msg_count, updated_at FROM conversations ORDER BY updated_at DESC LIMIT 10;"
+
+# Query PostgreSQL conversations with full messages
+pg-messages thread_id="":
+    #!/usr/bin/env bash
+    if [ -z "{{thread_id}}" ]; then
+        echo "Usage: just pg-messages <thread_id>"
+        echo "Get thread IDs with: just pg-conversations"
+        exit 1
+    fi
+    LIMA_HOME=~/Library/Application\ Support/rancher-desktop/lima \
+    resources/darwin/lima/bin/limactl shell 0 -- \
+    sudo k3s kubectl exec -n sulla deploy/postgres -- \
+    psql -U sulla -c "SELECT jsonb_pretty(messages) FROM conversations WHERE thread_id = '{{thread_id}}';"

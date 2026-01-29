@@ -71,6 +71,15 @@ export class PersistenceService {
 
       await client.connect();
 
+      // Check if table exists first
+      const tableCheck = await client.query(`
+        SELECT EXISTS (
+          SELECT FROM information_schema.tables 
+          WHERE table_schema = 'public' AND table_name = 'conversations'
+        )
+      `);
+      const tableExists = tableCheck.rows[0].exists;
+
       await client.query(`
         CREATE TABLE IF NOT EXISTS conversations (
           id SERIAL PRIMARY KEY,
@@ -80,6 +89,10 @@ export class PersistenceService {
           updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
       `);
+
+      if (!tableExists) {
+        console.log('[Persistence:PG] Created conversations table');
+      }
 
       await client.query(`
         INSERT INTO conversations (thread_id, messages, updated_at)
@@ -104,6 +117,21 @@ export class PersistenceService {
       const client = new pg.Client({ connectionString: POSTGRES_URL });
 
       await client.connect();
+
+      // Check if table exists first
+      const tableCheck = await client.query(`
+        SELECT EXISTS (
+          SELECT FROM information_schema.tables 
+          WHERE table_schema = 'public' AND table_name = 'conversations'
+        )
+      `);
+
+      if (!tableCheck.rows[0].exists) {
+        await client.end();
+        console.log('[Persistence:PG] Conversations table not yet created');
+
+        return null;
+      }
 
       const result = await client.query(
         'SELECT messages FROM conversations WHERE thread_id = $1',
