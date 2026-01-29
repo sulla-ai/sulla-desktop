@@ -96,7 +96,27 @@ class RemoteModelServiceClass implements ILLMService {
   }
 
   /**
+   * Check if an error is network-related
+   */
+  private isNetworkError(err: unknown): boolean {
+    if (err instanceof TypeError && err.message === 'Failed to fetch') {
+      return true;
+    }
+    if (err instanceof Error) {
+      const msg = err.message.toLowerCase();
+
+      return msg.includes('network') ||
+             msg.includes('internet') ||
+             msg.includes('disconnected') ||
+             msg.includes('failed to fetch');
+    }
+
+    return false;
+  }
+
+  /**
    * Chat completion - main method
+   * Falls back to local Ollama on network errors
    */
   async chat(messages: ChatMessage[], options: ChatOptions = {}): Promise<string | null> {
     if (!this.config || !this.config.apiKey) {
@@ -126,6 +146,22 @@ class RemoteModelServiceClass implements ILLMService {
       }
     } catch (err) {
       console.error('[RemoteModelService] Chat failed:', err);
+
+      // Fallback to local Ollama on network errors
+      if (this.isNetworkError(err)) {
+        console.warn('[RemoteModelService] Network error, falling back to local Ollama');
+        try {
+          const { getOllamaService } = await import('./OllamaService');
+          const ollama = getOllamaService();
+
+          await ollama.initialize();
+          if (ollama.isAvailable()) {
+            return await ollama.chat(messages, options);
+          }
+        } catch (fallbackErr) {
+          console.error('[RemoteModelService] Fallback to Ollama also failed:', fallbackErr);
+        }
+      }
 
       return null;
     }
