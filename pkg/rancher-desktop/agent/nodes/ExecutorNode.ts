@@ -44,8 +44,8 @@ export class ExecutorNode extends BaseNode {
       return null;
     }
 
-    // Build instruction with user query
-    let instruction = `User: ${ lastUserMessage.content }`;
+    // Build instruction - don't include user message here since it's in shortTermMemory
+    let instruction = 'Respond to the user\'s latest message based on the conversation above.';
 
     // Add tool results if any
     if (state.metadata.toolResults) {
@@ -61,11 +61,22 @@ export class ExecutorNode extends BaseNode {
       instruction = `${ instruction }\n\n${ state.metadata.promptSuffix }`;
     }
 
-    // Use BaseNode's buildContextualPrompt and prompt helpers
+    // Add plan guidance if available
+    const plan = state.metadata.plan as { fullPlan?: { responseGuidance?: { tone?: string; format?: string } } } | undefined;
+
+    if (plan?.fullPlan?.responseGuidance) {
+      const guidance = plan.fullPlan.responseGuidance;
+
+      instruction += `\n\nResponse guidance: Use a ${guidance.tone || 'friendly'} tone and ${guidance.format || 'conversational'} format.`;
+    }
+
+    // Use BaseNode's buildContextualPrompt - history already includes the user message
     const fullPrompt = this.buildContextualPrompt(instruction, state, {
       includeMemory:  true,
       includeHistory: true,
     });
+
+    console.log(`[Agent:Executor] Full prompt length: ${fullPrompt.length} chars`);
 
     return this.prompt(fullPrompt);
   }
