@@ -33,8 +33,9 @@ export abstract class BaseNode implements GraphNode {
   abstract execute(state: ThreadState): Promise<{ state: ThreadState; next: NodeResult }>;
 
   async initialize(): Promise<void> {
-    // Detect available model on init
+    console.log(`[Agent:${this.name}] Initializing...`);
     await this.detectModel();
+    console.log(`[Agent:${this.name}] Model: ${this.availableModel || 'none'}`);
   }
 
   async destroy(): Promise<void> {
@@ -75,9 +76,13 @@ export abstract class BaseNode implements GraphNode {
     if (!model) {
       await this.detectModel();
       if (!this.availableModel) {
+        console.warn(`[Agent:${this.name}] No model available for prompt`);
+
         return null;
       }
     }
+
+    console.log(`[Agent:${this.name}] Sending prompt (${prompt.length} chars) to ${model || this.availableModel}`);
 
     try {
       const body: Record<string, unknown> = {
@@ -111,13 +116,19 @@ export abstract class BaseNode implements GraphNode {
 
       const data = await res.json();
 
-      return {
+      const result = {
         content:      data.response || '',
         model:        data.model || model || this.availableModel || '',
         evalCount:    data.eval_count,
         evalDuration: data.eval_duration,
       };
-    } catch {
+
+      console.log(`[Agent:${this.name}] Response received (${result.content.length} chars, ${result.evalCount || 0} tokens)`);
+
+      return result;
+    } catch (err) {
+      console.error(`[Agent:${this.name}] Prompt failed:`, err);
+
       return null;
     }
   }

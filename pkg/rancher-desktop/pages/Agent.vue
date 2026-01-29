@@ -223,14 +223,8 @@ onMounted(async () => {
     // Progress not available yet
   }
 
-  // Check if already fully ready
-  const hasModel = await checkOllamaModel();
-
-  if (hasModel) {
-    systemReady.value = true;
-  } else {
-    startReadinessCheck();
-  }
+  // Always start readiness check - it will verify K8s is done AND Ollama is ready
+  startReadinessCheck();
 });
 
 onUnmounted(() => {

@@ -113,9 +113,9 @@ export class ConversationThread {
    * Flow: Memory → Planner → Executor → Critic → (loop or END)
    */
   async process(input: SensoryInput): Promise<AgentResponse> {
+    console.log(`[Agent:Thread:${this.threadId}] Processing input: "${input.data.substring(0, 50)}..."`);
     this.emit({ type: 'progress', threadId: this.threadId, data: { phase: 'start' } });
 
-    // Record user message
     const userMessage: Message = {
       id:        generateMessageId(),
       role:      'user',
@@ -125,18 +125,18 @@ export class ConversationThread {
     };
 
     this.addMessage(userMessage);
-
-    // Update state timestamp
     this.state.updatedAt = Date.now();
 
-    // Execute the graph workflow
+    console.log(`[Agent:Thread:${this.threadId}] Starting graph execution...`);
     this.emit({ type: 'progress', threadId: this.threadId, data: { phase: 'graph_execution' } });
 
     try {
       this.state = await this.graph.execute(this.state);
+      console.log(`[Agent:Thread:${this.threadId}] Graph execution complete`);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
 
+      console.error(`[Agent:Thread:${this.threadId}] Graph execution failed:`, message);
       this.state.metadata.error = `Graph execution failed: ${ message }`;
     }
 

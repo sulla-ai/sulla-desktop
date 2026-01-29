@@ -36,15 +36,47 @@ start:
 logs:
     tail -f /tmp/sulla-desktop.log
 
-# Stop the development server
+# Stop the development server gracefully
 stop:
-    @echo "Stopping Sulla Desktop..."
-    -pkill -f "yarn dev" 2>/dev/null || true
-    -pkill -f "electron" 2>/dev/null || true
-    @echo "Sulla Desktop stopped."
+    #!/usr/bin/env bash
+    echo "Checking for running Sulla Desktop..."
+    PIDS=$(pgrep -f "sulla.*Electron|Electron.*sulla" 2>/dev/null || true)
+    if [ -z "$PIDS" ]; then
+        echo "Sulla Desktop is not running."
+        exit 0
+    fi
+    echo "Found Sulla processes: $PIDS"
+    
+    # Send SIGTERM for graceful shutdown
+    echo "Requesting graceful shutdown (SIGTERM)..."
+    pkill -TERM -f "sulla.*Electron|Electron.*sulla" 2>/dev/null || true
+    
+    # Wait for graceful shutdown (up to 15 seconds)
+    for i in {1..15}; do
+        REMAINING=$(pgrep -f "sulla.*Electron|Electron.*sulla" 2>/dev/null || true)
+        if [ -z "$REMAINING" ]; then
+            echo "Sulla Desktop stopped gracefully."
+            exit 0
+        fi
+        echo "Waiting for shutdown... ($i/15)"
+        sleep 1
+    done
+    
+    # Force kill if graceful shutdown failed
+    echo "Graceful shutdown timed out, force killing..."
+    pkill -9 -f "sulla.*Electron|Electron.*sulla" 2>/dev/null || true
+    sleep 1
+    echo "Sulla Desktop stopped."
 
-# Restart the development server
-restart: stop start
+# Restart the development server (use --hard to rebuild)
+restart hard="":
+    #!/usr/bin/env bash
+    just stop
+    if [ "{{hard}}" = "--hard" ] || [ "{{hard}}" = "hard" ]; then
+        echo "Hard restart: rebuilding..."
+        just rebuild
+    fi
+    just start
 
 pods:
     LIMA_HOME=~/Library/Application\ Support/rancher-desktop/lima \

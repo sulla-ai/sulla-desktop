@@ -46,35 +46,34 @@ A modular, multi-agent reasoning system with conscious/subconscious processing l
 │  └─────────────────────────────────────────────────────────────────────┘    │
 │                                    │                                         │
 │  ┌─────────────────────────────────────────────────────────────────────┐    │
-│  │                    PLUGIN PIPELINE                                  │    │
+│  │                    GRAPH NODE PIPELINE                              │    │
 │  │                                                                     │    │
 │  │  ┌───────────────────────────────────────────────────────────────┐  │    │
-│  │  │ PHASE 1: beforeProcess()                                      │  │    │
-│  │  │ - Modify prompt (DateTimePlugin adds instructions)            │  │    │
-│  │  │ - Retrieve context from memory                                │  │    │
+│  │  │ NODE 1: MemoryNode                                            │  │    │
+│  │  │ - Uses LLM to plan search query and collection                │  │    │
+│  │  │ - Queries Chroma for relevant context                         │  │    │
 │  │  └───────────────────────────────────────────────────────────────┘  │    │
 │  │                              │                                      │    │
 │  │                              ▼                                      │    │
 │  │  ┌───────────────────────────────────────────────────────────────┐  │    │
-│  │  │ SUBCONSCIOUS TASKS (Async, Parallel)                          │  │    │
-│  │  │ - DeepMemorySearch: Chroma query full history                 │  │    │
-│  │  │ - ToolExecutor: browser/file integrations                     │  │    │
-│  │  │ - Integrator: merge outputs                                   │  │    │
+│  │  │ NODE 2: PlannerNode                                           │  │    │
+│  │  │ - Analyzes query complexity                                   │  │    │
+│  │  │ - Determines if tools are needed                              │  │    │
 │  │  └───────────────────────────────────────────────────────────────┘  │    │
 │  │                              │                                      │    │
 │  │                              ▼                                      │    │
 │  │  ┌───────────────────────────────────────────────────────────────┐  │    │
-│  │  │ PHASE 2: process()                                            │  │    │
-│  │  │ - OllamaPlugin: builds prompt from short-term memory          │  │    │
-│  │  │ - Calls LLM with context                                      │  │    │
+│  │  │ NODE 3: ExecutorNode                                          │  │    │
+│  │  │ - Builds contextual prompt with memory + history              │  │    │
+│  │  │ - Calls Ollama LLM for response                               │  │    │
 │  │  │ - Sets state.metadata.response                                │  │    │
 │  │  └───────────────────────────────────────────────────────────────┘  │    │
 │  │                              │                                      │    │
 │  │                              ▼                                      │    │
 │  │  ┌───────────────────────────────────────────────────────────────┐  │    │
-│  │  │ PHASE 3: afterProcess()                                       │  │    │
-│  │  │ - Aggregate subconscious results                              │  │    │
-│  │  │ - Store conversation in memory                                │  │    │
+│  │  │ NODE 4: CriticNode                                            │  │    │
+│  │  │ - Evaluates response quality                                  │  │    │
+│  │  │ - Decides: approve / revise / reject                          │  │    │
 │  │  └───────────────────────────────────────────────────────────────┘  │    │
 │  │                                                                     │    │
 │  └─────────────────────────────────────────────────────────────────────┘    │
@@ -110,15 +109,12 @@ agent/
 ├── Graph.ts              # LangGraph-style workflow orchestrator
 ├── ResponseHandler.ts    # Output formatting & critique
 ├── README.md             # This file
-├── nodes/                # Graph nodes (LangGraph-style)
-│   ├── BaseNode.ts       # Abstract base class
-│   ├── MemoryNode.ts     # Chroma queries for context
-│   ├── PlannerNode.ts    # Decides next steps
-│   ├── ExecutorNode.ts   # LLM calls + tool execution
-│   └── CriticNode.ts     # Approve/revise/reject decisions
-└── plugins/              # Legacy plugins (backward compat)
-    ├── BasePlugin.ts
-    └── OllamaPlugin.ts
+└── nodes/                # Graph nodes (LangGraph-style)
+    ├── BaseNode.ts       # Abstract base class with Ollama LLM helpers
+    ├── MemoryNode.ts     # Chroma queries for context
+    ├── PlannerNode.ts    # Decides next steps
+    ├── ExecutorNode.ts   # LLM calls + tool execution
+    └── CriticNode.ts     # Approve/revise/reject decisions
 ```
 
 ## Core Classes
@@ -153,12 +149,10 @@ Per-thread state management with conscious processing loop.
 ```typescript
 const thread = getThread(threadId);
 
-// Register plugins
-thread.registerPlugin(new DateTimePlugin());
-thread.registerPlugin(new OllamaPlugin());
-
-// Initialize and process
+// Initialize (sets up graph with default nodes)
 await thread.initialize();
+
+// Process input through graph pipeline
 const response = await thread.process(input);
 
 // Access thread state
@@ -184,7 +178,7 @@ const output = await handler.route(response, "microphone"); // → TTS
 
 ## Graph Node System (LangGraph-style)
 
-Plugins integrate as LangGraph nodes inside ConversationThread.
+The ConversationThread uses a LangGraph-style graph with nodes for processing.
 
 ### Node Interface
 
@@ -293,29 +287,25 @@ graph.setEndPoints('critic');
 4. thread = getThread('thread_123')
    └─► New ConversationThread with empty state
 
-5. thread.registerPlugin(DateTimePlugin, OllamaPlugin)
-   └─► Plugins sorted by order: [DateTimePlugin(25), OllamaPlugin(50)]
+5. thread.initialize()
+   └─► Sets up graph with nodes: Memory → Planner → Executor → Critic
 
 6. thread.process(input)
    │
    ├─► Records user message to state.messages
    │
-   ├─► PHASE 1: beforeProcess
-   │   └─► DateTimePlugin adds promptSuffix with current datetime
+   ├─► NODE 1: MemoryNode
+   │   └─► Uses LLM to plan search, queries Chroma for context
    │
-   ├─► Spawns subconscious tasks (async)
-   │   └─► DeepMemorySearch queries Chroma (non-blocking)
+   ├─► NODE 2: PlannerNode
+   │   └─► Analyzes complexity, determines if tools needed
    │
-   ├─► PHASE 2: process
-   │   └─► OllamaPlugin:
-   │       - Builds prompt from shortTermMemory + current input
-   │       - Calls POST /api/generate
+   ├─► NODE 3: ExecutorNode
+   │   └─► Builds contextual prompt, calls Ollama LLM
    │       - Sets state.metadata.response = "2+2 equals 4."
    │
-   ├─► Waits for subconscious tasks (with timeout)
-   │
-   ├─► PHASE 3: afterProcess
-   │   └─► (plugins can modify response here)
+   ├─► NODE 4: CriticNode
+   │   └─► Evaluates response quality: approve/revise/reject
    │
    └─► Records assistant message, returns AgentResponse
 
@@ -333,8 +323,6 @@ import {
   getContextDetector,
   getThread,
   getResponseHandler,
-  OllamaPlugin,
-  DateTimePlugin,
 } from '@pkg/agent';
 
 const sensory = getSensory();
@@ -349,14 +337,12 @@ const send = async () => {
   const ctx = await contextDetector.detect(input);
   const thread = getThread(ctx.threadId);
 
-  // 3. Register plugins for new threads
+  // 3. Initialize new threads (sets up graph nodes)
   if (ctx.isNew) {
-    thread.registerPlugin(new DateTimePlugin());
-    thread.registerPlugin(new OllamaPlugin());
     await thread.initialize();
   }
 
-  // 4. Process through the thread
+  // 4. Process through the graph pipeline
   const response = await thread.process(input);
 
   // 5. Handle response

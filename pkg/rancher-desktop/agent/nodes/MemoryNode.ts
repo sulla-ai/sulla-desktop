@@ -20,48 +20,56 @@ export class MemoryNode extends BaseNode {
   }
 
   async initialize(): Promise<void> {
-    await super.initialize(); // Initialize LLM from BaseNode
+    await super.initialize();
     await this.refreshCollections();
+    console.log(`[Agent:Memory] Collections: ${this.availableCollections.join(', ') || 'none'}`);
   }
 
   async execute(state: ThreadState): Promise<{ state: ThreadState; next: NodeResult }> {
-    // Get the latest user message
+    console.log(`[Agent:Memory] Executing...`);
     const lastUserMessage = state.messages.filter(m => m.role === 'user').pop();
 
     if (!lastUserMessage) {
+      console.log(`[Agent:Memory] No user message, skipping`);
+
       return { state, next: 'continue' };
     }
 
     try {
-      // Refresh collections list
       await this.refreshCollections();
 
       if (this.availableCollections.length === 0) {
-        // No collections available, skip memory retrieval
+        console.log(`[Agent:Memory] No collections available, skipping`);
+
         return { state, next: 'continue' };
       }
 
-      // Use LLM to determine what to search for and where
+      console.log(`[Agent:Memory] Planning search for: "${lastUserMessage.content.substring(0, 50)}..."`);
       const searchPlan = await this.planSearch(lastUserMessage.content, state);
 
       if (!searchPlan) {
+        console.log(`[Agent:Memory] No search plan generated, skipping`);
+
         return { state, next: 'continue' };
       }
 
-      // Store the search plan in metadata for debugging
+      console.log(`[Agent:Memory] Search plan: ${searchPlan.reasoning}`);
       state.metadata.memorySearchPlan = searchPlan;
 
       // Query Chroma with the planned search
       const memories = await this.queryChroma(searchPlan);
 
       if (memories.length > 0) {
+        console.log(`[Agent:Memory] Found ${memories.length} memories`);
         state.metadata.retrievedMemories = memories;
         state.metadata.memoryContext = memories
           .map((m, i) => `[Memory ${ i + 1 }]: ${ m }`)
           .join('\n');
+      } else {
+        console.log(`[Agent:Memory] No memories found`);
       }
     } catch (err) {
-      console.warn('Memory retrieval failed:', err);
+      console.error('[Agent:Memory] Retrieval failed:', err);
     }
 
     return { state, next: 'continue' };

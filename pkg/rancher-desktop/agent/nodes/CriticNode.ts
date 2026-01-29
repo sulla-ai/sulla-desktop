@@ -13,26 +13,27 @@ export class CriticNode extends BaseNode {
   }
 
   async execute(state: ThreadState): Promise<{ state: ThreadState; next: NodeResult }> {
+    console.log(`[Agent:Critic] Executing...`);
     const response = state.metadata.response as string | undefined;
 
     if (!response) {
-      // No response to critique
+      console.log(`[Agent:Critic] No response to critique, ending`);
+
       return { state, next: 'end' };
     }
 
-    // Track revision count
     const revisionCount = (state.metadata.revisionCount as number) || 0;
 
-    // Skip critique if we've hit max revisions
     if (revisionCount >= this.maxRevisions) {
+      console.log(`[Agent:Critic] Max revisions (${this.maxRevisions}) reached, auto-approving`);
       state.metadata.criticDecision = 'approve';
       state.metadata.criticReason = 'Max revisions reached';
 
       return { state, next: 'end' };
     }
 
-    // Evaluate the response
     const decision = await this.evaluate(state, response);
+    console.log(`[Agent:Critic] Decision: ${decision.decision} - ${decision.reason}`);
 
     state.metadata.criticDecision = decision.decision;
     state.metadata.criticReason = decision.reason;
@@ -42,17 +43,14 @@ export class CriticNode extends BaseNode {
     }
 
     if (decision.decision === 'revise') {
-      // Increment revision count
       state.metadata.revisionCount = revisionCount + 1;
-
-      // Add revision feedback to metadata for planner
       state.metadata.revisionFeedback = decision.reason;
+      console.log(`[Agent:Critic] Requesting revision ${revisionCount + 1}/${this.maxRevisions}`);
 
-      // Loop back to planner
       return { state, next: 'planner' };
     }
 
-    // Reject - end with error
+    console.error(`[Agent:Critic] Response rejected: ${decision.reason}`);
     state.metadata.error = `Response rejected: ${ decision.reason }`;
 
     return { state, next: 'end' };

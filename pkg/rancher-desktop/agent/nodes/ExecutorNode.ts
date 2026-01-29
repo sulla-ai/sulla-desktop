@@ -9,23 +9,27 @@ export class ExecutorNode extends BaseNode {
   }
 
   async execute(state: ThreadState): Promise<{ state: ThreadState; next: NodeResult }> {
+    console.log(`[Agent:Executor] Executing...`);
     const plan = state.metadata.plan as { requiresTools: boolean; steps: string[] } | undefined;
 
     // Execute tools if needed
     if (plan?.requiresTools) {
-      // TODO: Implement tool execution
+      console.log(`[Agent:Executor] Tools required but not yet implemented`);
       state.metadata.toolResults = { message: 'Tool execution not yet implemented' };
     }
 
     // Generate LLM response using BaseNode helpers
+    console.log(`[Agent:Executor] Generating LLM response...`);
     const response = await this.generateResponse(state);
 
     if (response) {
+      console.log(`[Agent:Executor] Response generated (${response.content.length} chars)`);
       state.metadata.response = response.content;
       state.metadata.ollamaModel = response.model;
       state.metadata.ollamaEvalCount = response.evalCount;
       state.metadata.executorCompleted = true;
     } else {
+      console.error(`[Agent:Executor] Failed to generate response`);
       state.metadata.error = 'Failed to generate response';
     }
 

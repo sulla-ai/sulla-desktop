@@ -3,18 +3,18 @@
 import type { ThreadState, NodeResult } from '../types';
 import { BaseNode } from './BaseNode';
 
-const OLLAMA_BASE = 'http://127.0.0.1:30114';
-
 export class PlannerNode extends BaseNode {
   constructor() {
     super('planner', 'Planner');
   }
 
   async execute(state: ThreadState): Promise<{ state: ThreadState; next: NodeResult }> {
-    // Get the latest user message
+    console.log(`[Agent:Planner] Executing...`);
     const lastUserMessage = state.messages.filter(m => m.role === 'user').pop();
 
     if (!lastUserMessage) {
+      console.log(`[Agent:Planner] No user message, ending`);
+
       return { state, next: 'end' };
     }
 
@@ -22,7 +22,7 @@ export class PlannerNode extends BaseNode {
     const needsTools = await this.analyzeRequest(lastUserMessage.content, state);
 
     if (needsTools) {
-      // Store the plan in metadata
+      console.log(`[Agent:Planner] Tools required: ${needsTools.steps.join(', ')}`);
       state.metadata.plan = {
         requiresTools: true,
         steps:         needsTools.steps || ['execute_tool'],
@@ -31,7 +31,7 @@ export class PlannerNode extends BaseNode {
       return { state, next: 'executor' };
     }
 
-    // Simple request - go directly to executor for LLM response
+    console.log(`[Agent:Planner] Simple request, proceeding to executor`);
     state.metadata.plan = {
       requiresTools: false,
       steps:         ['generate_response'],

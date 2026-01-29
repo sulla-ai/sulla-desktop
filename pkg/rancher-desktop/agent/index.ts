@@ -14,7 +14,3 @@ export { MemoryNode } from './nodes/MemoryNode';
 export { PlannerNode } from './nodes/PlannerNode';
 export { ExecutorNode } from './nodes/ExecutorNode';
 export { CriticNode } from './nodes/CriticNode';
-
-// Legacy plugins (for backward compatibility)
-export { BasePlugin } from './plugins/BasePlugin';
-export { OllamaPlugin } from './plugins/OllamaPlugin';

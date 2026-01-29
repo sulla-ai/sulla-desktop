@@ -85,6 +85,7 @@ export class Graph {
       throw new Error('No entry point set');
     }
 
+    console.log(`[Agent:Graph] Starting execution from: ${this.entryPoint}`);
     await this.initialize();
 
     let state = initialState;
@@ -100,16 +101,17 @@ export class Graph {
         throw new Error(`Node not found: ${ currentNodeId }`);
       }
 
-      // Execute the node
+      console.log(`[Agent:Graph] Executing node: ${node.name} (${currentNodeId})`);
       const result = await node.execute(state);
 
       state = result.state;
 
-      // Determine next node
       const nextNodeId = this.resolveNext(currentNodeId, result.next, state);
+      console.log(`[Agent:Graph] Node ${node.name} returned: ${result.next} → next: ${nextNodeId}`);
 
       // Check if we should end
       if (nextNodeId === 'end' || this.endPoints.has(currentNodeId) && result.next === 'end') {
+        console.log(`[Agent:Graph] Execution complete after ${iterations} iterations`);
         break;
       }
 
