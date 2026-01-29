@@ -148,3 +148,56 @@ spec:
     targetPort: 11434
     nodePort: 30114
   type: NodePort
+---
+# Chroma Vector DB for persistent memory
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chroma
+  namespace: sulla
+  labels:
+    app: chroma
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: chroma
+  template:
+    metadata:
+      labels:
+        app: chroma
+    spec:
+      containers:
+      - name: chroma
+        image: chromadb/chroma:latest
+        ports:
+        - containerPort: 8000
+        volumeMounts:
+        - mountPath: /chroma/chroma
+          name: chroma-data
+        resources:
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+      volumes:
+      - name: chroma-data
+        hostPath:
+          path: /var/lib/sulla/chroma
+          type: DirectoryOrCreate
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: chroma
+  namespace: sulla
+spec:
+  selector:
+    app: chroma
+  ports:
+  - port: 8000
+    targetPort: 8000
+    nodePort: 30115
+  type: NodePort
