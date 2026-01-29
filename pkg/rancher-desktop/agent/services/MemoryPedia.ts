@@ -6,8 +6,7 @@ import { ChatOllama } from '@langchain/ollama';
 import { HumanMessage } from '@langchain/core/messages';
 import { MemoryGraph, MemoryProcessingState } from './MemoryGraph';
 import { getOllamaModel, getOllamaBase } from './ConfigService';
-
-const CHROMA_BASE = 'http://127.0.0.1:30115';
+import { getChromaService } from './ChromaService';
 
 // Collection names
 const COLLECTIONS = {
@@ -55,9 +54,9 @@ export class MemoryPedia {
   private llm: ChatOllama | null = null;
   private memoryGraph: MemoryGraph | null = null;
   private initialized = false;
-  private chromaAvailable = false;
   private processingQueue: Array<{ threadId: string; messages: Array<{ role: string; content: string }> }> = [];
   private isProcessing = false;
+  private chroma = getChromaService();
 
   async initialize(): Promise<void> {
     if (this.initialized) {
@@ -81,60 +80,16 @@ export class MemoryPedia {
     this.memoryGraph = new MemoryGraph();
     console.log('[MemoryPedia] MemoryGraph initialized');
 
-    // Check Chroma availability and ensure collections exist
-    await this.ensureCollections();
+    // Initialize ChromaService and ensure collections exist
+    await this.chroma.initialize();
+
+    // Ensure our collections exist
+    for (const collName of Object.values(COLLECTIONS)) {
+      await this.chroma.ensureCollection(collName);
+    }
 
     this.initialized = true;
-    console.log(`[MemoryPedia] Initialized (Chroma: ${this.chromaAvailable})`);
-  }
-
-  private async ensureCollections(): Promise<void> {
-    try {
-      const res = await fetch(`${CHROMA_BASE}/api/v2/tenants/default_tenant/databases/default_database/collections`, {
-        signal: AbortSignal.timeout(2000),
-      });
-
-      if (!res.ok) {
-        console.warn('[MemoryPedia] Chroma not available');
-
-        return;
-      }
-
-      this.chromaAvailable = true;
-      const existing = await res.json();
-      const existingNames = existing.map((c: { name: string }) => c.name);
-
-      // Create collections if they don't exist
-      for (const collName of Object.values(COLLECTIONS)) {
-        if (!existingNames.includes(collName)) {
-          await this.createCollection(collName);
-        }
-      }
-
-      console.log('[MemoryPedia] Collections ready');
-    } catch (err) {
-      console.warn('[MemoryPedia] Chroma check failed:', err);
-    }
-  }
-
-  private async createCollection(name: string): Promise<void> {
-    try {
-      const res = await fetch(`${CHROMA_BASE}/api/v2/tenants/default_tenant/databases/default_database/collections`, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({
-          name,
-          metadata: { 'hnsw:space': 'cosine' },
-        }),
-        signal: AbortSignal.timeout(5000),
-      });
-
-      if (res.ok) {
-        console.log(`[MemoryPedia] Created collection: ${name}`);
-      }
-    } catch (err) {
-      console.warn(`[MemoryPedia] Failed to create collection ${name}:`, err);
-    }
+    console.log(`[MemoryPedia] Initialized (Chroma: ${this.chroma.isAvailable()})`);
   }
 
   /**
@@ -142,7 +97,7 @@ export class MemoryPedia {
    * Called after conversation is stored to PostgreSQL
    */
   queueConversation(threadId: string, messages: Array<{ role: string; content: string }>): void {
-    if (!this.chromaAvailable) {
+    if (!this.chroma.isAvailable()) {
       return;
     }
 
@@ -297,26 +252,20 @@ export class MemoryPedia {
    * Get all existing pages for consolidation
    */
   private async getAllPages(): Promise<Array<{ pageId: string; title: string; type: string }>> {
-    if (!this.chromaAvailable) {
+    if (!this.chroma.isAvailable()) {
       return [];
     }
 
     try {
-      const res = await fetch(
-        `${CHROMA_BASE}/api/v2/tenants/default_tenant/databases/default_database/collections/${COLLECTIONS.PAGES}/get`,
-        {
-          method:  'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({ limit: 1000 }),
-          signal:  AbortSignal.timeout(5000),
-        },
-      );
+      const data = await this.chroma.get(COLLECTIONS.PAGES, undefined, {
+        limit:   1000,
+        include: ['metadatas', 'documents'],
+      });
 
-      if (!res.ok) {
+      if (!data) {
         return [];
       }
 
-      const data = await res.json();
       const pages: Array<{ pageId: string; title: string; type: string }> = [];
 
       if (data.ids) {
@@ -325,8 +274,8 @@ export class MemoryPedia {
 
           pages.push({
             pageId: data.ids[i],
-            title:  metadata.title || data.ids[i],
-            type:   metadata.pageType || 'entity',
+            title:  String(metadata.title || data.ids[i]),
+            type:   String(metadata.pageType || 'entity'),
           });
         }
       }
@@ -454,31 +403,20 @@ If nothing notable to extract, respond: { "entities": [], "topics": [] }`;
    * Store a conversation summary in Chroma
    */
   private async storeSummary(summary: ConversationSummary): Promise<void> {
-    try {
-      const res = await fetch(
-        `${CHROMA_BASE}/api/v2/tenants/default_tenant/databases/default_database/collections/${COLLECTIONS.SUMMARIES}/add`,
-        {
-          method:  'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({
-            ids:       [summary.threadId],
-            documents: [summary.summary],
-            metadatas: [{
-              threadId:  summary.threadId,
-              topics:    summary.topics.join(','),
-              entities:  summary.entities.join(','),
-              timestamp: summary.timestamp,
-            }],
-          }),
-          signal: AbortSignal.timeout(5000),
-        },
-      );
+    const success = await this.chroma.add(
+      COLLECTIONS.SUMMARIES,
+      [summary.threadId],
+      [summary.summary],
+      [{
+        threadId:  summary.threadId,
+        topics:    summary.topics.join(','),
+        entities:  summary.entities.join(','),
+        timestamp: summary.timestamp,
+      }],
+    );
 
-      if (res.ok) {
-        console.log(`[MemoryPedia] Stored summary for: ${summary.threadId}`);
-      }
-    } catch (err) {
-      console.warn('[MemoryPedia] Failed to store summary:', err);
+    if (success) {
+      console.log(`[MemoryPedia] Stored summary for: ${summary.threadId}`);
     }
   }
 
@@ -516,23 +454,9 @@ If nothing notable to extract, respond: { "entities": [], "topics": [] }`;
 
   private async getPage(pageId: string): Promise<MemoryPage | null> {
     try {
-      const res = await fetch(
-        `${CHROMA_BASE}/api/v2/tenants/default_tenant/databases/default_database/collections/${COLLECTIONS.PAGES}/get`,
-        {
-          method:  'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({ ids: [pageId] }),
-          signal:  AbortSignal.timeout(5000),
-        },
-      );
+      const data = await this.chroma.get(COLLECTIONS.PAGES, [pageId]);
 
-      if (!res.ok) {
-        return null;
-      }
-
-      const data = await res.json();
-
-      if (!data.ids || data.ids.length === 0) {
+      if (!data || !data.ids || data.ids.length === 0) {
         return null;
       }
 
@@ -540,11 +464,11 @@ If nothing notable to extract, respond: { "entities": [], "topics": [] }`;
 
       return {
         pageId,
-        title:          metadata.title || pageId,
-        pageType:       metadata.pageType || 'entity',
+        title:          String(metadata.title || pageId),
+        pageType:       String(metadata.pageType || 'entity'),
         content:        data.documents?.[0] || '',
-        relatedThreads: (metadata.relatedThreads || '').split(',').filter(Boolean),
-        lastUpdated:    metadata.lastUpdated || Date.now(),
+        relatedThreads: String(metadata.relatedThreads || '').split(',').filter(Boolean),
+        lastUpdated:    Number(metadata.lastUpdated) || Date.now(),
       };
     } catch {
       return null;
@@ -552,31 +476,20 @@ If nothing notable to extract, respond: { "entities": [], "topics": [] }`;
   }
 
   private async createPage(page: MemoryPage): Promise<void> {
-    try {
-      const res = await fetch(
-        `${CHROMA_BASE}/api/v2/tenants/default_tenant/databases/default_database/collections/${COLLECTIONS.PAGES}/add`,
-        {
-          method:  'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({
-            ids:       [page.pageId],
-            documents: [page.content],
-            metadatas: [{
-              title:          page.title,
-              pageType:       page.pageType,
-              relatedThreads: page.relatedThreads.join(','),
-              lastUpdated:    page.lastUpdated,
-            }],
-          }),
-          signal: AbortSignal.timeout(5000),
-        },
-      );
+    const success = await this.chroma.add(
+      COLLECTIONS.PAGES,
+      [page.pageId],
+      [page.content],
+      [{
+        title:          page.title,
+        pageType:       page.pageType,
+        relatedThreads: page.relatedThreads.join(','),
+        lastUpdated:    page.lastUpdated,
+      }],
+    );
 
-      if (res.ok) {
-        console.log(`[MemoryPedia] Created page: ${page.title}`);
-      }
-    } catch (err) {
-      console.warn(`[MemoryPedia] Failed to create page ${page.pageId}:`, err);
+    if (success) {
+      console.log(`[MemoryPedia] Created page: ${page.title}`);
     }
   }
 
@@ -585,41 +498,20 @@ If nothing notable to extract, respond: { "entities": [], "topics": [] }`;
     const updatedContent = await this.mergePageContent(existing.content, newInfo);
     const relatedThreads = [...new Set([...existing.relatedThreads, threadId])];
 
-    try {
-      // Delete old entry
-      await fetch(
-        `${CHROMA_BASE}/api/v2/tenants/default_tenant/databases/default_database/collections/${COLLECTIONS.PAGES}/delete`,
-        {
-          method:  'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({ ids: [existing.pageId] }),
-          signal:  AbortSignal.timeout(5000),
-        },
-      );
+    const success = await this.chroma.upsert(
+      COLLECTIONS.PAGES,
+      [existing.pageId],
+      [updatedContent],
+      [{
+        title:          existing.title,
+        pageType:       existing.pageType,
+        relatedThreads: relatedThreads.join(','),
+        lastUpdated:    Date.now(),
+      }],
+    );
 
-      // Add updated entry
-      await fetch(
-        `${CHROMA_BASE}/api/v2/tenants/default_tenant/databases/default_database/collections/${COLLECTIONS.PAGES}/add`,
-        {
-          method:  'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({
-            ids:       [existing.pageId],
-            documents: [updatedContent],
-            metadatas: [{
-              title:          existing.title,
-              pageType:       existing.pageType,
-              relatedThreads: relatedThreads.join(','),
-              lastUpdated:    Date.now(),
-            }],
-          }),
-          signal: AbortSignal.timeout(5000),
-        },
-      );
-
+    if (success) {
       console.log(`[MemoryPedia] Updated page: ${existing.title}`);
-    } catch (err) {
-      console.warn(`[MemoryPedia] Failed to update page ${existing.pageId}:`, err);
     }
   }
 
@@ -653,44 +545,17 @@ Respond with the merged content only (no JSON, no explanation):`;
    * Search conversation summaries by semantic query
    */
   async searchSummaries(query: string, limit = 5): Promise<Array<{ threadId: string; summary: string; score: number }>> {
-    if (!this.chromaAvailable) {
+    if (!this.chroma.isAvailable()) {
       return [];
     }
 
     try {
-      // First check if collection has any documents
-      const countRes = await fetch(
-        `${CHROMA_BASE}/api/v2/tenants/default_tenant/databases/default_database/collections/${COLLECTIONS.SUMMARIES}/count`,
-        { signal: AbortSignal.timeout(3000) },
-      );
+      const data = await this.chroma.query(COLLECTIONS.SUMMARIES, [query], limit);
 
-      if (!countRes.ok) {
-        return [];
-      }
-      const count = await countRes.json();
-
-      if (count === 0) {
+      if (!data) {
         return [];
       }
 
-      const res = await fetch(
-        `${CHROMA_BASE}/api/v2/tenants/default_tenant/databases/default_database/collections/${COLLECTIONS.SUMMARIES}/query`,
-        {
-          method:  'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({
-            query_texts: [query],
-            n_results:   limit,
-          }),
-          signal: AbortSignal.timeout(5000),
-        },
-      );
-
-      if (!res.ok) {
-        return [];
-      }
-
-      const data = await res.json();
       const results: Array<{ threadId: string; summary: string; score: number }> = [];
 
       if (data.ids?.[0]) {
@@ -713,44 +578,17 @@ Respond with the merged content only (no JSON, no explanation):`;
    * Search MemoryPedia pages by semantic query
    */
   async searchPages(query: string, limit = 5): Promise<Array<{ pageId: string; title: string; content: string; pageType: string }>> {
-    if (!this.chromaAvailable) {
+    if (!this.chroma.isAvailable()) {
       return [];
     }
 
     try {
-      // First check if collection has any documents
-      const countRes = await fetch(
-        `${CHROMA_BASE}/api/v2/tenants/default_tenant/databases/default_database/collections/${COLLECTIONS.PAGES}/count`,
-        { signal: AbortSignal.timeout(3000) },
-      );
+      const data = await this.chroma.query(COLLECTIONS.PAGES, [query], limit);
 
-      if (!countRes.ok) {
-        return [];
-      }
-      const count = await countRes.json();
-
-      if (count === 0) {
+      if (!data) {
         return [];
       }
 
-      const res = await fetch(
-        `${CHROMA_BASE}/api/v2/tenants/default_tenant/databases/default_database/collections/${COLLECTIONS.PAGES}/query`,
-        {
-          method:  'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({
-            query_texts: [query],
-            n_results:   limit,
-          }),
-          signal: AbortSignal.timeout(5000),
-        },
-      );
-
-      if (!res.ok) {
-        return [];
-      }
-
-      const data = await res.json();
       const results: Array<{ pageId: string; title: string; content: string; pageType: string }> = [];
 
       if (data.ids?.[0]) {
@@ -759,9 +597,9 @@ Respond with the merged content only (no JSON, no explanation):`;
 
           results.push({
             pageId:   data.ids[0][i],
-            title:    metadata.title || data.ids[0][i],
+            title:    String(metadata.title || data.ids[0][i]),
             content:  data.documents?.[0]?.[i] || '',
-            pageType: metadata.pageType || 'entity',
+            pageType: String(metadata.pageType || 'entity'),
           });
         }
       }

@@ -2,8 +2,7 @@
 
 import type { ThreadState, NodeResult } from '../types';
 import { BaseNode } from './BaseNode';
-
-const CHROMA_BASE = 'http://127.0.0.1:30115';
+import { getChromaService } from '../services/ChromaService';
 
 interface SearchPlan {
   searchQuery: string;
@@ -13,7 +12,7 @@ interface SearchPlan {
 }
 
 export class MemoryNode extends BaseNode {
-  private availableCollections: string[] = [];
+  private chroma = getChromaService();
 
   constructor() {
     super('memory_recall', 'Memory Recall');
@@ -21,8 +20,8 @@ export class MemoryNode extends BaseNode {
 
   async initialize(): Promise<void> {
     await super.initialize();
-    await this.refreshCollections();
-    console.log(`[Agent:Memory] Collections: ${this.availableCollections.join(', ') || 'none'}`);
+    await this.chroma.initialize();
+    console.log(`[Agent:Memory] Collections: ${this.chroma.getCollectionNames().join(', ') || 'none'}`);
   }
 
   async execute(state: ThreadState): Promise<{ state: ThreadState; next: NodeResult }> {
@@ -36,9 +35,9 @@ export class MemoryNode extends BaseNode {
     }
 
     try {
-      await this.refreshCollections();
+      await this.chroma.refreshCollections();
 
-      if (this.availableCollections.length === 0) {
+      if (this.chroma.getCollectionNames().length === 0) {
         console.log(`[Agent:Memory] No collections available, skipping`);
 
         return { state, next: 'continue' };
@@ -76,31 +75,13 @@ export class MemoryNode extends BaseNode {
   }
 
   /**
-   * Refresh the list of available Chroma collections
-   */
-  private async refreshCollections(): Promise<void> {
-    try {
-      const res = await fetch(`${ CHROMA_BASE }/api/v2/tenants/default_tenant/databases/default_database/collections`, {
-        signal: AbortSignal.timeout(2000),
-      });
-
-      if (res.ok) {
-        const collections = await res.json();
-
-        this.availableCollections = collections.map((c: { name: string }) => c.name);
-      }
-    } catch {
-      // Keep existing collections list
-    }
-  }
-
-  /**
    * Use LLM to determine what to search for and which collection to query
    */
   private async planSearch(userQuery: string, state: ThreadState): Promise<SearchPlan | null> {
     // Build context about available collections
-    const collectionsInfo = this.availableCollections.length > 0
-      ? `Available collections: ${ this.availableCollections.join(', ') }`
+    const collections = this.chroma.getCollectionNames();
+    const collectionsInfo = collections.length > 0
+      ? `Available collections: ${ collections.join(', ') }`
       : 'No collections available';
 
     const prompt = `You are a memory retrieval planner. Given a user query, determine what to search for in the vector database.
@@ -140,8 +121,8 @@ If no memory search is needed (simple greeting, etc), respond with:
     // Validate collection exists
     let collection = parsed.collection || 'conversations';
 
-    if (!this.availableCollections.includes(collection)) {
-      collection = this.availableCollections[0] || 'conversations';
+    if (!collections.includes(collection)) {
+      collection = collections[0] || 'conversations';
     }
 
     return {
@@ -156,9 +137,11 @@ If no memory search is needed (simple greeting, etc), respond with:
    * Fallback search plan when LLM is unavailable
    */
   private fallbackSearchPlan(userQuery: string): SearchPlan {
+    const collections = this.chroma.getCollectionNames();
+
     return {
       searchQuery: userQuery,
-      collection:  this.availableCollections[0] || 'conversations',
+      collection:  collections[0] || 'conversations',
       reasoning:   'Fallback: direct query search',
     };
   }
@@ -168,29 +151,16 @@ If no memory search is needed (simple greeting, etc), respond with:
    */
   private async queryChroma(plan: SearchPlan, limit = 5): Promise<string[]> {
     try {
-      // Build query body
-      const queryBody: Record<string, unknown> = {
-        query_texts: [plan.searchQuery],
-        n_results:   limit,
-      };
+      const data = await this.chroma.query(
+        plan.collection,
+        [plan.searchQuery],
+        limit,
+        plan.whereClause,
+      );
 
-      // Add where clause if provided
-      if (plan.whereClause && Object.keys(plan.whereClause).length > 0) {
-        queryBody.where = plan.whereClause;
-      }
-
-      const res = await fetch(`${ CHROMA_BASE }/api/v2/tenants/default_tenant/databases/default_database/collections/${ plan.collection }/query`, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify(queryBody),
-        signal:  AbortSignal.timeout(5000),
-      });
-
-      if (!res.ok) {
+      if (!data) {
         return [];
       }
-
-      const data = await res.json();
 
       return data.documents?.[0] || [];
     } catch {
