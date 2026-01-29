@@ -84,6 +84,12 @@ export const actions = {
   async fetchDiagnostics({ commit, rootState }) {
     try {
       const { port, user, password } = rootState.credentials.credentials;
+
+      // Skip if port is invalid (not configured yet)
+      if (!port || port === 0) {
+        return;
+      }
+
       const response = await fetch(
         uri(port, 'diagnostic_checks'),
         {
@@ -114,6 +120,12 @@ export const actions = {
   },
   async runDiagnostics({ commit, rootState }) {
     const { port, user, password } = rootState.credentials.credentials;
+
+    // Skip if port is invalid (not configured yet)
+    if (!port || port === 0) {
+      return;
+    }
+
     const response = await fetch(
       uri(port, 'diagnostic_checks'),
       {
