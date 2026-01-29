@@ -137,6 +137,53 @@ const modelDownloadProgress = ref(0);
 const modelDownloadTotal = ref(0);
 const modelDownloadStatus = ref('');
 
+// Ollama memory error recovery
+const ollamaRestarting = ref(false);
+const memoryErrorCount = ref(0);
+const MAX_MEMORY_ERROR_RETRIES = 3;
+
+// Detect memory errors and trigger pod restart
+const handleOllamaMemoryError = async (errorMessage: string): Promise<boolean> => {
+  if (!errorMessage.includes('requires more system memory')) {
+    return false;
+  }
+
+  memoryErrorCount.value++;
+  console.warn(`[Agent] Ollama memory error detected (${memoryErrorCount.value}/${MAX_MEMORY_ERROR_RETRIES})`);
+
+  if (memoryErrorCount.value >= MAX_MEMORY_ERROR_RETRIES) {
+    console.error('[Agent] Max memory error retries exceeded');
+    return false;
+  }
+
+  if (ollamaRestarting.value) {
+    return true; // Already restarting
+  }
+
+  ollamaRestarting.value = true;
+  updateStartupStatus('recovery', 'Restarting Ollama to free memory...');
+
+  try {
+    // Request backend to restart the Ollama pod
+    await ipcRenderer.invoke('sulla-restart-ollama');
+    console.log('[Agent] Ollama restart requested');
+
+    // Wait for pod to come back up
+    updateStartupStatus('recovery', 'Waiting for Ollama to restart...');
+    await new Promise(resolve => setTimeout(resolve, 5000));
+
+    // Reset state and re-check readiness
+    ollamaRestarting.value = false;
+    systemReady.value = false;
+    startReadinessCheck();
+    return true;
+  } catch (err) {
+    console.error('[Agent] Failed to restart Ollama:', err);
+    ollamaRestarting.value = false;
+    return false;
+  }
+};
+
 const progressPercent = computed(() => {
   if (progressMax.value <= 0) {
     return 0;
@@ -403,7 +450,14 @@ const send = async () => {
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
 
-    error.value = `Error: ${ message }`;
+    // Check for Ollama memory error and auto-restart if needed
+    const recovered = await handleOllamaMemoryError(message);
+
+    if (recovered) {
+      error.value = 'Restarting AI service to free memory. Please try again in a moment.';
+    } else {
+      error.value = `Error: ${ message }`;
+    }
   } finally {
     loading.value = false;
   }

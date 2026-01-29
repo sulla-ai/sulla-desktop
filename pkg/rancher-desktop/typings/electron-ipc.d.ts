@@ -126,6 +126,10 @@ export interface IpcMainInvokeEvents {
   'api-get-credentials':       () => { user: string, password: string, port: number };
   'k8s-progress':              () => Readonly<{ current: number, max: number, description?: string, transitionTime?: Date }>;
 
+  // #region Sulla
+  'sulla-restart-ollama':      () => void;
+  // #endregion
+
   // #region main/imageEvents
   'images-mounted':     (mounted: boolean) => { imageName: string, tag: string, imageID: string, size: string }[];
   'images-check-state': () => boolean;

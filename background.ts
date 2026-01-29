@@ -32,6 +32,7 @@ import { DiagnosticsManager, DiagnosticsResultCollection } from '@pkg/main/diagn
 import { ExtensionErrorCode, isExtensionError } from '@pkg/main/extensions';
 import { ImageEventHandler } from '@pkg/main/imageEvents';
 import { getIpcMainProxy } from '@pkg/main/ipcMain';
+import { initSullaEvents } from '@pkg/main/sullaEvents';
 import mainEvents from '@pkg/main/mainEvents';
 import buildApplicationMenu from '@pkg/main/mainmenu';
 import setupNetworking from '@pkg/main/networking';
@@ -228,6 +229,9 @@ Electron.app.whenReady().then(async() => {
     await checkPrerequisites();
 
     DashboardServer.getInstance().init();
+
+    // Initialize Sulla-specific IPC handlers
+    initSullaEvents();
 
     await setupNetworking();
 
