@@ -5,6 +5,7 @@ import { ipcRenderer } from '@pkg/utils/ipcRenderer';
 
 // Nav items for the Language Model Settings sidebar
 const navItems = [
+  { id: 'overview', name: 'Overview' },
   { id: 'models', name: 'Models' },
 ];
 
@@ -112,8 +113,18 @@ export default defineComponent({
 
   data() {
     return {
-      currentNav:       'models' as string,
+      currentNav:       'overview' as string,
       navItems,
+      // Overview dashboard metrics
+      containerStats: {
+        cpuPercent:    0,
+        memoryUsage:   0,
+        memoryLimit:   0,
+        memoryPercent: 0,
+        status:        'unknown' as string,
+      },
+      statsInterval:    null as ReturnType<typeof setInterval> | null,
+      loadingStats:     false,
       // Which tab is being viewed (local or remote)
       viewingTab:       'local' as 'local' | 'remote',
       // Which mode is currently active (saved in settings)
@@ -172,6 +183,12 @@ export default defineComponent({
 
       return model?.description || '';
     },
+    formattedMemoryUsage(): string {
+      return this.formatBytes(this.containerStats.memoryUsage);
+    },
+    formattedMemoryLimit(): string {
+      return this.formatBytes(this.containerStats.memoryLimit);
+    },
   },
 
   async mounted() {
@@ -206,7 +223,17 @@ export default defineComponent({
     ipcRenderer.send('settings-read');
 
     await this.loadModels();
+    // Start fetching container stats
+    this.fetchContainerStats();
+    this.statsInterval = setInterval(() => this.fetchContainerStats(), 3000);
     ipcRenderer.send('dialog/ready');
+  },
+
+  beforeUnmount() {
+    if (this.statsInterval) {
+      clearInterval(this.statsInterval);
+      this.statsInterval = null;
+    }
   },
 
   methods: {
@@ -214,6 +241,62 @@ export default defineComponent({
       this.currentNav = navId;
       if (navId === 'models') {
         this.loadModels();
+      }
+    },
+
+    async fetchContainerStats() {
+      try {
+        // Query Ollama API for service status and running models
+        const [tagsRes, psRes] = await Promise.all([
+          fetch('http://127.0.0.1:30114/api/tags', { signal: AbortSignal.timeout(3000) }).catch(() => null),
+          fetch('http://127.0.0.1:30114/api/ps', { signal: AbortSignal.timeout(3000) }).catch(() => null),
+        ]);
+
+        if (!tagsRes || !tagsRes.ok) {
+          this.containerStats.status = 'offline';
+
+          return;
+        }
+
+        this.containerStats.status = 'running';
+
+        // Get running models info from /api/ps
+        if (psRes && psRes.ok) {
+          const psData = await psRes.json();
+          const runningModels = psData.models || [];
+
+          if (runningModels.length > 0) {
+            // Sum up memory usage from all running models
+            let totalSize = 0;
+            let totalVramSize = 0;
+
+            for (const model of runningModels) {
+              totalSize += model.size || 0;
+              totalVramSize += model.size_vram || 0;
+            }
+
+            // Use model size as memory indicator (actual VRAM/RAM used)
+            this.containerStats.memoryUsage = totalVramSize || totalSize;
+            // Estimate limit based on typical system (this is approximate)
+            this.containerStats.memoryLimit = 16 * 1024 * 1024 * 1024; // 16GB default
+            this.containerStats.memoryPercent = (this.containerStats.memoryUsage / this.containerStats.memoryLimit) * 100;
+
+            // Store running model count for display
+            (this.containerStats as Record<string, unknown>).runningModels = runningModels.length;
+            (this.containerStats as Record<string, unknown>).modelDetails = runningModels.map((m: { name: string; size: number }) => ({
+              name:  m.name,
+              size:  m.size,
+            }));
+          } else {
+            this.containerStats.memoryUsage = 0;
+            this.containerStats.memoryPercent = 0;
+            (this.containerStats as Record<string, unknown>).runningModels = 0;
+            (this.containerStats as Record<string, unknown>).modelDetails = [];
+          }
+        }
+      } catch (err) {
+        console.warn('[LM Settings] Failed to fetch Ollama stats:', err);
+        this.containerStats.status = 'error';
       }
     },
 
@@ -492,6 +575,121 @@ export default defineComponent({
 
       <!-- Content area -->
       <div class="lm-body">
+        <!-- Overview Tab -->
+        <div
+          v-if="currentNav === 'overview'"
+          class="tab-content"
+        >
+          <h2>Ollama Container Status</h2>
+          <p class="description">
+            Monitor the resource usage of your local Ollama container.
+          </p>
+
+          <!-- Status Badge -->
+          <div class="status-section">
+            <span class="status-label">Status:</span>
+            <span
+              class="status-badge"
+              :class="{
+                'status-running': containerStats.status === 'running',
+                'status-stopped': containerStats.status === 'exited' || containerStats.status === 'stopped',
+                'status-error': containerStats.status === 'error' || containerStats.status === 'docker_unavailable',
+                'status-unknown': containerStats.status === 'unknown' || containerStats.status === 'not_found',
+              }"
+            >
+              {{ containerStats.status === 'docker_unavailable' ? 'Docker Unavailable' :
+                 containerStats.status === 'not_found' ? 'Container Not Found' :
+                 containerStats.status.charAt(0).toUpperCase() + containerStats.status.slice(1) }}
+            </span>
+          </div>
+
+          <!-- Metrics Cards -->
+          <div
+            v-if="containerStats.status === 'running'"
+            class="metrics-grid"
+          >
+            <!-- Running Models -->
+            <div class="metric-card">
+              <div class="metric-header">
+                <span class="metric-title">Running Models</span>
+              </div>
+              <div class="metric-value">
+                {{ (containerStats as any).runningModels || 0 }}
+              </div>
+              <div
+                v-if="(containerStats as any).modelDetails?.length"
+                class="metric-subtext"
+              >
+                {{ (containerStats as any).modelDetails.map((m: any) => m.name).join(', ') }}
+              </div>
+              <div
+                v-else
+                class="metric-subtext"
+              >
+                No models loaded
+              </div>
+            </div>
+
+            <!-- Model Memory Usage -->
+            <div class="metric-card">
+              <div class="metric-header">
+                <span class="metric-title">Model Memory</span>
+              </div>
+              <div class="metric-value">
+                {{ formattedMemoryUsage }}
+              </div>
+              <div class="metric-bar">
+                <div
+                  class="metric-bar-fill memory-bar"
+                  :style="{ width: Math.min(containerStats.memoryPercent, 100) + '%' }"
+                />
+              </div>
+              <div class="metric-subtext">
+                Memory used by loaded models
+              </div>
+            </div>
+          </div>
+
+          <!-- Not Running Message -->
+          <div
+            v-else
+            class="not-running-message"
+          >
+            <p v-if="containerStats.status === 'offline'">
+              Ollama service is offline. Make sure it's running on port 30114.
+            </p>
+            <p v-else-if="containerStats.status === 'error'">
+              Unable to connect to Ollama service.
+            </p>
+            <p v-else>
+              Checking Ollama status...
+            </p>
+          </div>
+
+          <!-- Active Model Info -->
+          <div class="active-model-section">
+            <h3>Active Configuration</h3>
+            <div class="config-item">
+              <span class="config-label">Mode:</span>
+              <span class="config-value">{{ activeMode === 'local' ? 'Local (Ollama)' : 'Remote (API)' }}</span>
+            </div>
+            <div
+              v-if="activeMode === 'local'"
+              class="config-item"
+            >
+              <span class="config-label">Model:</span>
+              <span class="config-value">{{ activeModel }}</span>
+            </div>
+            <div
+              v-else
+              class="config-item"
+            >
+              <span class="config-label">Provider:</span>
+              <span class="config-value">{{ selectedProvider }} / {{ selectedRemoteModel }}</span>
+            </div>
+          </div>
+        </div>
+
         <!-- Models Tab -->
         <div
           v-if="currentNav === 'models'"
@@ -871,9 +1069,152 @@ export default defineComponent({
     font-weight: 500;
   }
 
+  h3 {
+    margin: 1.5rem 0 0.75rem;
+    font-size: 1rem;
+    font-weight: 500;
+  }
+
   .description {
     color: var(--muted);
     margin-bottom: 1.5rem;
+  }
+}
+
+// Overview tab styles
+.status-section {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+
+  .status-label {
+    font-weight: 500;
+  }
+
+  .status-badge {
+    padding: 0.25rem 0.75rem;
+    border-radius: 9999px;
+    font-size: 0.85rem;
+    font-weight: 500;
+
+    &.status-running {
+      background: rgba(34, 197, 94, 0.15);
+      color: #22c55e;
+    }
+
+    &.status-stopped {
+      background: rgba(234, 179, 8, 0.15);
+      color: #eab308;
+    }
+
+    &.status-error {
+      background: rgba(239, 68, 68, 0.15);
+      color: #ef4444;
+    }
+
+    &.status-unknown {
+      background: rgba(156, 163, 175, 0.15);
+      color: #9ca3af;
+    }
+  }
+}
+
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.metric-card {
+  background: var(--input-bg, rgba(0, 0, 0, 0.1));
+  border: 1px solid var(--input-border);
+  border-radius: 8px;
+  padding: 1rem;
+
+  .metric-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+  }
+
+  .metric-title {
+    font-size: 0.9rem;
+    color: var(--muted);
+  }
+
+  .metric-value {
+    font-size: 1.5rem;
+    font-weight: 600;
+    margin-bottom: 0.75rem;
+  }
+
+  .metric-bar {
+    height: 8px;
+    background: var(--input-border);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  .metric-bar-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.3s ease;
+
+    &.cpu-bar {
+      background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+    }
+
+    &.memory-bar {
+      background: linear-gradient(90deg, #22c55e, #eab308);
+    }
+  }
+
+  .metric-subtext {
+    font-size: 0.8rem;
+    color: var(--muted);
+    margin-top: 0.5rem;
+  }
+}
+
+.not-running-message {
+  background: var(--input-bg, rgba(0, 0, 0, 0.1));
+  border: 1px solid var(--input-border);
+  border-radius: 8px;
+  padding: 2rem;
+  text-align: center;
+  color: var(--muted);
+
+  p {
+    margin: 0;
+  }
+}
+
+.active-model-section {
+  background: var(--input-bg, rgba(0, 0, 0, 0.1));
+  border: 1px solid var(--input-border);
+  border-radius: 8px;
+  padding: 1rem;
+
+  h3 {
+    margin: 0 0 0.75rem !important;
+  }
+
+  .config-item {
+    display: flex;
+    gap: 0.5rem;
+    padding: 0.25rem 0;
+
+    .config-label {
+      color: var(--muted);
+      min-width: 80px;
+    }
+
+    .config-value {
+      font-weight: 500;
+    }
   }
 }
 
