@@ -8,7 +8,7 @@ import { Settings } from '@pkg/config/settings';
 import mainEvents from '@pkg/main/mainEvents';
 import paths from '@pkg/utils/paths';
 import { getVersion, parseDocsVersion } from '@pkg/utils/version';
-import { openDockerDashboard, openMain } from '@pkg/window';
+import { openDockerDashboard, openLanguageModelSettings, openMain } from '@pkg/window';
 import { openDashboard } from '@pkg/window/dashboard';
 import { openPreferences } from '@pkg/window/preferences';
 
@@ -90,6 +90,11 @@ function getNeuralNetworkMenu(): MenuItem {
   return new MenuItem({
     label:   'Neural Network',
     submenu: [
+      {
+        label:       'Language Model Settings…',
+        accelerator: 'CmdOrCtrl+L',
+        click:       openLanguageModelSettings,
+      },
       {
         label: 'Docker',
         click: openDockerDashboard,
@@ -304,14 +309,6 @@ function getWindowsApplicationMenu(): MenuItem[] {
  */
 function getPreferencesMenuItem(): MenuItemConstructorOptions[] {
   return [
-    {
-      label:               'Docker…',
-      id:                  'docker-dashboard',
-      visible:             true,
-      registerAccelerator: true,
-      accelerator:         'CmdOrCtrl+,',
-      click:               openDockerDashboard,
-    },
     {
       label:               'Preferences…',
       id:                  'preferences',

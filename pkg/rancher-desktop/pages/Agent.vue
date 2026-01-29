@@ -372,7 +372,7 @@ onMounted(async () => {
   ipcRenderer.on('k8s-progress', handleProgress);
 
   // Load settings and update agent config with selected model
-  ipcRenderer.on('settings-read', (_event: unknown, settings: { experimental?: { sullaModel?: string } }) => {
+  const handleSettingsRead = (_event: unknown, settings: { experimental?: { sullaModel?: string } }) => {
     if (settings.experimental?.sullaModel) {
       modelName.value = settings.experimental.sullaModel;
       updateAgentConfig(settings.experimental.sullaModel);
@@ -380,8 +380,14 @@ onMounted(async () => {
     } else {
       modelName.value = 'tinyllama:latest';
     }
-  });
+  };
+  ipcRenderer.on('settings-read', handleSettingsRead);
   ipcRenderer.send('settings-read');
+
+  // Listen for settings changes (e.g., from Language Model Settings window)
+  ipcRenderer.on('preferences/changed', () => {
+    ipcRenderer.send('settings-read');
+  });
 
   // Get initial progress
   try {
@@ -407,6 +413,8 @@ onMounted(async () => {
 
 onUnmounted(() => {
   ipcRenderer.removeListener('k8s-progress', handleProgress);
+  ipcRenderer.removeAllListeners('preferences/changed');
+  ipcRenderer.removeAllListeners('settings-read');
   if (readinessInterval) {
     clearInterval(readinessInterval);
   }

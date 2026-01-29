@@ -107,6 +107,7 @@ export function createWindow(name: string, url: string, options: Electron.Browse
 
 const mainUrl = `${ webRoot }/agent.html`;
 const dockerDashboardUrl = `${ webRoot }/index.html`;
+const languageModelSettingsUrl = `${ webRoot }/lm-settings.html`;
 
 console.log('[window/index] URLs configured:', { webRoot, mainUrl, dockerDashboardUrl });
 
@@ -222,6 +223,39 @@ export function openDockerDashboard() {
         devTools:         !app.isPackaged,
         nodeIntegration:  true,
         contextIsolation: false,
+      },
+    });
+
+  app.dock?.show();
+
+  return window;
+}
+
+/**
+ * Open the Language Model Settings window; if it is already open, focus it.
+ */
+export function openLanguageModelSettings() {
+  console.log('[openLanguageModelSettings] Called.');
+
+  const { width, height } = screen.getPrimaryDisplay().workAreaSize;
+
+  const defaultWidth = Math.min(Math.trunc(width * 0.7), 1000);
+  const defaultHeight = Math.min(Math.trunc(height * 0.7), 650);
+
+  const window = createWindow(
+    'language-model-settings',
+    languageModelSettingsUrl,
+    {
+      title:          'Sulla Desktop - Language Model Settings',
+      width:          defaultWidth,
+      height:         defaultHeight,
+      resizable:      true,
+      icon:           path.join(paths.resources, 'icons', 'logo-square-512.png'),
+      webPreferences: {
+        devTools:         !app.isPackaged,
+        nodeIntegration:  true,
+        contextIsolation: false,
+        webSecurity:      false, // Allow fetch to localhost services
       },
     });
 

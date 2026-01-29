@@ -1,0 +1,21 @@
+/**
+ * This is the entry point for the Language Model Settings window.
+ */
+
+import Cookies from 'cookie-universal';
+import { createApp } from 'vue';
+
+import usePlugins from './plugins';
+import store from './store';
+
+import LanguageModelSettings from '../pages/LanguageModelSettings.vue';
+
+// This does just the Vuex part of cookie-universal-nuxt, which is all we need.
+(store as any).$cookies = Cookies();
+
+const app = createApp(LanguageModelSettings);
+
+app.use(store);
+await usePlugins(app, store);
+
+app.mount('#app');
