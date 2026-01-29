@@ -1,9 +1,20 @@
-// Agent Application - Main exports
+// Agent System - Main exports
+// Flow: SensoryInput → ContextDetector → ConversationThread (Graph) → ResponseHandler
 
 export * from './types';
-export { AgentApplication, getAgentApplication, resetAgentApplication } from './AgentApplication';
-export { Sensory, getSensory } from './Sensory';
-export { Response, getResponse } from './Response';
+export { Sensory, getSensory } from './SensoryInput';
+export { ContextDetector, getContextDetector } from './ContextDetector';
+export { ConversationThread, getThread, getAllThreads, removeThread } from './ConversationThread';
+export { ResponseHandler, getResponseHandler } from './ResponseHandler';
+export { Graph, createDefaultGraph } from './Graph';
+
+// Graph Nodes
+export { BaseNode } from './nodes/BaseNode';
+export { MemoryNode } from './nodes/MemoryNode';
+export { PlannerNode } from './nodes/PlannerNode';
+export { ExecutorNode } from './nodes/ExecutorNode';
+export { CriticNode } from './nodes/CriticNode';
+
+// Legacy plugins (for backward compatibility)
 export { BasePlugin } from './plugins/BasePlugin';
 export { OllamaPlugin } from './plugins/OllamaPlugin';
-export { DateTimePlugin } from './plugins/DateTimePlugin';

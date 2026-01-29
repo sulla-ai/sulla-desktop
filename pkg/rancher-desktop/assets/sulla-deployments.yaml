@@ -208,3 +208,124 @@ spec:
     targetPort: 8000
     nodePort: 30115
   type: NodePort
+---
+# PostgreSQL for LangChain persistence
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  namespace: sulla
+  labels:
+    app: postgres
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:16-alpine
+        ports:
+        - containerPort: 5432
+        env:
+        - name: POSTGRES_USER
+          value: "sulla"
+        - name: POSTGRES_PASSWORD
+          value: "sulla_dev_password"
+        - name: POSTGRES_DB
+          value: "sulla"
+        - name: PGDATA
+          value: "/var/lib/postgresql/data/pgdata"
+        volumeMounts:
+        - mountPath: /var/lib/postgresql/data
+          name: postgres-data
+        resources:
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+      volumes:
+      - name: postgres-data
+        hostPath:
+          path: /var/lib/sulla/postgres
+          type: DirectoryOrCreate
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: sulla
+spec:
+  selector:
+    app: postgres
+  ports:
+  - port: 5432
+    targetPort: 5432
+    nodePort: 30116
+  type: NodePort
+---
+# Redis for LangChain caching and message broker
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: sulla
+  labels:
+    app: redis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+      - name: redis
+        image: redis:7-alpine
+        ports:
+        - containerPort: 6379
+        args:
+        - "--appendonly"
+        - "yes"
+        - "--save"
+        - "60"
+        - "1"
+        volumeMounts:
+        - mountPath: /data
+          name: redis-data
+        resources:
+          limits:
+            memory: "256Mi"
+            cpu: "250m"
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+      volumes:
+      - name: redis-data
+        hostPath:
+          path: /var/lib/sulla/redis
+          type: DirectoryOrCreate
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: sulla
+spec:
+  selector:
+    app: redis
+  ports:
+  - port: 6379
+    targetPort: 6379
+    nodePort: 30117
+  type: NodePort

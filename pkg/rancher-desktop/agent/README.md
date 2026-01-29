@@ -1,103 +1,100 @@
-# Sulla Agent Application
+# Sulla Agent System
 
-A modular, pluggable multi-agent reasoning system for processing user inputs through a configurable pipeline.
+A modular, multi-agent reasoning system with conscious/subconscious processing loops.
 
 ## Architecture Overview
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                              USER INPUT                                      │
-│                         (text, audio, etc.)                                  │
+│                    (keyboard, microphone, camera, API)                       │
 └─────────────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                              SENSORY                                         │
+│                           SENSORY INPUT                                      │
 │  ┌─────────────────────────────────────────────────────────────────────┐    │
-│  │  processText(text) / processAudio(audio)                            │    │
-│  │  - Accepts raw input from user                                      │    │
-│  │  - Creates SensoryInput object                                      │    │
-│  │  - Triggers AgentApplication.process()                              │    │
+│  │  createTextInput(text) / createAudioInput(audio)                    │    │
+│  │  - Captures mic/text/camera input                                   │    │
+│  │  - Extracts text and metadata (source, speaker)                     │    │
+│  │  - Outputs SensoryInput without blocking                            │    │
 │  └─────────────────────────────────────────────────────────────────────┘    │
 └─────────────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                         AGENT APPLICATION                                    │
+│                         CONTEXT DETECTOR                                     │
+│                      (Prefrontal Analog - Fast)                              │
 │  ┌─────────────────────────────────────────────────────────────────────┐    │
-│  │  Creates AgentContext:                                              │    │
-│  │  {                                                                  │    │
-│  │    rawInput: "user's original text",                                │    │
-│  │    prompt: "user's original text",  // modified by plugins          │    │
-│  │    response: "",                    // set by LLM plugin            │    │
-│  │    metadata: {},                    // plugins can store data       │    │
-│  │    functionCalls: [],               // for tool/function calling    │    │
-│  │    errors: [],                      // error collection             │    │
-│  │    timestamp: 1234567890                                            │    │
-│  │  }                                                                  │    │
+│  │  detect(input) → ThreadContext                                      │    │
+│  │  - Fast heuristic/LLM for topic classification                      │    │
+│  │  - Matches to existing thread or creates new                        │    │
+│  │  - Returns: threadId, isNew, summary, confidence                    │    │
+│  └─────────────────────────────────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                       CONVERSATION THREAD                                    │
+│                    (Conscious Processing Loop)                               │
+│  ┌─────────────────────────────────────────────────────────────────────┐    │
+│  │  Per-thread state:                                                  │    │
+│  │  - messages: full conversation history                              │    │
+│  │  - shortTermMemory: recent 5 exchanges                              │    │
+│  │  - metadata: thread-specific data                                   │    │
+│  │  - subconsciousStatus: async task monitoring                        │    │
 │  └─────────────────────────────────────────────────────────────────────┘    │
 │                                    │                                         │
-│                                    ▼                                         │
 │  ┌─────────────────────────────────────────────────────────────────────┐    │
 │  │                    PLUGIN PIPELINE                                  │    │
 │  │                                                                     │    │
-│  │  Plugins sorted by `order` (lower = earlier)                        │    │
-│  │                                                                     │    │
 │  │  ┌───────────────────────────────────────────────────────────────┐  │    │
 │  │  │ PHASE 1: beforeProcess()                                      │  │    │
-│  │  │ - Modify prompt before LLM call                               │  │    │
-│  │  │ - Retrieve context from memory/vector DB                      │  │    │
-│  │  │ - Add system instructions                                     │  │    │
-│  │  │ - Validate/sanitize input                                     │  │    │
+│  │  │ - Modify prompt (DateTimePlugin adds instructions)            │  │    │
+│  │  │ - Retrieve context from memory                                │  │    │
+│  │  └───────────────────────────────────────────────────────────────┘  │    │
+│  │                              │                                      │    │
+│  │                              ▼                                      │    │
+│  │  ┌───────────────────────────────────────────────────────────────┐  │    │
+│  │  │ SUBCONSCIOUS TASKS (Async, Parallel)                          │  │    │
+│  │  │ - DeepMemorySearch: Chroma query full history                 │  │    │
+│  │  │ - ToolExecutor: browser/file integrations                     │  │    │
+│  │  │ - Integrator: merge outputs                                   │  │    │
 │  │  └───────────────────────────────────────────────────────────────┘  │    │
 │  │                              │                                      │    │
 │  │                              ▼                                      │    │
 │  │  ┌───────────────────────────────────────────────────────────────┐  │    │
 │  │  │ PHASE 2: process()                                            │  │    │
-│  │  │ - Main processing (LLM calls happen here)                     │  │    │
-│  │  │ - OllamaPlugin calls /api/generate                            │  │    │
-│  │  │ - Sets context.response                                       │  │    │
-│  │  │ - Execute function calls                                      │  │    │
+│  │  │ - OllamaPlugin: builds prompt from short-term memory          │  │    │
+│  │  │ - Calls LLM with context                                      │  │    │
+│  │  │ - Sets state.metadata.response                                │  │    │
 │  │  └───────────────────────────────────────────────────────────────┘  │    │
 │  │                              │                                      │    │
 │  │                              ▼                                      │    │
 │  │  ┌───────────────────────────────────────────────────────────────┐  │    │
 │  │  │ PHASE 3: afterProcess()                                       │  │    │
-│  │  │ - Modify/format response                                      │  │    │
+│  │  │ - Aggregate subconscious results                              │  │    │
 │  │  │ - Store conversation in memory                                │  │    │
-│  │  │ - Log analytics                                               │  │    │
-│  │  │ - Trigger side effects                                        │  │    │
 │  │  └───────────────────────────────────────────────────────────────┘  │    │
 │  │                                                                     │    │
-│  └─────────────────────────────────────────────────────────────────────┘    │
-│                                    │                                         │
-│                                    ▼                                         │
-│  ┌─────────────────────────────────────────────────────────────────────┐    │
-│  │  Returns AgentResponse:                                             │    │
-│  │  {                                                                  │    │
-│  │    type: "text",                                                    │    │
-│  │    data: "The AI's response...",                                    │    │
-│  │    context: { ...full AgentContext for debugging }                  │    │
-│  │  }                                                                  │    │
 │  └─────────────────────────────────────────────────────────────────────┘    │
 └─────────────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                              RESPONSE                                        │
+│                         RESPONSE HANDLER                                     │
 │  ┌─────────────────────────────────────────────────────────────────────┐    │
-│  │  formatText(agentResponse) → string                                 │    │
-│  │  formatAudio(agentResponse) → audio data (future)                   │    │
-│  │  hasErrors(agentResponse) → boolean                                 │    │
-│  │  getErrors(agentResponse) → string[]                                │    │
-│  │  getContext(agentResponse) → full context for debugging             │    │
+│  │  formatText(response) → string                                      │    │
+│  │  formatAudio(response) → TTS via Coqui (future)                     │    │
+│  │  refine(response) → critique step for coherence                     │    │
+│  │  route(response, inputSource) → modality routing                    │    │
 │  └─────────────────────────────────────────────────────────────────────┘    │
 └─────────────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                              USER OUTPUT                                     │
-│                         (displayed in UI)                                    │
+│                    (text display or TTS audio)                               │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -107,156 +104,179 @@ A modular, pluggable multi-agent reasoning system for processing user inputs thr
 agent/
 ├── index.ts              # Main exports
 ├── types.ts              # TypeScript interfaces
-├── AgentApplication.ts   # Core orchestrator
-├── Sensory.ts            # Input handling
-├── Response.ts           # Output handling
+├── SensoryInput.ts       # Input capture (text/audio/camera)
+├── ContextDetector.ts    # Fast thread selection/creation
+├── ConversationThread.ts # Per-thread state + graph execution
+├── Graph.ts              # LangGraph-style workflow orchestrator
+├── ResponseHandler.ts    # Output formatting & critique
 ├── README.md             # This file
-└── plugins/
-    ├── BasePlugin.ts     # Abstract base class
-    └── OllamaPlugin.ts   # LLM integration
+├── nodes/                # Graph nodes (LangGraph-style)
+│   ├── BaseNode.ts       # Abstract base class
+│   ├── MemoryNode.ts     # Chroma queries for context
+│   ├── PlannerNode.ts    # Decides next steps
+│   ├── ExecutorNode.ts   # LLM calls + tool execution
+│   └── CriticNode.ts     # Approve/revise/reject decisions
+└── plugins/              # Legacy plugins (backward compat)
+    ├── BasePlugin.ts
+    └── OllamaPlugin.ts
 ```
 
 ## Core Classes
 
-### AgentApplication
-The central orchestrator that manages plugins and runs the processing pipeline.
-
-```typescript
-const agent = getAgentApplication();
-
-// Register plugins (sorted by order automatically)
-agent.registerPlugin(new OllamaPlugin());
-agent.registerPlugin(new MyCustomPlugin());
-
-// Process input
-const response = await agent.process(sensoryInput);
-```
-
-### Sensory
-Handles input from various sources and triggers the agent pipeline.
+### SensoryInput
+Captures input from various sources without blocking.
 
 ```typescript
 const sensory = getSensory();
 
-// Process text input
-const response = await sensory.processText("Hello, how are you?");
+// Create text input from keyboard
+const input = sensory.createTextInput("Hello, how are you?");
 
-// Future: Process audio input
-// const response = await sensory.processAudio(audioData);
+// Create audio input (after transcription)
+const audioInput = sensory.createAudioInput(transcribedText, { speaker: "user1" });
 ```
 
-### Response
-Handles output formatting and error inspection.
+### ContextDetector
+Fast heuristic for thread selection - the "prefrontal cortex" analog.
 
 ```typescript
-const responseHandler = getResponse();
+const detector = getContextDetector();
 
-// Get text response
-const text = responseHandler.formatText(agentResponse);
-
-// Check for errors
-if (responseHandler.hasErrors(agentResponse)) {
-  console.error(responseHandler.getErrors(agentResponse));
-}
-
-// Debug: get full context
-const ctx = responseHandler.getContext(agentResponse);
+// Detect context and get/create thread
+const context = await detector.detect(input);
+// Returns: { threadId, isNew, summary, confidence }
 ```
 
-## Plugin System
-
-### Plugin Interface
+### ConversationThread
+Per-thread state management with conscious processing loop.
 
 ```typescript
-interface Plugin {
-  config: PluginConfig;
-  
-  initialize?(): Promise<void>;           // Called once on registration
-  beforeProcess?(ctx): Promise<ctx>;      // Before LLM call
-  process?(ctx): Promise<ctx>;            // Main processing (LLM calls)
-  afterProcess?(ctx): Promise<ctx>;       // After LLM call
-  destroy?(): Promise<void>;              // Cleanup
-}
+const thread = getThread(threadId);
 
-interface PluginConfig {
-  id: string;           // Unique identifier
-  name: string;         // Display name
-  order: number;        // Execution order (lower = earlier)
-  enabled: boolean;     // Toggle on/off
-  settings: object;     // Plugin-specific config
-}
+// Register plugins
+thread.registerPlugin(new DateTimePlugin());
+thread.registerPlugin(new OllamaPlugin());
+
+// Initialize and process
+await thread.initialize();
+const response = await thread.process(input);
+
+// Access thread state
+const state = thread.getState();
+const memory = thread.getShortTermMemory();
 ```
 
-### Creating a Plugin
+### ResponseHandler
+Output formatting with optional critique step.
 
 ```typescript
-import { BasePlugin } from './plugins/BasePlugin';
-import type { AgentContext } from './types';
+const handler = getResponseHandler();
 
-export class MyPlugin extends BasePlugin {
+// Format as text
+const text = handler.formatText(response);
+
+// Apply critique step (LLM refinement)
+const refined = await handler.refine(response);
+
+// Route based on input modality
+const output = await handler.route(response, "microphone"); // → TTS
+```
+
+## Graph Node System (LangGraph-style)
+
+Plugins integrate as LangGraph nodes inside ConversationThread.
+
+### Node Interface
+
+```typescript
+interface GraphNode {
+  id: string;
+  name: string;
+  execute(state: ThreadState): Promise<{ state: ThreadState; next: NodeResult }>;
+  initialize?(): Promise<void>;
+  destroy?(): Promise<void>;
+}
+
+type NodeResult = 'continue' | 'end' | 'loop' | string; // string = specific node name
+```
+
+### Default Graph Flow
+
+```
+Memory → Planner → Executor → Critic → (loop to Planner OR end)
+```
+
+| Node | Purpose |
+|------|---------|
+| **MemoryNode** | Queries Chroma for relevant past context |
+| **PlannerNode** | Analyzes request, decides if tools needed |
+| **ExecutorNode** | Builds prompt, calls LLM, executes tools |
+| **CriticNode** | Reviews response: approve/revise/reject |
+
+### Creating a Custom Node
+
+```typescript
+import { BaseNode } from './nodes/BaseNode';
+import type { ThreadState, NodeResult } from './types';
+
+export class MyCustomNode extends BaseNode {
   constructor() {
-    super({
-      id: 'my-plugin',
-      name: 'My Custom Plugin',
-      order: 25,  // Runs before OllamaPlugin (order: 50)
-    });
+    super('my_node', 'My Custom Node');
   }
 
-  async beforeProcess(context: AgentContext): Promise<AgentContext> {
-    // Modify the prompt before LLM sees it
-    context.prompt = `You are a helpful assistant.\n\nUser: ${context.prompt}`;
-    return context;
-  }
-
-  async afterProcess(context: AgentContext): Promise<AgentContext> {
-    // Log the interaction
-    console.log('User asked:', context.rawInput);
-    console.log('AI responded:', context.response);
-    return context;
+  async execute(state: ThreadState): Promise<{ state: ThreadState; next: NodeResult }> {
+    // Modify state
+    state.metadata.myData = 'custom processing';
+    
+    // Return state and next node (or 'continue' to follow edges)
+    return { state, next: 'continue' };
   }
 }
 ```
 
-### Plugin Execution Order
-
-Plugins are sorted by their `order` property:
-
-| Order | Plugin Type | Purpose |
-|-------|-------------|---------|
-| 0-24  | Input Processing | Validation, sanitization |
-| 25-49 | Context Retrieval | Memory, RAG, history |
-| 50    | **OllamaPlugin** | LLM call |
-| 51-74 | Response Processing | Formatting, filtering |
-| 75-99 | Storage/Logging | Save to DB, analytics |
-
-### Example: Multi-Agent Review System
+### Adding Nodes to a Thread
 
 ```typescript
-// Reviewer plugin that runs after initial LLM response
-class ReviewerPlugin extends BasePlugin {
-  constructor() {
-    super({ id: 'reviewer', name: 'Response Reviewer', order: 55 });
-  }
+const thread = getThread(threadId);
 
-  async afterProcess(context: AgentContext): Promise<AgentContext> {
-    // Call LLM again to review the response
-    const reviewPrompt = `Review this response for accuracy:\n${context.response}`;
-    
-    const review = await this.callOllama(reviewPrompt);
-    
-    // Store review in metadata
-    context.metadata.review = review;
-    
-    // Optionally modify response based on review
-    if (review.includes('NEEDS_CORRECTION')) {
-      context.response = await this.callOllama(
-        `Correct this response: ${context.response}`
-      );
-    }
-    
-    return context;
-  }
-}
+// Add custom node
+thread.addNode(new MyCustomNode());
+
+// Add edge from existing node to custom node
+thread.addEdge('planner', 'my_node');
+thread.addEdge('my_node', 'executor');
+
+// Or add conditional edge
+thread.addConditionalEdge('my_node', (state) => {
+  return state.metadata.needsReview ? 'critic' : 'executor';
+});
+```
+
+### Graph Configuration
+
+```typescript
+import { Graph, MemoryNode, PlannerNode, ExecutorNode, CriticNode } from '@pkg/agent';
+
+const graph = new Graph();
+
+// Add nodes
+graph.addNode(new MemoryNode());
+graph.addNode(new PlannerNode());
+graph.addNode(new ExecutorNode());
+graph.addNode(new CriticNode());
+
+// Fixed edges
+graph.addEdge('memory_recall', 'planner');
+graph.addEdge('planner', 'executor');
+graph.addEdge('executor', 'critic');
+
+// Conditional edge: Critic → Planner (revise) or END (approve)
+graph.addConditionalEdge('critic', (state) => {
+  return state.metadata.criticDecision === 'revise' ? 'planner' : 'end';
+});
+
+graph.setEntryPoint('memory_recall');
+graph.setEndPoints('critic');
 ```
 
 ## Data Flow Example
@@ -264,64 +284,111 @@ class ReviewerPlugin extends BasePlugin {
 ```
 1. User types: "What is 2+2?"
 
-2. Sensory.processText("What is 2+2?")
-   └─► Creates SensoryInput { type: 'text', data: 'What is 2+2?' }
+2. sensory.createTextInput("What is 2+2?")
+   └─► SensoryInput { id, type: 'text', data: 'What is 2+2?', metadata: { source: 'keyboard' } }
 
-3. AgentApplication.process(input)
-   └─► Creates AgentContext {
-         rawInput: "What is 2+2?",
-         prompt: "What is 2+2?",
-         response: "",
-         ...
-       }
+3. contextDetector.detect(input)
+   └─► ThreadContext { threadId: 'thread_123', isNew: true, summary: 'Math question' }
 
-4. PHASE 1 - beforeProcess (all plugins, sorted by order)
-   └─► ContextPlugin (order: 25) might add:
-       context.prompt = "Previous context...\n\nUser: What is 2+2?"
+4. thread = getThread('thread_123')
+   └─► New ConversationThread with empty state
 
-5. PHASE 2 - process (all plugins, sorted by order)
-   └─► OllamaPlugin (order: 50):
-       - Calls POST /api/generate with context.prompt
-       - Sets context.response = "2+2 equals 4."
+5. thread.registerPlugin(DateTimePlugin, OllamaPlugin)
+   └─► Plugins sorted by order: [DateTimePlugin(25), OllamaPlugin(50)]
 
-6. PHASE 3 - afterProcess (all plugins, sorted by order)
-   └─► MemoryPlugin (order: 75) might:
-       - Store conversation in vector DB
-       - Log analytics
+6. thread.process(input)
+   │
+   ├─► Records user message to state.messages
+   │
+   ├─► PHASE 1: beforeProcess
+   │   └─► DateTimePlugin adds promptSuffix with current datetime
+   │
+   ├─► Spawns subconscious tasks (async)
+   │   └─► DeepMemorySearch queries Chroma (non-blocking)
+   │
+   ├─► PHASE 2: process
+   │   └─► OllamaPlugin:
+   │       - Builds prompt from shortTermMemory + current input
+   │       - Calls POST /api/generate
+   │       - Sets state.metadata.response = "2+2 equals 4."
+   │
+   ├─► Waits for subconscious tasks (with timeout)
+   │
+   ├─► PHASE 3: afterProcess
+   │   └─► (plugins can modify response here)
+   │
+   └─► Records assistant message, returns AgentResponse
 
-7. Returns AgentResponse {
-     type: 'text',
-     data: '2+2 equals 4.',
-     context: { ...full context }
-   }
-
-8. Response.formatText(agentResponse)
+7. responseHandler.formatText(response)
    └─► Returns "2+2 equals 4."
 
-9. UI displays: "2+2 equals 4."
+8. UI displays: "2+2 equals 4."
 ```
 
 ## Usage in Agent.vue
 
 ```typescript
-import { getAgentApplication, getSensory, getResponse, OllamaPlugin } from '@pkg/agent';
+import {
+  getSensory,
+  getContextDetector,
+  getThread,
+  getResponseHandler,
+  OllamaPlugin,
+  DateTimePlugin,
+} from '@pkg/agent';
 
-// Initialize
-const agent = getAgentApplication();
 const sensory = getSensory();
-const responseHandler = getResponse();
+const contextDetector = getContextDetector();
+const responseHandler = getResponseHandler();
 
-// Register plugins
-agent.registerPlugin(new OllamaPlugin());
-
-// Handle user input
 const send = async () => {
-  const agentResponse = await sensory.processText(userQuery);
-  
-  if (responseHandler.hasErrors(agentResponse)) {
-    showError(responseHandler.getErrors(agentResponse).join('; '));
+  // 1. Create sensory input
+  const input = sensory.createTextInput(query);
+
+  // 2. Detect context and get/create thread
+  const ctx = await contextDetector.detect(input);
+  const thread = getThread(ctx.threadId);
+
+  // 3. Register plugins for new threads
+  if (ctx.isNew) {
+    thread.registerPlugin(new DateTimePlugin());
+    thread.registerPlugin(new OllamaPlugin());
+    await thread.initialize();
+  }
+
+  // 4. Process through the thread
+  const response = await thread.process(input);
+
+  // 5. Handle response
+  if (responseHandler.hasErrors(response)) {
+    showError(responseHandler.getError(response));
   } else {
-    showResponse(responseHandler.formatText(agentResponse));
+    showResponse(responseHandler.formatText(response));
   }
 };
+```
+
+## Future: LangGraph Integration
+
+The ConversationThread class is designed to eventually integrate LangGraph for:
+- Stateful, interruptible, multi-step reasoning
+- Cycles/loops/critique/human-in-the-loop
+- Coordinating multiple specialized agents
+- Checkpointing (save/resume thread state)
+
+```typescript
+// Future shape inside ConversationThread
+class ConversationThread {
+  private graph: CompiledStateGraph;
+  
+  constructor(threadId: string) {
+    const workflow = new StateGraph(AgentState);
+    workflow.addNode("memory_recall", this.memoryRecallNode);
+    workflow.addNode("planner", this.plannerNode);
+    workflow.addNode("executor", this.executorNode);
+    workflow.addNode("critic", this.criticNode);
+    // ... edges and conditions
+    this.graph = workflow.compile({ checkpointer: MemorySaver() });
+  }
+}
 ```

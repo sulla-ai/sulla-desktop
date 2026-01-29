@@ -1,6 +1,6 @@
 // OllamaPlugin - Calls Ollama LLM to generate responses
 
-import type { AgentContext } from '../types';
+import type { ThreadState } from '../types';
 import { BasePlugin } from './BasePlugin';
 
 export interface OllamaPluginSettings {
@@ -54,7 +54,7 @@ export class OllamaPlugin extends BasePlugin {
     return null;
   }
 
-  async process(context: AgentContext): Promise<AgentContext> {
+  async process(state: ThreadState): Promise<ThreadState> {
     // Determine which model to use
     let model = this.settings.model;
 
@@ -67,9 +67,32 @@ export class OllamaPlugin extends BasePlugin {
     }
 
     if (!model) {
-      context.errors.push('[ollama] No model available. Ollama may still be downloading.');
+      state.metadata.error = '[ollama] No model available. Ollama may still be downloading.';
 
-      return context;
+      return state;
+    }
+
+    // Build prompt from short-term memory + current input
+    const lastUserMessage = state.messages[state.messages.length - 1];
+    let prompt = lastUserMessage?.content || '';
+
+    // Add context from short-term memory if available
+    if (state.shortTermMemory.length > 1) {
+      const context = state.shortTermMemory
+        .slice(0, -1) // Exclude the current message
+        .map(m => `${ m.role === 'user' ? 'User' : 'Assistant' }: ${ m.content }`)
+        .join('\n');
+
+      prompt = `Previous conversation:\n${ context }\n\nUser: ${ prompt }`;
+    }
+
+    // Apply any prompt modifications from metadata
+    if (state.metadata.promptPrefix) {
+      prompt = `${ state.metadata.promptPrefix }\n\n${ prompt }`;
+    }
+
+    if (state.metadata.promptSuffix) {
+      prompt = `${ prompt }\n\n${ state.metadata.promptSuffix }`;
     }
 
     try {
@@ -78,7 +101,7 @@ export class OllamaPlugin extends BasePlugin {
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({
           model,
-          prompt: context.prompt,
+          prompt,
           stream: this.settings.stream,
         }),
       });
@@ -91,16 +114,16 @@ export class OllamaPlugin extends BasePlugin {
 
       const data = await res.json();
 
-      context.response = data.response || '';
-      context.metadata.ollamaModel = model;
-      context.metadata.ollamaEvalCount = data.eval_count;
-      context.metadata.ollamaEvalDuration = data.eval_duration;
+      state.metadata.response = data.response || '';
+      state.metadata.ollamaModel = model;
+      state.metadata.ollamaEvalCount = data.eval_count;
+      state.metadata.ollamaEvalDuration = data.eval_duration;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
 
-      context.errors.push(`[ollama] Failed to generate response: ${ message }`);
+      state.metadata.error = `[ollama] Failed to generate response: ${ message }`;
     }
 
-    return context;
+    return state;
   }
 }

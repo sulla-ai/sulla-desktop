@@ -1,6 +1,6 @@
 // BasePlugin - Abstract base class for all plugins
 
-import type { AgentContext, Plugin, PluginConfig } from '../types';
+import type { ThreadState, Plugin, PluginConfig } from '../types';
 
 export abstract class BasePlugin implements Plugin {
   config: PluginConfig;
@@ -19,19 +19,19 @@ export abstract class BasePlugin implements Plugin {
     // Override in subclass if needed
   }
 
-  async beforeProcess(context: AgentContext): Promise<AgentContext> {
+  async beforeProcess(state: ThreadState): Promise<ThreadState> {
     // Override in subclass if needed
-    return context;
+    return state;
   }
 
-  async process(context: AgentContext): Promise<AgentContext> {
+  async process(state: ThreadState): Promise<ThreadState> {
     // Override in subclass if needed
-    return context;
+    return state;
   }
 
-  async afterProcess(context: AgentContext): Promise<AgentContext> {
+  async afterProcess(state: ThreadState): Promise<ThreadState> {
     // Override in subclass if needed
-    return context;
+    return state;
   }
 
   async destroy(): Promise<void> {

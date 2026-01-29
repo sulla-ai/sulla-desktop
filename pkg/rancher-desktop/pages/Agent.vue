@@ -73,21 +73,23 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 
 import { ipcRenderer } from '@pkg/utils/ipcRenderer';
-import { getAgentApplication, getSensory, getResponse, OllamaPlugin, DateTimePlugin } from '@pkg/agent';
+import {
+  getSensory,
+  getContextDetector,
+  getThread,
+  getResponseHandler,
+} from '@pkg/agent';
 
 const query = ref('');
 const response = ref('');
 const loading = ref(false);
 const error = ref('');
+const currentThreadId = ref<string | null>(null);
 
-// Initialize agent application
-const agent = getAgentApplication();
+// Initialize agent components
 const sensory = getSensory();
-const responseHandler = getResponse();
-
-// Register plugins (order determines execution sequence)
-agent.registerPlugin(new DateTimePlugin());  // order: 25 - modifies prompt
-agent.registerPlugin(new OllamaPlugin());    // order: 50 - calls LLM
+const contextDetector = getContextDetector();
+const responseHandler = getResponseHandler();
 
 // System readiness state
 const systemReady = ref(false);
@@ -149,39 +151,40 @@ let k8sReady = false;
 const startReadinessCheck = () => {
   readinessInterval = setInterval(async () => {
     // Phase 1: Wait for K8s progress to complete
-    if (!k8sReady && progressMax.value > 0 && progressCurrent.value >= progressMax.value) {
-      k8sReady = true;
-      updateStartupStatus('pods', 'Waiting for Sulla pods to start...');
+    if (!k8sReady) {
+      if (progressMax.value > 0 && progressCurrent.value >= progressMax.value) {
+        k8sReady = true;
+      } else {
+        // Still waiting for K8s - don't override the K8s progress description
+        return;
+      }
     }
 
     // Phase 2: Check Ollama connectivity
-    if (k8sReady || progressMax.value <= 0) {
-      const ollamaUp = await checkOllamaConnectivity();
+    const ollamaUp = await checkOllamaConnectivity();
 
-      if (!ollamaUp) {
-        updateStartupStatus('pods', 'Starting Ollama service...');
+    if (!ollamaUp) {
+      updateStartupStatus('pods', 'Waiting for Ollama pod to start...');
 
-        return;
-      }
+      return;
+    }
 
-      // Phase 3: Check for model
-      updateStartupStatus('model', 'Checking for AI model...');
-      const hasModel = await checkOllamaModel();
+    // Phase 3: Check for model
+    updateStartupStatus('model', 'Checking for AI model...');
+    const hasModel = await checkOllamaModel();
 
-      if (!hasModel) {
-        updateStartupStatus('model', 'Downloading AI model (this may take a few minutes)...');
+    if (!hasModel) {
+      updateStartupStatus('model', 'Downloading AI model (this may take a few minutes)...');
 
-        return;
-      }
+      return;
+    }
 
-      // All ready! Initialize agent application
-      updateStartupStatus('ready', 'System ready!');
-      await agent.initialize();
-      systemReady.value = true;
-      if (readinessInterval) {
-        clearInterval(readinessInterval);
-        readinessInterval = null;
-      }
+    // All ready!
+    updateStartupStatus('ready', 'System ready!');
+    systemReady.value = true;
+    if (readinessInterval) {
+      clearInterval(readinessInterval);
+      readinessInterval = null;
     }
   }, 2000);
 };
@@ -224,8 +227,6 @@ onMounted(async () => {
   const hasModel = await checkOllamaModel();
 
   if (hasModel) {
-    // Initialize agent application when system is ready
-    await agent.initialize();
     systemReady.value = true;
   } else {
     startReadinessCheck();
@@ -249,14 +250,30 @@ const send = async () => {
   error.value = '';
 
   try {
-    // Use the agent application to process the input
-    const agentResponse = await sensory.processText(query.value);
+    // 1. Create sensory input
+    const input = sensory.createTextInput(query.value);
 
-    // Handle response
+    // 2. Detect context and get/create thread
+    const threadContext = await contextDetector.detect(input);
+
+    currentThreadId.value = threadContext.threadId;
+
+    // 3. Get or create conversation thread (uses default graph with nodes)
+    const thread = getThread(threadContext.threadId);
+
+    // Initialize if new thread
+    if (threadContext.isNew) {
+      await thread.initialize();
+    }
+
+    // 4. Process through the graph: Memory → Planner → Executor → Critic
+    const agentResponse = await thread.process(input);
+
+    // 5. Handle response
     if (responseHandler.hasErrors(agentResponse)) {
-      const errors = responseHandler.getErrors(agentResponse);
+      const err = responseHandler.getError(agentResponse);
 
-      throw new Error(errors.join('; '));
+      throw new Error(err || 'Unknown error');
     }
 
     response.value = responseHandler.formatText(agentResponse) || 'No response from model';
