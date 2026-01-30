@@ -14,11 +14,12 @@ type ServiceSummary = {
 
 export class KubectlGetServicesTool extends BaseTool {
   override readonly name = 'kubectl_get_services';
+  override readonly category = 'kubernetes_read';
 
   override getPlanningInstructions(): string {
     return [
-      '13) kubectl_get_services (Kubernetes via kubectl)',
-      '   - Purpose: List services and connectivity-related details.',
+      '17) kubectl_get_services (Kubernetes via kubectl)',
+      '   - Purpose: List services and key connectivity details.',
       '   - Args:',
       '     - namespace (string, optional) if omitted lists across all namespaces',
       '   - Output: Service summaries including type, ClusterIP, External IPs, ports.',

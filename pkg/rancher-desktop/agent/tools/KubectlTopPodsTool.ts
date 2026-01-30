@@ -5,11 +5,12 @@ import { runCommand } from './CommandRunner';
 
 export class KubectlTopPodsTool extends BaseTool {
   override readonly name = 'kubectl_top_pods';
+  override readonly category = 'kubernetes_debug';
 
   override getPlanningInstructions(): string {
     return [
       '9) kubectl_top_pods (Kubernetes via kubectl)',
-      '   - Purpose: Show pod resource usage across namespaces (requires metrics-server).',
+      '   - Purpose: View pod CPU/memory usage for debugging and capacity planning.',
       '   - Args:',
       '     - namespace (string, optional) if omitted uses all namespaces',
       '   - Output: `kubectl top pods` output.',

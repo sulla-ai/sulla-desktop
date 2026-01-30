@@ -5,11 +5,12 @@ import { runCommand } from './CommandRunner';
 
 export class KubectlCpFromPodTool extends BaseTool {
   override readonly name = 'kubectl_cp_from_pod';
+  override readonly category = 'kubernetes_exec';
 
   override getPlanningInstructions(): string {
     return [
       '23) kubectl_cp_from_pod (Kubernetes via kubectl)',
-      '   - Purpose: Copy a file/directory from a pod to the host filesystem.',
+      '   - Purpose: Copy files/directories from a pod to the host filesystem.',
       '   - Args:',
       '     - namespace (string, required)',
       '     - pod (string, required)',

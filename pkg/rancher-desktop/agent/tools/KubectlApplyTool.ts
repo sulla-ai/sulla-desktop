@@ -5,6 +5,7 @@ import { runCommand } from './CommandRunner';
 
 export class KubectlApplyTool extends BaseTool {
   override readonly name = 'kubectl_apply';
+  override readonly category = 'kubernetes_write';
 
   override getPlanningInstructions(): string {
     return [

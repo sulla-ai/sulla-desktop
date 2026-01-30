@@ -14,11 +14,12 @@ type PodSummary = {
 
 export class KubectlListPodsTool extends BaseTool {
   override readonly name = 'kubectl_list_pods';
+  override readonly category = 'kubernetes_read';
 
   override getPlanningInstructions(): string {
     return [
       '3) kubectl_list_pods (Kubernetes via kubectl)',
-      '   - Purpose: List pods across all namespaces and summarize status/health.',
+      '   - Purpose: List pods in a namespace (or all namespaces) and summarize status/health.',
       '   - Output: Per-pod status including namespace, name, phase, readiness, restarts, and node (when available).',
       '   - Use when:',
       '     - User asks for cluster status, what is running, or whether workloads are healthy.',

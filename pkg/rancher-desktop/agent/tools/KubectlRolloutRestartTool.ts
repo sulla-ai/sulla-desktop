@@ -5,11 +5,12 @@ import { runCommand } from './CommandRunner';
 
 export class KubectlRolloutRestartTool extends BaseTool {
   override readonly name = 'kubectl_rollout_restart';
+  override readonly category = 'kubernetes_write';
 
   override getPlanningInstructions(): string {
     return [
-      '12) kubectl_rollout_restart (Kubernetes via kubectl)',
-      '   - Purpose: Trigger a rollout restart for a deployment (mutates cluster state).',
+      '13) kubectl_rollout_restart (Kubernetes via kubectl)',
+      '   - Purpose: Restart a deployment rollout (mutates cluster state).',
       '   - Args:',
       '     - namespace (string, required)',
       '     - deployment (string, required)',

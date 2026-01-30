@@ -5,11 +5,12 @@ import { runCommand } from './CommandRunner';
 
 export class HostFindFilesTool extends BaseTool {
   override readonly name = 'host_find_files';
+  override readonly category = 'host_fs';
 
   override getPlanningInstructions(): string {
     return [
       '31) host_find_files (Host filesystem)',
-      '   - Purpose: Find files by name under a directory (uses `find`).',
+      '   - Purpose: Find files by name under a directory on the host.',
       '   - Args:',
       '     - path (string, required) root directory',
       '     - pattern (string, required) glob-like name pattern (e.g. "*.log")',

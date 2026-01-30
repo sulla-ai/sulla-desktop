@@ -5,11 +5,12 @@ import fs from 'fs';
 
 export class HostReadFileTool extends BaseTool {
   override readonly name = 'host_read_file';
+  override readonly category = 'host_fs';
 
   override getPlanningInstructions(): string {
     return [
       '28) host_read_file (Host filesystem)',
-      '   - Purpose: Read a host file (optionally a line range).',
+      '   - Purpose: Read a file from the host filesystem.',
       '   - Args:',
       '     - path (string, required)',
       '     - offset (number, optional, default 0) byte offset',

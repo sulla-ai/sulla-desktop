@@ -13,11 +13,12 @@ type IngressSummary = {
 
 export class KubectlGetIngressesTool extends BaseTool {
   override readonly name = 'kubectl_get_ingresses';
+  override readonly category = 'kubernetes_read';
 
   override getPlanningInstructions(): string {
     return [
-      '14) kubectl_get_ingresses (Kubernetes via kubectl)',
-      '   - Purpose: List ingresses and routing details.',
+      '18) kubectl_get_ingresses (Kubernetes via kubectl)',
+      '   - Purpose: List ingresses and key routing info.',
       '   - Args:',
       '     - namespace (string, optional) if omitted lists across all namespaces',
       '   - Output: Ingress summaries including hosts and addresses.',

@@ -5,11 +5,12 @@ import { runCommand } from './CommandRunner';
 
 export class KubectlGetPodYamlTool extends BaseTool {
   override readonly name = 'kubectl_get_pod_yaml';
+  override readonly category = 'kubernetes_debug';
 
   override getPlanningInstructions(): string {
     return [
       '25) kubectl_get_pod_yaml (Kubernetes via kubectl)',
-      '   - Purpose: Fetch full pod YAML for deep inspection.',
+      '   - Purpose: Fetch full pod YAML for inspection (debugging).',
       '   - Args:',
       '     - namespace (string, required)',
       '     - pod (string, required)',

@@ -32,6 +32,11 @@ import { HostStatTool } from './HostStatTool';
 import { HostFindFilesTool } from './HostFindFilesTool';
 import { HostGrepTool } from './HostGrepTool';
 import { HostRunCommandTool } from './HostRunCommandTool';
+import { PlanCreateTool } from './PlanCreateTool';
+import { PlanGetTool } from './PlanGetTool';
+import { PlanUpdateTool } from './PlanUpdateTool';
+import { PlanMarkDoneTool } from './PlanMarkDoneTool';
+import { PlanReviewTool } from './PlanReviewTool';
 
 let registered = false;
 
@@ -74,6 +79,11 @@ export function registerDefaultTools(): void {
   registry.register(new HostFindFilesTool());
   registry.register(new HostGrepTool());
   registry.register(new HostRunCommandTool());
+  registry.register(new PlanCreateTool());
+  registry.register(new PlanGetTool());
+  registry.register(new PlanUpdateTool());
+  registry.register(new PlanMarkDoneTool());
+  registry.register(new PlanReviewTool());
   registered = true;
 }
 
@@ -112,3 +122,8 @@ export { HostStatTool } from './HostStatTool';
 export { HostFindFilesTool } from './HostFindFilesTool';
 export { HostGrepTool } from './HostGrepTool';
 export { HostRunCommandTool } from './HostRunCommandTool';
+export { PlanCreateTool } from './PlanCreateTool';
+export { PlanGetTool } from './PlanGetTool';
+export { PlanUpdateTool } from './PlanUpdateTool';
+export { PlanMarkDoneTool } from './PlanMarkDoneTool';
+export { PlanReviewTool } from './PlanReviewTool';

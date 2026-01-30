@@ -13,11 +13,12 @@ type NodeTopMetric = {
 
 export class KubectlTopNodesTool extends BaseTool {
   override readonly name = 'kubectl_top_nodes';
+  override readonly category = 'kubernetes_debug';
 
   override getPlanningInstructions(): string {
     return [
       '8) kubectl_top_nodes (Kubernetes via kubectl)',
-      '   - Purpose: Show node resource usage (requires metrics-server).',
+      '   - Purpose: View node CPU/memory usage for capacity debugging.',
       '   - Output: `kubectl top nodes` output.',
       '   - Planning guidance:',
       '     - Set requiresTools=true',

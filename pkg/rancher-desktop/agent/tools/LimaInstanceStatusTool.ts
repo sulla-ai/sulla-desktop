@@ -5,11 +5,12 @@ import { runCommand } from './CommandRunner';
 
 export class LimaInstanceStatusTool extends BaseTool {
   override readonly name = 'lima_instance_status';
+  override readonly category = 'lima';
 
   override getPlanningInstructions(): string {
     return [
-      '18) lima_instance_status (Lima via limactl)',
-      '   - Purpose: Show detailed info for a Lima instance.',
+      '14) lima_instance_status (Lima via limactl)',
+      '   - Purpose: Get Lima instance status details.',
       '   - Args:',
       '     - name (string, required) instance name',
       '   - Output: limactl info output (JSON when supported).',

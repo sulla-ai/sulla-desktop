@@ -14,11 +14,12 @@ type DeploymentSummary = {
 
 export class KubectlGetDeploymentsTool extends BaseTool {
   override readonly name = 'kubectl_get_deployments';
+  override readonly category = 'kubernetes_read';
 
   override getPlanningInstructions(): string {
     return [
-      '10) kubectl_get_deployments (Kubernetes via kubectl)',
-      '   - Purpose: List deployments and basic rollout/availability status.',
+      '11) kubectl_get_deployments (Kubernetes via kubectl)',
+      '   - Purpose: List deployments and summarize rollout/availability.',
       '   - Args:',
       '     - namespace (string, optional) if omitted lists across all namespaces',
       '   - Output: Deployment summaries including desired/available counts.',

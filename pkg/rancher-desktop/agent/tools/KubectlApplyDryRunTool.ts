@@ -5,10 +5,12 @@ import { runCommand } from './CommandRunner';
 
 export class KubectlApplyDryRunTool extends BaseTool {
   override readonly name = 'kubectl_apply_dry_run';
+  override readonly category = 'kubernetes_write';
 
   override getPlanningInstructions(): string {
     return [
       '15) kubectl_apply_dry_run (Kubernetes via kubectl)',
+      '   - Purpose: Validate manifests against the cluster API without applying (server-side dry-run).',
       '   - Purpose: Validate/apply manifests in dry-run mode (server-side) using YAML provided by the planner.',
       '   - Args:',
       '     - yaml (string, required) YAML manifest(s) to apply',

@@ -7,6 +7,7 @@ import { getRemoteModelService } from '../services/RemoteModelService';
 
 export class AgentGetSettingsTool extends BaseTool {
   override readonly name = 'agent_get_settings';
+  override readonly category = 'agent_settings';
 
   override getPlanningInstructions(): string {
     return [

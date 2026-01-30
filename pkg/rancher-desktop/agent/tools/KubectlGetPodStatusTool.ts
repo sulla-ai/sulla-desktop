@@ -16,6 +16,7 @@ type ContainerStatusSummary = {
 
 export class KubectlGetPodStatusTool extends BaseTool {
   override readonly name = 'kubectl_get_pod_status';
+  override readonly category = 'kubernetes_debug';
 
   override getPlanningInstructions(): string {
     return [

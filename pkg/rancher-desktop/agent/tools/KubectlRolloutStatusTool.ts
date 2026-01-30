@@ -5,10 +5,11 @@ import { runCommand } from './CommandRunner';
 
 export class KubectlRolloutStatusTool extends BaseTool {
   override readonly name = 'kubectl_rollout_status';
+  override readonly category = 'kubernetes_debug';
 
   override getPlanningInstructions(): string {
     return [
-      '11) kubectl_rollout_status (Kubernetes via kubectl)',
+      '12) kubectl_rollout_status (Kubernetes via kubectl)',
       '   - Purpose: Check rollout status for a deployment.',
       '   - Args:',
       '     - namespace (string, required)',

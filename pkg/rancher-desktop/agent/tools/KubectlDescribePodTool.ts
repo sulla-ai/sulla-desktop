@@ -5,11 +5,12 @@ import { runCommand } from './CommandRunner';
 
 export class KubectlDescribePodTool extends BaseTool {
   override readonly name = 'kubectl_describe_pod';
+  override readonly category = 'kubernetes_debug';
 
   override getPlanningInstructions(): string {
     return [
       '5) kubectl_describe_pod (Kubernetes via kubectl)',
-      '   - Purpose: Describe a specific pod including events and scheduling details.',
+      '   - Purpose: Describe a pod for debugging (events, scheduling, container status).',
       '   - Args:',
       '     - namespace (string, required)',
       '     - pod (string, required)',

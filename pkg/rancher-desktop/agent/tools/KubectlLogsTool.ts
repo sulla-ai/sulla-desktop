@@ -5,11 +5,12 @@ import { runCommand } from './CommandRunner';
 
 export class KubectlLogsTool extends BaseTool {
   override readonly name = 'kubectl_logs';
+  override readonly category = 'kubernetes_debug';
 
   override getPlanningInstructions(): string {
     return [
       '6) kubectl_logs (Kubernetes via kubectl)',
-      '   - Purpose: Fetch logs for a pod (optionally a specific container).',
+      '   - Purpose: Fetch logs from a pod/container to debug issues.',
       '   - Args:',
       '     - namespace (string, required)',
       '     - pod (string, required)',

@@ -9,6 +9,7 @@ export interface ToolContext {
 
 export abstract class BaseTool {
   abstract readonly name: string;
+  readonly category: string = 'uncategorized';
   readonly aliases: string[] = [];
 
   abstract getPlanningInstructions(): string;

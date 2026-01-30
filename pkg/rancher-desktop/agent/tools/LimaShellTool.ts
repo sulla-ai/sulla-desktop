@@ -5,11 +5,12 @@ import { runCommand } from './CommandRunner';
 
 export class LimaShellTool extends BaseTool {
   override readonly name = 'lima_shell';
+  override readonly category = 'lima';
 
   override getPlanningInstructions(): string {
     return [
-      '19) lima_shell (Lima via limactl)',
-      '   - Purpose: Execute a shell command inside a Lima instance.',
+      '10) lima_shell (Lima via limactl)',
+      '   - Purpose: Run a shell command inside a Lima VM instance.',
       '   - Args:',
       '     - name (string, required) instance name',
       '     - command (string, required) command to run inside the VM',

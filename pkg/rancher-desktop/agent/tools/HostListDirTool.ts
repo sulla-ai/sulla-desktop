@@ -6,11 +6,12 @@ import path from 'path';
 
 export class HostListDirTool extends BaseTool {
   override readonly name = 'host_list_dir';
+  override readonly category = 'host_fs';
 
   override getPlanningInstructions(): string {
     return [
       '27) host_list_dir (Host filesystem)',
-      '   - Purpose: List directory entries on the host.',
+      '   - Purpose: List files/directories on the host.',
       '   - Args:',
       '     - path (string, required)',
       '     - limit (number, optional, default 200)',

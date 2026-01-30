@@ -17,6 +17,7 @@ type NodeSummary = {
 
 export class KubectlListNodesTool extends BaseTool {
   override readonly name = 'kubectl_list_nodes';
+  override readonly category = 'kubernetes_read';
 
   override getPlanningInstructions(): string {
     return [

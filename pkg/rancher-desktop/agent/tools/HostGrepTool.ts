@@ -5,11 +5,12 @@ import { runCommand } from './CommandRunner';
 
 export class HostGrepTool extends BaseTool {
   override readonly name = 'host_grep';
+  override readonly category = 'host_fs';
 
   override getPlanningInstructions(): string {
     return [
       '32) host_grep (Host filesystem)',
-      '   - Purpose: Search for text in files under a directory (uses `rg` when available).',
+      '   - Purpose: Search text in files on the host.',
       '   - Args:',
       '     - path (string, required) root directory',
       '     - query (string, required) search string/regex',

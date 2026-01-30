@@ -5,11 +5,12 @@ import { runCommand } from './CommandRunner';
 
 export class KubectlGetEventsTool extends BaseTool {
   override readonly name = 'kubectl_get_events';
+  override readonly category = 'kubernetes_debug';
 
   override getPlanningInstructions(): string {
     return [
       '7) kubectl_get_events (Kubernetes via kubectl)',
-      '   - Purpose: List recent Kubernetes events across all namespaces (sorted by time).',
+      '   - Purpose: Fetch recent Kubernetes events to diagnose scheduling and runtime issues.',
       '   - Args:',
       '     - limit (number, optional, default 100)',
       '   - Output: Recent events table text.',

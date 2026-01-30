@@ -7,6 +7,7 @@ import type { ToolContext } from './BaseTool';
 export class MemorySearchTool extends BaseTool {
   override readonly name = 'memory_search';
   override readonly aliases = ['recall_memory'];
+  override readonly category = 'memory';
 
   override getPlanningInstructions(): string {
     return [

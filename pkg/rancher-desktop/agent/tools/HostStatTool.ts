@@ -5,11 +5,12 @@ import fs from 'fs';
 
 export class HostStatTool extends BaseTool {
   override readonly name = 'host_stat';
+  override readonly category = 'host_fs';
 
   override getPlanningInstructions(): string {
     return [
       '30) host_stat (Host filesystem)',
-      '   - Purpose: Stat a host path.',
+      '   - Purpose: Stat a host path (file or directory).',
       '   - Args:',
       '     - path (string, required)',
       '   - Output: type, size, times.',

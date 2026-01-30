@@ -20,6 +20,7 @@ const ALLOWED_COMMANDS = new Set([
 
 export class HostRunCommandTool extends BaseTool {
   override readonly name = 'host_run_command';
+  override readonly category = 'host_exec';
 
   override getPlanningInstructions(): string {
     return [

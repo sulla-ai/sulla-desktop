@@ -5,11 +5,12 @@ import { runCommand } from './CommandRunner';
 
 export class LimaListInstancesTool extends BaseTool {
   override readonly name = 'lima_list_instances';
+  override readonly category = 'lima';
 
   override getPlanningInstructions(): string {
     return [
-      '17) lima_list_instances (Lima via limactl)',
-      '   - Purpose: List Lima instances and their state.',
+      '19) lima_list_instances (Lima via limactl)',
+      '   - Purpose: List Lima instances used by Rancher Desktop.',
       '   - Output: limactl list output (JSON when supported).',
       '   - Planning guidance:',
       '     - Set requiresTools=true',

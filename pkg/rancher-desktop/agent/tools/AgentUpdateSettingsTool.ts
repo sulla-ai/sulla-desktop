@@ -16,6 +16,7 @@ type ExperimentalSettingsPatch = {
 
 export class AgentUpdateSettingsTool extends BaseTool {
   override readonly name = 'agent_update_settings';
+  override readonly category = 'agent_settings';
 
   override getPlanningInstructions(): string {
     return [

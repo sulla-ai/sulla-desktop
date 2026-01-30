@@ -7,6 +7,7 @@ import type { ToolContext } from './BaseTool';
 export class CountMemoryArticlesTool extends BaseTool {
   override readonly name = 'count_memory_articles';
   override readonly aliases = ['count_memory', 'count_memorypedia'];
+  override readonly category = 'memory';
 
   override getPlanningInstructions(): string {
     return [

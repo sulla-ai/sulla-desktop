@@ -5,11 +5,12 @@ import fs from 'fs';
 
 export class HostTailFileTool extends BaseTool {
   override readonly name = 'host_tail_file';
+  override readonly category = 'host_fs';
 
   override getPlanningInstructions(): string {
     return [
       '29) host_tail_file (Host filesystem)',
-      '   - Purpose: Tail a host file by lines.',
+      '   - Purpose: Tail a host file (best effort).',
       '   - Args:',
       '     - path (string, required)',
       '     - lines (number, optional, default 200)',
