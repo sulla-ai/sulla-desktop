@@ -5,6 +5,7 @@ import type { GraphNode, ThreadState, NodeResult } from '../types';
 import type { ILLMService } from '../services/ILLMService';
 import { getLLMService, getCurrentMode } from '../services/LLMServiceFactory';
 import { getOllamaService } from '../services/OllamaService';
+import { getAwarenessService } from '../services/AwarenessService';
 
 export interface LLMOptions {
   model?: string;
@@ -140,7 +141,7 @@ export abstract class BaseNode implements GraphNode {
   ): string {
     const parts: string[] = [];
 
-    parts.push('You are Sulla, You are an AI Agent/Assistant that runs as a desktop application using a Kubernetes cluster as your neural network of capabilities and skills.');
+    parts.push(getAwarenessService().identityPrompt);
     parts.push('');
 
     const historyForLog: Array<{ role: string; content: string }> = [];

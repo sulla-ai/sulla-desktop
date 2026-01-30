@@ -9,6 +9,9 @@ import { getLLMService } from './services/LLMServiceFactory';
 // Minimum similarity score to consider a thread match (0-1, lower = more similar in Chroma)
 const SIMILARITY_THRESHOLD = 0.7;
 
+// How much better a new semantic match must be (vs current thread match) to justify switching
+const SWITCH_MARGIN = 0.15;
+
 export class ContextDetector {
   private threadSummaries: Map<string, string> = new Map();
   private initialized = false;
@@ -48,7 +51,7 @@ export class ContextDetector {
    * Detect context from sensory input
    * Returns thread ID (existing or new) + summary
    */
-  async detect(input: SensoryInput): Promise<ThreadContext> {
+  async detect(input: SensoryInput, currentThreadId?: string): Promise<ThreadContext> {
     // Ensure initialized
     if (!this.initialized) {
       await this.initialize();
@@ -56,8 +59,44 @@ export class ContextDetector {
 
     const text = input.data;
 
+    const currentSummary = currentThreadId ? this.threadSummaries.get(currentThreadId) : undefined;
+    const currentConfidence = currentSummary ? this.keywordConfidence(text, currentSummary) : 0;
+
     // Try semantic search via MemoryPedia first
     const semanticMatch = await this.findSemanticMatch(text);
+
+    if (currentThreadId) {
+      if (semanticMatch && semanticMatch.threadId !== currentThreadId) {
+        const isTopicShift = currentConfidence < 0.2;
+        const shouldSwitch = isTopicShift && (semanticMatch.confidence >= SIMILARITY_THRESHOLD)
+          && (semanticMatch.confidence >= currentConfidence + SWITCH_MARGIN);
+
+        if (shouldSwitch) {
+          console.log(
+            `[ContextDetector] Switching threads: current=${currentThreadId} (conf=${currentConfidence.toFixed(2)}), matched=${semanticMatch.threadId} (conf=${semanticMatch.confidence.toFixed(2)})`,
+          );
+
+          return semanticMatch;
+        }
+      }
+
+      // Keep current thread unless we have a strong reason to switch or start new.
+      const isStrongTopicShift = currentConfidence < 0.1;
+      const hasGoodOtherMatch = Boolean(semanticMatch && semanticMatch.confidence >= SIMILARITY_THRESHOLD);
+
+      if (isStrongTopicShift && !hasGoodOtherMatch) {
+        console.log('[ContextDetector] Strong topic shift detected and no good match found; creating new thread');
+
+        return this.createNewThread(text);
+      }
+
+      return {
+        threadId:   currentThreadId,
+        isNew:      false,
+        summary:    currentSummary || '',
+        confidence: Math.max(currentConfidence, 0.5),
+      };
+    }
 
     if (semanticMatch) {
       console.log(`[ContextDetector] Semantic match found: ${semanticMatch.threadId} (score: ${semanticMatch.confidence.toFixed(2)})`);
@@ -80,6 +119,20 @@ export class ContextDetector {
     console.log('[ContextDetector] No match, creating new thread');
 
     return this.createNewThread(text);
+  }
+
+  private keywordConfidence(text: string, summary: string): number {
+    const textLower = text.toLowerCase();
+    const summaryLower = summary.toLowerCase();
+    const words = textLower.split(/\s+/).map(w => w.replace(/[^a-z0-9]/g, '')).filter(w => w.length > 3);
+
+    if (words.length === 0) {
+      return 0;
+    }
+
+    const matchCount = words.filter(w => summaryLower.includes(w)).length;
+
+    return Math.min(matchCount / Math.max(words.length, 1), 1);
   }
 
   /**

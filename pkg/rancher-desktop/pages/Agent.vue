@@ -481,7 +481,7 @@ const send = async () => {
     const input = sensory.createTextInput(query.value);
 
     // 2. Detect context and get/create thread
-    const threadContext = await contextDetector.detect(input);
+    const threadContext = await contextDetector.detect(input, currentThreadId.value || undefined);
 
     currentThreadId.value = threadContext.threadId;
 

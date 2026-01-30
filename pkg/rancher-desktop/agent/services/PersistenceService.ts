@@ -30,6 +30,89 @@ export class PersistenceService {
     this.initialized = true;
   }
 
+  async loadAwareness(): Promise<Record<string, unknown> | null> {
+    if (!this.pgConnected) {
+      return null;
+    }
+
+    try {
+      const client = new pg.Client({ connectionString: POSTGRES_URL });
+
+      await client.connect();
+
+      // Ensure table exists
+      const tableCheck = await client.query(`
+        SELECT EXISTS (
+          SELECT FROM information_schema.tables
+          WHERE table_schema = 'public' AND table_name = 'agent_awareness'
+        )
+      `);
+      const tableExists = tableCheck.rows[0].exists;
+
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS agent_awareness (
+          id INTEGER PRIMARY KEY,
+          data JSONB NOT NULL,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+
+      if (!tableExists) {
+        console.log('[Persistence:PG] Created agent_awareness table');
+      }
+
+      const result = await client.query(
+        'SELECT data FROM agent_awareness WHERE id = 1',
+      );
+
+      await client.end();
+
+      if (result.rows.length > 0) {
+        return result.rows[0].data as Record<string, unknown>;
+      }
+
+      return null;
+    } catch (err) {
+      console.warn('[Persistence:PG] Load awareness failed:', err);
+
+      return null;
+    }
+  }
+
+  async saveAwareness(data: Record<string, unknown>): Promise<void> {
+    if (!this.pgConnected) {
+      return;
+    }
+
+    try {
+      const client = new pg.Client({ connectionString: POSTGRES_URL });
+
+      await client.connect();
+
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS agent_awareness (
+          id INTEGER PRIMARY KEY,
+          data JSONB NOT NULL,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+
+      await client.query(
+        `
+        INSERT INTO agent_awareness (id, data, updated_at)
+        VALUES (1, $1, CURRENT_TIMESTAMP)
+        ON CONFLICT (id)
+        DO UPDATE SET data = $1, updated_at = CURRENT_TIMESTAMP
+      `,
+        [JSON.stringify(data)],
+      );
+
+      await client.end();
+    } catch (err) {
+      console.warn('[Persistence:PG] Save awareness failed:', err);
+    }
+  }
+
   private async testPostgres(): Promise<boolean> {
     try {
       const client = new pg.Client({ connectionString: POSTGRES_URL });

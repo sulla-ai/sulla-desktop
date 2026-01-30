@@ -13,6 +13,8 @@ import type {
 import { Graph, createDefaultGraph } from './Graph';
 import { getPersistenceService } from './services/PersistenceService';
 import { getMemoryPedia } from './services/MemoryPedia';
+import { getAwarenessService } from './services/AwarenessService';
+import { getAwarenessPlanner } from './services/AwarenessPlanner';
 
 const SHORT_TERM_MEMORY_SIZE = 5; // Recent 5 exchanges
 
@@ -110,6 +112,9 @@ export class ConversationThread {
     const persistence = getPersistenceService();
 
     await persistence.initialize();
+
+    // Initialize global awareness (shared across threads)
+    await getAwarenessService().initialize();
 
     // Initialize MemoryPedia (async, don't block)
     const memoryPedia = getMemoryPedia();
@@ -228,6 +233,11 @@ export class ConversationThread {
 
     // Queue for MemoryPedia processing (summarization + entity extraction)
     memoryPedia.queueConversation(this.threadId, messages);
+
+    // Update global awareness (async, don't block)
+    getAwarenessPlanner().maybeUpdate(this.threadId, messages).catch(err => {
+      console.warn(`[Agent:Thread:${this.threadId}] Awareness update failed:`, err);
+    });
   }
 
   /**

@@ -19,3 +19,5 @@ export { CriticNode } from './nodes/CriticNode';
 export { getPersistenceService } from './services/PersistenceService';
 export { getMemoryPedia, MemoryPedia } from './services/MemoryPedia';
 export { MemoryGraph } from './services/MemoryGraph';
+export { getAwarenessService, AwarenessService } from './services/AwarenessService';
+export { getAwarenessPlanner, AwarenessPlanner } from './services/AwarenessPlanner';
