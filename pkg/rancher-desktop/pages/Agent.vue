@@ -1,42 +1,84 @@
 <template>
-  <div class="agent">
+  <div class="min-h-screen bg-white text-[#0d0d0d] dark:bg-neutral-950 dark:text-neutral-50 font-sans relative" :class="{ dark: isDark }">
+    <div
+      class="absolute top-4 left-4 z-40 text-sm font-semibold tracking-tight text-[#0d0d0d]/80 dark:text-white/80"
+    >
+      Sulla Desktop by Jonathon Byrdziak
+    </div>
+
+    <div class="absolute top-4 right-4 z-40 flex items-center gap-2">
+      <a
+        class="flex h-10 w-10 items-center justify-center rounded-full border border-black/10 bg-white/70 text-[#0d0d0d] shadow-sm backdrop-blur hover:bg-white/90 dark:border-white/10 dark:bg-neutral-950/70 dark:text-white dark:hover:bg-neutral-950/90"
+        href="https://github.com/sulla-ai/desktop"
+        target="_blank"
+        rel="noreferrer"
+        aria-label="Open GitHub repository"
+      >
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="currentColor">
+          <path d="M12 .5C5.73.5.75 5.66.75 12.02c0 5.12 3.29 9.46 7.86 10.99.58.11.79-.26.79-.57 0-.28-.01-1.02-.02-2-3.2.7-3.87-1.57-3.87-1.57-.53-1.36-1.29-1.72-1.29-1.72-1.05-.73.08-.72.08-.72 1.16.08 1.77 1.22 1.77 1.22 1.03 1.8 2.69 1.28 3.35.98.1-.77.4-1.28.72-1.57-2.55-.3-5.23-1.31-5.23-5.83 0-1.29.45-2.35 1.19-3.18-.12-.3-.52-1.52.11-3.17 0 0 .97-.32 3.18 1.21.92-.26 1.9-.39 2.88-.39.98 0 1.96.13 2.88.39 2.2-1.53 3.17-1.21 3.17-1.21.63 1.65.23 2.87.12 3.17.74.83 1.19 1.89 1.19 3.18 0 4.53-2.69 5.53-5.25 5.82.41.36.78 1.08.78 2.19 0 1.58-.02 2.86-.02 3.25 0 .31.21.68.8.56 4.56-1.53 7.84-5.87 7.84-10.98C23.25 5.66 18.27.5 12 .5z" />
+        </svg>
+      </a>
+
+      <button
+        type="button"
+        class="flex h-10 w-10 items-center justify-center rounded-full border border-black/10 bg-white/70 text-[#0d0d0d] shadow-sm backdrop-blur hover:bg-white/90 dark:border-white/10 dark:bg-neutral-950/70 dark:text-white dark:hover:bg-neutral-950/90"
+        :aria-label="isDark ? 'Switch to light mode' : 'Switch to dark mode'"
+        @click="toggleTheme"
+      >
+        <svg v-if="isDark" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="4" />
+          <path d="M12 2v2" />
+          <path d="M12 20v2" />
+          <path d="m4.93 4.93 1.41 1.41" />
+          <path d="m17.66 17.66 1.41 1.41" />
+          <path d="M2 12h2" />
+          <path d="M20 12h2" />
+          <path d="m6.34 17.66-1.41 1.41" />
+          <path d="m19.07 4.93-1.41 1.41" />
+        </svg>
+        <svg v-else xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3a7 7 0 0 0 9.79 9.79Z" />
+        </svg>
+      </button>
+    </div>
+
     <!-- Loading overlay while system boots -->
     <div
       v-if="!systemReady"
-      class="loading-overlay"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
     >
-      <div class="loading-content">
-        <div class="loading-spinner">
+      <div class="w-full max-w-lg rounded-2xl border border-black/10 bg-white/85 p-6 shadow-2xl dark:border-white/10 dark:bg-neutral-900/70">
+        <div class="text-4xl leading-none mb-3">
           ⚙️
         </div>
-        <h2>Starting Sulla...</h2>
-        <p class="progress-text">
+        <h2 class="text-xl font-semibold tracking-tight">Starting Sulla...</h2>
+        <p class="mt-2 text-sm text-neutral-600 dark:text-neutral-300">
           {{ progressDescription || 'Initializing system...' }}
         </p>
         
         <!-- Model download progress -->
         <div
           v-if="modelDownloading"
-          class="model-download-info"
+          class="mt-4 rounded-xl border border-black/10 bg-black/5 p-4 dark:border-white/10 dark:bg-white/5"
         >
-          <p class="model-name">
+          <p class="text-sm text-neutral-800 dark:text-neutral-200">
             📦 Downloading: <strong>{{ modelName }}</strong>
           </p>
-          <p class="model-status">
+          <p class="mt-1 text-xs text-neutral-600 dark:text-neutral-400">
             {{ modelDownloadStatus }}
           </p>
           <div
             v-if="modelDownloadTotal > 0"
-            class="progress-bar-container"
+            class="mt-3 h-2 w-full overflow-hidden rounded-full bg-black/10 dark:bg-white/10"
           >
             <div
-              class="progress-bar-fill model-progress"
+              class="h-full rounded-full bg-gradient-to-r from-indigo-500/90 to-violet-500/90"
               :style="{ width: (modelDownloadProgress / modelDownloadTotal * 100) + '%' }"
             />
           </div>
           <p
             v-if="modelDownloadTotal > 0"
-            class="model-progress-text"
+            class="mt-2 font-mono text-[11px] text-neutral-600 dark:text-neutral-400"
           >
             {{ Math.round(modelDownloadProgress / 1024 / 1024) }} MB / {{ Math.round(modelDownloadTotal / 1024 / 1024) }} MB
             ({{ Math.round(modelDownloadProgress / modelDownloadTotal * 100) }}%)
@@ -46,76 +88,162 @@
         <!-- K8s progress bar -->
         <div
           v-else-if="progressMax > 0"
-          class="progress-bar-container"
+          class="mt-4 h-2 w-full overflow-hidden rounded-full bg-black/10 dark:bg-white/10"
         >
           <div
-            class="progress-bar-fill"
+            class="h-full rounded-full bg-black/30 dark:bg-white/30"
             :style="{ width: progressPercent + '%' }"
           />
         </div>
         <div
           v-else
-          class="progress-bar-container"
+          class="mt-4 h-2 w-full overflow-hidden rounded-full bg-black/10 dark:bg-white/10"
         >
-          <div class="progress-bar-indeterminate" />
+          <div class="h-full w-1/3 animate-pulse rounded-full bg-black/25 dark:bg-white/25" />
         </div>
       </div>
     </div>
 
     <!-- Main agent interface -->
     <div
-      class="agent-content"
-      :class="{ blurred: !systemReady }"
+      class="flex min-h-screen flex-col"
+      :class="{ 'blur-sm pointer-events-none select-none': !systemReady }"
     >
-      <h1>Sulla</h1>
-      <div class="avatar">
-        {{ loading ? '🔄' : '🤖' }}
-      </div>
-      <input
-        v-model="query"
-        type="text"
-        placeholder="Ask me anything..."
-        :disabled="loading || !systemReady"
-        @keyup.enter="send"
-      >
       <div
-        v-if="loading"
-        class="status"
+        v-if="hasMessages"
+        ref="transcriptEl"
+        class="flex-1 overflow-y-auto px-4 py-6"
       >
-        Thinking...
+        <div
+          v-for="m in messages"
+          :key="m.id"
+          class="mb-3 flex"
+          :class="m.role === 'user' ? 'justify-end' : 'justify-start'"
+        >
+          <div
+            class="max-w-[min(760px,92%)] whitespace-pre-wrap rounded-2xl px-4 py-3 text-sm leading-6 border"
+            :class="m.role === 'user'
+              ? 'bg-black/5 border-black/10 text-[#0d0d0d] dark:bg-white/10 dark:border-white/10 dark:text-neutral-50'
+              : 'bg-black/3 border-black/10 text-neutral-900 dark:bg-white/5 dark:border-white/10 dark:text-neutral-100'"
+          >
+            {{ m.content }}
+          </div>
+        </div>
+        <div
+          v-if="loading"
+          class="mb-3 flex justify-start"
+        >
+          <div class="max-w-[min(760px,92%)] whitespace-pre-wrap rounded-2xl px-4 py-3 text-sm leading-6 bg-black/3 border border-black/10 text-neutral-900 dark:bg-white/5 dark:border-white/10 dark:text-neutral-100">
+            Thinking...
+          </div>
+        </div>
       </div>
+
       <div
-        v-if="response"
-        class="response"
+        :class="hasMessages ? 'sticky bottom-0 border-t border-black/10 bg-white/75 backdrop-blur dark:border-white/10 dark:bg-neutral-950/80' : 'flex flex-1 items-center justify-center bg-white dark:bg-neutral-950'"
       >
-        {{ response }}
-      </div>
-      <div
-        v-if="error"
-        class="error"
-      >
-        {{ error }}
+        <div class="w-full px-4" :class="hasMessages ? 'py-3' : ''">
+          <div
+            class="flex h-full flex-col items-center"
+            :class="hasMessages ? '' : 'justify-center'"
+          >
+            <form
+              class="group/composer mx-auto mb-3 w-full max-w-3xl"
+              :data-empty="!query.trim()"
+              :data-running="loading"
+              @submit.prevent
+            >
+              <div class="overflow-hidden rounded-[32px] bg-[#f8f8f8] shadow-sm ring-1 ring-[#e5e5e5] ring-inset transition-shadow focus-within:ring-[#d0d0d0] dark:bg-neutral-900/70 dark:ring-white/10 dark:focus-within:ring-white/20">
+                <div class="flex items-end gap-1 p-2">
+                  <button
+                    type="button"
+                    class="mb-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[#0d0d0d] transition-colors hover:bg-[#f0f0f0] disabled:opacity-60 dark:text-white dark:hover:bg-white/10"
+                    aria-label="Attach"
+                    :disabled="loading || !systemReady"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="m16 6-8.414 8.586a2 2 0 0 0 2.829 2.829l8.414-8.586a4 4 0 1 0-5.657-5.657l-8.379 8.551a6 6 0 1 0 8.485 8.485l8.379-8.551" />
+                    </svg>
+                  </button>
+
+                  <textarea
+                    v-model="query"
+                    name="input"
+                    placeholder="What do you want to know?"
+                    class="my-2 h-6 max-h-[400px] min-w-0 flex-1 resize-none bg-transparent text-[#0d0d0d] text-base leading-6 outline-none placeholder:text-[#9a9a9a] dark:text-white dark:placeholder:text-neutral-500"
+                    :disabled="loading || !systemReady"
+                    @keydown.enter.exact.prevent="send"
+                  />
+
+                  <button
+                    type="button"
+                    class="mb-0.5 flex h-9 shrink-0 items-center gap-2 rounded-full px-2.5 text-[#0d0d0d] hover:bg-[#f0f0f0] disabled:opacity-60 dark:text-white dark:hover:bg-white/10"
+                    aria-label="Model select"
+                    :disabled="loading || !systemReady"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0" aria-hidden="true">
+                      <path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401" />
+                    </svg>
+                    <div class="flex items-center gap-1 overflow-hidden">
+                      <span class="whitespace-nowrap font-semibold text-sm">Grok 4.1</span>
+                      <svg width="16" height="16" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg" class="shrink-0" aria-hidden="true">
+                        <path d="M3.13523 6.15803C3.3241 5.95657 3.64052 5.94637 3.84197 6.13523L7.5 9.56464L11.158 6.13523C11.3595 5.94637 11.6759 5.95657 11.8648 6.15803C12.0536 6.35949 12.0434 6.67591 11.842 6.86477L7.84197 10.6148C7.64964 10.7951 7.35036 10.7951 7.15803 10.6148L3.15803 6.86477C2.95657 6.67591 2.94637 6.35949 3.13523 6.15803Z" fill="currentColor" fill-rule="evenodd" clip-rule="evenodd" />
+                      </svg>
+                    </div>
+                  </button>
+
+                  <div class="relative mb-0.5 h-9 w-9 shrink-0 rounded-full bg-[#0d0d0d] text-white dark:bg-white dark:text-[#0d0d0d]">
+                    <button
+                      type="button"
+                      class="absolute inset-0 flex items-center justify-center"
+                      aria-label="Voice mode"
+                      :disabled="loading || !systemReady"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M12 19v3" />
+                        <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                        <rect x="9" y="2" width="6" height="13" rx="3" />
+                      </svg>
+                    </button>
+                  </div>
+
+                  <button
+                    type="button"
+                    class="mb-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#0d0d0d] text-white disabled:opacity-60 disabled:cursor-not-allowed dark:bg-white dark:text-[#0d0d0d]"
+                    aria-label="Submit"
+                    :disabled="loading || !systemReady || !query.trim()"
+                    @click="send"
+                  >
+                    <svg width="18" height="18" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                      <path d="M7.14645 2.14645C7.34171 1.95118 7.65829 1.95118 7.85355 2.14645L11.8536 6.14645C12.0488 6.34171 12.0488 6.65829 11.8536 6.85355C11.6583 7.04882 11.3417 7.04882 11.1464 6.85355L8 3.70711L8 12.5C8 12.7761 7.77614 13 7.5 13C7.22386 13 7 12.7761 7 12.5L7 3.70711L3.85355 6.85355C3.65829 7.04882 3.34171 7.04882 3.14645 6.85355C2.95118 6.65829 2.95118 6.34171 3.14645 6.14645L7.14645 2.14645Z" fill="currentColor" fill-rule="evenodd" clip-rule="evenodd" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue';
-
-import { ipcRenderer } from '@pkg/utils/ipcRenderer';
+import { ref, onMounted, onUnmounted } from 'vue';
 import {
   getSensory,
   getContextDetector,
   getThread,
   getResponseHandler,
 } from '@pkg/agent';
-import { updateAgentConfig, updateAgentConfigFull } from '@pkg/agent/services/ConfigService';
+import { updateAgentConfigFull } from '@pkg/agent/services/ConfigService';
+import { StartupProgressController } from './agent/StartupProgressController';
+import { AgentSettingsController } from './agent/AgentSettingsController';
+import { AgentChatController } from './agent/AgentChatController';
 
-const query = ref('');
-const response = ref('');
-const loading = ref(false);
-const error = ref('');
+const THEME_STORAGE_KEY = 'agentTheme';
+const isDark = ref(false);
+
 const currentThreadId = ref<string | null>(null);
 
 // Initialize agent components
@@ -123,610 +251,89 @@ const sensory = getSensory();
 const contextDetector = getContextDetector();
 const responseHandler = getResponseHandler();
 
-// System readiness state
-const systemReady = ref(false);
-const progressCurrent = ref(0);
-const progressMax = ref(-1);
-const progressDescription = ref('');
-const startupPhase = ref('initializing');
-
-// Model download state
-const modelDownloading = ref(false);
-const modelName = ref('');
-const modelDownloadProgress = ref(0);
-const modelDownloadTotal = ref(0);
-const modelDownloadStatus = ref('');
-
-// Model mode (local vs remote)
-const modelMode = ref<'local' | 'remote'>('local');
+const startupState = StartupProgressController.createState();
+const {
+  systemReady,
+  progressCurrent,
+  progressMax,
+  progressDescription,
+  startupPhase,
+  modelDownloading,
+  modelName,
+  modelDownloadProgress,
+  modelDownloadTotal,
+  modelDownloadStatus,
+  modelMode,
+  progressPercent,
+} = startupState;
 
 // Ollama memory error recovery
 const ollamaRestarting = ref(false);
 const memoryErrorCount = ref(0);
 const MAX_MEMORY_ERROR_RETRIES = 3;
 
-// Detect memory errors and trigger pod restart
-const handleOllamaMemoryError = async (errorMessage: string): Promise<boolean> => {
-  if (!errorMessage.includes('requires more system memory')) {
-    return false;
-  }
+const startupProgress = new StartupProgressController(startupState);
 
-  memoryErrorCount.value++;
-  console.warn(`[Agent] Ollama memory error detected (${memoryErrorCount.value}/${MAX_MEMORY_ERROR_RETRIES})`);
+const settingsController = new AgentSettingsController(
+  {
+    modelName,
+    modelMode,
+  },
+  updateAgentConfigFull,
+);
 
-  if (memoryErrorCount.value >= MAX_MEMORY_ERROR_RETRIES) {
-    console.error('[Agent] Max memory error retries exceeded');
-    return false;
-  }
-
-  if (ollamaRestarting.value) {
-    return true; // Already restarting
-  }
-
-  ollamaRestarting.value = true;
-  updateStartupStatus('recovery', 'Restarting Ollama to free memory...');
-
-  try {
-    // Request backend to restart the Ollama pod
-    await ipcRenderer.invoke('sulla-restart-ollama');
-    console.log('[Agent] Ollama restart requested');
-
-    // Wait for pod to come back up
-    updateStartupStatus('recovery', 'Waiting for Ollama to restart...');
-    await new Promise(resolve => setTimeout(resolve, 5000));
-
-    // Reset state and re-check readiness
-    ollamaRestarting.value = false;
-    systemReady.value = false;
-    startReadinessCheck();
-    return true;
-  } catch (err) {
-    console.error('[Agent] Failed to restart Ollama:', err);
-    ollamaRestarting.value = false;
-    return false;
-  }
-};
-
-const progressPercent = computed(() => {
-  if (progressMax.value <= 0) {
-    return 0;
-  }
-
-  return Math.round((progressCurrent.value / progressMax.value) * 100);
+startupProgress.setMemoryErrorRefs({
+  ollamaRestarting,
+  memoryErrorCount,
+  maxRetries: MAX_MEMORY_ERROR_RETRIES,
 });
 
-const OLLAMA_BASE = 'http://127.0.0.1:30114';
+const chatController = new AgentChatController({
+  systemReady,
+  currentThreadId,
+  sensory,
+  contextDetector,
+  getThread,
+  responseHandler,
+  startupProgress,
+});
 
-// Startup phases with descriptions
-const updateStartupStatus = (phase: string, detail: string) => {
-  startupPhase.value = phase;
-  progressDescription.value = detail;
-};
-
-// Check Ollama connectivity (not model, just the service)
-const checkOllamaConnectivity = async (): Promise<boolean> => {
-  try {
-    const res = await fetch(`${ OLLAMA_BASE }/api/tags`, { signal: AbortSignal.timeout(2000) });
-
-    return res.ok;
-  } catch {
-    return false;
-  }
-};
-
-// Check if Ollama has the configured model ready
-const checkOllamaModel = async (targetModel: string): Promise<boolean> => {
-  try {
-    const res = await fetch(`${ OLLAMA_BASE }/api/tags`);
-
-    if (res.ok) {
-      const data = await res.json();
-      const modelNames = data.models?.map((m: { name: string }) => m.name) || [];
-
-      // Check if the target model is available
-      if (modelNames.includes(targetModel)) {
-        return true;
-      }
-
-      // Also check without tag (e.g., 'mistral:7b' matches 'mistral:7b')
-      const baseModel = targetModel.split(':')[0];
-      if (modelNames.some((name: string) => name.startsWith(baseModel))) {
-        return true;
-      }
-    }
-  } catch {
-    // Not ready yet
-  }
-
-  return false;
-};
-
-// Pull model with streaming progress
-const pullModelWithProgress = async (targetModel: string): Promise<boolean> => {
-  modelDownloading.value = true;
-  modelName.value = targetModel;
-  modelDownloadStatus.value = 'Starting download...';
-  modelDownloadProgress.value = 0;
-  modelDownloadTotal.value = 0;
-
-  try {
-    const res = await fetch(`${ OLLAMA_BASE }/api/pull`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: targetModel, stream: true }),
-    });
-
-    if (!res.ok || !res.body) {
-      modelDownloadStatus.value = 'Download failed';
-      modelDownloading.value = false;
-      return false;
-    }
-
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop() || '';
-
-      for (const line of lines) {
-        if (!line.trim()) continue;
-        try {
-          const data = JSON.parse(line);
-          
-          if (data.status) {
-            modelDownloadStatus.value = data.status;
-          }
-          
-          if (data.total && data.completed !== undefined) {
-            modelDownloadTotal.value = data.total;
-            modelDownloadProgress.value = data.completed;
-          }
-          
-          if (data.status === 'success') {
-            modelDownloadStatus.value = 'Download complete!';
-            modelDownloading.value = false;
-            return true;
-          }
-        } catch {
-          // Ignore parse errors
-        }
-      }
-    }
-
-    modelDownloading.value = false;
-    return true;
-  } catch (err) {
-    console.error('[Agent] Model pull failed:', err);
-    modelDownloadStatus.value = 'Download failed';
-    modelDownloading.value = false;
-    return false;
-  }
-};
-
-// Poll for system readiness with detailed status updates
-let readinessInterval: ReturnType<typeof setInterval> | null = null;
-let k8sReady = false;
-
-const startReadinessCheck = () => {
-  readinessInterval = setInterval(async () => {
-    // Phase 1: Wait for K8s progress to complete
-    if (!k8sReady) {
-      if (progressMax.value > 0 && progressCurrent.value >= progressMax.value) {
-        k8sReady = true;
-      } else {
-        // Still waiting for K8s - don't override the K8s progress description
-        return;
-      }
-    }
-
-    // Phase 2: Check Ollama connectivity
-    const ollamaUp = await checkOllamaConnectivity();
-
-    if (!ollamaUp) {
-      updateStartupStatus('pods', 'Waiting for Ollama pod to start...');
-
-      return;
-    }
-
-    // Phase 3: Check for model and pull if needed (only for local mode)
-    if (modelMode.value === 'local') {
-      const targetModel = modelName.value || 'tinyllama:latest';
-      updateStartupStatus('model', `Checking for AI model (${targetModel})...`);
-      const hasModel = await checkOllamaModel(targetModel);
-
-      if (!hasModel) {
-        if (!modelDownloading.value) {
-          // Start the model download
-          updateStartupStatus('model', `Downloading ${targetModel}...`);
-          pullModelWithProgress(targetModel);
-        }
-        return;
-      }
-    } else {
-      // Remote mode - skip Ollama model check
-      updateStartupStatus('model', `Using remote model: ${modelName.value}`);
-    }
-
-    // All ready!
-    updateStartupStatus('ready', 'System ready!');
-    systemReady.value = true;
-    if (readinessInterval) {
-      clearInterval(readinessInterval);
-      readinessInterval = null;
-    }
-  }, 2000);
-};
-
-// Handle K8s progress updates
-const handleProgress = (_event: unknown, progress: { current: number; max: number; description?: string }) => {
-  progressCurrent.value = progress.current;
-  progressMax.value = progress.max;
-
-  // Only update description from K8s if we're still in K8s boot phase
-  if (startupPhase.value === 'initializing' || startupPhase.value === 'k8s') {
-    progressDescription.value = progress.description || 'Starting Kubernetes...';
-    startupPhase.value = 'k8s';
-  }
-};
+const {
+  query,
+  loading,
+  messages,
+  transcriptEl,
+  hasMessages,
+} = chatController;
 
 onMounted(async () => {
-  // Listen for K8s progress events
-  ipcRenderer.on('k8s-progress', handleProgress);
+  const stored = localStorage.getItem(THEME_STORAGE_KEY);
 
-  // Load settings and update agent config with selected model
-  const handleSettingsRead = (_event: unknown, settings: {
-    experimental?: {
-      sullaModel?: string;
-      modelMode?: 'local' | 'remote';
-      remoteProvider?: string;
-      remoteModel?: string;
-      remoteApiKey?: string;
-      remoteRetryCount?: number;
-      remoteTimeoutSeconds?: number;
-    };
-  }) => {
-    const exp = settings.experimental;
-
-    if (exp) {
-      // Update full config including remote settings
-      updateAgentConfigFull({
-        sullaModel:     exp.sullaModel,
-        modelMode:      exp.modelMode,
-        remoteProvider: exp.remoteProvider,
-        remoteModel:    exp.remoteModel,
-        remoteApiKey:   exp.remoteApiKey,
-        remoteRetryCount: exp.remoteRetryCount,
-        remoteTimeoutSeconds: exp.remoteTimeoutSeconds,
-      });
-
-      // Track model mode
-      modelMode.value = exp.modelMode || 'local';
-
-      // Update display model name based on mode
-      if (exp.modelMode === 'remote' && exp.remoteModel) {
-        modelName.value = exp.remoteModel;
-        console.log(`[Agent] Remote model configured: ${exp.remoteProvider}/${exp.remoteModel}`);
-      } else if (exp.sullaModel) {
-        modelName.value = exp.sullaModel;
-        console.log(`[Agent] Local model configured: ${exp.sullaModel}`);
-      } else {
-        modelName.value = 'tinyllama:latest';
-      }
-    } else {
-      modelName.value = 'tinyllama:latest';
-      modelMode.value = 'local';
-    }
-  };
-  ipcRenderer.on('settings-read', handleSettingsRead);
-  ipcRenderer.send('settings-read');
-
-  // Listen for settings changes (e.g., from Language Model Settings window)
-  ipcRenderer.on('preferences/changed', () => {
-    ipcRenderer.send('settings-read');
-  });
-
-  ipcRenderer.on('settings-update', () => {
-    ipcRenderer.send('settings-read');
-  });
-
-  // Get initial progress
-  try {
-    const progress = await ipcRenderer.invoke('k8s-progress');
-
-    if (progress) {
-      progressCurrent.value = progress.current;
-      progressMax.value = progress.max;
-      progressDescription.value = progress.description || 'Initializing...';
-
-      // Check if K8s is already done
-      if (progress.max > 0 && progress.current >= progress.max) {
-        k8sReady = true;
-      }
-    }
-  } catch {
-    // Progress not available yet
+  if (stored === 'dark') {
+    isDark.value = true;
+  } else if (stored === 'light') {
+    isDark.value = false;
+  } else {
+    isDark.value = window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false;
   }
 
-  // Always start readiness check - it will verify K8s is done AND Ollama is ready
-  startReadinessCheck();
+  startupProgress.start();
+
+  settingsController.start();
+
+  await startupProgress.initializeFromBackend();
 });
 
 onUnmounted(() => {
-  ipcRenderer.removeListener('k8s-progress', handleProgress);
-  ipcRenderer.removeAllListeners('preferences/changed');
-  ipcRenderer.removeAllListeners('settings-update');
-  ipcRenderer.removeAllListeners('settings-read');
-  if (readinessInterval) {
-    clearInterval(readinessInterval);
-  }
+  startupProgress.dispose();
+  settingsController.dispose();
 });
 
-const send = async () => {
-  if (!query.value.trim() || loading.value || !systemReady.value) {
-    return;
-  }
+const send = () => chatController.send();
 
-  loading.value = true;
-  response.value = '';
-  error.value = '';
-
-  try {
-    // 1. Create sensory input
-    const input = sensory.createTextInput(query.value);
-
-    // 2. Detect context and get/create thread
-    const threadContext = await contextDetector.detect(input, currentThreadId.value || undefined);
-
-    currentThreadId.value = threadContext.threadId;
-
-    // 3. Get or create conversation thread (uses default graph with nodes)
-    const thread = getThread(threadContext.threadId);
-
-    // Always initialize (idempotent - handles persistence setup)
-    await thread.initialize();
-
-    // 4. Process through the graph: Memory → Planner → Executor → Critic
-    const agentResponse = await thread.process(input);
-
-    // 5. Handle response
-    if (responseHandler.hasErrors(agentResponse)) {
-      const err = responseHandler.getError(agentResponse);
-
-      throw new Error(err || 'Unknown error');
-    }
-
-    response.value = responseHandler.formatText(agentResponse) || 'No response from model';
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-
-    // Check for Ollama memory error and auto-restart if needed
-    const recovered = await handleOllamaMemoryError(message);
-
-    if (recovered) {
-      error.value = 'Restarting AI service to free memory. Please try again in a moment.';
-    } else {
-      error.value = `Error: ${ message }`;
-    }
-  } finally {
-    loading.value = false;
-  }
+const toggleTheme = () => {
+  isDark.value = !isDark.value;
+  localStorage.setItem(THEME_STORAGE_KEY, isDark.value ? 'dark' : 'light');
 };
 </script>
 
-<style scoped>
-.agent {
-  position: relative;
-  min-height: 100vh;
-  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-  color: #fff;
-}
-
-.agent-content {
-  text-align: center;
-  padding: 2rem;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-height: 100vh;
-  transition: filter 0.3s ease;
-}
-
-.agent-content.blurred {
-  filter: blur(8px);
-  pointer-events: none;
-}
-
-.loading-overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 100;
-  background: rgba(26, 26, 46, 0.9);
-}
-
-.loading-content {
-  text-align: center;
-  max-width: 400px;
-  padding: 2rem;
-}
-
-.loading-spinner {
-  font-size: 4rem;
-  animation: spin 2s linear infinite;
-  margin-bottom: 1rem;
-}
-
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-
-.loading-content h2 {
-  font-size: 1.5rem;
-  font-weight: 300;
-  margin-bottom: 1rem;
-  letter-spacing: 0.1em;
-}
-
-.progress-text {
-  font-size: 0.9rem;
-  color: rgba(255, 255, 255, 0.7);
-  margin-bottom: 1.5rem;
-  min-height: 1.5em;
-}
-
-.progress-bar-container {
-  width: 100%;
-  height: 6px;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 3px;
-  overflow: hidden;
-}
-
-.progress-bar-fill {
-  height: 100%;
-  background: linear-gradient(90deg, #4facfe 0%, #00f2fe 100%);
-  border-radius: 3px;
-  transition: width 0.3s ease;
-}
-
-.progress-bar-indeterminate {
-  height: 100%;
-  width: 30%;
-  background: linear-gradient(90deg, #4facfe 0%, #00f2fe 100%);
-  border-radius: 3px;
-  animation: indeterminate 1.5s ease-in-out infinite;
-}
-
-@keyframes indeterminate {
-  0% { transform: translateX(-100%); }
-  100% { transform: translateX(400%); }
-}
-
-h1 {
-  font-size: 2.5rem;
-  margin-bottom: 1rem;
-  font-weight: 300;
-  letter-spacing: 0.2em;
-}
-
-.avatar {
-  font-size: 8rem;
-  margin: 2rem 0;
-  animation: pulse 2s ease-in-out infinite;
-}
-
-@keyframes pulse {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.05); }
-}
-
-input {
-  width: 80%;
-  max-width: 500px;
-  padding: 1rem 1.5rem;
-  margin: 1rem;
-  border: none;
-  border-radius: 2rem;
-  font-size: 1rem;
-  background: rgba(255, 255, 255, 0.1);
-  color: #fff;
-  outline: none;
-  transition: background 0.3s;
-}
-
-input::placeholder {
-  color: rgba(255, 255, 255, 0.5);
-}
-
-input:focus {
-  background: rgba(255, 255, 255, 0.2);
-}
-
-.response {
-  margin-top: 2rem;
-  padding: 1.5rem;
-  max-width: 600px;
-  min-height: 2rem;
-  font-size: 1.1rem;
-  color: rgba(255, 255, 255, 0.9);
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 1rem;
-  line-height: 1.6;
-  text-align: left;
-  white-space: pre-wrap;
-}
-
-.status {
-  margin-top: 1rem;
-  color: rgba(255, 255, 255, 0.6);
-  font-style: italic;
-}
-
-.error {
-  margin-top: 2rem;
-  padding: 1rem;
-  max-width: 500px;
-  color: #ff6b6b;
-  background: rgba(255, 107, 107, 0.1);
-  border-radius: 0.5rem;
-  font-size: 0.9rem;
-}
-
-input:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-/* Model download progress styles */
-.model-download-info {
-  margin: 1rem 0;
-  padding: 1rem;
-  background: rgba(79, 172, 254, 0.1);
-  border-radius: 0.5rem;
-  border: 1px solid rgba(79, 172, 254, 0.3);
-}
-
-.model-name {
-  font-size: 1rem;
-  margin-bottom: 0.5rem;
-  color: #4facfe;
-}
-
-.model-name strong {
-  color: #00f2fe;
-}
-
-.model-status {
-  font-size: 0.85rem;
-  color: rgba(255, 255, 255, 0.7);
-  margin-bottom: 0.75rem;
-}
-
-.model-download-info .progress-bar-container {
-  margin-bottom: 0.5rem;
-}
-
-.model-progress {
-  background: linear-gradient(90deg, #00f2fe 0%, #4facfe 100%);
-}
-
-.model-progress-text {
-  font-size: 0.8rem;
-  color: rgba(255, 255, 255, 0.6);
-  margin: 0;
-  font-family: monospace;
-}
-</style>

@@ -10,6 +10,7 @@ export interface AgentAwarenessData {
   mid_term_context: string;
   short_term_context: string;
   memory_search_hints: string;
+  active_plan_ids: string[];
 }
 
 export class AwarenessService {
@@ -106,6 +107,7 @@ export class AwarenessService {
       mid_term_context: '',
       short_term_context: '',
       memory_search_hints: '',
+      active_plan_ids: [],
     };
   }
 
@@ -118,6 +120,7 @@ export class AwarenessService {
       data.mid_term_context,
       data.short_term_context,
       data.memory_search_hints,
+      (data.active_plan_ids || []).join(','),
     ].every(v => !v || String(v).trim().length === 0);
   }
 
@@ -135,6 +138,11 @@ export class AwarenessService {
   private coerce(raw: Record<string, unknown>): AgentAwarenessData {
     const d = raw as Partial<AgentAwarenessData>;
 
+    const activeRaw = (d as any).active_plan_ids;
+    const active = Array.isArray(activeRaw)
+      ? activeRaw.map(String).filter(Boolean)
+      : [];
+
     return {
       agent_identity: String(d.agent_identity || this.getDefaultAwareness().agent_identity),
       primary_user_identity: String(d.primary_user_identity || ''),
@@ -143,6 +151,7 @@ export class AwarenessService {
       mid_term_context: String(d.mid_term_context || ''),
       short_term_context: String(d.short_term_context || ''),
       memory_search_hints: String(d.memory_search_hints || ''),
+      active_plan_ids: active,
     };
   }
 }

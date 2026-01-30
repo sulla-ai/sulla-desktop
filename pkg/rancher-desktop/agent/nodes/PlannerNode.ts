@@ -6,39 +6,54 @@ import type { ThreadState, NodeResult } from '../types';
 import { BaseNode } from './BaseNode';
 import { getChromaService } from '../services/ChromaService';
 import { getMemoryPedia } from '../services/MemoryPedia';
+import { getPlanService } from '../services/PlanService';
+import { getAwarenessService } from '../services/AwarenessService';
 import { getToolRegistry, registerDefaultTools } from '../tools';
+import { jsonrepair } from 'jsonrepair';
 
 // Plan structure for conversation handling
 interface ConversationPlan {
   // Intent classification
   intent: {
-    type: 'question' | 'task' | 'conversation' | 'clarification' | 'follow_up';
+    type: 'question' | 'task' | 'conversation' | 'clarification' | 'follow_up' | 'exploration';
     confidence: number;
     description: string;
   };
+  // Whether we should create/persist a plan (simple questions may not need one)
+  planNeeded: boolean;
   // What the user is trying to accomplish
   goal: string;
   // Whether this requires tools/actions or just a response
   requiresTools: boolean;
-  // Ordered steps to execute
-  steps: Array<{
+  // Ordered todos to execute (high-level; executor selects tools per todo)
+  todos: Array<{
+    id: string;
+    title: string;
+    description: string;
+    dependsOn: string[]; // IDs of todos this depends on
+    categoryHints?: string[];
+  }>;
+  // Back-compat: older planners may return steps; we map them into todos.
+  steps?: Array<{
     id: string;
     action: string;
     description: string;
-    dependsOn: string[]; // IDs of steps this depends on
+    dependsOn: string[];
   }>;
   // Context requirements
-  context: {
-    needsMemoryRecall: boolean;
-    memorySearchQueries: string[]; // Specific queries to search in ChromaDB
+  context?: {
+    needsMemoryRecall?: boolean;
+    memorySearchQueries?: string[];
+    // Specific queries to search in ChromaDB
     needsExternalData: boolean;
     relevantTopics: string[];
   };
   // Response guidance
   responseGuidance: {
     tone: 'formal' | 'casual' | 'technical' | 'friendly';
-    format: 'brief' | 'detailed' | 'structured' | 'conversational';
+    format: 'brief' | 'detailed' | 'json' | 'markdown' | 'conversational';
     includeExamples: boolean;
+    lengthConstraint: "short" | "medium" | "long"
   };
 }
 
@@ -61,6 +76,21 @@ export class PlannerNode extends BaseNode {
     const conversationContext = this.buildConversationContext(state);
     console.log(`[Agent:Planner] Context: ${state.messages.length} messages, thread: ${state.threadId}`);
 
+    const revisionReason = String(
+      (state.metadata.requestPlanRevision && (state.metadata.requestPlanRevision as any).reason)
+      || state.metadata.revisionFeedback
+      || '',
+    ).trim();
+
+    const awareness = getAwarenessService();
+    await awareness.initialize();
+    const activePlanIdRaw = (state.metadata.activePlanId !== undefined && state.metadata.activePlanId !== null)
+      ? String(state.metadata.activePlanId)
+      : String((awareness.getData().active_plan_ids || [])[0] || '');
+    const priorPlanId = activePlanIdRaw && Number.isFinite(Number(activePlanIdRaw)) ? Number(activePlanIdRaw) : null;
+
+    const forcePlan = Boolean(priorPlanId || revisionReason);
+
     // Use LLM to create a plan
     const plan = await this.createPlan(lastUserMessage.content, conversationContext, state);
 
@@ -70,17 +100,78 @@ export class PlannerNode extends BaseNode {
     if (plan) {
       console.log(`[Agent:Planner] Plan created:`);
       console.log(`  Intent: ${plan.intent.type} (${(plan.intent.confidence * 100).toFixed(0)}%)`);
+      console.log(`  Plan needed: ${plan.planNeeded}`);
       console.log(`  Goal: ${plan.goal}`);
-      console.log(`  Steps: ${plan.steps.map(s => s.action).join(' → ')}`);
+      console.log(`  Todos: ${plan.todos.map(t => t.title).join(' → ')}`);
       console.log(`  Requires tools: ${plan.requiresTools}`);
       console.log(`  Needs memory recall: ${plan.context?.needsMemoryRecall || false}`);
       console.log(`  Response format: ${plan.responseGuidance.format}, tone: ${plan.responseGuidance.tone}`);
 
+      const shouldPersistPlan = forcePlan || !!plan.planNeeded;
+
+      if (shouldPersistPlan) {
+        try {
+          registerDefaultTools();
+          const todos = plan.todos
+            .map((t, idx) => ({
+              title: t.title,
+              description: t.description || t.title,
+              orderIndex: idx,
+              categoryHints: Array.isArray(t.categoryHints) ? t.categoryHints.map(String) : [],
+            }));
+
+          const planService = getPlanService();
+          await planService.initialize();
+
+          console.log(`[Agent:Planner] Persisting plan to Postgres: thread=${state.threadId}, todos=${todos.length}, priorPlanId=${priorPlanId || 'none'}`);
+
+          if (priorPlanId) {
+            await planService.updatePlanStatus(priorPlanId, 'abandoned');
+            await planService.addPlanEvent(priorPlanId, 'superseded', {
+              reason: revisionReason || 'Plan revised',
+            });
+          }
+
+          const created = await planService.createPlan({
+            threadId: state.threadId,
+            data: {
+              intent: plan.intent,
+              goal: plan.goal,
+              context: plan.context,
+              responseGuidance: plan.responseGuidance,
+            },
+            todos,
+            eventData: priorPlanId
+              ? { revisedFromPlanId: priorPlanId, reason: revisionReason || 'Plan revised' }
+              : {},
+          });
+
+          console.log(`[Agent:Planner] Plan persistence result: ${created?.planId ? `planId=${created.planId}` : 'FAILED'}`);
+
+          if (created?.planId) {
+            await awareness.update({ active_plan_ids: [String(created.planId)] });
+            state.metadata.activePlanId = created.planId;
+
+            console.log(`[Agent:Planner] Awareness updated: active_plan_ids=[${created.planId}]`);
+
+            // Clear revision request flags for the next executor cycle.
+            delete (state.metadata as any).requestPlanRevision;
+            delete (state.metadata as any).revisionFeedback;
+          }
+        } catch (err) {
+          console.warn('[Agent:Planner] Failed to persist plan:', err);
+        }
+      } else {
+        // Explicitly do not create a persistent plan for simple queries.
+        console.log('[Agent:Planner] Plan not persisted (planNeeded=false and no active plan/revision).');
+        state.metadata.planHasRemainingTodos = false;
+      }
+
       // Store the full plan in metadata
       state.metadata.plan = {
         requiresTools: plan.requiresTools,
-        steps:         plan.steps.map(s => s.action),
-        fullPlan:      plan,
+        todos: plan.todos.map(t => t.title),
+        fullPlan: plan,
       };
 
       return { state, next: 'executor' };
@@ -95,60 +186,60 @@ export class PlannerNode extends BaseNode {
     const fallbackMentionsMemory = /\b(chroma|chromadb|memorypedia|memory pedia|memory graph|long[- ]term memory|remember|recall|previously)\b/i
       .test(lastUserMessage.content);
 
-    const fallbackSteps: Array<{ id: string; action: string; description: string; dependsOn: string[] }> = [];
-    const fallbackStepActions: string[] = [];
+    const fallbackTodos: Array<{ id: string; title: string; description: string; dependsOn: string[] }> = [];
+    const fallbackTodoTitles: string[] = [];
 
     if (wantsCount) {
-      fallbackSteps.push({
-        id:          'step_1',
-        action:      'count_memory_articles',
+      fallbackTodos.push({
+        id: 'todo_1',
+        title: 'Count memory items',
         description: 'Count memory items stored in ChromaDB/MemoryPedia',
-        dependsOn:   [],
+        dependsOn: [],
       });
-      fallbackStepActions.push('count_memory_articles');
+      fallbackTodoTitles.push('Count memory items');
     }
 
     if (fallbackMentionsMemory) {
-      fallbackSteps.push({
-        id:          `step_${fallbackSteps.length + 1}`,
-        action:      'recall_memory',
+      fallbackTodos.push({
+        id: `todo_${fallbackTodos.length + 1}`,
+        title: 'Recall relevant memory',
         description: 'Recall relevant long-term memory from ChromaDB/MemoryPedia',
-        dependsOn:   fallbackSteps.length > 0 ? [fallbackSteps[fallbackSteps.length - 1].id] : [],
+        dependsOn: fallbackTodos.length > 0 ? [fallbackTodos[fallbackTodos.length - 1].id] : [],
       });
-      fallbackStepActions.push('recall_memory');
+      fallbackTodoTitles.push('Recall relevant memory');
     }
 
-    fallbackSteps.push({
-      id:          `step_${fallbackSteps.length + 1}`,
-      action:      'generate_response',
+    fallbackTodos.push({
+      id: `todo_${fallbackTodos.length + 1}`,
+      title: 'Generate response',
       description: 'Respond to the user using any tool outputs and conversation context',
-      dependsOn:   fallbackSteps.length > 0 ? [fallbackSteps[fallbackSteps.length - 1].id] : [],
+      dependsOn: fallbackTodos.length > 0 ? [fallbackTodos[fallbackTodos.length - 1].id] : [],
     });
-    fallbackStepActions.push('generate_response');
+    fallbackTodoTitles.push('Generate response');
 
     const fallbackRequiresTools = wantsCount || fallbackMentionsMemory;
 
     state.metadata.plan = {
       requiresTools: fallbackRequiresTools,
-      steps:         fallbackStepActions,
-      fullPlan:      {
+      todos: fallbackTodoTitles,
+      fullPlan: {
         intent: {
-          type:        'question',
-          confidence:  0.4,
+          type: 'question',
+          confidence: 0.4,
           description: 'Fallback plan generated because LLM planning timed out or failed',
         },
-        goal:          'Answer the user request using available tools where applicable',
+        goal: 'Answer the user request using available tools where applicable',
         requiresTools: fallbackRequiresTools,
-        steps:         fallbackSteps,
+        todos: fallbackTodos,
         context: {
-          needsMemoryRecall:  fallbackMentionsMemory,
+          needsMemoryRecall: fallbackMentionsMemory,
           memorySearchQueries: fallbackMentionsMemory ? [lastUserMessage.content] : [],
-          needsExternalData:  false,
-          relevantTopics:     [],
+          needsExternalData: false,
+          relevantTopics: [],
         },
         responseGuidance: {
-          tone:            'technical',
-          format:          'brief',
+          tone: 'technical',
+          format: 'brief',
           includeExamples: false,
         },
       },
@@ -195,59 +286,65 @@ export class PlannerNode extends BaseNode {
 
     registerDefaultTools();
     const registry = getToolRegistry();
+    const categoryIndex = registry.getCompactCategoryIndexBlock({ includeToolNames: true });
     const toolsBlock = registry.getCompactPlanningInstructionsBlock({
-      includeNames: this.selectRelevantTools(userMessage),
+      includeCategories: ['memory'],
     });
 
-    const prompt = `You are a planning assistant. Analyze this user request and create an execution plan.
+    const prompt = `You are an advanced planning agent for complex tasks. Analyze the user request and generate a high-level execution plan.
 
 User message: "${userMessage}"
 
 ${context ? `Context:\n${context}\n` : ''}
 
-IMPORTANT: You have access to a long-term memory system (ChromaDB) that stores:
-- Past conversation summaries
-- Entity pages (people, projects, technologies, concepts, etc.)
+Long-term memory access: Use tool:memory_search for past summaries, entities (people, projects, tech, concepts).
 
+Available tool categories:
+${categoryIndex}
+
+Tools:
 ${toolsBlock}
 
-If the user is asking about something that might have been discussed before, or references a topic/entity that could be in memory, you MUST:
-- Set context.needsMemoryRecall=true
-- Provide context.memorySearchQueries with 1-5 specific queries
-- Include a step with action "memory_search" before generating the final response.
+Guidelines:
+- Output high-level steps as TODOs (focus on objectives, not specific tool calls—defer tool selection to execution phase).
+- For tool/capability discovery: Prioritize summarizing categories, suggest read-only tests for safety.
+- Detect if plan unnecessary (simple queries): Set planNeeded false.
+- Incorporate dependencies, parallelism where possible.
+- Optimize for efficiency: Minimize steps, maximize reuse of memory/external data.
 
-Create a plan in JSON format:
+Output JSON plan:
 {
   "intent": {
-    "type": "question" | "task" | "conversation" | "clarification" | "follow_up",
+    "type": "question" | "task" | "conversation" | "clarification" | "follow_up" | "exploration",
     "confidence": 0.0-1.0,
-    "description": "brief description of what user wants"
+    "description": "concise user intent summary"
   },
-  "goal": "what the user is trying to accomplish",
-  "requiresTools": false,
-  "steps": [
+  "planNeeded": boolean,
+  "goal": "user's core objective",
+  "requiresTools": boolean,
+  "todos": [
     {
-      "id": "step_1",
-      "action": "action_name (e.g., recall_memory, generate_response, search_knowledge)",
-      "description": "what this step does",
-      "dependsOn": []
+      "id": "todo_id",
+      "title": "short TODO title",
+      "description": "step purpose and expected output",
+      "dependsOn": string[] (previous todo/step ids),
+      "parallelizable": boolean,
+      "categoryHints": []
     }
   ],
   "context": {
-    "needsMemoryRecall": true/false (set true if user asks about past topics, entities, or references something that might be stored),
-    "memorySearchQueries": ["specific search query 1", "entity name to look up"] (provide if needsMemoryRecall is true),
-    "needsExternalData": true/false,
-    "relevantTopics": ["topic1", "topic2"]
+    "relevantTopics": string[],
+    "potentialRisks": string[] (e.g., data privacy, API limits)
   },
   "responseGuidance": {
     "tone": "formal" | "casual" | "technical" | "friendly",
-    "format": "brief" | "detailed" | "structured" | "conversational",
-    "includeExamples": true/false
+    "format": "brief" | "detailed" | "json" | "markdown" | "conversational",
+    "includeExamples": boolean,
+    "lengthConstraint": "short" | "medium" | "long"
   }
 }
-}
 
-Respond ONLY with the JSON, no other text.`;
+Respond solely with JSON.`;
 
     try {
       const response = await this.prompt(prompt);
@@ -269,10 +366,25 @@ Respond ONLY with the JSON, no other text.`;
         return null;
       }
 
-      const plan = JSON.parse(jsonMatch[0]) as ConversationPlan;
+      const plan = this.tryParsePlanJson(jsonMatch[0]);
+      if (!plan) {
+        console.warn('[Agent:Planner] Failed to parse plan JSON');
+        return null;
+      }
+
+      // Back-compat: map steps into todos if needed.
+      if ((!plan.todos || !Array.isArray(plan.todos) || plan.todos.length === 0) && Array.isArray(plan.steps)) {
+        plan.todos = plan.steps.map(s => ({
+          id: s.id,
+          title: s.action,
+          description: s.description || s.action,
+          dependsOn: Array.isArray(s.dependsOn) ? s.dependsOn.map(String) : [],
+          categoryHints: [],
+        }));
+      }
 
       // Validate required fields
-      if (!plan.intent || !plan.goal || !plan.steps) {
+      if (!plan.intent || !plan.goal || !plan.todos || typeof plan.planNeeded !== 'boolean') {
         console.warn('[Agent:Planner] Invalid plan structure');
 
         return null;
@@ -282,6 +394,21 @@ Respond ONLY with the JSON, no other text.`;
     } catch (err) {
       console.error('[Agent:Planner] Planning failed:', err);
 
+      return null;
+    }
+  }
+
+  private tryParsePlanJson(raw: string): ConversationPlan | null {
+    try {
+      return JSON.parse(raw) as ConversationPlan;
+    } catch {
+      // continue to repair
+    }
+
+    try {
+      const repaired = jsonrepair(raw);
+      return JSON.parse(repaired) as ConversationPlan;
+    } catch {
       return null;
     }
   }

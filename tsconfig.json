@@ -38,6 +38,10 @@
   "exclude": [
     "node_modules",
     "dist",
+    "tailwind.config.js",
+    "tailwind.config.cjs",
+    "tailwind.config.mjs",
+    "postcss.config.cjs",
     "scripts/lib/installer-*.tsx",
     "scripts/lib/installer-win32-gen.tsx"
   ],

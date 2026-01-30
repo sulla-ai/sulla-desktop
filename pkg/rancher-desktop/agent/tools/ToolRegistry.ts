@@ -54,8 +54,6 @@ export class ToolRegistry {
 
     const lines: string[] = [];
     lines.push('Tool categories (index):');
-    lines.push('- To use tools from a category, include a step with action "expand_tool_category" and args { "category": "..." }.');
-    lines.push('- Then select specific tools from that category for subsequent steps.');
     lines.push('');
 
     for (const category of Array.from(byCategory.keys()).sort()) {

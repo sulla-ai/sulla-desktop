@@ -221,6 +221,10 @@ export function createDefaultGraph(): Graph {
       return 'planner';
     }
 
+    if (state.metadata.planHasRemainingTodos) {
+      return 'executor';
+    }
+
     return 'end';
   });
 

@@ -16,6 +16,20 @@ export class CriticNode extends BaseNode {
     console.log(`[Agent:Critic] Executing...`);
     const response = state.metadata.response as string | undefined;
 
+    const requestedRevision = state.metadata.requestPlanRevision as { reason?: string } | boolean | undefined;
+    if (requestedRevision) {
+      const reason = (typeof requestedRevision === 'object' && requestedRevision)
+        ? String((requestedRevision as any).reason || 'Executor requested plan revision')
+        : 'Executor requested plan revision';
+
+      state.metadata.criticDecision = 'revise';
+      state.metadata.criticReason = reason;
+      state.metadata.revisionFeedback = reason;
+      state.metadata.revisionCount = ((state.metadata.revisionCount as number) || 0) + 1;
+      console.log(`[Agent:Critic] Forcing revision due to executor request: ${reason}`);
+      return { state, next: 'planner' };
+    }
+
     if (!response) {
       console.log(`[Agent:Critic] No response to critique, ending`);
 
@@ -29,7 +43,7 @@ export class CriticNode extends BaseNode {
       state.metadata.criticDecision = 'approve';
       state.metadata.criticReason = 'Max revisions reached';
 
-      return { state, next: 'end' };
+      return { state, next: 'continue' };
     }
 
     const decision = await this.evaluate(state, response);
@@ -39,7 +53,7 @@ export class CriticNode extends BaseNode {
     state.metadata.criticReason = decision.reason;
 
     if (decision.decision === 'approve') {
-      return { state, next: 'end' };
+      return { state, next: 'continue' };
     }
 
     if (decision.decision === 'revise') {

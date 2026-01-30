@@ -4,6 +4,8 @@
 
 import { createApp } from 'vue';
 
+import './agent-tailwind.css';
+
 import Agent from '../pages/Agent.vue';
 
 const app = createApp(Agent);

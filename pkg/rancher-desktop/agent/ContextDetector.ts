@@ -5,6 +5,8 @@
 import type { SensoryInput, ThreadContext } from './types';
 import { getMemoryPedia } from './services/MemoryPedia';
 import { getLLMService } from './services/LLMServiceFactory';
+import { getAwarenessService } from './services/AwarenessService';
+import { getPlanService } from './services/PlanService';
 
 // Minimum similarity score to consider a thread match (0-1, lower = more similar in Chroma)
 const SIMILARITY_THRESHOLD = 0.7;
@@ -58,6 +60,32 @@ export class ContextDetector {
     }
 
     const text = input.data;
+
+    try {
+      const awareness = getAwarenessService();
+      await awareness.initialize();
+      const activePlanIds = awareness.getData().active_plan_ids || [];
+      const activePlanId = activePlanIds[0] && Number.isFinite(Number(activePlanIds[0])) ? Number(activePlanIds[0]) : null;
+
+      if (activePlanId) {
+        const planService = getPlanService();
+        await planService.initialize();
+        const loaded = await planService.getPlan(activePlanId);
+
+        if (loaded?.plan?.status === 'active' && loaded.plan.threadId) {
+          const pinnedThreadId = loaded.plan.threadId;
+          const pinnedSummary = this.threadSummaries.get(pinnedThreadId) || '';
+          return {
+            threadId: pinnedThreadId,
+            isNew: false,
+            summary: pinnedSummary,
+            confidence: 1.0,
+          };
+        }
+      }
+    } catch {
+      // If plan pinning fails, fall back to normal detection.
+    }
 
     const currentSummary = currentThreadId ? this.threadSummaries.get(currentThreadId) : undefined;
     const currentConfidence = currentSummary ? this.keywordConfidence(text, currentSummary) : 0;
