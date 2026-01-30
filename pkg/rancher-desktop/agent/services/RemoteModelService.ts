@@ -31,6 +31,8 @@ class RemoteModelServiceClass implements ILLMService {
   private config: RemoteProviderConfig | null = null;
   private available = false;
   private initialized = false;
+  private retryCount = 3; // Default retry count before fallback
+  private defaultTimeoutMs = 60000;
 
   /**
    * Configure the service with provider details
@@ -39,6 +41,30 @@ class RemoteModelServiceClass implements ILLMService {
     this.config = config;
     this.initialized = false;
     this.available = false;
+  }
+
+  /**
+   * Set the retry count for API calls before falling back to local LLM
+   */
+  setRetryCount(count: number): void {
+    this.retryCount = Math.max(0, Math.min(10, count)); // Clamp between 0-10
+    console.log(`[RemoteModelService] Retry count set to: ${this.retryCount}`);
+  }
+
+  /**
+   * Get current retry count
+   */
+  getRetryCount(): number {
+    return this.retryCount;
+  }
+
+  setDefaultTimeoutMs(timeoutMs: number): void {
+    this.defaultTimeoutMs = Math.max(1000, Math.min(300000, timeoutMs));
+    console.log(`[RemoteModelService] Default timeout set to: ${this.defaultTimeoutMs}ms`);
+  }
+
+  getDefaultTimeoutMs(): number {
+    return this.defaultTimeoutMs;
   }
 
   /**
@@ -116,7 +142,7 @@ class RemoteModelServiceClass implements ILLMService {
 
   /**
    * Chat completion - main method
-   * Falls back to local Ollama on network errors
+   * Retries on failure, then falls back to local Ollama
    */
   async chat(messages: ChatMessage[], options: ChatOptions = {}): Promise<string | null> {
     if (!this.config || !this.config.apiKey) {
@@ -131,40 +157,56 @@ class RemoteModelServiceClass implements ILLMService {
       return null;
     }
 
-    const { timeout = 60000, temperature } = options;
+    const { timeout = this.defaultTimeoutMs, temperature } = options;
+    let lastError: unknown = null;
 
-    try {
-      // Route to provider-specific handler
-      switch (this.config.id) {
-        case 'anthropic':
-          return await this.chatAnthropic(messages, temperature, timeout);
-        case 'google':
-          return await this.chatGoogle(messages, temperature, timeout);
-        default:
-          // OpenAI-compatible (Grok, OpenAI)
-          return await this.chatOpenAI(messages, temperature, timeout);
-      }
-    } catch (err) {
-      console.error('[RemoteModelService] Chat failed:', err);
+    // Retry loop
+    for (let attempt = 0; attempt <= this.retryCount; attempt++) {
+      try {
+        if (attempt > 0) {
+          console.log(`[RemoteModelService] Retry attempt ${attempt}/${this.retryCount}`);
+          // Exponential backoff: 1s, 2s, 4s, etc.
+          await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt - 1) * 1000));
+        }
 
-      // Fallback to local Ollama on network errors
-      if (this.isNetworkError(err)) {
-        console.warn('[RemoteModelService] Network error, falling back to local Ollama');
-        try {
-          const { getOllamaService } = await import('./OllamaService');
-          const ollama = getOllamaService();
+        // Route to provider-specific handler
+        switch (this.config.id) {
+          case 'anthropic':
+            return await this.chatAnthropic(messages, temperature, timeout);
+          case 'google':
+            return await this.chatGoogle(messages, temperature, timeout);
+          default:
+            // OpenAI-compatible (Grok, OpenAI)
+            return await this.chatOpenAI(messages, temperature, timeout);
+        }
+      } catch (err) {
+        lastError = err;
+        console.error(`[RemoteModelService] Chat failed (attempt ${attempt + 1}/${this.retryCount + 1}):`, err);
 
-          await ollama.initialize();
-          if (ollama.isAvailable()) {
-            return await ollama.chat(messages, options);
-          }
-        } catch (fallbackErr) {
-          console.error('[RemoteModelService] Fallback to Ollama also failed:', fallbackErr);
+        // Only retry on network errors
+        if (!this.isNetworkError(err)) {
+          break; // Don't retry on non-network errors (e.g., auth errors)
         }
       }
-
-      return null;
     }
+
+    // All retries exhausted, fall back to local Ollama
+    if (this.isNetworkError(lastError)) {
+      console.warn(`[RemoteModelService] All ${this.retryCount + 1} attempts failed, falling back to local Ollama`);
+      try {
+        const { getOllamaService } = await import('./OllamaService');
+        const ollama = getOllamaService();
+
+        await ollama.initialize();
+        if (ollama.isAvailable()) {
+          return await ollama.chat(messages, options);
+        }
+      } catch (fallbackErr) {
+        console.error('[RemoteModelService] Fallback to Ollama also failed:', fallbackErr);
+      }
+    }
+
+    return null;
   }
 
   /**

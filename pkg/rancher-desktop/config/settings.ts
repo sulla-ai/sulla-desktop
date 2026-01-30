@@ -143,6 +143,9 @@ export const defaultSettings = {
     remoteModel:     'grok-4-1-fast-reasoning',
     /** Remote API key */
     remoteApiKey:    '',
+    /** Number of retries before falling back to local LLM */
+    remoteRetryCount: 3,
+    remoteTimeoutSeconds: 60,
     virtualMachine:  {
       diskSize: '100GiB',
       mount:    {

@@ -26,6 +26,15 @@ export function updateLLMConfig(config: LLMConfig): void {
       apiKey: config.remoteApiKey,
       model:  config.remoteModel,
     });
+
+    // Set retry count if provided
+    if (config.remoteRetryCount !== undefined) {
+      remoteService.setRetryCount(config.remoteRetryCount);
+    }
+
+    if (config.remoteTimeoutSeconds !== undefined) {
+      remoteService.setDefaultTimeoutMs(config.remoteTimeoutSeconds * 1000);
+    }
   }
 
   console.log(`[LLMServiceFactory] Config updated: mode=${config.mode}, model=${config.mode === 'local' ? config.localModel : config.remoteModel}`);

@@ -136,6 +136,8 @@ export default class SettingsValidator {
         remoteProvider:  this.checkString,
         remoteModel:     this.checkString,
         remoteApiKey:    this.checkString,
+        remoteRetryCount: this.checkNumber(0, 10),
+        remoteTimeoutSeconds: this.checkNumber(1, 300),
         virtualMachine:  {
           diskSize: this.checkLima(this.checkByteUnits),
           mount:    {

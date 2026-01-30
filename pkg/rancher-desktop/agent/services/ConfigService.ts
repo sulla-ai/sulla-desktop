@@ -15,6 +15,8 @@ interface AgentConfig {
   remoteProvider: string;
   remoteModel: string;
   remoteApiKey: string;
+  remoteRetryCount: number;
+  remoteTimeoutSeconds: number;
 }
 
 let cachedConfig: AgentConfig | null = null;
@@ -36,12 +38,14 @@ export function getAgentConfig(): AgentConfig {
       const config = (window as any).__SULLA_CONFIG__;
 
       cachedConfig = {
-        ollamaModel:    config.sullaModel || DEFAULT_MODEL,
-        ollamaBase:     OLLAMA_BASE,
-        modelMode:      config.modelMode || 'local',
-        remoteProvider: config.remoteProvider || 'grok',
-        remoteModel:    config.remoteModel || 'grok-4-1-fast-reasoning',
-        remoteApiKey:   config.remoteApiKey || '',
+        ollamaModel:      config.sullaModel || DEFAULT_MODEL,
+        ollamaBase:       OLLAMA_BASE,
+        modelMode:        config.modelMode || 'local',
+        remoteProvider:   config.remoteProvider || 'grok',
+        remoteModel:      config.remoteModel || 'grok-4-1-fast-reasoning',
+        remoteApiKey:     config.remoteApiKey || '',
+        remoteRetryCount: config.remoteRetryCount ?? 3,
+        remoteTimeoutSeconds: config.remoteTimeoutSeconds ?? 60,
       };
 
       return cachedConfig;
@@ -52,12 +56,14 @@ export function getAgentConfig(): AgentConfig {
 
   // Return defaults
   return {
-    ollamaModel:    DEFAULT_MODEL,
-    ollamaBase:     OLLAMA_BASE,
-    modelMode:      'local',
-    remoteProvider: 'grok',
-    remoteModel:    'grok-4-1-fast-reasoning',
-    remoteApiKey:   '',
+    ollamaModel:      DEFAULT_MODEL,
+    ollamaBase:       OLLAMA_BASE,
+    modelMode:        'local',
+    remoteProvider:   'grok',
+    remoteModel:      'grok-4-1-fast-reasoning',
+    remoteApiKey:     '',
+    remoteRetryCount: 3,
+    remoteTimeoutSeconds: 60,
   };
 }
 
@@ -71,28 +77,34 @@ export function updateAgentConfigFull(settings: {
   remoteProvider?: string;
   remoteModel?: string;
   remoteApiKey?: string;
+  remoteRetryCount?: number;
+  remoteTimeoutSeconds?: number;
 }): void {
   cachedConfig = {
-    ollamaModel:    settings.sullaModel || DEFAULT_MODEL,
-    ollamaBase:     OLLAMA_BASE,
-    modelMode:      settings.modelMode || 'local',
-    remoteProvider: settings.remoteProvider || 'grok',
-    remoteModel:    settings.remoteModel || 'grok-4-1-fast-reasoning',
-    remoteApiKey:   settings.remoteApiKey || '',
+    ollamaModel:      settings.sullaModel || DEFAULT_MODEL,
+    ollamaBase:       OLLAMA_BASE,
+    modelMode:        settings.modelMode || 'local',
+    remoteProvider:   settings.remoteProvider || 'grok',
+    remoteModel:      settings.remoteModel || 'grok-4-1-fast-reasoning',
+    remoteApiKey:     settings.remoteApiKey || '',
+    remoteRetryCount: settings.remoteRetryCount ?? 3,
+    remoteTimeoutSeconds: settings.remoteTimeoutSeconds ?? 60,
   };
 
   // Update the LLM service factory
   const llmConfig: LLMConfig = {
-    mode:           cachedConfig.modelMode,
-    localModel:     cachedConfig.ollamaModel,
-    ollamaBase:     cachedConfig.ollamaBase,
-    remoteProvider: cachedConfig.remoteProvider,
-    remoteModel:    cachedConfig.remoteModel,
-    remoteApiKey:   cachedConfig.remoteApiKey,
+    mode:             cachedConfig.modelMode,
+    localModel:       cachedConfig.ollamaModel,
+    ollamaBase:       cachedConfig.ollamaBase,
+    remoteProvider:   cachedConfig.remoteProvider,
+    remoteModel:      cachedConfig.remoteModel,
+    remoteApiKey:     cachedConfig.remoteApiKey,
+    remoteRetryCount: cachedConfig.remoteRetryCount,
+    remoteTimeoutSeconds: cachedConfig.remoteTimeoutSeconds,
   };
 
   updateLLMConfig(llmConfig);
-  console.log(`[ConfigService] Config updated: mode=${cachedConfig.modelMode}, model=${cachedConfig.modelMode === 'local' ? cachedConfig.ollamaModel : cachedConfig.remoteModel}`);
+  console.log(`[ConfigService] Config updated: mode=${cachedConfig.modelMode}, model=${cachedConfig.modelMode === 'local' ? cachedConfig.ollamaModel : cachedConfig.remoteModel}, retries=${cachedConfig.remoteRetryCount}, timeoutSeconds=${cachedConfig.remoteTimeoutSeconds}`);
 }
 
 /**

@@ -83,4 +83,6 @@ export interface LLMConfig {
   remoteProvider: string;
   remoteModel: string;
   remoteApiKey: string;
+  remoteRetryCount?: number; // Number of retries before falling back to local LLM
+  remoteTimeoutSeconds?: number;
 }

@@ -142,9 +142,12 @@ export default defineComponent({
       selectedRemoteModel:  'grok-4-1-fast-reasoning',
       apiKey:               '',
       apiKeyVisible:        false,
+      remoteRetryCount:     3, // Number of retries before falling back to local LLM
+      remoteTimeoutSeconds: 60, // Remote API timeout limit in seconds
       // Activation state
       activating:           false,
       activationError:      '' as string,
+      savingSettings:       false,
     };
   },
 
@@ -200,6 +203,8 @@ export default defineComponent({
         remoteProvider?: string;
         remoteModel?: string;
         remoteApiKey?: string;
+        remoteRetryCount?: number;
+        remoteTimeoutSeconds?: number;
       };
     }) => {
       if (settings.experimental?.sullaModel) {
@@ -218,6 +223,12 @@ export default defineComponent({
       }
       if (settings.experimental?.remoteApiKey) {
         this.apiKey = settings.experimental.remoteApiKey;
+      }
+      if (settings.experimental?.remoteRetryCount !== undefined) {
+        this.remoteRetryCount = settings.experimental.remoteRetryCount;
+      }
+      if (settings.experimental?.remoteTimeoutSeconds !== undefined) {
+        this.remoteTimeoutSeconds = settings.experimental.remoteTimeoutSeconds;
       }
     });
     ipcRenderer.send('settings-read');
@@ -438,12 +449,7 @@ export default defineComponent({
         }
 
         // Save settings
-        await ipcRenderer.invoke('settings-write', {
-          experimental: {
-            modelMode:  'local',
-            sullaModel: this.pendingModel,
-          },
-        });
+        await this.writeExperimentalSettings({ modelMode: 'local' });
 
         this.activeMode = 'local';
         this.activeModel = this.pendingModel;
@@ -478,41 +484,50 @@ export default defineComponent({
         }
 
         // Try a simple API call to validate the key
-        const testUrl = provider.id === 'grok' || provider.id === 'openai'
-          ? `${provider.baseUrl}/models`
-          : null;
+        const timeoutMs = Math.max(1000, Math.min(300, this.remoteTimeoutSeconds)) * 1000;
 
-        if (testUrl) {
+        if (provider.id === 'grok' || provider.id === 'openai') {
+          const testUrl = `${provider.baseUrl}/chat/completions`;
+          const testBody = {
+            model:       this.selectedRemoteModel,
+            messages:    [{ role: 'user', content: 'Reply with the word: OK' }],
+            temperature: 0,
+            max_tokens:  10,
+          };
+
           try {
             const testRes = await fetch(testUrl, {
-              headers: { Authorization: `Bearer ${this.apiKey}` },
-              signal:  AbortSignal.timeout(10000),
+              method:  'POST',
+              headers: {
+                'Content-Type':  'application/json',
+                Authorization:   `Bearer ${this.apiKey}`,
+              },
+              body:    JSON.stringify(testBody),
+              signal:  AbortSignal.timeout(timeoutMs),
             });
 
             if (!testRes.ok) {
               const errorText = await testRes.text();
 
-              this.activationError = `API key validation failed: ${testRes.status}. Check your API key.`;
-              console.error('API validation error:', errorText);
+              this.activationError = `Remote model test failed: ${testRes.status}. Check model, key, and timeout.`;
+              console.error('Remote model test error:', errorText);
 
               return;
             }
-          } catch {
-            this.activationError = 'Could not connect to API. Check your internet connection and API key.';
+          } catch (err) {
+            this.activationError = 'Remote model test failed (timeout/network). Check connection, API key, and timeout.';
+            console.error('Remote model test error:', err);
 
             return;
           }
+        } else {
+          this.activationError = 'Remote provider test is not supported for this provider yet.';
+
+          return;
         }
 
         // Save settings
-        await ipcRenderer.invoke('settings-write', {
-          experimental: {
-            modelMode:      'remote',
-            remoteProvider: this.selectedProvider,
-            remoteModel:    this.selectedRemoteModel,
-            remoteApiKey:   this.apiKey,
-          },
-        });
+        await this.writeExperimentalSettings({ modelMode: 'remote' });
 
         this.activeMode = 'remote';
         console.log(`[LM Settings] Remote model activated: ${this.selectedProvider}/${this.selectedRemoteModel}`);
@@ -542,6 +557,36 @@ export default defineComponent({
       } catch (err) {
         console.error('Error deleting model:', err);
       }
+    },
+
+    async saveSettings() {
+      if (this.savingSettings) {
+        return;
+      }
+
+      this.savingSettings = true;
+      try {
+        await this.writeExperimentalSettings();
+        console.log('[LM Settings] Settings saved');
+      } catch (err) {
+        console.error('Failed to save LM settings:', err);
+      } finally {
+        this.savingSettings = false;
+      }
+    },
+
+    async writeExperimentalSettings(extra: Record<string, unknown> = {}) {
+      await ipcRenderer.invoke('settings-write', {
+        experimental: {
+          ...extra,
+          sullaModel:            this.pendingModel,
+          remoteProvider:        this.selectedProvider,
+          remoteModel:           this.selectedRemoteModel,
+          remoteApiKey:          this.apiKey,
+          remoteRetryCount:      this.remoteRetryCount,
+          remoteTimeoutSeconds:  this.remoteTimeoutSeconds,
+        },
+      });
     },
 
     closeWindow() {
@@ -888,6 +933,42 @@ export default defineComponent({
                 Get your API key from the {{ currentProvider?.name }} dashboard.
               </p>
             </div>
+
+            <!-- Retry Count -->
+            <div class="setting-group">
+              <label class="setting-label">Retry Count</label>
+              <div class="retry-input">
+                <input
+                  v-model.number="remoteRetryCount"
+                  type="number"
+                  class="text-input"
+                  min="0"
+                  max="10"
+                  style="width: 80px;"
+                >
+              </div>
+              <p class="setting-description">
+                Number of retries before falling back to local Ollama model. Set to 0 to disable fallback.
+              </p>
+            </div>
+
+            <!-- Timeout Limit (seconds) -->
+            <div class="setting-group">
+              <label class="setting-label">Timeout Limit (seconds)</label>
+              <div class="timeout-input">
+                <input
+                  v-model.number="remoteTimeoutSeconds"
+                  type="number"
+                  class="text-input"
+                  min="1"
+                  max="300"
+                  style="width: 120px;"
+                >
+              </div>
+              <p class="setting-description">
+                Timeout limit for remote API calls (in seconds).
+              </p>
+            </div>
           </template>
         </div>
 
@@ -896,6 +977,13 @@ export default defineComponent({
 
     <!-- Footer -->
     <div class="lm-footer">
+      <button
+        class="btn role-primary"
+        :disabled="activating || savingSettings"
+        @click="saveSettings"
+      >
+        {{ savingSettings ? 'Saving...' : 'Save' }}
+      </button>
       <button
         class="btn role-secondary"
         @click="closeWindow"
