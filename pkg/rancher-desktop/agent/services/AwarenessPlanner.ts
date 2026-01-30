@@ -23,7 +23,7 @@ export class AwarenessPlanner {
 
     const current = awareness.getData();
 
-    const prompt = `You maintain a global Awareness context for an AI desktop agent.
+    const prompt = `You maintain a global Awareness context for Sulla, a desktop assistant.
 
 Current Awareness JSON:
 ${JSON.stringify(current)}

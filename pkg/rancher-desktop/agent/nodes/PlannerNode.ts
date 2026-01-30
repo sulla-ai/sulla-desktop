@@ -194,7 +194,10 @@ export class PlannerNode extends BaseNode {
     }
 
     registerDefaultTools();
-    const toolsBlock = getToolRegistry().getPlanningInstructionsBlock();
+    const registry = getToolRegistry();
+    const toolsBlock = registry.getCompactPlanningInstructionsBlock({
+      includeNames: this.selectRelevantTools(userMessage),
+    });
 
     const prompt = `You are a planning assistant. Analyze this user request and create an execution plan.
 
@@ -242,6 +245,7 @@ Create a plan in JSON format:
     "includeExamples": true/false
   }
 }
+}
 
 Respond ONLY with the JSON, no other text.`;
 
@@ -280,6 +284,86 @@ Respond ONLY with the JSON, no other text.`;
 
       return null;
     }
+  }
+
+  private selectRelevantTools(userMessage: string): string[] {
+    const wantsMemory = /\b(chroma|chromadb|memorypedia|memory pedia|memory graph|long[- ]term memory|remember|recall|previously)\b/i
+      .test(userMessage);
+    const wantsK8s = /\b(kubernetes|k8s|kubectl|pod|pods|node|nodes|deployment|deployments|service|services|ingress|namespace|namespaces)\b/i
+      .test(userMessage);
+    const wantsLima = /\b(lima|limactl)\b/i.test(userMessage);
+    const wantsApply = /\b(apply|manifest|yaml|helm)\b/i.test(userMessage);
+    const wantsLogs = /\b(logs?|describe|events?|rollout|restart|top)\b/i.test(userMessage);
+    const wantsSettings = /\b(settings?|config|configuration|preferences?|model mode|timeout|retries|retry|api key|provider|temperature)\b/i
+      .test(userMessage);
+    const wantsHost = /\b(host|filesystem|file system|files|folder|directory|path|grep|search files|find files|tail|cat|read file|run command)\b/i
+      .test(userMessage);
+    const wantsPodExec = /\b(exec|shell|bash|sh|inside (the )?pod|in (the )?pod|kubectl exec|run in pod)\b/i
+      .test(userMessage);
+
+    const selected = new Set<string>();
+
+    if (wantsMemory) {
+      selected.add('memory_search');
+      selected.add('count_memory_articles');
+    }
+
+    if (wantsK8s) {
+      selected.add('kubectl_list_pods');
+      selected.add('kubectl_list_nodes');
+      selected.add('kubectl_get_deployments');
+      selected.add('kubectl_get_services');
+      selected.add('kubectl_get_ingresses');
+      if (wantsLogs) {
+        selected.add('kubectl_logs');
+        selected.add('kubectl_describe_pod');
+        selected.add('kubectl_get_events');
+        selected.add('kubectl_top_nodes');
+        selected.add('kubectl_top_pods');
+        selected.add('kubectl_rollout_status');
+        selected.add('kubectl_rollout_restart');
+      }
+      if (wantsApply) {
+        selected.add('kubectl_apply_dry_run');
+        selected.add('kubectl_apply');
+      }
+
+      if (wantsPodExec) {
+        selected.add('kubectl_exec');
+        selected.add('kubectl_cp_from_pod');
+        selected.add('kubectl_cp_to_pod');
+        selected.add('kubectl_get_pod_yaml');
+        selected.add('kubectl_get_pod_status');
+      }
+    }
+
+    if (wantsLima) {
+      selected.add('lima_list_instances');
+      selected.add('lima_instance_status');
+      selected.add('lima_shell');
+    }
+
+    if (wantsSettings) {
+      selected.add('agent_get_settings');
+      selected.add('agent_update_settings');
+    }
+
+    if (wantsHost) {
+      selected.add('host_list_dir');
+      selected.add('host_read_file');
+      selected.add('host_tail_file');
+      selected.add('host_stat');
+      selected.add('host_find_files');
+      selected.add('host_grep');
+      selected.add('host_run_command');
+    }
+
+    if (selected.size === 0) {
+      selected.add('memory_search');
+      selected.add('count_memory_articles');
+    }
+
+    return Array.from(selected);
   }
 
   /**

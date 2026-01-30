@@ -128,7 +128,7 @@ export class AwarenessService {
 
       return content.trim();
     } catch {
-      return 'You are Sulla Desktop. You are an AI Agent/Assistant that runs as a desktop application using a Kubernetes cluster as your neural network of capabilities and skills.';
+      return 'You are Sulla Desktop. You are Sulla, a desktop assistant that runs as a desktop application using a Kubernetes cluster as your neural network of capabilities and skills.';
     }
   }
 

@@ -45,7 +45,7 @@ export class ExecutorNode extends BaseNode {
     plan: {
       requiresTools: boolean;
       steps: string[];
-      fullPlan?: { steps?: Array<{ action: string }>; context?: { memorySearchQueries?: string[] } };
+      fullPlan?: { steps?: Array<{ action: string; args?: Record<string, unknown> }>; context?: { memorySearchQueries?: string[] } };
     },
   ): Promise<void> {
     const actions = (plan.fullPlan?.steps?.length)
@@ -56,6 +56,15 @@ export class ExecutorNode extends BaseNode {
     const registry = getToolRegistry();
     const toolResults: Record<string, ToolResult> = {};
     const memorySearchQueries = plan.fullPlan?.context?.memorySearchQueries || [];
+
+    const stepArgsByAction: Record<string, Record<string, unknown>> = {};
+    if (plan.fullPlan?.steps) {
+      for (const step of plan.fullPlan.steps) {
+        if (step?.action && step?.args && !stepArgsByAction[step.action]) {
+          stepArgsByAction[step.action] = step.args;
+        }
+      }
+    }
 
     for (const action of actions) {
       if (action === 'generate_response') {
@@ -72,6 +81,7 @@ export class ExecutorNode extends BaseNode {
         threadId: state.threadId,
         plannedAction: action,
         memorySearchQueries,
+        args: stepArgsByAction[action],
       });
 
       toolResults[action] = result;

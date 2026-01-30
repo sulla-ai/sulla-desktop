@@ -551,7 +551,9 @@ If nothing notable to extract, respond: { "entities": [], "topics": [] }`;
       return `${existing}\n\nUpdate: ${newInfo}`;
     }
 
-    const prompt = `Merge this new information into the existing page content. Keep it concise and well-organized.
+    const prompt = `Sulla is updating a MemoryPedia page.
+
+Merge this new information into the existing page content. Keep it concise and well-organized.
 
 Existing content:
 ${existing}

@@ -4,6 +4,7 @@ export interface ToolContext {
   threadId: string;
   plannedAction: string;
   memorySearchQueries?: string[];
+  args?: Record<string, unknown>;
 }
 
 export abstract class BaseTool {
