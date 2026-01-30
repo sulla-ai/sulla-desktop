@@ -82,7 +82,12 @@ export abstract class BaseNode implements GraphNode {
 
     const model = this.availableModel || this.llmService.getModel();
 
-    console.log(`[Agent:${this.name}] Sending prompt (${prompt.length} chars) to ${model}`);
+    console.log(`[Agent:${this.name}] LLM prompt`, {
+      node:   this.name,
+      model,
+      length: prompt.length,
+      prompt,
+    });
 
     try {
       const content = await this.llmService.generate(prompt);
@@ -135,6 +140,15 @@ export abstract class BaseNode implements GraphNode {
   ): string {
     const parts: string[] = [];
 
+    parts.push('You are Sulla, You are an AI Agent/Assistant that runs as a desktop application using a Kubernetes cluster as your neural network of capabilities and skills.');
+    parts.push('');
+
+    const historyForLog: Array<{ role: string; content: string }> = [];
+    if (options.includeHistory && state.shortTermMemory.length > 0) {
+      const maxItems = options.maxHistoryItems || 6;
+      historyForLog.push(...state.shortTermMemory.slice(-maxItems));
+    }
+
     // Add memory context if available and requested
     if (options.includeMemory && state.metadata.memoryContext) {
       parts.push('Relevant context from memory:');
@@ -156,6 +170,19 @@ export abstract class BaseNode implements GraphNode {
     // Add the main instruction
     parts.push(instruction);
 
-    return parts.join('\n');
+    const finalPrompt = parts.join('\n');
+
+    console.log(`[Agent:${this.name}] Contextual prompt`, {
+      node: this.name,
+      instruction,
+      includeMemory:  !!options.includeMemory,
+      includeHistory: !!options.includeHistory,
+      memoryContext:  options.includeMemory ? state.metadata.memoryContext : undefined,
+      history:        historyForLog.length > 0 ? historyForLog : undefined,
+      prompt:         finalPrompt,
+      length:         finalPrompt.length,
+    });
+
+    return finalPrompt;
   }
 }

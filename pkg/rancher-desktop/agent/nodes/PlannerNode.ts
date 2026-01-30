@@ -280,19 +280,18 @@ Create a plan in JSON format:
 Respond ONLY with the JSON, no other text.`;
 
     try {
-      console.log(`[Agent:Planner] Sending planning prompt (${prompt.length} chars)`);
-      const response = await this.llmService.generate(prompt);
+      const response = await this.prompt(prompt);
 
-      if (!response) {
+      if (!response?.content) {
         console.warn('[Agent:Planner] No response from LLM');
 
         return null;
       }
 
-      console.log(`[Agent:Planner] Received response (${response.length} chars)`);
+      console.log(`[Agent:Planner] Received response (${response.content.length} chars)`);
 
       // Extract JSON from response
-      const jsonMatch = response.match(/\{[\s\S]*\}/);
+      const jsonMatch = response.content.match(/\{[\s\S]*\}/);
 
       if (!jsonMatch) {
         console.warn('[Agent:Planner] No JSON found in response');
