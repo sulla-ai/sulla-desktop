@@ -65,6 +65,16 @@ export class PlannerNode extends BaseNode {
   async execute(state: ThreadState): Promise<{ state: ThreadState; next: NodeResult }> {
     console.log(`[Agent:Planner] Executing...`);
     const emit = (state.metadata.__emitAgentEvent as ((event: { type: 'progress' | 'chunk' | 'complete' | 'error'; threadId: string; data: unknown }) => void) | undefined);
+    
+    // Track consecutive LLM failures to prevent infinite loops
+    const llmFailureCount = ((state.metadata.llmFailureCount as number) || 0);
+    if (llmFailureCount >= 3) {
+      console.error(`[Agent:Planner] LLM has failed ${llmFailureCount} times, aborting`);
+      state.metadata.response = 'I apologize, but I\'m having trouble connecting to the language model service. Please check that the model is running and try again.';
+      state.metadata.error = 'LLM service unavailable after multiple attempts';
+      return { state, next: 'end' };
+    }
+    
     const lastUserMessage = state.messages.filter(m => m.role === 'user').pop();
 
     if (!lastUserMessage) {
@@ -246,6 +256,9 @@ export class PlannerNode extends BaseNode {
 
     // Fallback to simple plan if LLM planning fails
     console.log(`[Agent:Planner] LLM planning failed, using fallback`);
+    
+    // Increment LLM failure count
+    state.metadata.llmFailureCount = llmFailureCount + 1;
 
     const wantsCount = /\b(how many|count|number of|total)\b/i.test(lastUserMessage.content)
       && /\b(memory|memories|articles|pages|chroma|chromadb|memorypedia)\b/i.test(lastUserMessage.content);
@@ -319,7 +332,9 @@ export class PlannerNode extends BaseNode {
    * Build context from conversation history for planning
    */
   private buildConversationContext(state: ThreadState): string {
-    const recentMessages = state.messages.slice(-6); // Last 6 messages for context
+    // Filter out system messages to avoid confusing the LLM with prior prompt context
+    const userAssistantMessages = state.messages.filter(m => m.role === 'user' || m.role === 'assistant');
+    const recentMessages = userAssistantMessages.slice(-10); // Last 10 user/assistant messages
     const contextParts: string[] = [];
 
     const memories = state.metadata.memories as string[] | undefined;
@@ -329,9 +344,10 @@ export class PlannerNode extends BaseNode {
     }
 
     if (recentMessages.length > 1) {
-      const history = recentMessages.slice(0, -1).map(m => `${m.role}: ${m.content.substring(0, 100)}`).join('\n');
+      // Include full message content for continuity (not truncated)
+      const history = recentMessages.slice(0, -1).map(m => `${m.role}: ${m.content}`).join('\n\n');
 
-      contextParts.push(`Recent conversation:\n${history}`);
+      contextParts.push(`Conversation history:\n${history}`);
     }
 
     return contextParts.join('\n\n');
@@ -413,6 +429,11 @@ Guidelines:
 - For tool/capability discovery: Prioritize summarizing categories, suggest read-only tests for safety.
 - Detect if plan unnecessary (simple queries): Set planNeeded false.
 - If revising an existing plan (revision context provided): keep prior todos stable and only append/adjust minimally. Do not reset completed work.
+- **CRITICAL: If todos are BLOCKED, you MUST change the approach.** Do not recreate the same blocked todos. Either:
+  1. Replace blocked todos with a completely different approach
+  2. Remove blocked todos if they are not essential to the goal
+  3. Add new prerequisite todos that can unblock the situation
+  4. Simplify the plan to achieve the goal without the blocked steps
 - Incorporate dependencies, parallelism where possible.
 - Optimize for efficiency: Minimize steps, maximize reuse of memory/external data.
 

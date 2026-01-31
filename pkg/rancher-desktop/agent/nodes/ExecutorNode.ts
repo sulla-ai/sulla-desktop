@@ -74,6 +74,10 @@ export class ExecutorNode extends BaseNode {
 
   async execute(state: ThreadState): Promise<{ state: ThreadState; next: NodeResult }> {
     console.log(`[Agent:Executor] Executing...`);
+    
+    // Track consecutive LLM failures to prevent infinite loops
+    const llmFailureCount = ((state.metadata.llmFailureCount as number) || 0);
+    
     const executed = await this.executeNextTodoFromActivePlan(state);
     if (!executed) {
       console.log('[Agent:Executor] No active todo to execute, generating response...');
@@ -88,9 +92,19 @@ export class ExecutorNode extends BaseNode {
       state.metadata.ollamaModel = response.model;
       state.metadata.ollamaEvalCount = response.evalCount;
       state.metadata.executorCompleted = true;
+      state.metadata.llmFailureCount = 0; // Reset on success
     } else {
       console.error(`[Agent:Executor] Failed to generate response`);
       state.metadata.error = 'Failed to generate response';
+      state.metadata.llmFailureCount = llmFailureCount + 1;
+      
+      // If LLM has failed multiple times, break the loop
+      if (llmFailureCount + 1 >= 3) {
+        console.error(`[Agent:Executor] LLM failed ${llmFailureCount + 1} times, breaking loop`);
+        state.metadata.response = 'I apologize, but I\'m having trouble connecting to the language model service. Please check that the model is running and try again.';
+        state.metadata.executorCompleted = true;
+        return { state, next: 'end' };
+      }
     }
 
     return { state, next: 'continue' };
@@ -115,8 +129,54 @@ export class ExecutorNode extends BaseNode {
     }
 
     if (this.hasBlockedPrerequisiteForRemainingWork(loaded.todos)) {
-      await this.emitChat(state, 'A prerequisite todo is blocked and later todos depend on it. Requesting a plan revision.');
-      state.metadata.requestPlanRevision = { reason: 'Blocked prerequisite todo prevents remaining work' };
+      // Get details about the blocked todo(s) for better revision context
+      const blockedTodos = loaded.todos.filter(t => t.status === 'blocked');
+      const blockedDetails = blockedTodos.map(t => ({
+        id: t.id,
+        title: t.title,
+        description: t.description,
+      }));
+      
+      // Track blocked revision attempts to prevent infinite loops
+      const blockedRevisionCount = ((state.metadata.blockedRevisionCount as number) || 0) + 1;
+      state.metadata.blockedRevisionCount = blockedRevisionCount;
+      
+      if (blockedRevisionCount > 3) {
+        // Too many failed attempts - abort gracefully
+        await this.emitChat(state, `I've tried ${blockedRevisionCount - 1} times to work around blocked tasks but haven't been able to make progress. The blocked tasks are: ${blockedTodos.map(t => t.title).join(', ')}. I'll need to stop here and report what happened.`);
+        
+        // Mark plan as abandoned and clear it
+        try {
+          await planService.updatePlanStatus(planId, 'abandoned');
+          delete (state.metadata as any).activePlanId;
+          delete (state.metadata as any).activeTodo;
+          const awareness = getAwarenessService();
+          await awareness.initialize();
+          await awareness.update({ active_plan_ids: [] });
+        } catch {
+          // best effort
+        }
+        
+        state.metadata.planHasRemainingTodos = false;
+        state.metadata.error = `Plan failed after ${blockedRevisionCount - 1} revision attempts. Blocked todos: ${blockedTodos.map(t => t.title).join(', ')}`;
+        return false;
+      }
+      
+      const detailedReason = `Blocked prerequisite todo prevents remaining work.
+
+BLOCKED TODOS (need alternative approach or removal):
+${JSON.stringify(blockedDetails, null, 2)}
+
+IMPORTANT: You must either:
+1. Replace the blocked todo(s) with a different approach that can succeed
+2. Remove the blocked todo(s) if they are not essential
+3. Add new prerequisite todos that can unblock the situation
+
+Do NOT simply recreate the same todos - that will cause an infinite loop.
+Revision attempt: ${blockedRevisionCount}/3`;
+
+      await this.emitChat(state, `A prerequisite todo is blocked (attempt ${blockedRevisionCount}/3). Requesting a plan revision with a different approach.`);
+      state.metadata.requestPlanRevision = { reason: detailedReason };
       state.metadata.planHasRemainingTodos = true;
       return false;
     }
@@ -168,7 +228,7 @@ export class ExecutorNode extends BaseNode {
 
     await this.emitChat(state, `Working on: ${nextTodo.title}`);
 
-    const decision = await this.planSingleTodoStep(state, nextTodo);
+    const decision = await this.planTodoStep(state, nextTodo);
     if (!decision) {
       await this.emitChat(state, 'I could not determine a safe next action for this todo. Requesting a plan revision.');
       await planService.updateTodoStatus({
@@ -182,30 +242,42 @@ export class ExecutorNode extends BaseNode {
       return true;
     }
 
-    if (!decision.action || decision.action === 'none') {
-      await this.emitChat(state, decision.summary ? `No tool action selected. ${decision.summary}` : 'No tool action selected for this todo.');
+    if (decision.actions.length === 0) {
+      await this.emitChat(state, decision.summary ? `No tool actions selected. ${decision.summary}` : 'No tool actions selected for this todo.');
     }
 
-    let toolResult: ToolResult | null = null;
-    if (decision.action && decision.action !== 'none') {
-      toolResult = await this.executeSingleToolAction(state, decision.action, decision.args);
+    // Execute all tool actions
+    let anyToolFailed = false;
+    let lastFailedAction = '';
+    let lastFailedError = '';
+    
+    for (const actionItem of decision.actions) {
+      const toolResult = await this.executeSingleToolAction(state, actionItem.action, actionItem.args);
       if (toolResult) {
-        this.appendToolResult(state, decision.action, toolResult);
+        this.appendToolResult(state, actionItem.action, toolResult);
       }
 
       if (toolResult && !toolResult.success) {
-        await this.emitChat(state, `Tool failed (${decision.action}): ${toolResult.error || 'unknown error'}. Requesting plan revision.`);
-        await planService.updateTodoStatus({
-          todoId: nextTodo.id,
-          status: 'blocked',
-          eventType: 'todo_status',
-          eventData: { status: 'blocked', reason: `Tool failed (${decision.action}): ${toolResult.error || 'unknown error'}` },
-        });
-        state.metadata.requestPlanRevision = { reason: `Tool failed (${decision.action}): ${toolResult.error || 'unknown error'}` };
+        anyToolFailed = true;
+        lastFailedAction = actionItem.action;
+        lastFailedError = toolResult.error || 'unknown error';
+        // Continue executing other actions even if one fails
       }
     }
+    
+    if (anyToolFailed) {
+      await this.emitChat(state, `Tool failed (${lastFailedAction}): ${lastFailedError}. Requesting plan revision.`);
+      await planService.updateTodoStatus({
+        todoId: nextTodo.id,
+        status: 'blocked',
+        eventType: 'todo_status',
+        eventData: { status: 'blocked', reason: `Tool failed (${lastFailedAction}): ${lastFailedError}` },
+      });
+      state.metadata.requestPlanRevision = { reason: `Tool failed (${lastFailedAction}): ${lastFailedError}` };
+    }
 
-    const markDone = decision.markDone || (toolResult ? toolResult.success : false);
+    const allActionsSucceeded = decision.actions.length > 0 && !anyToolFailed;
+    const markDone = decision.markDone || allActionsSucceeded;
     const shouldBlock = !!state.metadata.requestPlanRevision && !markDone;
     const nextStatus: TodoStatus = markDone ? 'done' : (shouldBlock ? 'blocked' : 'in_progress');
 
@@ -250,7 +322,8 @@ export class ExecutorNode extends BaseNode {
 
     state.metadata.todoExecution = {
       todoId: nextTodo.id,
-      action: decision.action || null,
+      actions: decision.actions.map(a => a.action),
+      actionsCount: decision.actions.length,
       markDone,
       status: nextStatus,
       summary: decision.summary || '',
@@ -299,10 +372,10 @@ export class ExecutorNode extends BaseNode {
     return null;
   }
 
-  private async planSingleTodoStep(
+  private async planTodoStep(
     state: ThreadState,
     todo: PlanTodoRecord,
-  ): Promise<{ action: string; args?: Record<string, unknown>; markDone: boolean; summary: string } | null> {
+  ): Promise<{ actions: Array<{ action: string; args?: Record<string, unknown> }>; markDone: boolean; summary: string } | null> {
     registerDefaultTools();
     const registry = getToolRegistry();
 
@@ -339,22 +412,35 @@ export class ExecutorNode extends BaseNode {
     });
     const isoDate = now.toISOString();
 
-    const prompt = `You are executing exactly ONE todo from a larger plan.
+    // Build conversation history for context continuity
+    // Filter out system messages to avoid confusing the LLM with prior prompt context
+    const userAssistantMessages = state.messages.filter(m => m.role === 'user' || m.role === 'assistant');
+    const recentMessages = userAssistantMessages.slice(-10);
+    const conversationHistory = recentMessages.length > 0
+      ? `\n\nConversation history:\n${recentMessages.map(m => `${m.role}: ${m.content}`).join('\n\n')}`
+      : '';
+
+    const prompt = `You are executing a todo from a larger plan.
 
 Current date/time: ${currentDateTime}
 Timezone: ${timezone}
 ISO timestamp: ${isoDate}
+${conversationHistory}
 
 Todo:
 ${JSON.stringify({ id: todo.id, title: todo.title, description: todo.description, categoryHints: todo.categoryHints, status: todo.status })}
 
 Constraints:
-- You may execute AT MOST ONE tool action.
-- If you cannot make progress without more info, set action="none" and markDone=false.
+- You may execute MULTIPLE tool actions in a single response.
+- If you cannot make progress without more info, return an empty actions array and markDone=false.
+- Set markDone=true ONLY when the ENTIRE todo is complete.
+
+**For batch tasks (e.g., "delete all events", "process all items"):**
+- Include ALL necessary tool calls in the actions array.
+- Check the recent findings to see what has already been done.
 
 Communication:
-- If you want to explain what you're doing or surface a problem to the user during execution, you may choose action="emit_chat_message" with args={"content":"..."}.
-- Only choose emit_chat_message when you have nothing else to do safely or you need to narrate/clarify; it counts as your one tool action.
+- Include emit_chat_message in actions if you want to explain what you're doing.
 
 Use the recent findings to complete this todo.
 
@@ -366,8 +452,10 @@ ${toolsBlock}
 
 Return JSON only:
 {
-  "action": "tool_name" | "none",
-  "args": { },
+  "actions": [
+    { "action": "tool_name", "args": { } },
+    { "action": "another_tool", "args": { } }
+  ],
   "markDone": true|false,
   "summary": "short summary of what you did or what is needed next"
 }`;
@@ -389,12 +477,28 @@ Return JSON only:
       return null;
     }
 
-    const action = String(parsed?.action || 'none');
-    const args = (parsed?.args && typeof parsed.args === 'object') ? (parsed.args as Record<string, unknown>) : undefined;
+    // Parse actions array - support both new format (actions array) and legacy format (single action)
+    let actions: Array<{ action: string; args?: Record<string, unknown> }> = [];
+    
+    if (Array.isArray(parsed?.actions)) {
+      actions = parsed.actions
+        .filter((a: any) => a && typeof a.action === 'string' && a.action !== 'none')
+        .map((a: any) => ({
+          action: String(a.action),
+          args: (a.args && typeof a.args === 'object') ? (a.args as Record<string, unknown>) : undefined,
+        }));
+    } else if (parsed?.action && parsed.action !== 'none') {
+      // Legacy single action format
+      actions = [{
+        action: String(parsed.action),
+        args: (parsed.args && typeof parsed.args === 'object') ? (parsed.args as Record<string, unknown>) : undefined,
+      }];
+    }
+    
     const markDone = !!parsed?.markDone;
     const summary = String(parsed?.summary || '');
 
-    return { action, args, markDone, summary };
+    return { actions, markDone, summary };
   }
 
   private selectRelevantCategories(text: string): string[] {

@@ -12,7 +12,7 @@ let currentConfig: LLMConfig | null = null;
  * Update the LLM configuration
  * Call this when settings change
  */
-export function updateLLMConfig(config: LLMConfig): void {
+export async function updateLLMConfig(config: LLMConfig): Promise<void> {
   currentConfig = config;
 
   // Always apply remote service configuration knobs when in remote mode.
@@ -35,9 +35,13 @@ export function updateLLMConfig(config: LLMConfig): void {
     if (config.remoteTimeoutSeconds !== undefined) {
       remoteService.setDefaultTimeoutMs(config.remoteTimeoutSeconds * 1000);
     }
+    
+    // Re-initialize the service after configuration change
+    await remoteService.initialize();
+    console.log(`[LLMServiceFactory] Remote service initialized: available=${remoteService.isAvailable()}`);
   }
 
-  console.log(`[LLMServiceFactory] Config updated: mode=${config.mode}, model=${config.mode === 'local' ? config.localModel : config.remoteModel}`);
+  console.log(`[LLMServiceFactory] Config updated: mode=${config.mode}, model=${config.mode === 'local' ? config.localModel : config.remoteModel}, retryCount=${config.remoteRetryCount}, timeoutSeconds=${config.remoteTimeoutSeconds}`);
 }
 
 /**

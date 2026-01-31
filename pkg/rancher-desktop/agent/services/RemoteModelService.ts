@@ -118,7 +118,41 @@ class RemoteModelServiceClass implements ILLMService {
   }
 
   /**
-   * Check if an error is network-related
+   * Check if an error is retryable (network errors or server errors)
+   */
+  private isRetryableError(err: unknown): boolean {
+    if (err instanceof TypeError && err.message === 'Failed to fetch') {
+      return true;
+    }
+    if (err instanceof Error) {
+      const msg = err.message.toLowerCase();
+
+      // Network errors
+      if (msg.includes('network') ||
+          msg.includes('internet') ||
+          msg.includes('disconnected') ||
+          msg.includes('failed to fetch') ||
+          msg.includes('timeout') ||
+          msg.includes('aborted')) {
+        return true;
+      }
+      
+      // Server errors (5xx) are retryable
+      if (msg.includes('500') || msg.includes('502') || msg.includes('503') || msg.includes('504')) {
+        return true;
+      }
+      
+      // Rate limiting is retryable
+      if (msg.includes('429') || msg.includes('rate limit')) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+  
+  /**
+   * Check if an error is a network error specifically (for fallback decision)
    */
   private isNetworkError(err: unknown): boolean {
     if (err instanceof TypeError && err.message === 'Failed to fetch') {
@@ -179,15 +213,17 @@ class RemoteModelServiceClass implements ILLMService {
         lastError = err;
         console.error(`[RemoteModelService] Chat failed (attempt ${attempt + 1}/${this.retryCount + 1}):`, err);
 
-        // Only retry on network errors
-        if (!this.isNetworkError(err)) {
-          break; // Don't retry on non-network errors (e.g., auth errors)
+        // Only retry on retryable errors (network, server errors, rate limiting)
+        if (!this.isRetryableError(err)) {
+          console.warn(`[RemoteModelService] Non-retryable error, not retrying`);
+          break; // Don't retry on non-retryable errors (e.g., auth errors)
         }
       }
     }
 
     // All retries exhausted, fall back to local Ollama
-    if (this.isNetworkError(lastError)) {
+    console.warn(`[RemoteModelService] All ${this.retryCount + 1} attempts failed, attempting fallback to local Ollama`);
+    if (this.isRetryableError(lastError)) {
       console.warn(`[RemoteModelService] All ${this.retryCount + 1} attempts failed, falling back to local Ollama`);
       try {
         const { getOllamaService } = await import('./OllamaService');

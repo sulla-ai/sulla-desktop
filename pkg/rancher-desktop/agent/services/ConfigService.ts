@@ -103,7 +103,11 @@ export function updateAgentConfigFull(settings: {
     remoteTimeoutSeconds: cachedConfig.remoteTimeoutSeconds,
   };
 
-  updateLLMConfig(llmConfig);
+  // updateLLMConfig is now async but we don't need to await it here
+  // as it will complete before the next LLM call
+  updateLLMConfig(llmConfig).catch(err => {
+    console.warn('[ConfigService] Failed to update LLM config:', err);
+  });
   console.log(`[ConfigService] Config updated: mode=${cachedConfig.modelMode}, model=${cachedConfig.modelMode === 'local' ? cachedConfig.ollamaModel : cachedConfig.remoteModel}, retries=${cachedConfig.remoteRetryCount}, timeoutSeconds=${cachedConfig.remoteTimeoutSeconds}`);
 }
 

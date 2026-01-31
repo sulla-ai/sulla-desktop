@@ -1,10 +1,17 @@
 // CriticNode - Reviews output and decides approve/reject/revise
+// Uses LLM to intelligently evaluate whether the task was completed successfully
 
 import type { ThreadState, NodeResult } from '../types';
 import { BaseNode } from './BaseNode';
 import { getPlanService, type TodoStatus } from '../services/PlanService';
 
 export type CriticDecision = 'approve' | 'revise' | 'reject';
+
+interface CriticLLMResponse {
+  decision: CriticDecision;
+  reason: string;
+  suggestedFix?: string;
+}
 
 export class CriticNode extends BaseNode {
   private maxRevisions = 2;
@@ -16,6 +23,16 @@ export class CriticNode extends BaseNode {
   async execute(state: ThreadState): Promise<{ state: ThreadState; next: NodeResult }> {
     console.log(`[Agent:Critic] Executing...`);
     const emit = (state.metadata.__emitAgentEvent as ((event: { type: 'progress' | 'chunk' | 'complete' | 'error'; threadId: string; data: unknown }) => void) | undefined);
+    
+    // Check for LLM failure count to prevent infinite loops
+    const llmFailureCount = ((state.metadata.llmFailureCount as number) || 0);
+    if (llmFailureCount >= 3) {
+      console.error(`[Agent:Critic] LLM has failed ${llmFailureCount} times, ending graph`);
+      state.metadata.criticDecision = 'approve';
+      state.metadata.criticReason = 'LLM service unavailable, ending gracefully';
+      return { state, next: 'end' };
+    }
+    
     const activePlanId = (state.metadata.activePlanId !== undefined && state.metadata.activePlanId !== null && Number.isFinite(Number(state.metadata.activePlanId)))
       ? Number(state.metadata.activePlanId)
       : null;
@@ -119,14 +136,23 @@ export class CriticNode extends BaseNode {
 
     const todoId = Number(activeTodo.id);
     const todoTitle = typeof activeTodo.title === 'string' ? activeTodo.title : '';
+    const todoDescription = typeof activeTodo.description === 'string' ? activeTodo.description : '';
     const execStatus = todoExecution && typeof todoExecution.status === 'string' ? String(todoExecution.status) : '';
     const execSummary = todoExecution && typeof todoExecution.summary === 'string' ? String(todoExecution.summary) : '';
     const toolResults = state.metadata.toolResults as Record<string, any> | undefined;
 
-    const anyToolFailed = !!toolResults && Object.values(toolResults).some((r: any) => r && r.success === false);
+    // Use LLM to evaluate the execution
+    const llmDecision = await this.evaluateWithLLM(state, {
+      todoId,
+      todoTitle,
+      todoDescription,
+      execStatus,
+      execSummary,
+      toolResults,
+      activePlanId,
+    });
 
-    // Approve when the todo is marked done.
-    if (execStatus === 'done') {
+    if (llmDecision.decision === 'approve') {
       // Critic owns status transitions: persist done to DB.
       try {
         const planService = getPlanService();
@@ -147,33 +173,22 @@ export class CriticNode extends BaseNode {
       }
 
       state.metadata.criticDecision = 'approve';
-      state.metadata.criticReason = `Todo complete: ${todoTitle || String(todoId)}`;
+      state.metadata.criticReason = llmDecision.reason;
 
       emit?.({
         type:     'progress',
         threadId: state.threadId,
-        data:     { phase: 'critic_decision', decision: 'approve', reason: state.metadata.criticReason },
+        data:     { phase: 'critic_decision', decision: 'approve', reason: llmDecision.reason },
       });
 
       return { state, next: 'continue' };
     }
 
-    // Otherwise, request a plan revision to address the todo failure/incompleteness.
-    const reasonParts: string[] = [];
-    reasonParts.push(`Todo not complete: ${todoTitle || String(todoId)}`);
-    if (execStatus) {
-      reasonParts.push(`status=${execStatus}`);
-    }
-    if (anyToolFailed) {
-      reasonParts.push('one or more tool calls failed');
-    }
-    if (execSummary) {
-      reasonParts.push(execSummary);
-    }
+    // LLM decided to revise - persist blocked status and request revision
+    const reason = llmDecision.suggestedFix
+      ? `${llmDecision.reason} | Suggested fix: ${llmDecision.suggestedFix}`
+      : llmDecision.reason;
 
-    const reason = reasonParts.join(' | ');
-
-    // Critic owns status transitions: persist blocked to DB.
     try {
       const planService = getPlanService();
       await planService.initialize();
@@ -206,5 +221,145 @@ export class CriticNode extends BaseNode {
     });
 
     return { state, next: 'planner' };
+  }
+
+  private async evaluateWithLLM(
+    state: ThreadState,
+    context: {
+      todoId: number;
+      todoTitle: string;
+      todoDescription: string;
+      execStatus: string;
+      execSummary: string;
+      toolResults: Record<string, any> | undefined;
+      activePlanId: number | null;
+    },
+  ): Promise<CriticLLMResponse> {
+    // Build conversation history (user/assistant only)
+    const userAssistantMessages = state.messages.filter(m => m.role === 'user' || m.role === 'assistant');
+    const recentMessages = userAssistantMessages.slice(-10);
+    const conversationHistory = recentMessages.length > 0
+      ? recentMessages.map(m => `${m.role}: ${m.content}`).join('\n\n')
+      : 'No conversation history available.';
+
+    // Get the original user request
+    const lastUserMessage = state.messages.filter(m => m.role === 'user').pop();
+    const userRequest = lastUserMessage?.content || 'Unknown request';
+
+    // Get the plan goal if available
+    const plan = state.metadata.plan as { fullPlan?: { goal?: string } } | undefined;
+    const planGoal = plan?.fullPlan?.goal || 'No explicit goal set';
+
+    const prompt = `You are a critic reviewing the execution of a task. Your job is to determine if the current todo was completed successfully and if the user's original request is being addressed.
+
+## User's Original Request
+"${userRequest}"
+
+## Plan Goal
+${planGoal}
+
+## Current Todo Being Evaluated
+- ID: ${context.todoId}
+- Title: ${context.todoTitle}
+- Description: ${context.todoDescription}
+- Execution Status: ${context.execStatus || 'unknown'}
+- Execution Summary: ${context.execSummary || 'none'}
+
+## Tool Results
+${context.toolResults ? JSON.stringify(context.toolResults, null, 2) : 'No tool results'}
+
+## Conversation History
+${conversationHistory}
+
+## Your Task
+Evaluate whether:
+1. The todo was completed successfully
+2. The execution moved us closer to fulfilling the user's request
+3. Any errors or issues need to be addressed
+
+Return JSON only:
+{
+  "decision": "approve" | "revise",
+  "reason": "Brief explanation of your decision",
+  "suggestedFix": "If revising, what should be done differently (optional)"
+}
+
+Guidelines:
+- "approve" if the todo was completed and we're making progress toward the user's goal
+- "revise" if there was an error, the todo wasn't actually completed, or the approach is wrong
+- Be pragmatic - minor issues don't require revision if the core task succeeded
+- If a tool succeeded and returned expected results, that's usually grounds for approval
+
+**CRITICAL for batch/iterative tasks:**
+- If the todo involves processing MULTIPLE items (e.g., "delete all events", "update all records"), check if ALL items were processed.
+- If the user asked to delete 5 events but only 1 was deleted, the todo is NOT complete - set decision="revise".
+- Look at the tool results and execution summary to verify the FULL scope of the task was addressed.
+- Do NOT approve a batch task that only partially completed.`;
+
+    try {
+      const response = await this.prompt(prompt);
+      if (!response?.content) {
+        console.warn('[Agent:Critic] No LLM response, defaulting to heuristic');
+        return this.fallbackHeuristic(context);
+      }
+
+      const jsonMatch = response.content.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        console.warn('[Agent:Critic] Could not parse LLM response, defaulting to heuristic');
+        return this.fallbackHeuristic(context);
+      }
+
+      const parsed = JSON.parse(jsonMatch[0]) as Partial<CriticLLMResponse>;
+      
+      if (parsed.decision !== 'approve' && parsed.decision !== 'revise') {
+        console.warn('[Agent:Critic] Invalid decision from LLM, defaulting to heuristic');
+        return this.fallbackHeuristic(context);
+      }
+
+      console.log(`[Agent:Critic] LLM decision: ${parsed.decision} - ${parsed.reason}`);
+      return {
+        decision: parsed.decision,
+        reason: parsed.reason || 'No reason provided',
+        suggestedFix: parsed.suggestedFix,
+      };
+    } catch (err) {
+      console.error('[Agent:Critic] LLM evaluation failed:', err);
+      return this.fallbackHeuristic(context);
+    }
+  }
+
+  private fallbackHeuristic(context: {
+    execStatus: string;
+    execSummary: string;
+    toolResults: Record<string, any> | undefined;
+    todoTitle: string;
+    todoId: number;
+  }): CriticLLMResponse {
+    const anyToolFailed = !!context.toolResults && 
+      Object.values(context.toolResults).some((r: any) => r && r.success === false);
+
+    if (context.execStatus === 'done' && !anyToolFailed) {
+      return {
+        decision: 'approve',
+        reason: `Todo complete: ${context.todoTitle || String(context.todoId)}`,
+      };
+    }
+
+    const reasonParts: string[] = [];
+    reasonParts.push(`Todo not complete: ${context.todoTitle || String(context.todoId)}`);
+    if (context.execStatus) {
+      reasonParts.push(`status=${context.execStatus}`);
+    }
+    if (anyToolFailed) {
+      reasonParts.push('one or more tool calls failed');
+    }
+    if (context.execSummary) {
+      reasonParts.push(context.execSummary);
+    }
+
+    return {
+      decision: 'revise',
+      reason: reasonParts.join(' | '),
+    };
   }
 }

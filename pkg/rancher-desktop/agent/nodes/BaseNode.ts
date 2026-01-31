@@ -67,6 +67,7 @@ export abstract class BaseNode implements GraphNode {
 
   /**
    * Send a prompt to the LLM (works for both local and remote)
+   * Falls back to local Ollama if remote service is unavailable
    */
   protected async prompt(prompt: string): Promise<LLMResponse | null> {
     if (!this.llmService) {
@@ -75,10 +76,26 @@ export abstract class BaseNode implements GraphNode {
       this.availableModel = this.llmService.getModel();
     }
 
+    // If primary service is not available, try fallback to Ollama
     if (!this.llmService.isAvailable()) {
-      console.warn(`[Agent:${this.name}] LLM service not available`);
-
-      return null;
+      console.warn(`[Agent:${this.name}] Primary LLM service not available, attempting fallback to Ollama`);
+      
+      try {
+        const ollama = getOllamaService();
+        await ollama.initialize();
+        
+        if (ollama.isAvailable()) {
+          console.log(`[Agent:${this.name}] Falling back to local Ollama`);
+          this.llmService = ollama;
+          this.availableModel = ollama.getModel();
+        } else {
+          console.error(`[Agent:${this.name}] Ollama fallback also not available`);
+          return null;
+        }
+      } catch (err) {
+        console.error(`[Agent:${this.name}] Fallback to Ollama failed:`, err);
+        return null;
+      }
     }
 
     const model = this.availableModel || this.llmService.getModel();
@@ -158,14 +175,20 @@ export abstract class BaseNode implements GraphNode {
     }
 
     // Add conversation history if requested
-    if (options.includeHistory && state.shortTermMemory.length > 0) {
-      const maxItems = options.maxHistoryItems || 6;
+    // Use full messages array for better continuity, fall back to shortTermMemory
+    // Filter out system messages to avoid confusing the LLM with prior prompt context
+    if (options.includeHistory) {
+      const maxItems = options.maxHistoryItems || 10;
+      const historySource = state.messages.length > 0 ? state.messages : state.shortTermMemory;
+      const userAssistantMessages = historySource.filter(m => m.role === 'user' || m.role === 'assistant');
 
-      parts.push('Recent conversation:');
-      state.shortTermMemory.slice(-maxItems).forEach(m => {
-        parts.push(`${ m.role === 'user' ? 'User' : 'Assistant' }: ${ m.content }`);
-      });
-      parts.push('');
+      if (userAssistantMessages.length > 0) {
+        parts.push('Conversation history:');
+        userAssistantMessages.slice(-maxItems).forEach(m => {
+          parts.push(`${ m.role === 'user' ? 'User' : 'Assistant' }: ${ m.content }`);
+        });
+        parts.push('');
+      }
     }
 
     // Add the main instruction
