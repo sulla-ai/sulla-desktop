@@ -450,6 +450,7 @@ import {
 import type { AgentResponse } from '@pkg/agent/types';
 import { updateAgentConfigFull } from '@pkg/agent/services/ConfigService';
 import { getSchedulerService } from '@pkg/agent/services/SchedulerService';
+import { getHeartbeatService } from '@pkg/agent/services/HeartbeatService';
 import { StartupProgressController } from './agent/StartupProgressController';
 import { AgentSettingsController } from './agent/AgentSettingsController';
 import { AgentChatController } from './agent/AgentChatController';
@@ -881,6 +882,15 @@ onMounted(async () => {
     console.log('[Agent] SchedulerService initialized');
   } catch (err) {
     console.warn('[Agent] Failed to initialize SchedulerService:', err);
+  }
+
+  // Initialize heartbeat service
+  try {
+    const heartbeat = getHeartbeatService();
+    await heartbeat.initialize();
+    console.log('[Agent] HeartbeatService initialized');
+  } catch (err) {
+    console.warn('[Agent] Failed to initialize HeartbeatService:', err);
   }
 });
 

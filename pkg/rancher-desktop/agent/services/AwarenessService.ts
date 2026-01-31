@@ -2,6 +2,8 @@ import { getPersistenceService } from './PersistenceService';
 
 export interface AgentAwarenessData {
   agent_identity: string;
+  job_description: string;
+  personality_preferences: string;
   primary_user_identity: string;
   other_user_identities: string;
   long_term_context: string;
@@ -57,6 +59,14 @@ export class AwarenessService {
       lines.push(data.agent_identity.trim());
     }
 
+    if (data.job_description) {
+      lines.push(`Your job description: ${data.job_description.trim()}`);
+    }
+
+    if (data.personality_preferences) {
+      lines.push(`Your personality and preferences: ${data.personality_preferences.trim()}`);
+    }
+
     if (data.primary_user_identity) {
       lines.push(`Primary user identity: ${data.primary_user_identity.trim()}`);
     }
@@ -98,6 +108,8 @@ export class AwarenessService {
   private getDefaultAwareness(): AgentAwarenessData {
     return {
       agent_identity: '',
+      job_description: '',
+      personality_preferences: '',
       primary_user_identity: '',
       other_user_identities: '',
       long_term_context: '',
@@ -111,6 +123,8 @@ export class AwarenessService {
   private isEffectivelyEmpty(data: AgentAwarenessData): boolean {
     return [
       data.agent_identity,
+      data.job_description,
+      data.personality_preferences,
       data.primary_user_identity,
       data.other_user_identities,
       data.long_term_context,
@@ -131,6 +145,8 @@ export class AwarenessService {
 
     return {
       agent_identity: String(d.agent_identity || ''),
+      job_description: String(d.job_description || ''),
+      personality_preferences: String(d.personality_preferences || ''),
       primary_user_identity: String(d.primary_user_identity || ''),
       other_user_identities: String(d.other_user_identities || ''),
       long_term_context: String(d.long_term_context || ''),

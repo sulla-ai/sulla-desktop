@@ -138,6 +138,10 @@ export default class SettingsValidator {
         remoteApiKey:    this.checkString,
         remoteRetryCount: this.checkNumber(0, 10),
         remoteTimeoutSeconds: this.checkNumber(1, 300),
+        heartbeatEnabled: this.checkBoolean,
+        heartbeatDelayMinutes: this.checkNumber(1, 1440),
+        heartbeatPrompt: this.checkString,
+        heartbeatModel:  this.checkString,
         virtualMachine:  {
           diskSize: this.checkLima(this.checkByteUnits),
           mount:    {

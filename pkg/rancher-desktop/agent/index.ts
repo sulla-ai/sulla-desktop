@@ -23,3 +23,4 @@ export { getAwarenessService, AwarenessService } from './services/AwarenessServi
 export { getAwarenessPlanner, AwarenessPlanner } from './services/AwarenessPlanner';
 export { getCalendarService, CalendarService } from './services/CalendarService';
 export { getSchedulerService, SchedulerService } from './services/SchedulerService';
+export { getHeartbeatService, HeartbeatService } from './services/HeartbeatService';

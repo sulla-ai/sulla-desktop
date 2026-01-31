@@ -20,6 +20,10 @@ export class AgentSettingsController {
       remoteApiKey?: string;
       remoteRetryCount?: number;
       remoteTimeoutSeconds?: number;
+      heartbeatEnabled?: boolean;
+      heartbeatDelayMinutes?: number;
+      heartbeatPrompt?: string;
+      heartbeatModel?: string;
     };
   }) => {
     const exp = settings.experimental;
@@ -33,6 +37,10 @@ export class AgentSettingsController {
         remoteApiKey:          exp.remoteApiKey,
         remoteRetryCount:      exp.remoteRetryCount,
         remoteTimeoutSeconds:  exp.remoteTimeoutSeconds,
+        heartbeatEnabled:      exp.heartbeatEnabled,
+        heartbeatDelayMinutes: exp.heartbeatDelayMinutes,
+        heartbeatPrompt:       exp.heartbeatPrompt,
+        heartbeatModel:        exp.heartbeatModel,
       });
 
       this.modelMode.value = exp.modelMode || 'local';

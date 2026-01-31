@@ -390,6 +390,37 @@ export class PlanService {
     }
   }
 
+  async getActivePlans(): Promise<PlanRecord[]> {
+    await this.initialize();
+
+    const client = new pg.Client({ connectionString: POSTGRES_URL });
+    await client.connect();
+
+    try {
+      const res = await client.query(
+        `SELECT id, thread_id, data, status, revision, created_at, updated_at
+         FROM agent_plans
+         WHERE status = 'active'
+         ORDER BY id DESC`,
+      );
+
+      return res.rows.map(row => ({
+        id:        Number(row.id),
+        threadId:  row.thread_id,
+        data:      row.data || {},
+        status:    row.status,
+        revision:  Number(row.revision) || 0,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      }));
+    } catch (err) {
+      console.warn('[PlanService] getActivePlans failed:', err);
+      return [];
+    } finally {
+      await client.end();
+    }
+  }
+
   async updatePlanStatus(planId: number, status: PlanStatus): Promise<boolean> {
     await this.initialize();
 

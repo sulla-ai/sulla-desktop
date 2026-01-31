@@ -77,6 +77,23 @@ export class Sensory {
   }
 
   /**
+   * Create a SensoryInput from heartbeat trigger
+   */
+  createHeartbeatInput(text: string, metadata?: Partial<SensoryMetadata>): SensoryInput {
+    return {
+      id:        generateInputId(),
+      type:      'text',
+      data:      text.trim(),
+      metadata:  {
+        source: 'heartbeat',
+        isBackgroundTask: true,
+        ...metadata,
+      },
+      timestamp: Date.now(),
+    };
+  }
+
+  /**
    * Extract text content from any SensoryInput
    */
   extractText(input: SensoryInput): string {

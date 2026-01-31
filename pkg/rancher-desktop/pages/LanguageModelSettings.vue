@@ -7,6 +7,7 @@ import { ipcRenderer } from '@pkg/utils/ipcRenderer';
 const navItems = [
   { id: 'overview', name: 'Overview' },
   { id: 'models', name: 'Models' },
+  { id: 'heartbeat', name: 'Heartbeat' },
 ];
 
 // Ollama models sorted by resource requirements (smallest to largest)
@@ -144,6 +145,11 @@ export default defineComponent({
       apiKeyVisible:        false,
       remoteRetryCount:     3, // Number of retries before falling back to local LLM
       remoteTimeoutSeconds: 60, // Remote API timeout limit in seconds
+      // Heartbeat settings
+      heartbeatEnabled:     true,
+      heartbeatDelayMinutes: 30,
+      heartbeatPrompt:      'This is the time for you to accomplish your goals',
+      heartbeatModel:       'default' as string, // 'default' or specific model like 'local:tinyllama:latest' or 'remote:grok:grok-4-1-fast-reasoning'
       // Activation state
       activating:           false,
       activationError:      '' as string,
@@ -205,6 +211,10 @@ export default defineComponent({
         remoteApiKey?: string;
         remoteRetryCount?: number;
         remoteTimeoutSeconds?: number;
+        heartbeatEnabled?: boolean;
+        heartbeatDelayMinutes?: number;
+        heartbeatPrompt?: string;
+        heartbeatModel?: string;
       };
     }) => {
       if (settings.experimental?.sullaModel) {
@@ -229,6 +239,18 @@ export default defineComponent({
       }
       if (settings.experimental?.remoteTimeoutSeconds !== undefined) {
         this.remoteTimeoutSeconds = settings.experimental.remoteTimeoutSeconds;
+      }
+      if (settings.experimental?.heartbeatEnabled !== undefined) {
+        this.heartbeatEnabled = settings.experimental.heartbeatEnabled;
+      }
+      if (settings.experimental?.heartbeatDelayMinutes !== undefined) {
+        this.heartbeatDelayMinutes = settings.experimental.heartbeatDelayMinutes;
+      }
+      if (settings.experimental?.heartbeatPrompt) {
+        this.heartbeatPrompt = settings.experimental.heartbeatPrompt;
+      }
+      if (settings.experimental?.heartbeatModel) {
+        this.heartbeatModel = settings.experimental.heartbeatModel;
       }
     });
     ipcRenderer.send('settings-read');
@@ -585,6 +607,10 @@ export default defineComponent({
           remoteApiKey:          this.apiKey,
           remoteRetryCount:      this.remoteRetryCount,
           remoteTimeoutSeconds:  this.remoteTimeoutSeconds,
+          heartbeatEnabled:      this.heartbeatEnabled,
+          heartbeatDelayMinutes: this.heartbeatDelayMinutes,
+          heartbeatPrompt:       this.heartbeatPrompt,
+          heartbeatModel:        this.heartbeatModel,
         },
       });
     },
@@ -970,6 +996,108 @@ export default defineComponent({
               </p>
             </div>
           </template>
+        </div>
+
+        <!-- Heartbeat Tab -->
+        <div
+          v-if="currentNav === 'heartbeat'"
+          class="tab-content"
+        >
+          <h2>Heartbeat Settings</h2>
+          <p class="description">
+            Configure a periodic heartbeat that triggers the agent to check in and review its state.
+          </p>
+
+          <!-- Enable/Disable Toggle -->
+          <div class="setting-group">
+            <label class="setting-label">Enable Heartbeat</label>
+            <div class="toggle-switch">
+              <label class="switch">
+                <input
+                  v-model="heartbeatEnabled"
+                  type="checkbox"
+                >
+                <span class="slider" />
+              </label>
+              <span class="toggle-label">{{ heartbeatEnabled ? 'Enabled' : 'Disabled' }}</span>
+            </div>
+            <p class="setting-description">
+              When enabled, the agent will periodically wake up and process the heartbeat prompt.
+            </p>
+          </div>
+
+          <!-- Delay Setting -->
+          <div class="setting-group">
+            <label class="setting-label">Heartbeat Interval (minutes)</label>
+            <div class="delay-input">
+              <input
+                v-model.number="heartbeatDelayMinutes"
+                type="number"
+                class="text-input"
+                min="1"
+                max="1440"
+                :disabled="!heartbeatEnabled"
+                style="width: 120px;"
+              >
+            </div>
+            <p class="setting-description">
+              How often the heartbeat should trigger (1-1440 minutes). Default is 30 minutes.
+            </p>
+          </div>
+
+          <!-- Model Setting -->
+          <div class="setting-group">
+            <label class="setting-label">Heartbeat Model</label>
+            <select
+              v-model="heartbeatModel"
+              class="model-select"
+              :disabled="!heartbeatEnabled"
+            >
+              <option value="default">
+                Use System Default
+              </option>
+              <optgroup label="Local Models (Ollama)">
+                <option
+                  v-for="model in installedModels"
+                  :key="'local:' + model.name"
+                  :value="'local:' + model.name"
+                >
+                  {{ model.name }}
+                </option>
+              </optgroup>
+              <optgroup
+                v-for="provider in remoteProviders"
+                :key="provider.id"
+                :label="'Remote: ' + provider.name"
+              >
+                <option
+                  v-for="model in provider.models"
+                  :key="'remote:' + provider.id + ':' + model.id"
+                  :value="'remote:' + provider.id + ':' + model.id"
+                >
+                  {{ model.name }}
+                </option>
+              </optgroup>
+            </select>
+            <p class="setting-description">
+              Select which model to use for heartbeat processing. "Use System Default" follows your main model settings.
+            </p>
+          </div>
+
+          <!-- Prompt Setting -->
+          <div class="setting-group">
+            <label class="setting-label">Heartbeat Prompt</label>
+            <textarea
+              v-model="heartbeatPrompt"
+              class="prompt-textarea"
+              rows="6"
+              :disabled="!heartbeatEnabled"
+              placeholder="Enter the prompt that will be sent to the agent on each heartbeat..."
+            />
+            <p class="setting-description">
+              This message will be sent to the agent each time the heartbeat triggers.
+            </p>
+          </div>
         </div>
 
       </div>
@@ -1400,6 +1528,92 @@ export default defineComponent({
 
   .text-input {
     flex: 1;
+  }
+}
+
+// Toggle switch styles
+.toggle-switch {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+
+  .toggle-label {
+    font-size: 0.9rem;
+    color: var(--body-text);
+  }
+}
+
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 48px;
+  height: 24px;
+
+  input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+  }
+
+  .slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: var(--input-border);
+    transition: 0.3s;
+    border-radius: 24px;
+
+    &::before {
+      position: absolute;
+      content: "";
+      height: 18px;
+      width: 18px;
+      left: 3px;
+      bottom: 3px;
+      background-color: white;
+      transition: 0.3s;
+      border-radius: 50%;
+    }
+  }
+
+  input:checked + .slider {
+    background-color: var(--primary, #3b82f6);
+  }
+
+  input:checked + .slider::before {
+    transform: translateX(24px);
+  }
+
+  input:disabled + .slider {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+.prompt-textarea {
+  width: 100%;
+  max-width: 600px;
+  padding: 0.75rem;
+  font-size: 0.9rem;
+  border: 1px solid var(--input-border);
+  border-radius: 4px;
+  background: var(--input-bg);
+  color: var(--input-text);
+  font-family: inherit;
+  resize: vertical;
+  min-height: 100px;
+
+  &:focus {
+    outline: none;
+    border-color: var(--primary);
+  }
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
   }
 }
 

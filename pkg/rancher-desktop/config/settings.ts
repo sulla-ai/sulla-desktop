@@ -146,6 +146,12 @@ export const defaultSettings = {
     /** Number of retries before falling back to local LLM */
     remoteRetryCount: 3,
     remoteTimeoutSeconds: 60,
+    /** Heartbeat settings */
+    heartbeatEnabled: true,
+    heartbeatDelayMinutes: 30,
+    heartbeatPrompt: 'This is the time for you to accomplish your goals',
+    /** Heartbeat model: 'default' uses main settings, or specific model like 'local:tinyllama:latest' or 'remote:grok:grok-4-1-fast-reasoning' */
+    heartbeatModel: 'default',
     virtualMachine:  {
       diskSize: '100GiB',
       mount:    {

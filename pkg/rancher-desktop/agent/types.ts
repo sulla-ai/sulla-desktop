@@ -14,7 +14,7 @@ export interface SensoryInput {
 }
 
 export interface SensoryMetadata {
-  source: 'keyboard' | 'microphone' | 'camera' | 'api' | 'calendar';
+  source: 'keyboard' | 'microphone' | 'camera' | 'api' | 'calendar' | 'heartbeat';
   speaker?: string;
   language?: string;
   isBackgroundTask?: boolean;

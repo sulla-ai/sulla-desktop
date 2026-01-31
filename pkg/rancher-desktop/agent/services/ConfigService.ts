@@ -3,6 +3,7 @@
 
 import type { LLMConfig } from './ILLMService';
 import { updateLLMConfig } from './LLMServiceFactory';
+import { getHeartbeatService } from './HeartbeatService';
 
 const DEFAULT_MODEL = 'tinyllama:latest';
 const OLLAMA_BASE = 'http://127.0.0.1:30114';
@@ -17,6 +18,11 @@ interface AgentConfig {
   remoteApiKey: string;
   remoteRetryCount: number;
   remoteTimeoutSeconds: number;
+  // Heartbeat settings
+  heartbeatEnabled: boolean;
+  heartbeatDelayMinutes: number;
+  heartbeatPrompt: string;
+  heartbeatModel: string;
 }
 
 let cachedConfig: AgentConfig | null = null;
@@ -46,6 +52,10 @@ export function getAgentConfig(): AgentConfig {
         remoteApiKey:     config.remoteApiKey || '',
         remoteRetryCount: config.remoteRetryCount ?? 3,
         remoteTimeoutSeconds: config.remoteTimeoutSeconds ?? 60,
+        heartbeatEnabled: config.heartbeatEnabled ?? true,
+        heartbeatDelayMinutes: config.heartbeatDelayMinutes ?? 30,
+        heartbeatPrompt: config.heartbeatPrompt || 'This is the time for you to accomplish your goals',
+        heartbeatModel: config.heartbeatModel || 'default',
       };
 
       return cachedConfig;
@@ -64,6 +74,10 @@ export function getAgentConfig(): AgentConfig {
     remoteApiKey:     '',
     remoteRetryCount: 3,
     remoteTimeoutSeconds: 60,
+    heartbeatEnabled: true,
+    heartbeatDelayMinutes: 30,
+    heartbeatPrompt: 'This is the time for you to accomplish your goals',
+    heartbeatModel: 'default',
   };
 }
 
@@ -79,6 +93,10 @@ export function updateAgentConfigFull(settings: {
   remoteApiKey?: string;
   remoteRetryCount?: number;
   remoteTimeoutSeconds?: number;
+  heartbeatEnabled?: boolean;
+  heartbeatDelayMinutes?: number;
+  heartbeatPrompt?: string;
+  heartbeatModel?: string;
 }): void {
   cachedConfig = {
     ollamaModel:      settings.sullaModel || DEFAULT_MODEL,
@@ -89,6 +107,10 @@ export function updateAgentConfigFull(settings: {
     remoteApiKey:     settings.remoteApiKey || '',
     remoteRetryCount: settings.remoteRetryCount ?? 3,
     remoteTimeoutSeconds: settings.remoteTimeoutSeconds ?? 60,
+    heartbeatEnabled: settings.heartbeatEnabled ?? true,
+    heartbeatDelayMinutes: settings.heartbeatDelayMinutes ?? 30,
+    heartbeatPrompt: settings.heartbeatPrompt || 'This is the time for you to accomplish your goals',
+    heartbeatModel: settings.heartbeatModel || 'default',
   };
 
   // Update the LLM service factory
@@ -108,7 +130,17 @@ export function updateAgentConfigFull(settings: {
   updateLLMConfig(llmConfig).catch(err => {
     console.warn('[ConfigService] Failed to update LLM config:', err);
   });
-  console.log(`[ConfigService] Config updated: mode=${cachedConfig.modelMode}, model=${cachedConfig.modelMode === 'local' ? cachedConfig.ollamaModel : cachedConfig.remoteModel}, retries=${cachedConfig.remoteRetryCount}, timeoutSeconds=${cachedConfig.remoteTimeoutSeconds}`);
+
+  // Update heartbeat service
+  const heartbeatService = getHeartbeatService();
+  heartbeatService.updateConfig({
+    enabled: cachedConfig.heartbeatEnabled,
+    delayMinutes: cachedConfig.heartbeatDelayMinutes,
+    prompt: cachedConfig.heartbeatPrompt,
+    model: cachedConfig.heartbeatModel,
+  });
+
+  console.log(`[ConfigService] Config updated: mode=${cachedConfig.modelMode}, model=${cachedConfig.modelMode === 'local' ? cachedConfig.ollamaModel : cachedConfig.remoteModel}, retries=${cachedConfig.remoteRetryCount}, timeoutSeconds=${cachedConfig.remoteTimeoutSeconds}, heartbeat=${cachedConfig.heartbeatEnabled ? `${cachedConfig.heartbeatDelayMinutes}min` : 'disabled'}`);
 }
 
 /**
