@@ -21,3 +21,5 @@ export { getMemoryPedia, MemoryPedia } from './services/MemoryPedia';
 export { MemoryGraph } from './services/MemoryGraph';
 export { getAwarenessService, AwarenessService } from './services/AwarenessService';
 export { getAwarenessPlanner, AwarenessPlanner } from './services/AwarenessPlanner';
+export { getCalendarService, CalendarService } from './services/CalendarService';
+export { getSchedulerService, SchedulerService } from './services/SchedulerService';

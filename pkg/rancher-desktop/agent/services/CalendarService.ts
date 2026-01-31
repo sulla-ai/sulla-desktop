@@ -30,6 +30,8 @@ export interface CalendarEventInput {
   allDay?: boolean;
 }
 
+type CalendarEventCallback = (event: CalendarEvent, action: 'created' | 'updated' | 'deleted') => void;
+
 let calendarServiceInstance: CalendarService | null = null;
 
 export function getCalendarService(): CalendarService {
@@ -41,6 +43,7 @@ export function getCalendarService(): CalendarService {
 
 export class CalendarService {
   private initialized = false;
+  private eventCallbacks: CalendarEventCallback[] = [];
 
   async initialize(): Promise<void> {
     if (this.initialized) {
@@ -51,6 +54,20 @@ export class CalendarService {
     await this.ensureTables();
     this.initialized = true;
     console.log('[CalendarService] Initialized');
+  }
+
+  onEventChange(callback: CalendarEventCallback): void {
+    this.eventCallbacks.push(callback);
+  }
+
+  private notifyEventChange(event: CalendarEvent, action: 'created' | 'updated' | 'deleted'): void {
+    for (const callback of this.eventCallbacks) {
+      try {
+        callback(event, action);
+      } catch (err) {
+        console.warn('[CalendarService] Event callback error:', err);
+      }
+    }
   }
 
   private async ensureTables(): Promise<void> {
@@ -115,7 +132,9 @@ export class CalendarService {
 
       const row = result.rows[0];
       console.log(`[CalendarService] Created event: ${row.id} - ${row.title}`);
-      return this.rowToEvent(row);
+      const createdEvent = this.rowToEvent(row);
+      this.notifyEventChange(createdEvent, 'created');
+      return createdEvent;
     } finally {
       await client.end();
     }
@@ -185,7 +204,9 @@ export class CalendarService {
       }
 
       console.log(`[CalendarService] Updated event: ${id}`);
-      return this.rowToEvent(result.rows[0]);
+      const updatedEvent = this.rowToEvent(result.rows[0]);
+      this.notifyEventChange(updatedEvent, 'updated');
+      return updatedEvent;
     } finally {
       await client.end();
     }
@@ -196,6 +217,9 @@ export class CalendarService {
     await client.connect();
 
     try {
+      // Get event before deleting for notification
+      const eventToDelete = await this.getEvent(id);
+
       const result = await client.query(
         'DELETE FROM calendar_events WHERE id = $1',
         [id],
@@ -204,6 +228,9 @@ export class CalendarService {
       const deleted = result.rowCount !== null && result.rowCount > 0;
       if (deleted) {
         console.log(`[CalendarService] Deleted event: ${id}`);
+        if (eventToDelete) {
+          this.notifyEventChange(eventToDelete, 'deleted');
+        }
       }
       return deleted;
     } finally {

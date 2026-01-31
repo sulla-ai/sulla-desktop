@@ -373,7 +373,26 @@ export class PlannerNode extends BaseNode {
       ? `\n\nPlan revision context:\n${revisionReason}\n\nExisting plan todos (do not reset completed work; append new todos when needed):\n${JSON.stringify(existingTodos || [], null, 2)}`
       : '';
 
+    // Get current date/time info for the LLM
+    const now = new Date();
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const currentDateTime = now.toLocaleString('en-US', {
+      timeZone: timezone,
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+    });
+    const isoDate = now.toISOString();
+
     const prompt = `You are an advanced planning agent for complex tasks. Analyze the user request and generate a high-level execution plan.
+
+Current date/time: ${currentDateTime}
+Timezone: ${timezone}
+ISO timestamp: ${isoDate}
 
 User message: "${userMessage}"
 

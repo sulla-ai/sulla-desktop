@@ -324,7 +324,26 @@ export class ExecutorNode extends BaseNode {
       ? `\n\nRecent findings (carry forward between todos):\n${JSON.stringify({ toolResults: toolHistory, notes: executionNotes }, null, 2)}`
       : '';
 
+    // Get current date/time info for the LLM
+    const now = new Date();
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const currentDateTime = now.toLocaleString('en-US', {
+      timeZone: timezone,
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+    });
+    const isoDate = now.toISOString();
+
     const prompt = `You are executing exactly ONE todo from a larger plan.
+
+Current date/time: ${currentDateTime}
+Timezone: ${timezone}
+ISO timestamp: ${isoDate}
 
 Todo:
 ${JSON.stringify({ id: todo.id, title: todo.title, description: todo.description, categoryHints: todo.categoryHints, status: todo.status })}

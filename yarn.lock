@@ -4846,6 +4846,15 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@types/node-schedule@npm:^2.1.8":
+  version: 2.1.8
+  resolution: "@types/node-schedule@npm:2.1.8"
+  dependencies:
+    "@types/node": "npm:*"
+  checksum: 10c0/f0d4a920697cd8e1431ee359dc61a7efdf2ff094e9fd28e4506394a6a832765e61750c9e47a68b15d542666110a6f6a281afb7f979925e952a3e35192d942c3e
+  languageName: node
+  linkType: hard
+
 "@types/node@npm:*, @types/node@npm:^24.0.0, @types/node@npm:^24.9.0":
   version: 24.10.9
   resolution: "@types/node@npm:24.10.9"
@@ -8602,6 +8611,15 @@ __metadata:
   dependencies:
     buffer: "npm:^5.1.0"
   checksum: 10c0/1a0da36e5f95b19cd2a7b2eab5306a08f1c47bdd22da6f761ab764e2222e8e90a877398907cea94108bd5e41a6d311ea84d7914eaca67da2baa4050bd6384b3d
+  languageName: node
+  linkType: hard
+
+"cron-parser@npm:^4.2.0":
+  version: 4.9.0
+  resolution: "cron-parser@npm:4.9.0"
+  dependencies:
+    luxon: "npm:^3.2.1"
+  checksum: 10c0/348622bdcd1a15695b61fc33af8a60133e5913a85cf99f6344367579e7002896514ba3b0a9d6bb569b02667d6b06836722bf2295fcd101b3de378f71d37bed0b
   languageName: node
   linkType: hard
 
@@ -13199,6 +13217,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"long-timeout@npm:0.1.1":
+  version: 0.1.1
+  resolution: "long-timeout@npm:0.1.1"
+  checksum: 10c0/a62240cc8f449d7a00081e817ae543fb1ded4d9fc05492e9fa8d6868cb33b2c9d5d71176a6f8be4473df7ba4b208460b3073b0e05069c3ec286122f3e4b5747f
+  languageName: node
+  linkType: hard
+
 "loose-envify@npm:^1.1.0":
   version: 1.4.0
   resolution: "loose-envify@npm:1.4.0"
@@ -13272,6 +13297,13 @@ __metadata:
   version: 7.18.3
   resolution: "lru-cache@npm:7.18.3"
   checksum: 10c0/b3a452b491433db885beed95041eb104c157ef7794b9c9b4d647be503be91769d11206bb573849a16b4cc0d03cbd15ffd22df7960997788b74c1d399ac7a4fed
+  languageName: node
+  linkType: hard
+
+"luxon@npm:^3.2.1":
+  version: 3.7.2
+  resolution: "luxon@npm:3.7.2"
+  checksum: 10c0/ed8f0f637826c08c343a29dd478b00628be93bba6f068417b1d8896b61cb61c6deacbe1df1e057dbd9298334044afa150f9aaabbeb3181418ac8520acfdc2ae2
   languageName: node
   linkType: hard
 
@@ -14058,6 +14090,17 @@ __metadata:
   version: 2.0.27
   resolution: "node-releases@npm:2.0.27"
   checksum: 10c0/f1e6583b7833ea81880627748d28a3a7ff5703d5409328c216ae57befbced10ce2c991bea86434e8ec39003bd017f70481e2e5f8c1f7e0a7663241f81d6e00e2
+  languageName: node
+  linkType: hard
+
+"node-schedule@npm:^2.1.1":
+  version: 2.1.1
+  resolution: "node-schedule@npm:2.1.1"
+  dependencies:
+    cron-parser: "npm:^4.2.0"
+    long-timeout: "npm:0.1.1"
+    sorted-array-functions: "npm:^1.3.0"
+  checksum: 10c0/6ec51b34b9e676740ac25298e4ced5ee46053379f0d3aad533e51d7e083bc24ced045df1772a95bf9d9cfdb81299340bbf551549a7c5eb6e4d2dc6468c85c70e
   languageName: node
   linkType: hard
 
@@ -16624,6 +16667,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"sorted-array-functions@npm:^1.3.0":
+  version: 1.3.0
+  resolution: "sorted-array-functions@npm:1.3.0"
+  checksum: 10c0/d94e3401a2bc1689dc913f56939621c892a3ff1288e984e85689a6c6e46b0ec16f65edc8b47d46b0f09d06857f67ca245553b462da597619102b9fad270476d9
+  languageName: node
+  linkType: hard
+
 "source-map-js@npm:>=0.6.2 <2.0.0, source-map-js@npm:^1.2.1":
   version: 1.2.1
   resolution: "source-map-js@npm:1.2.1"
@@ -17051,6 +17101,7 @@ __metadata:
     "@types/mustache": "npm:4.2.6"
     "@types/node": "npm:22.19.7"
     "@types/node-forge": "npm:1.3.14"
+    "@types/node-schedule": "npm:^2.1.8"
     "@types/pg": "npm:^8"
     "@types/plist": "npm:3.0.5"
     "@types/ps-tree": "npm:1.1.6"
@@ -17114,6 +17165,7 @@ __metadata:
     node-gyp: "npm:12.1.0"
     node-gyp-build: "npm:4.8.4"
     node-loader: "npm:^2.1.0"
+    node-schedule: "npm:^2.1.1"
     octokit: "npm:5.0.5"
     pg: "npm:^8.17.2"
     plist: "npm:3.1.0"

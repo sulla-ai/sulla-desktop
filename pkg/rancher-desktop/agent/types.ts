@@ -14,9 +14,12 @@ export interface SensoryInput {
 }
 
 export interface SensoryMetadata {
-  source: 'keyboard' | 'microphone' | 'camera' | 'api';
+  source: 'keyboard' | 'microphone' | 'camera' | 'api' | 'calendar';
   speaker?: string;
   language?: string;
+  isBackgroundTask?: boolean;
+  eventId?: number;
+  eventTitle?: string;
   [key: string]: unknown;
 }
 

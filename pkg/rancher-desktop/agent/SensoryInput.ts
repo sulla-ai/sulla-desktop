@@ -60,6 +60,23 @@ export class Sensory {
   }
 
   /**
+   * Create a SensoryInput from calendar event trigger
+   */
+  createCalendarInput(text: string, metadata?: Partial<SensoryMetadata>): SensoryInput {
+    return {
+      id:        generateInputId(),
+      type:      'text',
+      data:      text.trim(),
+      metadata:  {
+        source: 'calendar',
+        isBackgroundTask: true,
+        ...metadata,
+      },
+      timestamp: Date.now(),
+    };
+  }
+
+  /**
    * Extract text content from any SensoryInput
    */
   extractText(input: SensoryInput): string {

@@ -346,6 +346,7 @@ const newEventLocation = ref('');
 const newEventDescription = ref('');
 const savingEvent = ref(false);
 const previewEventId = ref<string | null>(null);
+const skipNextCallback = ref(false); // Skip callback when UI triggers the change
 
 interface SelectedEvent {
   id: number;
@@ -474,7 +475,7 @@ const loadEvents = async () => {
   }
 };
 
-onMounted(() => {
+onMounted(async () => {
   try {
     const saved = localStorage.getItem(THEME_STORAGE_KEY);
     isDark.value = saved === 'dark';
@@ -482,11 +483,45 @@ onMounted(() => {
     isDark.value = false;
   }
 
-  loadEvents();
+  await loadEvents();
 
   // Set default date to today
   const today = Temporal.Now.plainDateISO();
   newEventDate.value = today.toString();
+
+  // Listen for calendar event changes (from tools, scheduler, etc.)
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  calendarService.onEventChange((event, action) => {
+    // Skip if this change was triggered by the UI itself
+    if (skipNextCallback.value) {
+      skipNextCallback.value = false;
+      return;
+    }
+    
+    console.log(`[AgentCalendar] Event ${action} (external):`, event.id, event.title);
+    
+    if (action === 'created') {
+      eventsService.add({
+        id: event.id,
+        title: event.title,
+        start: Temporal.Instant.from(event.start).toZonedDateTimeISO(timezone),
+        end: Temporal.Instant.from(event.end).toZonedDateTimeISO(timezone),
+        description: event.description,
+        location: event.location,
+      });
+    } else if (action === 'updated') {
+      eventsService.update({
+        id: event.id,
+        title: event.title,
+        start: Temporal.Instant.from(event.start).toZonedDateTimeISO(timezone),
+        end: Temporal.Instant.from(event.end).toZonedDateTimeISO(timezone),
+        description: event.description,
+        location: event.location,
+      });
+    } else if (action === 'deleted') {
+      eventsService.remove(event.id);
+    }
+  });
 });
 
 const resetEventForm = () => {
@@ -523,6 +558,7 @@ const saveEvent = async () => {
     console.log('[AgentCalendar] Save - ZonedDateTime:', startZdt.toString());
     console.log('[AgentCalendar] Save - Instant:', startZdt.toInstant().toString());
 
+    skipNextCallback.value = true; // Skip callback since UI will update eventsService directly
     const event = await calendarService.createEvent({
       title: newEventTitle.value.trim(),
       start: startZdt.toInstant().toString(),
@@ -625,6 +661,7 @@ const updateEvent = async () => {
     const startZdt = Temporal.PlainDateTime.from(`${editEventDate.value}T${editEventStartTime.value}:00`).toZonedDateTime(timezone);
     const endZdt = Temporal.PlainDateTime.from(`${editEventDate.value}T${editEventEndTime.value}:00`).toZonedDateTime(timezone);
 
+    skipNextCallback.value = true; // Skip callback since UI will update eventsService directly
     const updatedEvent = await calendarService.updateEvent(editEventId.value, {
       title: editEventTitle.value.trim(),
       start: startZdt.toInstant().toString(),
@@ -659,6 +696,7 @@ const deleteEvent = async () => {
   if (!confirmed) return;
   
   try {
+    skipNextCallback.value = true; // Skip callback since UI will update eventsService directly
     const deleted = await calendarService.deleteEvent(editEventId.value);
     if (deleted) {
       eventsService.remove(editEventId.value);

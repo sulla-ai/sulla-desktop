@@ -152,3 +152,10 @@ docker-status:
     @echo "Checking Docker login status..."
     LIMA_HOME=~/Library/Application\ Support/rancher-desktop/lima \
     limactl shell 0 -- docker info 2>/dev/null | grep -E "Username|Registry" || echo "Not logged in"
+
+# Query PostgreSQL calendar_events table
+pg-events:
+    LIMA_HOME=~/Library/Application\ Support/rancher-desktop/lima \
+    resources/darwin/lima/bin/limactl shell 0 -- \
+    sudo k3s kubectl exec -n sulla deploy/postgres -- \
+    psql -U sulla -c "SELECT id, title, start_time, end_time, location, description FROM calendar_events ORDER BY start_time;"

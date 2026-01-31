@@ -34,6 +34,12 @@ import { HostGrepTool } from './HostGrepTool';
 import { HostRunCommandTool } from './HostRunCommandTool';
 import { EmitChatMessageTool } from './EmitChatMessageTool';
 import { EmitChatImageTool } from './EmitChatImageTool';
+import { CalendarListEventsTool } from './CalendarListEventsTool';
+import { CalendarGetNextEventTool } from './CalendarGetNextEventTool';
+import { CalendarGetEventTool } from './CalendarGetEventTool';
+import { CalendarCreateEventTool } from './CalendarCreateEventTool';
+import { CalendarUpdateEventTool } from './CalendarUpdateEventTool';
+import { CalendarDeleteEventTool } from './CalendarDeleteEventTool';
 
 let registered = false;
 
@@ -78,6 +84,12 @@ export function registerDefaultTools(): void {
   registry.register(new HostRunCommandTool());
   registry.register(new EmitChatMessageTool());
   registry.register(new EmitChatImageTool());
+  registry.register(new CalendarListEventsTool());
+  registry.register(new CalendarGetNextEventTool());
+  registry.register(new CalendarGetEventTool());
+  registry.register(new CalendarCreateEventTool());
+  registry.register(new CalendarUpdateEventTool());
+  registry.register(new CalendarDeleteEventTool());
   registered = true;
 }
 
@@ -116,3 +128,9 @@ export { HostStatTool } from './HostStatTool';
 export { HostFindFilesTool } from './HostFindFilesTool';
 export { HostGrepTool } from './HostGrepTool';
 export { HostRunCommandTool } from './HostRunCommandTool';
+export { CalendarListEventsTool } from './CalendarListEventsTool';
+export { CalendarGetNextEventTool } from './CalendarGetNextEventTool';
+export { CalendarGetEventTool } from './CalendarGetEventTool';
+export { CalendarCreateEventTool } from './CalendarCreateEventTool';
+export { CalendarUpdateEventTool } from './CalendarUpdateEventTool';
+export { CalendarDeleteEventTool } from './CalendarDeleteEventTool';

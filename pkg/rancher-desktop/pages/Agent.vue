@@ -449,6 +449,7 @@ import {
 } from '@pkg/agent';
 import type { AgentResponse } from '@pkg/agent/types';
 import { updateAgentConfigFull } from '@pkg/agent/services/ConfigService';
+import { getSchedulerService } from '@pkg/agent/services/SchedulerService';
 import { StartupProgressController } from './agent/StartupProgressController';
 import { AgentSettingsController } from './agent/AgentSettingsController';
 import { AgentChatController } from './agent/AgentChatController';
@@ -872,6 +873,15 @@ onMounted(async () => {
   await modelSelector.start();
 
   await startupProgress.initializeFromBackend();
+
+  // Initialize scheduler for calendar events
+  try {
+    const scheduler = getSchedulerService();
+    await scheduler.initialize();
+    console.log('[Agent] SchedulerService initialized');
+  } catch (err) {
+    console.warn('[Agent] Failed to initialize SchedulerService:', err);
+  }
 });
 
 onUnmounted(() => {
