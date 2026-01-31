@@ -4,7 +4,7 @@
 export * from './types';
 export { Sensory, getSensory } from './SensoryInput';
 export { ContextDetector, getContextDetector } from './ContextDetector';
-export { ConversationThread, getThread, getAllThreads, removeThread } from './ConversationThread';
+export { ConversationThread, getThread, getAllThreads, removeThread, onGlobalEvent, offGlobalEvent } from './ConversationThread';
 export { ResponseHandler, getResponseHandler } from './ResponseHandler';
 export { Graph, createDefaultGraph } from './Graph';
 

@@ -6,8 +6,6 @@ import { getContextDetector } from '../ContextDetector';
 import { getThread } from '../ConversationThread';
 import { getPlanService } from './PlanService';
 
-const HEARTBEAT_THREAD_ID = 'heartbeat-background';
-
 export interface HeartbeatConfig {
   enabled: boolean;
   delayMinutes: number;
@@ -131,11 +129,11 @@ export class HeartbeatService {
         input.metadata.heartbeatModel = this.config.model;
       }
 
-      // Detect context (will use heartbeat thread)
-      const threadContext = await contextDetector.detect(input, HEARTBEAT_THREAD_ID);
+      // Detect context - let the context detector determine the thread (no forced thread ID)
+      const threadContext = await contextDetector.detect(input);
       console.log(`[HeartbeatService]   Context detected: threadId=${threadContext.threadId}`);
 
-      // Get or create the heartbeat thread
+      // Get or create the thread
       const thread = getThread(threadContext.threadId);
       await thread.initialize();
       console.log(`[HeartbeatService]   Thread initialized, processing input...`);

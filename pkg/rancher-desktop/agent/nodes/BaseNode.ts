@@ -78,8 +78,16 @@ export abstract class BaseNode implements GraphNode {
   /**
    * Send a prompt to the LLM (works for both local and remote)
    * Falls back to local Ollama if remote service is unavailable
+   * If state contains heartbeatModel override, uses that model instead
    */
-  protected async prompt(prompt: string): Promise<LLMResponse | null> {
+  protected async prompt(prompt: string, state?: ThreadState): Promise<LLMResponse | null> {
+    // Check for heartbeat model override in state metadata
+    const heartbeatModel = state?.metadata?.heartbeatModel as string | undefined;
+    
+    if (heartbeatModel && heartbeatModel !== 'default') {
+      return this.promptWithModelOverride(prompt, heartbeatModel);
+    }
+
     if (!this.llmService) {
       this.llmService = getLLMService();
       await this.llmService.initialize();
@@ -147,10 +155,79 @@ export abstract class BaseNode implements GraphNode {
   }
 
   /**
+   * Send a prompt with a specific model override (for heartbeat)
+   * Format: 'local:modelname' or 'remote:provider:model'
+   */
+  private async promptWithModelOverride(prompt: string, modelOverride: string): Promise<LLMResponse | null> {
+    console.log(`[Agent:${this.name}] Using model override: ${modelOverride}`);
+    
+    // Prepend soul prompt
+    const soulPrompt = getSoulPrompt();
+    const fullPrompt = `${soulPrompt}\n\n---\n\n${prompt}`;
+
+    try {
+      if (modelOverride.startsWith('local:')) {
+        // Local Ollama model
+        const modelName = modelOverride.substring(6); // Remove 'local:' prefix
+        const ollama = getOllamaService();
+        await ollama.initialize();
+        
+        if (!ollama.isAvailable()) {
+          console.error(`[Agent:${this.name}] Ollama not available for model override`);
+          return null;
+        }
+        
+        const content = await ollama.generateWithModel(fullPrompt, modelName);
+        
+        if (!content) {
+          return null;
+        }
+        
+        return { content, model: modelName };
+      } else if (modelOverride.startsWith('remote:')) {
+        // Remote model: format is 'remote:provider:model'
+        const parts = modelOverride.substring(7).split(':'); // Remove 'remote:' prefix
+        if (parts.length < 2) {
+          console.error(`[Agent:${this.name}] Invalid remote model format: ${modelOverride}`);
+          return null;
+        }
+        
+        const [provider, ...modelParts] = parts;
+        const modelName = modelParts.join(':');
+        
+        // Import and use RemoteModelService with override
+        const { getRemoteModelService } = await import('../services/RemoteModelService');
+        const remoteService = getRemoteModelService();
+        await remoteService.initialize();
+        
+        if (!remoteService.isAvailable()) {
+          console.error(`[Agent:${this.name}] Remote service not available for model override`);
+          return null;
+        }
+        
+        // Use the remote service with the specific model
+        const content = await remoteService.generateWithModel(fullPrompt, provider, modelName);
+        
+        if (!content) {
+          return null;
+        }
+        
+        return { content, model: `${provider}:${modelName}` };
+      } else {
+        console.error(`[Agent:${this.name}] Unknown model override format: ${modelOverride}`);
+        return null;
+      }
+    } catch (err) {
+      console.error(`[Agent:${this.name}] Model override prompt failed:`, err);
+      return null;
+    }
+  }
+
+  /**
    * Send a prompt and parse JSON response
    */
-  protected async promptJSON<T = unknown>(prompt: string): Promise<T | null> {
-    const response = await this.prompt(prompt);
+  protected async promptJSON<T = unknown>(prompt: string, state?: ThreadState): Promise<T | null> {
+    const response = await this.prompt(prompt, state);
 
     if (!response) {
       return null;

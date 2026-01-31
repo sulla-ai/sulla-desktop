@@ -20,6 +20,26 @@ const SHORT_TERM_MEMORY_SIZE = 5; // Recent 5 exchanges
 
 let messageCounter = 0;
 
+// Global event handlers that receive events from ALL threads
+const globalEventHandlers: AgentEventHandler[] = [];
+
+/**
+ * Subscribe to events from ALL conversation threads
+ */
+export function onGlobalEvent(handler: AgentEventHandler): void {
+  globalEventHandlers.push(handler);
+}
+
+/**
+ * Unsubscribe from global events
+ */
+export function offGlobalEvent(handler: AgentEventHandler): void {
+  const idx = globalEventHandlers.indexOf(handler);
+  if (idx >= 0) {
+    globalEventHandlers.splice(idx, 1);
+  }
+}
+
 function generateMessageId(): string {
   return `msg_${ Date.now() }_${ ++messageCounter }`;
 }
@@ -35,21 +55,17 @@ export class ConversationThread {
   private initialized = false;
 
   constructor(threadId: string, graph?: Graph) {
+    const now = Date.now();
+
     this.state = {
       threadId,
-      messages:           [],
-      shortTermMemory:    [],
-      metadata:           {},
-      subconsciousStatus: {
-        deepMemory:   { state: 'idle' },
-        toolExecutor: { state: 'idle' },
-        integrator:   { state: 'idle' },
-      },
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
+      messages:        [],
+      shortTermMemory: [],
+      metadata:        {},
+      createdAt:       now,
+      updatedAt:       now,
     };
 
-    // Use provided graph or create default
     this.graph = graph || createDefaultGraph();
   }
 
@@ -86,16 +102,26 @@ export class ConversationThread {
   }
 
   /**
-   * Emit an event to all handlers
+   * Emit an event to all handlers (thread-specific and global)
    */
   private emit(event: Omit<AgentEvent, 'timestamp'>): void {
     const fullEvent: AgentEvent = { ...event, timestamp: Date.now() };
 
+    // Notify thread-specific handlers
     for (const handler of this.eventHandlers) {
       try {
         handler(fullEvent);
       } catch (err) {
         console.error('Event handler error:', err);
+      }
+    }
+
+    // Notify global handlers (for cross-thread UI updates)
+    for (const handler of globalEventHandlers) {
+      try {
+        handler(fullEvent);
+      } catch (err) {
+        console.error('Global event handler error:', err);
       }
     }
   }
@@ -159,6 +185,11 @@ export class ConversationThread {
 
     this.addMessage(userMessage);
     this.state.updatedAt = Date.now();
+
+    // Transfer heartbeat model override to thread state if present
+    if (input.metadata.heartbeatModel && typeof input.metadata.heartbeatModel === 'string') {
+      this.state.metadata.heartbeatModel = input.metadata.heartbeatModel;
+    }
 
     console.log(`[Agent:Thread:${this.threadId}] Starting graph execution...`);
     this.emit({ type: 'progress', threadId: this.threadId, data: { phase: 'graph_execution' } });

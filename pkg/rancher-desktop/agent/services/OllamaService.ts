@@ -126,9 +126,16 @@ class OllamaServiceClass implements ILLMService {
    * Generate a completion (non-chat)
    */
   async generate(prompt: string): Promise<string | null> {
+    return this.generateWithModel(prompt, this.getModel());
+  }
+
+  /**
+   * Generate a completion with a specific model
+   */
+  async generateWithModel(prompt: string, modelName: string): Promise<string | null> {
     try {
       const body: Record<string, unknown> = {
-        model:  this.getModel(),
+        model:  modelName,
         prompt,
         stream: false,
       };

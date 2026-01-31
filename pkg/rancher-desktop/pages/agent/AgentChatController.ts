@@ -2,7 +2,8 @@ import { computed, nextTick, ref } from 'vue';
 import type { ComputedRef, Ref } from 'vue';
 
 import type { ConversationThread } from '@pkg/agent/ConversationThread';
-import type { AgentResponse, SensoryInput, ThreadContext } from '@pkg/agent/types';
+import { onGlobalEvent, offGlobalEvent } from '@pkg/agent/ConversationThread';
+import type { AgentResponse, SensoryInput, ThreadContext, AgentEvent } from '@pkg/agent/types';
 
 import type { StartupProgressController } from './StartupProgressController';
 
@@ -65,21 +66,31 @@ export class AgentChatController {
 
     startupProgress: StartupProgressController;
   }) {
-  }
-
-  private subscribedThreadId: string | null = null;
-
-  private ensureThreadEventSubscription(threadId: string): void {
-    if (this.subscribedThreadId === threadId) {
-      return;
-    }
-    this.subscribedThreadId = threadId;
-
-    const thread = this.deps.getThread(threadId);
-    thread.onEvent((event) => {
+    // Subscribe to global events from all threads (including heartbeat)
+    this.globalEventHandler = (event: AgentEvent) => {
       this.deps.onAgentEvent?.(event as any);
       this.handleAgentEvent(event as any);
-    });
+    };
+    onGlobalEvent(this.globalEventHandler);
+  }
+
+  private globalEventHandler: ((event: AgentEvent) => void) | null = null;
+  private subscribedThreadId: string | null = null;
+
+  /**
+   * Clean up event subscriptions
+   */
+  dispose(): void {
+    if (this.globalEventHandler) {
+      offGlobalEvent(this.globalEventHandler);
+      this.globalEventHandler = null;
+    }
+  }
+
+  private ensureThreadEventSubscription(threadId: string): void {
+    // Thread subscription is no longer needed - we use global events instead
+    // This prevents duplicate messages since global events capture all thread events
+    this.subscribedThreadId = threadId;
   }
 
   private handleAgentEvent(event: { type: string; threadId: string; data: any; timestamp: number }) {

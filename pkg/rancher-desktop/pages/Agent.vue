@@ -898,6 +898,7 @@ onUnmounted(() => {
   startupProgress.dispose();
   settingsController.dispose();
   modelSelector.dispose();
+  chatController.dispose();
 });
 
 const send = () => chatController.send();

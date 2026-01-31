@@ -22,6 +22,8 @@ export class CriticNode extends BaseNode {
 
   async execute(state: ThreadState): Promise<{ state: ThreadState; next: NodeResult }> {
     console.log(`[Agent:Critic] Executing...`);
+    console.log(`[Agent:Critic] activePlanId=${state.metadata.activePlanId}, activeTodo=${JSON.stringify(state.metadata.activeTodo)}`);
+    console.log(`[Agent:Critic] todoExecution=${JSON.stringify(state.metadata.todoExecution)}`);
     const emit = (state.metadata.__emitAgentEvent as ((event: { type: 'progress' | 'chunk' | 'complete' | 'error'; threadId: string; data: unknown }) => void) | undefined);
     
     // Check for LLM failure count to prevent infinite loops
@@ -108,6 +110,30 @@ export class CriticNode extends BaseNode {
 
     if (revisionCount >= this.maxRevisions) {
       console.log(`[Agent:Critic] Max revisions (${this.maxRevisions}) reached, auto-approving`);
+      
+      // Mark the todo as done in the database before auto-approving
+      if (activePlanId && activeTodo) {
+        const planService = getPlanService();
+        try {
+          await planService.initialize();
+          const todoId = Number(activeTodo.id);
+          console.log(`[Agent:Critic] Auto-approving todo ${todoId} due to max revisions`);
+          await planService.updateTodoStatus({
+            todoId,
+            status: 'done',
+            eventType: 'todo_completed',
+            eventData: { status: 'done', reason: 'Max revisions reached' },
+          });
+          emit?.({
+            type:     'progress',
+            threadId: state.threadId,
+            data:     { phase: 'todo_status', planId: activePlanId, todoId, title: activeTodo.title, status: 'done' },
+          });
+        } catch (err) {
+          console.error(`[Agent:Critic] Failed to mark todo as done on max revisions:`, err);
+        }
+      }
+      
       state.metadata.criticDecision = 'approve';
       state.metadata.criticReason = 'Max revisions reached';
 
@@ -154,22 +180,61 @@ export class CriticNode extends BaseNode {
 
     if (llmDecision.decision === 'approve') {
       // Critic owns status transitions: persist done to DB.
+      const planService = getPlanService();
       try {
-        const planService = getPlanService();
         await planService.initialize();
+        console.log(`[Agent:Critic] Marking todo ${todoId} as done in database...`);
         await planService.updateTodoStatus({
           todoId,
           status: 'done',
           eventType: 'todo_completed',
           eventData: { status: 'done' },
         });
+        console.log(`[Agent:Critic] Todo ${todoId} marked as done successfully`);
         emit?.({
           type:     'progress',
           threadId: state.threadId,
           data:     { phase: 'todo_status', planId: activePlanId, todoId, title: todoTitle, status: 'done' },
         });
-      } catch {
-        // best effort
+      } catch (err) {
+        console.error(`[Agent:Critic] Failed to mark todo ${todoId} as done:`, err);
+      }
+
+      // Check if all todos are now complete - if so, mark plan as completed
+      try {
+        const refreshed = await planService.getPlan(activePlanId);
+        const remaining = refreshed
+          ? refreshed.todos.some(t => t.status === 'pending' || t.status === 'in_progress' || t.status === 'blocked')
+          : true;
+        state.metadata.planHasRemainingTodos = remaining;
+        
+        if (!remaining) {
+          console.log(`[Agent:Critic] All todos complete, marking plan ${activePlanId} as completed`);
+          await planService.addPlanEvent(activePlanId, 'plan_completed', { reason: 'All todos complete' });
+          await planService.updatePlanStatus(activePlanId, 'completed');
+
+          // Clear the active plan pointer so the next user prompt starts a new plan.
+          delete (state.metadata as any).activePlanId;
+          delete (state.metadata as any).activeTodo;
+
+          emit?.({
+            type:     'progress',
+            threadId: state.threadId,
+            data:     { phase: 'plan_completed', planId: activePlanId },
+          });
+
+          try {
+            const { getAwarenessService } = await import('../services/AwarenessService');
+            const awareness = getAwarenessService();
+            await awareness.initialize();
+            await awareness.update({ active_plan_ids: [] });
+          } catch {
+            // best effort
+          }
+        }
+      } catch (err) {
+        console.warn('[Agent:Critic] Failed to check plan completion:', err);
+        state.metadata.planHasRemainingTodos = true;
       }
 
       state.metadata.criticDecision = 'approve';
@@ -297,7 +362,7 @@ Guidelines:
 - Do NOT approve a batch task that only partially completed.`;
 
     try {
-      const response = await this.prompt(prompt);
+      const response = await this.prompt(prompt, state);
       if (!response?.content) {
         console.warn('[Agent:Critic] No LLM response, defaulting to heuristic');
         return this.fallbackHeuristic(context);

@@ -75,6 +75,9 @@ export class ExecutorNode extends BaseNode {
   async execute(state: ThreadState): Promise<{ state: ThreadState; next: NodeResult }> {
     console.log(`[Agent:Executor] Executing...`);
     
+    // Clear previous iteration's revision request - each execution starts fresh
+    delete state.metadata.requestPlanRevision;
+    
     // Track consecutive LLM failures to prevent infinite loops
     const llmFailureCount = ((state.metadata.llmFailureCount as number) || 0);
     
@@ -243,7 +246,22 @@ Revision attempt: ${blockedRevisionCount}/3`;
     }
 
     if (decision.actions.length === 0) {
-      await this.emitChat(state, decision.summary ? `No tool actions selected. ${decision.summary}` : 'No tool actions selected for this todo.');
+      // No actions selected - this todo cannot be completed without actions
+      // Request plan revision instead of marking as done
+      await this.emitChat(state, decision.summary 
+        ? `No tool actions available for this todo. ${decision.summary}` 
+        : 'No tool actions available for this todo. Requesting plan revision.');
+      
+      await planService.updateTodoStatus({
+        todoId: nextTodo.id,
+        status: 'blocked',
+        eventType: 'todo_status',
+        eventData: { status: 'blocked', reason: 'No tool actions available' },
+      });
+      
+      state.metadata.todoExecution = { todoId: nextTodo.id, status: 'blocked', summary: decision.summary || 'No actions available' };
+      state.metadata.requestPlanRevision = { reason: `Todo "${nextTodo.title}" has no available tool actions. The todo may need to be broken down differently or removed.` };
+      return true;
     }
 
     // Execute all tool actions
@@ -279,53 +297,34 @@ Revision attempt: ${blockedRevisionCount}/3`;
     const allActionsSucceeded = decision.actions.length > 0 && !anyToolFailed;
     const markDone = decision.markDone || allActionsSucceeded;
     const shouldBlock = !!state.metadata.requestPlanRevision && !markDone;
-    const nextStatus: TodoStatus = markDone ? 'done' : (shouldBlock ? 'blocked' : 'in_progress');
+    // Executor keeps todo in_progress - Critic will mark it done after review
+    const nextStatus: TodoStatus = shouldBlock ? 'blocked' : 'in_progress';
 
-    await planService.updateTodoStatus({
-      todoId: nextTodo.id,
-      status: nextStatus,
-      eventType: 'todo_status',
-      eventData: { status: nextStatus },
-    });
+    // Only update status if blocked, otherwise leave in_progress for Critic to review
+    if (shouldBlock) {
+      await planService.updateTodoStatus({
+        todoId: nextTodo.id,
+        status: nextStatus,
+        eventType: 'todo_status',
+        eventData: { status: nextStatus },
+      });
+    }
 
     if (markDone) {
-      await this.emitChat(state, decision.summary ? `Todo complete. ${decision.summary}` : 'Todo complete.');
+      await this.emitChat(state, decision.summary ? `Completed: ${decision.summary}` : 'Task executed, awaiting review.');
     } else if (decision.summary) {
       await this.emitChat(state, decision.summary);
     }
 
-    try {
-      const refreshed = await planService.getPlan(planId);
-      const remaining = refreshed
-        ? refreshed.todos.some(t => t.status === 'pending' || t.status === 'in_progress' || t.status === 'blocked')
-        : true;
-      state.metadata.planHasRemainingTodos = remaining;
-      if (!remaining) {
-        await planService.addPlanEvent(planId, 'final_review', { reason: 'All todos complete' });
-        await planService.updatePlanStatus(planId, 'completed');
-
-        // Clear the active plan pointer so the next user prompt starts a new plan.
-        delete (state.metadata as any).activePlanId;
-        delete (state.metadata as any).activeTodo;
-
-        try {
-          const awareness = getAwarenessService();
-          await awareness.initialize();
-          await awareness.update({ active_plan_ids: [] });
-        } catch {
-          // best effort
-        }
-      }
-    } catch {
-      state.metadata.planHasRemainingTodos = true;
-    }
+    // Don't check for plan completion here - let Critic handle it after marking todo done
+    state.metadata.planHasRemainingTodos = true;
 
     state.metadata.todoExecution = {
       todoId: nextTodo.id,
       actions: decision.actions.map(a => a.action),
       actionsCount: decision.actions.length,
       markDone,
-      status: nextStatus,
+      status: markDone ? 'done' : nextStatus,
       summary: decision.summary || '',
     };
 
@@ -460,7 +459,7 @@ Return JSON only:
   "summary": "short summary of what you did or what is needed next"
 }`;
 
-    const response = await this.prompt(prompt);
+    const response = await this.prompt(prompt, state);
     if (!response?.content) {
       return null;
     }
@@ -708,6 +707,6 @@ Output requirements:
 
     console.log(`[Agent:Executor] Full prompt length: ${fullPrompt.length} chars`);
 
-    return this.prompt(fullPrompt);
+    return this.prompt(fullPrompt, state);
   }
 }

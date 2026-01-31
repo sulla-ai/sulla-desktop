@@ -118,6 +118,53 @@ class RemoteModelServiceClass implements ILLMService {
   }
 
   /**
+   * Generate completion with a specific provider and model override
+   * Used for heartbeat model override
+   */
+  async generateWithModel(prompt: string, providerId: string, modelName: string): Promise<string | null> {
+    if (!this.config?.apiKey) {
+      console.warn('[RemoteModelService] No API key configured for model override');
+      return null;
+    }
+
+    const providerConfig = PROVIDER_CONFIGS[providerId] || PROVIDER_CONFIGS.openai;
+    const messages: ChatMessage[] = [{ role: 'user', content: prompt }];
+    const timeout = this.defaultTimeoutMs;
+
+    try {
+      // Use OpenAI-compatible endpoint for most providers
+      const url = `${providerConfig.baseUrl}${providerConfig.chatEndpoint}`;
+      
+      const body: Record<string, unknown> = {
+        model:    modelName,
+        messages: messages.map(m => ({ role: m.role, content: m.content })),
+      };
+
+      const res = await fetch(url, {
+        method:  'POST',
+        headers: {
+          'Content-Type':  'application/json',
+          'Authorization': `Bearer ${this.config.apiKey}`,
+        },
+        body:   JSON.stringify(body),
+        signal: AbortSignal.timeout(timeout),
+      });
+
+      if (!res.ok) {
+        const errorText = await res.text();
+        console.error(`[RemoteModelService] API error with model override: ${res.status}`, errorText);
+        return null;
+      }
+
+      const data = await res.json();
+      return data.choices?.[0]?.message?.content?.trim() || null;
+    } catch (err) {
+      console.error('[RemoteModelService] generateWithModel failed:', err);
+      return null;
+    }
+  }
+
+  /**
    * Check if an error is retryable (network errors or server errors)
    */
   private isRetryableError(err: unknown): boolean {

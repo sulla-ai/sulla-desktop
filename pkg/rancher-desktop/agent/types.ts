@@ -39,15 +39,85 @@ export interface ThreadContext {
 // CONVERSATION THREAD TYPES
 // ============================================================================
 
-export interface ThreadState {
+export interface TaskState {
+  // Memory Node
+  memoryContext?: string;
+  memories?: unknown[];
+  
+  // Planner Node
+  plan?: {
+    intent?: { type: string; confidence: number; description: string };
+    planNeeded?: boolean;
+    goal?: string;
+    requiresTools?: boolean;
+    todos?: unknown[];
+    fullPlan?: unknown;
+  };
+  requestPlanRevision?: { reason: string };
+  revisionFeedback?: string;
+  
+  // Executor Node
+  activePlanId?: number;
+  activeTodo?: {
+    id: number;
+    title: string;
+    description?: string;
+    status?: string;
+    categoryHints?: string[];
+  };
+  todoExecution?: {
+    todoId: number;
+    status: string;
+    summary?: string;
+    actions?: unknown[];
+    actionsCount?: number;
+    markDone?: boolean;
+  };
+  toolResults?: Record<string, unknown>;
+  executionNotes?: string[];
+  planHasRemainingTodos?: boolean;
+  executorCompleted?: boolean;
+  blockedRevisionCount?: number;
+  promptPrefix?: string;
+  promptSuffix?: string;
+  
+  // Critic Node
+  criticDecision?: 'approve' | 'revise' | 'reject';
+  criticReason?: string;
+  finalCriticDecision?: string;
+  revisionCount?: number;
+  
+  // Graph execution
+  maxIterationsReached?: boolean;
+  llmFailureCount?: number;
+  
+  // LLM response
+  response?: string;
+  ollamaModel?: string;
+  ollamaEvalCount?: number;
+  
+  // Heartbeat
+  heartbeatModel?: string;
+  
+  // Error handling
+  error?: string;
+  
+  // Internal event emitter (set during process())
+  __emitAgentEvent?: (event: Omit<AgentEvent, 'timestamp'>) => void;
+}
+
+export interface ConversationState {
   threadId: string;
   messages: Message[];
   shortTermMemory: Message[]; // Recent 5 exchanges
-  metadata: Record<string, unknown>;
-  subconsciousStatus: SubconsciousStatus;
+  metadata: TaskState;
   createdAt: number;
   updatedAt: number;
 }
+
+// Backwards compatibility aliases
+export type ThreadState = ConversationState;
+export type ThreadStateMetadata = TaskState;
 
 export interface Message {
   id: string;
@@ -55,42 +125,6 @@ export interface Message {
   content: string;
   timestamp: number;
   metadata?: Record<string, unknown>;
-}
-
-export interface SubconsciousStatus {
-  deepMemory: TaskStatus;
-  toolExecutor: TaskStatus;
-  integrator: TaskStatus;
-}
-
-export interface TaskStatus {
-  state: 'idle' | 'running' | 'completed' | 'failed';
-  progress?: number;
-  result?: unknown;
-  error?: string;
-}
-
-// ============================================================================
-// SUBCONSCIOUS TYPES (Async Workers)
-// ============================================================================
-
-export interface SubconsciousTask {
-  id: string;
-  type: 'deep_memory' | 'tool_execution' | 'integration';
-  input: unknown;
-  status: TaskStatus;
-}
-
-export interface DeepMemoryQuery {
-  query: string;
-  threadId: string;
-  limit?: number;
-}
-
-export interface DeepMemoryResult {
-  documents: string[];
-  scores: number[];
-  metadata: Record<string, unknown>[];
 }
 
 export interface ToolCall {

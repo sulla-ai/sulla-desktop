@@ -472,7 +472,7 @@ Output JSON plan:
 Respond solely with JSON.`;
 
     try {
-      const response = await this.prompt(prompt);
+      const response = await this.prompt(prompt, state);
 
       if (!response?.content) {
         console.warn('[Agent:Planner] No response from LLM');
