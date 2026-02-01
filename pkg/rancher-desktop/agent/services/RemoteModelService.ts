@@ -274,7 +274,13 @@ class RemoteModelServiceClass implements ILLMService {
         lastError = err;
         console.error(`[RemoteModelService] Chat failed (attempt ${attempt + 1}/${this.retryCount + 1}):`, err);
 
-        // Only retry on retryable errors (network, server errors, rate limiting)
+        // 503 errors should immediately fallback without retry
+        if (this.shouldImmediateFallback(err)) {
+          console.warn(`[RemoteModelService] Service unavailable (503), immediately falling back to local Ollama`);
+          break;
+        }
+
+        // Only retry on retryable errors (network, rate limiting)
         if (!this.isRetryableError(err)) {
           console.warn(`[RemoteModelService] Non-retryable error, not retrying`);
           break; // Don't retry on non-retryable errors (e.g., auth errors)
@@ -282,10 +288,9 @@ class RemoteModelServiceClass implements ILLMService {
       }
     }
 
-    // All retries exhausted, fall back to local Ollama
-    console.warn(`[RemoteModelService] All ${this.retryCount + 1} attempts failed, attempting fallback to local Ollama`);
-    if (this.isRetryableError(lastError)) {
-      console.warn(`[RemoteModelService] All ${this.retryCount + 1} attempts failed, falling back to local Ollama`);
+    // Fall back to local Ollama for retryable errors or immediate fallback errors
+    if (this.isRetryableError(lastError) || this.shouldImmediateFallback(lastError)) {
+      console.warn(`[RemoteModelService] Falling back to local Ollama`);
       try {
         const { getOllamaService } = await import('./OllamaService');
         const ollama = getOllamaService();
