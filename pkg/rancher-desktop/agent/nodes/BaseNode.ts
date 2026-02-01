@@ -91,8 +91,25 @@ export abstract class BaseNode implements GraphNode {
       }
     }
 
-    if (options.includeMemory && state.metadata.memoryContext) {
-      parts.push(`Relevant context from memory:\n${String(state.metadata.memoryContext)}`);
+    if (options.includeMemory) {
+      const kb = (state.metadata as any).knowledgeBaseContext;
+      const summaries = (state.metadata as any).chatSummariesContext;
+      const messages = (state.metadata as any).chatMessagesContext;
+      const legacy = state.metadata.memoryContext;
+
+      if (kb) {
+        parts.push(`Relevant context from KnowledgeBase:\n${String(kb)}`);
+      }
+      if (summaries) {
+        parts.push(`Relevant context from ChatSummaries:\n${String(summaries)}`);
+      }
+      if (messages) {
+        parts.push(`Relevant context from ChatMessages:\n${String(messages)}`);
+      }
+
+      if (!kb && !summaries && !messages && legacy) {
+        parts.push(`Relevant context from memory:\n${String(legacy)}`);
+      }
     }
 
     if (options.includeConversation) {

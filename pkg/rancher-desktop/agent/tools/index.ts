@@ -1,6 +1,13 @@
 import { getToolRegistry } from './ToolRegistry';
-import { MemorySearchTool } from './MemorySearchTool';
-import { CountMemoryArticlesTool } from './CountMemoryArticlesTool';
+import { KnowledgeBaseSearchTool } from './KnowledgeBaseSearchTool';
+import { ChatSummariesSearchTool } from './ChatSummariesSearchTool';
+import { ChatMessagesSearchTool } from './ChatMessagesSearchTool';
+import { KnowledgeBaseCountTool } from './KnowledgeBaseCountTool';
+import { ChatSummariesCountTool } from './ChatSummariesCountTool';
+import { KnowledgeBaseCreatePageTool } from './KnowledgeBaseCreatePageTool';
+import { KnowledgeBaseUpdatePageTool } from './KnowledgeBaseUpdatePageTool';
+import { KnowledgeBaseDeletePageTool } from './KnowledgeBaseDeletePageTool';
+import { KnowledgeBaseListPagesTool } from './KnowledgeBaseListPagesTool';
 import { KubectlListPodsTool } from './KubectlListPodsTool';
 import { KubectlListNodesTool } from './KubectlListNodesTool';
 import { KubectlDescribePodTool } from './KubectlDescribePodTool';
@@ -57,8 +64,15 @@ export function registerDefaultTools(): void {
   }
 
   const registry = getToolRegistry();
-  registry.register(new MemorySearchTool());
-  registry.register(new CountMemoryArticlesTool());
+  registry.register(new KnowledgeBaseSearchTool());
+  registry.register(new ChatSummariesSearchTool());
+  registry.register(new ChatMessagesSearchTool());
+  registry.register(new KnowledgeBaseCountTool());
+  registry.register(new ChatSummariesCountTool());
+  registry.register(new KnowledgeBaseCreatePageTool());
+  registry.register(new KnowledgeBaseUpdatePageTool());
+  registry.register(new KnowledgeBaseDeletePageTool());
+  registry.register(new KnowledgeBaseListPagesTool());
   registry.register(new KubectlListPodsTool());
   registry.register(new KubectlListNodesTool());
   registry.register(new KubectlDescribePodTool());
@@ -111,8 +125,15 @@ export function registerDefaultTools(): void {
 
 export { getToolRegistry } from './ToolRegistry';
 export { BaseTool } from './BaseTool';
-export { MemorySearchTool } from './MemorySearchTool';
-export { CountMemoryArticlesTool } from './CountMemoryArticlesTool';
+export { KnowledgeBaseSearchTool } from './KnowledgeBaseSearchTool';
+export { ChatSummariesSearchTool } from './ChatSummariesSearchTool';
+export { ChatMessagesSearchTool } from './ChatMessagesSearchTool';
+export { KnowledgeBaseCountTool } from './KnowledgeBaseCountTool';
+export { ChatSummariesCountTool } from './ChatSummariesCountTool';
+export { KnowledgeBaseCreatePageTool } from './KnowledgeBaseCreatePageTool';
+export { KnowledgeBaseUpdatePageTool } from './KnowledgeBaseUpdatePageTool';
+export { KnowledgeBaseDeletePageTool } from './KnowledgeBaseDeletePageTool';
+export { KnowledgeBaseListPagesTool } from './KnowledgeBaseListPagesTool';
 export { KubectlListPodsTool } from './KubectlListPodsTool';
 export { KubectlListNodesTool } from './KubectlListNodesTool';
 export { KubectlDescribePodTool } from './KubectlDescribePodTool';
