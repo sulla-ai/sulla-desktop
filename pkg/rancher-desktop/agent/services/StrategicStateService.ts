@@ -15,6 +15,7 @@ export interface StrategicMilestone {
 }
 
 export interface StrategicPlanData {
+  [key: string]: unknown;
   type: 'strategic';
   goal: string;
   goalDescription?: string;

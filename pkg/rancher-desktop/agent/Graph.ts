@@ -219,9 +219,9 @@ export function createHierarchicalGraph(): Graph {
     MemoryNode, 
     StrategicPlannerNode, 
     TacticalPlannerNode, 
-    ExecutorNode, 
-    CriticNode, 
-    FinalCriticNode 
+    TacticalExecutorNode, 
+    TacticalCriticNode, 
+    StrategicCriticNode 
   } = require('./nodes');
   const { registerDefaultTools } = require('./tools');
 
@@ -233,18 +233,18 @@ export function createHierarchicalGraph(): Graph {
   graph.addNode(new MemoryNode());
   graph.addNode(new StrategicPlannerNode());
   graph.addNode(new TacticalPlannerNode());
-  graph.addNode(new ExecutorNode());
-  graph.addNode(new CriticNode());
-  graph.addNode(new FinalCriticNode());
+  graph.addNode(new TacticalExecutorNode());
+  graph.addNode(new TacticalCriticNode());
+  graph.addNode(new StrategicCriticNode());
 
   // Flow: Memory → StrategicPlanner → TacticalPlanner → Executor → Critic
   graph.addEdge('memory_recall', 'strategic_planner');
   graph.addEdge('strategic_planner', 'tactical_planner');
-  graph.addEdge('tactical_planner', 'executor');
-  graph.addEdge('executor', 'critic');
+  graph.addEdge('tactical_planner', 'tactical_executor');
+  graph.addEdge('tactical_executor', 'tactical_critic');
 
   // Conditional edge from Critic
-  graph.addConditionalEdge('critic', (state: ThreadState) => {
+  graph.addConditionalEdge('tactical_critic', (state: ThreadState) => {
     const decision = state.metadata.criticDecision;
 
     // If revision requested, go back to tactical planner to re-plan the current milestone
@@ -259,10 +259,10 @@ export function createHierarchicalGraph(): Graph {
     }
 
     // All done - final review
-    return 'final_critic';
+    return 'strategic_critic';
   });
 
-  graph.addConditionalEdge('final_critic', (state: ThreadState) => {
+  graph.addConditionalEdge('strategic_critic', (state: ThreadState) => {
     if (state.metadata.finalCriticDecision === 'revise') {
       // Major revision needed - go back to strategic planner
       return 'strategic_planner';
@@ -272,7 +272,7 @@ export function createHierarchicalGraph(): Graph {
 
   // Set entry and end points
   graph.setEntryPoint('memory_recall');
-  graph.setEndPoints('final_critic');
+  graph.setEndPoints('strategic_critic');
 
   return graph;
 }

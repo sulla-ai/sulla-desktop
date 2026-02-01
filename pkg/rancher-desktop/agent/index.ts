@@ -13,8 +13,9 @@ export { BaseNode } from './nodes/BaseNode';
 export { MemoryNode } from './nodes/MemoryNode';
 export { StrategicPlannerNode } from './nodes/StrategicPlannerNode';
 export { TacticalPlannerNode } from './nodes/TacticalPlannerNode';
-export { ExecutorNode } from './nodes/ExecutorNode';
-export { CriticNode } from './nodes/CriticNode';
+export { TacticalExecutorNode } from './nodes/TacticalExecutorNode';
+export { TacticalCriticNode } from './nodes/TacticalCriticNode';
+export { StrategicCriticNode } from './nodes/StrategicCriticNode';
 
 // Services
 export { getPersistenceService } from './services/PersistenceService';

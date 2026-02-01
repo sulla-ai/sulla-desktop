@@ -1,16 +1,16 @@
-// FinalCriticNode - Reviews overall plan completion and can request plan revision
+// StrategicCriticNode - Reviews overall plan completion and can request plan revision
 
 import type { ThreadState, NodeResult } from '../types';
 import { BaseNode, JSON_ONLY_RESPONSE_INSTRUCTIONS } from './BaseNode';
 import { StrategicStateService } from '../services/StrategicStateService';
 
-export type FinalCriticDecision = 'approve' | 'revise';
+export type StrategicCriticDecision = 'approve' | 'revise';
 
-export class FinalCriticNode extends BaseNode {
+export class StrategicCriticNode extends BaseNode {
   private maxFinalRevisions = 2;
 
   constructor() {
-    super('final_critic', 'Final Critic');
+    super('strategic_critic', 'Strategic Critic');
   }
 
   async execute(state: ThreadState): Promise<{ state: ThreadState; next: NodeResult }> {
@@ -44,9 +44,6 @@ export class FinalCriticNode extends BaseNode {
     const todos = loaded.todos.map(t => ({ id: t.id, title: t.title, description: t.description, status: t.status, orderIndex: t.orderIndex }));
     const anyRemaining = strategicState.hasRemainingTodos();
 
-    // If anything is pending/in_progress/blocked, the plan is not complete.
-    // Request a revision immediately (do not approve/end), otherwise we can get stuck in a loop
-    // where the UI thinks we completed while blocked work remains.
     if (anyRemaining) {
       const blocked = loaded.todos.filter(t => t.status === 'blocked');
       const pending = loaded.todos.filter(t => t.status === 'pending' || t.status === 'in_progress');
@@ -89,7 +86,7 @@ ${responseText}
 4. No silent failures: security holes, partial batches, unverified outputs, orphaned temp files, or unlogged actions = automatic revise.
 5. User-facing response must unambiguously reflect goal completion—not just “we tried.”
 
-## Return JSON only:
+${JSON_ONLY_RESPONSE_INSTRUCTIONS}
 {
   "decision": "approve" | "revise",
   "confidence": 0-100,                          // how certain you are the goal is fully met
@@ -116,12 +113,10 @@ ${responseText}
       includeTacticalPlan: true,
     });
 
-    console.log(`[Agent:FinalCritic] Prompt (plain text):\n${prompt}`);
+    const critique = await this.promptJSON<{ decision: StrategicCriticDecision; reason?: string; suggestedTodos?: Array<{ title: string; description?: string; categoryHints?: string[] }> }>(prompt);
 
-    const critique = await this.promptJSON<{ decision: FinalCriticDecision; reason?: string; suggestedTodos?: Array<{ title: string; description?: string; categoryHints?: string[] }> }>(prompt);
-
-    const decision: FinalCriticDecision = (critique?.decision === 'revise') ? 'revise' : 'approve';
-    const reason = String(critique?.reason || (decision === 'revise' ? 'Final critic requested revision' : 'Final critic approved'));
+    const decision: StrategicCriticDecision = (critique?.decision === 'revise') ? 'revise' : 'approve';
+    const reason = String(critique?.reason || (decision === 'revise' ? 'Strategic critic requested revision' : 'Strategic critic approved'));
 
     state.metadata.finalCriticDecision = decision;
     state.metadata.finalCriticReason = reason;
@@ -137,7 +132,6 @@ ${responseText}
       return { state, next: 'strategic_planner' };
     }
 
-    // Plan was approved; ensure subsequent prompts create a new plan instead of revising this one.
     delete (state.metadata as any).activePlanId;
     delete (state.metadata as any).activeTodo;
 

@@ -1,4 +1,4 @@
-// ExecutorNode - Executes the plan (LLM calls, tool execution)
+// TacticalExecutorNode - Executes the plan (LLM calls, tool execution)
 
 import type { ThreadState, NodeResult, ToolResult } from '../types';
 import { BaseNode, JSON_ONLY_RESPONSE_INSTRUCTIONS } from './BaseNode';
@@ -6,9 +6,9 @@ import { getToolRegistry, registerDefaultTools } from '../tools';
 import { getAwarenessService } from '../services/AwarenessService';
 import { getSkillService } from '../services/SkillService';
 
-export class ExecutorNode extends BaseNode {
+export class TacticalExecutorNode extends BaseNode {
   constructor() {
-    super('executor', 'Executor');
+    super('tactical_executor', 'Tactical Executor');
   }
 
   private appendExecutionNote(state: ThreadState, note: string): void {
@@ -57,7 +57,7 @@ export class ExecutorNode extends BaseNode {
   }
 
   async execute(state: ThreadState): Promise<{ state: ThreadState; next: NodeResult }> {
-    console.log(`[Agent:Executor] Executing...`);
+    console.log(`[Agent:TacticalExecutor] Executing...`);
     
     // Clear previous iteration's revision request - each execution starts fresh
     delete state.metadata.requestPlanRevision;

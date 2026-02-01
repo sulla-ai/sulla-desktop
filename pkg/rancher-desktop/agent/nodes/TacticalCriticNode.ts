@@ -1,4 +1,4 @@
-// CriticNode - Reviews output and decides approve/reject/revise
+// TacticalCriticNode - Reviews output and decides approve/reject/revise
 // Uses LLM to intelligently evaluate whether the task was completed successfully
 
 import type { ThreadState, NodeResult } from '../types';
@@ -13,28 +13,28 @@ interface CriticLLMResponse {
   suggestedFix?: string;
 }
 
-export class CriticNode extends BaseNode {
+export class TacticalCriticNode extends BaseNode {
   private maxRevisions = 2;
 
   constructor() {
-    super('critic', 'Critic');
+    super('tactical_critic', 'Tactical Critic');
   }
 
   async execute(state: ThreadState): Promise<{ state: ThreadState; next: NodeResult }> {
-    console.log(`[Agent:Critic] Executing...`);
-    console.log(`[Agent:Critic] activePlanId=${state.metadata.activePlanId}, activeTodo=${JSON.stringify(state.metadata.activeTodo)}`);
-    console.log(`[Agent:Critic] todoExecution=${JSON.stringify(state.metadata.todoExecution)}`);
+    console.log(`[Agent:TacticalCritic] Executing...`);
+    console.log(`[Agent:TacticalCritic] activePlanId=${state.metadata.activePlanId}, activeTodo=${JSON.stringify(state.metadata.activeTodo)}`);
+    console.log(`[Agent:TacticalCritic] todoExecution=${JSON.stringify(state.metadata.todoExecution)}`);
     const emit = (state.metadata.__emitAgentEvent as ((event: { type: 'progress' | 'chunk' | 'complete' | 'error'; threadId: string; data: unknown }) => void) | undefined);
-    
+
     // Check for LLM failure count to prevent infinite loops
     const llmFailureCount = ((state.metadata.llmFailureCount as number) || 0);
     if (llmFailureCount >= 3) {
-      console.error(`[Agent:Critic] LLM has failed ${llmFailureCount} times, ending graph`);
+      console.error(`[Agent:TacticalCritic] LLM has failed ${llmFailureCount} times, ending graph`);
       state.metadata.criticDecision = 'approve';
       state.metadata.criticReason = 'LLM service unavailable, ending gracefully';
       return { state, next: 'end' };
     }
-    
+
     const activePlanId = (state.metadata.activePlanId !== undefined && state.metadata.activePlanId !== null && Number.isFinite(Number(state.metadata.activePlanId)))
       ? Number(state.metadata.activePlanId)
       : null;
@@ -79,7 +79,7 @@ export class CriticNode extends BaseNode {
       state.metadata.criticDecision = 'revise';
       state.metadata.criticReason = reason;
       state.metadata.revisionCount = ((state.metadata.revisionCount as number) || 0) + 1;
-      console.log(`[Agent:Critic] Forcing revision due to executor request: ${reason}`);
+      console.log(`[Agent:TacticalCritic] Forcing revision due to executor request: ${reason}`);
 
       emit?.({
         type:     'progress',
@@ -92,19 +92,19 @@ export class CriticNode extends BaseNode {
     const revisionCount = (state.metadata.revisionCount as number) || 0;
 
     if (revisionCount >= this.maxRevisions) {
-      console.log(`[Agent:Critic] Max revisions (${this.maxRevisions}) reached, auto-approving`);
-      
+      console.log(`[Agent:TacticalCritic] Max revisions (${this.maxRevisions}) reached, auto-approving`);
+
       // Mark the todo as done in the database before auto-approving
       if (activePlanId && activeTodo) {
         try {
           const todoId = Number(activeTodo.id);
-          console.log(`[Agent:Critic] Auto-approving todo ${todoId} due to max revisions`);
+          console.log(`[Agent:TacticalCritic] Auto-approving todo ${todoId} due to max revisions`);
           await strategicState.completeTodo(todoId, typeof activeTodo.title === 'string' ? activeTodo.title : undefined);
         } catch (err) {
-          console.error(`[Agent:Critic] Failed to mark todo as done on max revisions:`, err);
+          console.error(`[Agent:TacticalCritic] Failed to mark todo as done on max revisions:`, err);
         }
       }
-      
+
       state.metadata.criticDecision = 'approve';
       state.metadata.criticReason = 'Max revisions reached';
 
@@ -151,11 +151,11 @@ export class CriticNode extends BaseNode {
 
     if (llmDecision.decision === 'approve') {
       try {
-        console.log(`[Agent:Critic] Marking todo ${todoId} as done in database...`);
+        console.log(`[Agent:TacticalCritic] Marking todo ${todoId} as done in database...`);
         await strategicState.completeTodo(todoId, todoTitle);
-        console.log(`[Agent:Critic] Todo ${todoId} marked as done successfully`);
+        console.log(`[Agent:TacticalCritic] Todo ${todoId} marked as done successfully`);
       } catch (err) {
-        console.error(`[Agent:Critic] Failed to mark todo ${todoId} as done:`, err);
+        console.error(`[Agent:TacticalCritic] Failed to mark todo ${todoId} as done:`, err);
       }
 
       // Check if all todos are now complete - if so, mark plan as completed
@@ -165,7 +165,7 @@ export class CriticNode extends BaseNode {
         state.metadata.planHasRemainingTodos = remaining;
 
         if (!remaining) {
-          console.log(`[Agent:Critic] All todos complete, marking plan ${activePlanId} as completed`);
+          console.log(`[Agent:TacticalCritic] All todos complete, marking plan ${activePlanId} as completed`);
           await strategicState.markPlanCompleted('All todos complete');
 
           // Clear the active plan pointer so the next user prompt starts a new plan.
@@ -173,7 +173,7 @@ export class CriticNode extends BaseNode {
           delete (state.metadata as any).activeTodo;
         }
       } catch (err) {
-        console.warn('[Agent:Critic] Failed to check plan completion:', err);
+        console.warn('[Agent:TacticalCritic] Failed to check plan completion:', err);
         state.metadata.planHasRemainingTodos = true;
       }
 
@@ -207,7 +207,7 @@ export class CriticNode extends BaseNode {
     state.metadata.revisionFeedback = reason;
     state.metadata.requestPlanRevision = { reason };
     state.metadata.revisionCount = revisionCount + 1;
-    console.log(`[Agent:Critic] Requesting plan revision ${revisionCount + 1}/${this.maxRevisions}: ${reason}`);
+    console.log(`[Agent:TacticalCritic] Requesting plan revision ${revisionCount + 1}/${this.maxRevisions}: ${reason}`);
 
     emit?.({
       type:     'progress',
@@ -276,29 +276,29 @@ ${JSON_ONLY_RESPONSE_INSTRUCTIONS}
     try {
       const response = await this.prompt(prompt, state);
       if (!response?.content) {
-        console.warn('[Agent:Critic] No LLM response, defaulting to heuristic');
+        console.warn('[Agent:TacticalCritic] No LLM response, defaulting to heuristic');
         return this.fallbackHeuristic(context);
       }
 
       const parsed = this.parseFirstJSONObject<Partial<CriticLLMResponse>>(response.content);
       if (!parsed) {
-        console.warn('[Agent:Critic] Could not parse LLM response, defaulting to heuristic');
-        return this.fallbackHeuristic(context);
-      }
-      
-      if (parsed.decision !== 'approve' && parsed.decision !== 'revise') {
-        console.warn('[Agent:Critic] Invalid decision from LLM, defaulting to heuristic');
+        console.warn('[Agent:TacticalCritic] Could not parse LLM response, defaulting to heuristic');
         return this.fallbackHeuristic(context);
       }
 
-      console.log(`[Agent:Critic] LLM decision: ${parsed.decision} - ${parsed.reason}`);
+      if (parsed.decision !== 'approve' && parsed.decision !== 'revise') {
+        console.warn('[Agent:TacticalCritic] Invalid decision from LLM, defaulting to heuristic');
+        return this.fallbackHeuristic(context);
+      }
+
+      console.log(`[Agent:TacticalCritic] LLM decision: ${parsed.decision} - ${parsed.reason}`);
       return {
         decision: parsed.decision,
         reason: parsed.reason || 'No reason provided',
         suggestedFix: parsed.suggestedFix,
       };
     } catch (err) {
-      console.error('[Agent:Critic] LLM evaluation failed:', err);
+      console.error('[Agent:TacticalCritic] LLM evaluation failed:', err);
       return this.fallbackHeuristic(context);
     }
   }
@@ -310,7 +310,7 @@ ${JSON_ONLY_RESPONSE_INSTRUCTIONS}
     todoTitle: string;
     todoId: number;
   }): CriticLLMResponse {
-    const anyToolFailed = !!context.toolResults && 
+    const anyToolFailed = !!context.toolResults &&
       Object.values(context.toolResults).some((r: any) => r && r.success === false);
 
     if (context.execStatus === 'done' && !anyToolFailed) {
