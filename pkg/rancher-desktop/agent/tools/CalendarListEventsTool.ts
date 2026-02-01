@@ -10,7 +10,7 @@ export class CalendarListEventsTool extends BaseTool {
 
   override getPlanningInstructions(): string {
     return [
-      '1) calendar_list_events',
+      '37) calendar_list_events',
       '   - Purpose: List calendar events within a date range.',
       '   - Args:',
       '     - startAfter (string, optional): ISO date string, only return events starting after this time',

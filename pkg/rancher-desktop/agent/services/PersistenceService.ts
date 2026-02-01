@@ -7,6 +7,16 @@ import Redis from 'ioredis';
 const POSTGRES_URL = 'postgresql://sulla:sulla_dev_password@127.0.0.1:30116/sulla';
 const REDIS_URL = 'redis://127.0.0.1:30117';
 
+export interface EnabledSkillRecord {
+  id: string;
+  title: string;
+  description: string;
+  how_to_run: string;
+  meta: Record<string, unknown>;
+  enabled_at: string;
+  updated_at: string;
+}
+
 export class PersistenceService {
   private initialized = false;
   private pgConnected = false;
@@ -24,10 +34,207 @@ export class PersistenceService {
     this.pgConnected = await this.testPostgres();
     this.redisConnected = await this.testRedis();
 
+    if (this.pgConnected) {
+      await this.ensureEnabledSkillsTable();
+    }
+
     console.log(`[Persistence] PostgreSQL connected: ${this.pgConnected}`);
     console.log(`[Persistence] Redis connected: ${this.redisConnected}`);
 
     this.initialized = true;
+  }
+
+  private async ensureEnabledSkillsTable(): Promise<void> {
+    if (!this.pgConnected) {
+      return;
+    }
+
+    try {
+      const client = new pg.Client({ connectionString: POSTGRES_URL });
+
+      await client.connect();
+
+      const tableCheck = await client.query(`
+        SELECT EXISTS (
+          SELECT FROM information_schema.tables
+          WHERE table_schema = 'public' AND table_name = 'enabled_skills'
+        )
+      `);
+      const tableExists = tableCheck.rows[0].exists;
+
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS enabled_skills (
+          id TEXT PRIMARY KEY,
+          title TEXT NOT NULL,
+          description TEXT NOT NULL,
+          how_to_run TEXT NOT NULL,
+          meta JSONB NOT NULL,
+          enabled_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+
+      if (!tableExists) {
+        console.log('[Persistence:PG] Created enabled_skills table');
+      }
+
+      await client.end();
+    } catch (err) {
+      console.warn('[Persistence:PG] Ensure enabled_skills table failed:', err);
+    }
+  }
+
+  async enableSkill(input: {
+    id: string;
+    title: string;
+    description: string;
+    how_to_run: string;
+    meta: Record<string, unknown>;
+  }): Promise<void> {
+    if (!this.pgConnected) {
+      return;
+    }
+
+    try {
+      const client = new pg.Client({ connectionString: POSTGRES_URL });
+
+      await client.connect();
+      await this.ensureEnabledSkillsTable();
+
+      await client.query(
+        `
+        INSERT INTO enabled_skills (id, title, description, how_to_run, meta, enabled_at, updated_at)
+        VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        ON CONFLICT (id)
+        DO UPDATE SET title = $2, description = $3, how_to_run = $4, meta = $5, updated_at = CURRENT_TIMESTAMP
+      `,
+        [
+          input.id,
+          input.title,
+          input.description,
+          input.how_to_run,
+          JSON.stringify(input.meta ?? {}),
+        ],
+      );
+
+      await client.end();
+    } catch (err) {
+      console.warn('[Persistence:PG] Enable skill failed:', err);
+    }
+  }
+
+  async disableSkill(id: string): Promise<void> {
+    if (!this.pgConnected) {
+      return;
+    }
+
+    try {
+      const client = new pg.Client({ connectionString: POSTGRES_URL });
+
+      await client.connect();
+      await this.ensureEnabledSkillsTable();
+
+      await client.query('DELETE FROM enabled_skills WHERE id = $1', [id]);
+      await client.end();
+    } catch (err) {
+      console.warn('[Persistence:PG] Disable skill failed:', err);
+    }
+  }
+
+  async listEnabledSkills(): Promise<EnabledSkillRecord[]> {
+    if (!this.pgConnected) {
+      return [];
+    }
+
+    try {
+      const client = new pg.Client({ connectionString: POSTGRES_URL });
+
+      await client.connect();
+      await this.ensureEnabledSkillsTable();
+
+      const result = await client.query(
+        'SELECT id, title, description, how_to_run, meta, enabled_at, updated_at FROM enabled_skills ORDER BY enabled_at DESC',
+      );
+
+      await client.end();
+
+      return (result.rows ?? []).map((row: any) => ({
+        id: row.id,
+        title: row.title,
+        description: row.description,
+        how_to_run: row.how_to_run,
+        meta: row.meta ?? {},
+        enabled_at: String(row.enabled_at ?? ''),
+        updated_at: String(row.updated_at ?? ''),
+      }));
+    } catch (err) {
+      console.warn('[Persistence:PG] List enabled skills failed:', err);
+
+      return [];
+    }
+  }
+
+  async isSkillEnabled(id: string): Promise<boolean> {
+    if (!this.pgConnected) {
+      return false;
+    }
+
+    try {
+      const client = new pg.Client({ connectionString: POSTGRES_URL });
+
+      await client.connect();
+      await this.ensureEnabledSkillsTable();
+
+      const result = await client.query('SELECT 1 FROM enabled_skills WHERE id = $1', [id]);
+
+      await client.end();
+
+      return (result.rows?.length ?? 0) > 0;
+    } catch (err) {
+      console.warn('[Persistence:PG] isSkillEnabled failed:', err);
+
+      return false;
+    }
+  }
+
+  async getEnabledSkill(id: string): Promise<EnabledSkillRecord | null> {
+    if (!this.pgConnected) {
+      return null;
+    }
+
+    try {
+      const client = new pg.Client({ connectionString: POSTGRES_URL });
+
+      await client.connect();
+      await this.ensureEnabledSkillsTable();
+
+      const result = await client.query(
+        'SELECT id, title, description, how_to_run, meta, enabled_at, updated_at FROM enabled_skills WHERE id = $1',
+        [id],
+      );
+
+      await client.end();
+
+      if (!result.rows || result.rows.length === 0) {
+        return null;
+      }
+
+      const row = result.rows[0] as any;
+
+      return {
+        id:          row.id,
+        title:       row.title,
+        description: row.description,
+        how_to_run:  row.how_to_run,
+        meta:        row.meta ?? {},
+        enabled_at:  String(row.enabled_at ?? ''),
+        updated_at:  String(row.updated_at ?? ''),
+      };
+    } catch (err) {
+      console.warn('[Persistence:PG] getEnabledSkill failed:', err);
+
+      return null;
+    }
   }
 
   async loadAwareness(): Promise<Record<string, unknown> | null> {

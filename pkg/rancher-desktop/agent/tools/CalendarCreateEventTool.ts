@@ -10,7 +10,7 @@ export class CalendarCreateEventTool extends BaseTool {
 
   override getPlanningInstructions(): string {
     return [
-      '1) calendar_create_event',
+      '40) calendar_create_event',
       '   - Purpose: Create a new calendar event.',
       '   - Args:',
       '     - title (string, required): Event title',

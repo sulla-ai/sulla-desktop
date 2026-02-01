@@ -1,11 +1,13 @@
 // BaseNode - Abstract base class for all graph nodes
 // Uses LLMServiceFactory for LLM interactions (supports both local Ollama and remote APIs)
 
-import type { GraphNode, ThreadState, NodeResult } from '../types';
+import type { GraphNode, ThreadState, NodeResult, Message } from '../types';
 import type { ILLMService } from '../services/ILLMService';
+import type { ChatMessage } from '../services/ILLMService';
 import { getLLMService, getCurrentMode } from '../services/LLMServiceFactory';
 import { getOllamaService } from '../services/OllamaService';
 import { getAwarenessService } from '../services/AwarenessService';
+import { jsonrepair } from 'jsonrepair';
 
 // Import soul.md via raw-loader (configured in vue.config.mjs)
 // @ts-ignore - raw-loader import
@@ -30,6 +32,23 @@ export interface LLMResponse {
   evalDuration?: number;
 }
 
+export type ToolPromptDetail = 'names' | 'tactical' | 'planning';
+
+export interface PromptEnrichmentOptions {
+  includeSoul?: boolean;
+  includeAwareness?: boolean;
+  includeMemory?: boolean;
+  includeConversation?: boolean;
+  conversationOverride?: string;
+  maxHistoryItems?: number;
+  includeTools?: boolean;
+  toolDetail?: ToolPromptDetail;
+  includeSkills?: boolean;
+  includeStrategicPlan?: boolean;
+  includeTacticalPlan?: boolean;
+  requireJson?: boolean;
+}
+
 export abstract class BaseNode implements GraphNode {
   id: string;
   name: string;
@@ -39,6 +58,192 @@ export abstract class BaseNode implements GraphNode {
   constructor(id: string, name: string) {
     this.id = id;
     this.name = name;
+  }
+
+  protected prefixWithSoulPrompt(prompt: string): string {
+    const soulPrompt = getSoulPrompt();
+    const soulHeader = `${soulPrompt}\n\n---\n\n`;
+    return prompt.startsWith(soulHeader)
+      ? prompt
+      : `${soulHeader}${prompt}`;
+  }
+
+  protected async enrichPrompt(
+    basePrompt: string,
+    state: ThreadState,
+    options: PromptEnrichmentOptions = {},
+  ): Promise<string> {
+    const parts: string[] = [];
+
+    if (options.requireJson) {
+      parts.push('CRITICAL: You MUST respond with ONLY valid JSON. No markdown, no explanation, no conversation. Start your response with { and end with }.');
+    }
+
+    if (options.includeAwareness) {
+      try {
+        const awareness = getAwarenessService();
+        await awareness.initialize();
+        const identity = awareness.identityPrompt;
+        if (identity.trim()) {
+          parts.push(`Awareness context:\n${identity}`);
+        }
+      } catch {
+        // best effort
+      }
+    }
+
+    if (options.includeMemory && state.metadata.memoryContext) {
+      parts.push(`Relevant context from memory:\n${String(state.metadata.memoryContext)}`);
+    }
+
+    if (options.includeConversation) {
+      const override = options.conversationOverride;
+      if (override && override.trim()) {
+        parts.push(`Conversation history:\n${override.trim()}`);
+      } else {
+        const maxItems = options.maxHistoryItems || 10;
+        const historySource = state.messages.length > 0 ? state.messages : state.shortTermMemory;
+        const userAssistantMessages = historySource.filter(m => m.role === 'user' || m.role === 'assistant');
+        if (userAssistantMessages.length > 0) {
+          const lines = userAssistantMessages
+            .slice(-maxItems)
+            .map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`);
+          parts.push(`Conversation history:\n${lines.join('\n')}`);
+        }
+      }
+    }
+
+    if (options.includeTools) {
+      try {
+        const { registerDefaultTools, getToolRegistry } = await import('../tools');
+        registerDefaultTools();
+        const registry = getToolRegistry();
+        const detail: ToolPromptDetail = options.toolDetail || 'names';
+
+        if (detail === 'tactical') {
+          parts.push(`Available tools:\n${registry.getTacticalInstructionsBlock()}`);
+        } else if (detail === 'planning') {
+          const toolParts = registry.listUnique().map(t => t.getPlanningInstructions());
+          parts.push(`Available tools:\n${toolParts.join('\n\n')}`);
+        } else {
+          const toolLines = registry.listUnique().map(t => `- ${t.name}`);
+          parts.push(`Available tools:\n${toolLines.join('\n')}`);
+        }
+      } catch {
+        // best effort
+      }
+    }
+
+    if (options.includeSkills) {
+      try {
+        const { getSkillService } = await import('../services/SkillService');
+        const skillService = getSkillService();
+        await skillService.initialize();
+        const enabledSkills = await skillService.listEnabledSkills();
+        if (enabledSkills.length > 0) {
+          const lines = enabledSkills.map(s => `- ${s.id}: ${s.description || s.title || ''}`);
+          parts.push(`Enabled skills:\n${lines.join('\n')}`);
+        }
+      } catch {
+        // best effort
+      }
+    }
+
+    if (options.includeStrategicPlan || options.includeTacticalPlan) {
+      const planBlock = this.buildPlanContextBlock(state, !!options.includeStrategicPlan, !!options.includeTacticalPlan);
+      if (planBlock) {
+        parts.push(planBlock);
+      }
+    }
+
+    parts.push(basePrompt);
+
+    const enriched = parts.join('\n\n');
+    return options.includeSoul ? this.prefixWithSoulPrompt(enriched) : enriched;
+  }
+
+  protected extractFirstJSONObjectText(text: string): string | null {
+    const src = String(text || '');
+    const match = src.match(/\{[\s\S]*\}/);
+    return match ? match[0] : null;
+  }
+
+  protected parseJsonLenient<T = unknown>(text: string): T | null {
+    try {
+      return JSON.parse(text) as T;
+    } catch {
+      try {
+        const repaired = jsonrepair(text);
+        return JSON.parse(repaired) as T;
+      } catch {
+        return null;
+      }
+    }
+  }
+
+  protected parseFirstJSONObject<T = unknown>(text: string): T | null {
+    const jsonText = this.extractFirstJSONObjectText(text);
+    if (!jsonText) {
+      return null;
+    }
+    return this.parseJsonLenient<T>(jsonText);
+  }
+
+  /**
+   * Build a context block showing strategic and tactical plan progress
+   * @param strategicOnly If true, only include strategic plan (no tactical steps)
+   */
+  protected buildPlanContextBlock(state: ThreadState, includeStrategic: boolean, includeTactical: boolean): string | null {
+    const strategicPlan = state.metadata.strategicPlan as {
+      goal?: string;
+      milestones?: Array<{ id: string; title: string; description?: string; status?: string }>;
+    } | undefined;
+
+    const tacticalPlan = state.metadata.tacticalPlan as {
+      milestoneId?: string;
+      steps?: Array<{ id: string; action: string; description?: string; status?: string }>;
+    } | undefined;
+
+    const parts: string[] = [];
+
+    // Strategic plan milestones
+    if (includeStrategic && strategicPlan?.milestones && strategicPlan.milestones.length > 0) {
+      const milestoneLines = strategicPlan.milestones.map(m => {
+        const status = m.status || 'pending';
+        const statusIcon = status === 'completed' ? '✓' : status === 'in_progress' ? '→' : status === 'failed' ? '✗' : '○';
+        const title = status === 'in_progress' ? `**${m.title}**` : m.title;
+        return `  ${statusIcon} ${title} [${status}]`;
+      });
+      parts.push(`## Strategic Plan\nGoal: ${strategicPlan.goal || 'Not specified'}\n\nMilestones:\n${milestoneLines.join('\n')}`);
+    }
+
+    // Tactical plan steps for current milestone
+    if (includeTactical && tacticalPlan?.steps && tacticalPlan.steps.length > 0) {
+      const stepLines = tacticalPlan.steps.map((s, idx) => {
+        const status = s.status || 'pending';
+        const statusIcon = status === 'done' ? '✓' : status === 'in_progress' ? '→' : status === 'failed' ? '✗' : '○';
+        const action = status === 'in_progress' ? `**${s.action}**` : s.action;
+        return `  ${statusIcon} Step ${idx + 1}: ${action} [${status}]`;
+      });
+      parts.push(`## Tactical Plan (Current Milestone)\nSteps:\n${stepLines.join('\n')}`);
+    }
+
+    return parts.length > 0 ? parts.join('\n\n') : null;
+  }
+
+  private createInternalMessageId(prefix: string): string {
+    return `${prefix}_${Date.now()}_${Math.floor(Math.random() * 1_000_000)}`;
+  }
+
+  private toChatMessagesFromThread(state: ThreadState): ChatMessage[] {
+    const out: ChatMessage[] = [];
+    for (const m of state.messages) {
+      if (m.role !== 'user' && m.role !== 'assistant' && m.role !== 'system') {
+        continue;
+      }
+      out.push({ role: m.role, content: m.content });
+    }
+    return out;
   }
 
   abstract execute(state: ThreadState): Promise<{ state: ThreadState; next: NodeResult }>;
@@ -80,12 +285,12 @@ export abstract class BaseNode implements GraphNode {
    * Falls back to local Ollama if remote service is unavailable
    * If state contains heartbeatModel override, uses that model instead
    */
-  protected async prompt(prompt: string, state?: ThreadState): Promise<LLMResponse | null> {
+  protected async prompt(prompt: string, state?: ThreadState, storeInMessages = true): Promise<LLMResponse | null> {
     // Check for heartbeat model override in state metadata
     const heartbeatModel = state?.metadata?.heartbeatModel as string | undefined;
     
     if (heartbeatModel && heartbeatModel !== 'default') {
-      return this.promptWithModelOverride(prompt, heartbeatModel);
+      return this.promptWithModelOverride(prompt, heartbeatModel, state);
     }
 
     if (!this.llmService) {
@@ -118,19 +323,39 @@ export abstract class BaseNode implements GraphNode {
 
     const model = this.availableModel || this.llmService.getModel();
 
-    // Prepend soul prompt to every LLM request
-    const soulPrompt = getSoulPrompt();
-    const fullPrompt = `${soulPrompt}\n\n---\n\n${prompt}`;
-
-    console.log(`[Agent:${this.name}] LLM prompt (${fullPrompt.length} chars, model: ${model}):\n${fullPrompt}`);
-
     try {
-      const content = await this.llmService.generate(fullPrompt);
+      let messages: ChatMessage[] = [{ role: 'user', content: prompt }];
+      if (state) {
+        if (storeInMessages) {
+          const promptMsg: Message = {
+            id: this.createInternalMessageId('node_prompt'),
+            role: 'system',
+            content: prompt,
+            timestamp: Date.now(),
+            metadata: { nodeId: this.id, nodeName: this.name, kind: 'node_prompt' },
+          };
+          state.messages.push(promptMsg);
+        }
+        messages = this.toChatMessagesFromThread(state);
+      }
+
+      const content = await this.llmService.chat(messages);
 
       if (!content) {
         console.warn(`[Agent:${this.name}] No response from LLM`);
 
         return null;
+      }
+
+      if (state && storeInMessages) {
+        const responseMsg: Message = {
+          id: this.createInternalMessageId('node_response'),
+          role: 'assistant',
+          content,
+          timestamp: Date.now(),
+          metadata: { nodeId: this.id, nodeName: this.name, kind: 'node_response', model },
+        };
+        state.messages.push(responseMsg);
       }
 
       const result = {
@@ -152,13 +377,9 @@ export abstract class BaseNode implements GraphNode {
    * Send a prompt with a specific model override (for heartbeat)
    * Format: 'local:modelname' or 'remote:provider:model'
    */
-  private async promptWithModelOverride(prompt: string, modelOverride: string): Promise<LLMResponse | null> {
+  private async promptWithModelOverride(prompt: string, modelOverride: string, state?: ThreadState): Promise<LLMResponse | null> {
     console.log(`[Agent:${this.name}] Using model override: ${modelOverride}`);
     
-    // Prepend soul prompt
-    const soulPrompt = getSoulPrompt();
-    const fullPrompt = `${soulPrompt}\n\n---\n\n${prompt}`;
-
     try {
       if (modelOverride.startsWith('local:')) {
         // Local Ollama model
@@ -171,12 +392,36 @@ export abstract class BaseNode implements GraphNode {
           return null;
         }
         
-        const content = await ollama.generateWithModel(fullPrompt, modelName);
+        let messages: ChatMessage[] = [{ role: 'user', content: prompt }];
+        if (state) {
+          const promptMsg: Message = {
+            id: this.createInternalMessageId('node_prompt'),
+            role: 'system',
+            content: prompt,
+            timestamp: Date.now(),
+            metadata: { nodeId: this.id, nodeName: this.name, kind: 'node_prompt', modelOverride },
+          };
+          state.messages.push(promptMsg);
+          messages = this.toChatMessagesFromThread(state);
+        }
+
+        const content = await ollama.chatWithModel(messages, modelName);
         
         if (!content) {
           return null;
         }
         
+        if (state) {
+          const responseMsg: Message = {
+            id: this.createInternalMessageId('node_response'),
+            role: 'assistant',
+            content,
+            timestamp: Date.now(),
+            metadata: { nodeId: this.id, nodeName: this.name, kind: 'node_response', model: modelName, modelOverride },
+          };
+          state.messages.push(responseMsg);
+        }
+
         return { content, model: modelName };
       } else if (modelOverride.startsWith('remote:')) {
         // Remote model: format is 'remote:provider:model'
@@ -200,12 +445,29 @@ export abstract class BaseNode implements GraphNode {
         }
         
         // Use the remote service with the specific model
-        const content = await remoteService.generateWithModel(fullPrompt, provider, modelName);
+        // Remote override API currently accepts a single prompt string.
+        // When state is provided, serialize the accumulated thread into a single prompt.
+        const effectivePrompt = state
+          ? this.toChatMessagesFromThread(state).map(m => `${m.role}: ${m.content}`).join('\n\n')
+          : prompt;
+
+        const content = await remoteService.generateWithModel(effectivePrompt, provider, modelName);
         
         if (!content) {
           return null;
         }
         
+        if (state) {
+          const responseMsg: Message = {
+            id: this.createInternalMessageId('node_response'),
+            role: 'assistant',
+            content,
+            timestamp: Date.now(),
+            metadata: { nodeId: this.id, nodeName: this.name, kind: 'node_response', model: `${provider}:${modelName}`, modelOverride },
+          };
+          state.messages.push(responseMsg);
+        }
+
         return { content, model: `${provider}:${modelName}` };
       } else {
         console.error(`[Agent:${this.name}] Unknown model override format: ${modelOverride}`);
@@ -281,8 +543,6 @@ export abstract class BaseNode implements GraphNode {
     parts.push(instruction);
 
     const finalPrompt = parts.join('\n');
-
-    console.log(`[Agent:${this.name}] Contextual prompt (${finalPrompt.length} chars):\n${finalPrompt}`);
 
     return finalPrompt;
   }

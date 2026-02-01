@@ -63,12 +63,12 @@ export class FinalCriticNode extends BaseNode {
       state.metadata.revisionFeedback = reason;
       state.metadata.requestPlanRevision = { reason };
       state.metadata.finalRevisionCount = finalRevisionCount + 1;
-      return { state, next: 'planner' };
+      return { state, next: 'strategic_planner' };
     }
 
     const responseText = typeof state.metadata.response === 'string' ? String(state.metadata.response) : '';
 
-    const prompt = `You are the Final Overseer: a 25-year veteran systems architect & outcome auditor who has green-lit or killed 1000+ multi-million-dollar deployments and marketing campaigns (e.g., Body Glove full-funnel revamps hitting 3.2× ROAS, ClientBasis lead-routing systems achieving 97% delivery accuracy). You approve nothing unless the original goal is verifiably 100% satisfied—no partial credit, no “close enough.”
+    const basePrompt = `You are the Final Overseer: a 25-year veteran systems architect & outcome auditor who has green-lit or killed 1000+ multi-million-dollar deployments and marketing campaigns (e.g., Body Glove full-funnel revamps hitting 3.2× ROAS, ClientBasis lead-routing systems achieving 97% delivery accuracy). You approve nothing unless the original goal is verifiably 100% satisfied—no partial credit, no “close enough.”
 
 ## Plan Goal
 ${goal || '(unknown)'}
@@ -102,6 +102,17 @@ ${responseText}
   "killSwitch": boolean                         // true ONLY if plan created irreversible damage or security violation
 }`;
 
+    const prompt = await this.enrichPrompt(basePrompt, state, {
+      includeSoul: true,
+      includeAwareness: true,
+      includeMemory: true,
+      includeTools: true,
+      toolDetail: 'names',
+      includeSkills: true,
+      includeStrategicPlan: true,
+      includeTacticalPlan: true,
+    });
+
     console.log(`[Agent:FinalCritic] Prompt (plain text):\n${prompt}`);
 
     const critique = await this.promptJSON<{ decision: FinalCriticDecision; reason?: string; suggestedTodos?: Array<{ title: string; description?: string; categoryHints?: string[] }> }>(prompt);
@@ -120,7 +131,7 @@ ${responseText}
       state.metadata.revisionFeedback = reason;
       state.metadata.requestPlanRevision = { reason };
       state.metadata.finalRevisionCount = finalRevisionCount + 1;
-      return { state, next: 'planner' };
+      return { state, next: 'strategic_planner' };
     }
 
     // Plan was approved; ensure subsequent prompts create a new plan instead of revising this one.

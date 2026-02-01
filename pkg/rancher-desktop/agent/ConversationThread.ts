@@ -10,7 +10,7 @@ import type {
   AgentEventHandler,
   GraphNode,
 } from './types';
-import { Graph, createDefaultGraph, createHierarchicalGraph } from './Graph';
+import { Graph, createHierarchicalGraph } from './Graph';
 import { getPersistenceService } from './services/PersistenceService';
 import { getMemoryPedia } from './services/MemoryPedia';
 import { getAwarenessService } from './services/AwarenessService';

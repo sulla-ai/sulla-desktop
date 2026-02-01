@@ -160,9 +160,12 @@
                   <div class="flex flex-col gap-2 lg:w-64">
                     <button
                       type="button"
-                      class="h-11 w-full cursor-pointer border border-indigo-600 bg-indigo-600 px-4 text-base font-semibold text-white shadow-sm hover:bg-indigo-700"
+                      class="h-11 w-full cursor-pointer border border-indigo-600 px-4 text-base font-semibold shadow-sm"
+                      :class="isEnabled ? 'bg-white text-indigo-600 hover:bg-indigo-50 dark:bg-neutral-900 dark:hover:bg-neutral-800' : 'bg-indigo-600 text-white hover:bg-indigo-700'"
+                      :disabled="loadingEnable || !skillMeta"
+                      @click="toggleEnabled"
                     >
-                      Install Now
+                      {{ loadingEnable ? '...' : (isEnabled ? 'Disable' : 'Enable') }}
                     </button>
 
                     <a
@@ -312,7 +315,8 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
-import { skillsData } from './agent/skillsData';
+import { getSkillService } from '@pkg/agent/services/SkillService';
+import type { SkillMeta } from '@pkg/agent/services/SkillService';
 
 const route = useRoute();
 const router = useRouter();
@@ -339,7 +343,83 @@ const skillId = computed(() => {
   return typeof raw === 'string' ? raw : Array.isArray(raw) ? raw[0] : '';
 });
 
-const skill = computed(() => skillsData.find(s => s.id === skillId.value) ?? null);
+const skillMeta = ref<SkillMeta | null>(null);
+const loadingSkill = ref(false);
+const isEnabled = ref(false);
+const loadingEnable = ref(false);
+
+const loadSkill = async(id: string) => {
+  loadingSkill.value = true;
+  try {
+    const svc = getSkillService();
+    skillMeta.value = await svc.getSkillMetaById(id);
+    isEnabled.value = await svc.isSkillEnabled(id);
+  } catch {
+    skillMeta.value = null;
+    isEnabled.value = false;
+  } finally {
+    loadingSkill.value = false;
+  }
+};
+
+const toggleEnabled = async() => {
+  if (!skillMeta.value) {
+    return;
+  }
+  loadingEnable.value = true;
+  try {
+    const svc = getSkillService();
+    if (isEnabled.value) {
+      await svc.disableSkill(skillMeta.value.id);
+      isEnabled.value = false;
+    } else {
+      await svc.enableSkill(skillMeta.value);
+      isEnabled.value = true;
+    }
+  } finally {
+    loadingEnable.value = false;
+  }
+};
+
+const skill = computed(() => {
+  if (!skillMeta.value) {
+    return null;
+  }
+
+  const s: any = skillMeta.value;
+  const sections = (s.sections && typeof s.sections === 'object') ? s.sections : {};
+
+  return {
+    id: s.id,
+    name: s.title,
+    shortDescription: s.shortDescription || s.description || '',
+    publisher: s.publisher || '',
+    authorUrl: s.authorUrl,
+    banner: s.banner,
+    icon: s.icon,
+    homepage: s.homepage,
+    commercial: !!s.commercial,
+    rating: typeof s.rating === 'number' ? s.rating : 0,
+    activeInstalls: typeof s.activeInstalls === 'number' ? s.activeInstalls : 0,
+    version: s.version || '',
+    lastUpdated: s.lastUpdated || '',
+    requires: s.requires,
+    testedUpTo: s.testedUpTo,
+    requiresPhp: s.requiresPhp,
+    license: s.license,
+    licenseUrl: s.licenseUrl,
+    downloads: s.downloads,
+    supportThreads: s.supportThreads,
+    tags: Array.isArray(s.tags) ? s.tags : [],
+    overview: String(sections.details || ''),
+    reviews: String(sections.reviews || ''),
+    installation: String(sections.installation || ''),
+    advancedView: String(sections.development || ''),
+    faq: s.faq,
+    screenshots: s.screenshots,
+    changelog: s.changelog,
+  };
+});
 
 const tabs = ['Details', 'Reviews', 'Installation', 'Development'] as const;
 
@@ -347,9 +427,14 @@ type Tab = (typeof tabs)[number];
 
 const activeTab = ref<Tab>('Details');
 
-watch(skillId, () => {
+watch(skillId, (id) => {
   activeTab.value = 'Details';
-});
+  if (id) {
+    loadSkill(id);
+  } else {
+    skillMeta.value = null;
+  }
+}, { immediate: true });
 
 const goBack = () => {
   if (window.history.length > 1) {

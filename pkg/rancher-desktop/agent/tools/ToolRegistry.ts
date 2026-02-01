@@ -84,6 +84,16 @@ export class ToolRegistry {
     return parts.join('\n').trim();
   }
 
+  getTacticalInstructionsBlock(): string {
+    const tools = this.listUnique();
+    if (tools.length === 0) {
+      return '';
+    }
+
+    const lines = tools.map(t => `- ${t.getTacticalInstructions()}`);
+    return `Available tools:\n${lines.join('\n')}`;
+  }
+
   getCompactPlanningInstructionsBlock(options: { includeNames?: string[]; includeCategories?: string[] } = {}): string {
     const all = this.listUnique();
     let tools = all;

@@ -57,7 +57,7 @@ export class EmitChatImageTool extends BaseTool {
 
   getPlanningInstructions(): string {
     return [
-      'Emit Chat Image (emit_chat_image)',
+      '36) emit_chat_image',
       '- Purpose: Show an image inside the chat transcript during execution.',
       '- args:',
       '  - path (string): Path to an image on disk (.png, .jpg, .gif, .webp, .svg).',

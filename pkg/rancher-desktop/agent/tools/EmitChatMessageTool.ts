@@ -8,7 +8,7 @@ export class EmitChatMessageTool extends BaseTool {
 
   getPlanningInstructions(): string {
     return [
-      'Emit Chat Message (emit_chat_message)',
+      '35) emit_chat_message',
       '- Purpose: Emit a user-visible chat bubble during plan execution to explain what you\'re doing.',
       '- args:',
       '  - content (string): The message to show to the user.',

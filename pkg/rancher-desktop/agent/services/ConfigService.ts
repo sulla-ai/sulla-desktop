@@ -13,6 +13,10 @@ interface AgentConfig {
   ollamaBase: string;
   // LLM mode settings
   modelMode: 'local' | 'remote';
+  // Local Ollama settings
+  localTimeoutSeconds: number;
+  localRetryCount: number;
+  // Remote API settings
   remoteProvider: string;
   remoteModel: string;
   remoteApiKey: string;
@@ -47,6 +51,8 @@ export function getAgentConfig(): AgentConfig {
         ollamaModel:      config.sullaModel || DEFAULT_MODEL,
         ollamaBase:       OLLAMA_BASE,
         modelMode:        config.modelMode || 'local',
+        localTimeoutSeconds: config.localTimeoutSeconds ?? 120,
+        localRetryCount: config.localRetryCount ?? 2,
         remoteProvider:   config.remoteProvider || 'grok',
         remoteModel:      config.remoteModel || 'grok-4-1-fast-reasoning',
         remoteApiKey:     config.remoteApiKey || '',
@@ -69,6 +75,8 @@ export function getAgentConfig(): AgentConfig {
     ollamaModel:      DEFAULT_MODEL,
     ollamaBase:       OLLAMA_BASE,
     modelMode:        'local',
+    localTimeoutSeconds: 120,
+    localRetryCount: 2,
     remoteProvider:   'grok',
     remoteModel:      'grok-4-1-fast-reasoning',
     remoteApiKey:     '',
@@ -88,6 +96,8 @@ export function getAgentConfig(): AgentConfig {
 export function updateAgentConfigFull(settings: {
   sullaModel?: string;
   modelMode?: 'local' | 'remote';
+  localTimeoutSeconds?: number;
+  localRetryCount?: number;
   remoteProvider?: string;
   remoteModel?: string;
   remoteApiKey?: string;
@@ -102,6 +112,8 @@ export function updateAgentConfigFull(settings: {
     ollamaModel:      settings.sullaModel || DEFAULT_MODEL,
     ollamaBase:       OLLAMA_BASE,
     modelMode:        settings.modelMode || 'local',
+    localTimeoutSeconds: settings.localTimeoutSeconds ?? 120,
+    localRetryCount: settings.localRetryCount ?? 2,
     remoteProvider:   settings.remoteProvider || 'grok',
     remoteModel:      settings.remoteModel || 'grok-4-1-fast-reasoning',
     remoteApiKey:     settings.remoteApiKey || '',
@@ -118,6 +130,8 @@ export function updateAgentConfigFull(settings: {
     mode:             cachedConfig.modelMode,
     localModel:       cachedConfig.ollamaModel,
     ollamaBase:       cachedConfig.ollamaBase,
+    localTimeoutSeconds: cachedConfig.localTimeoutSeconds,
+    localRetryCount: cachedConfig.localRetryCount,
     remoteProvider:   cachedConfig.remoteProvider,
     remoteModel:      cachedConfig.remoteModel,
     remoteApiKey:     cachedConfig.remoteApiKey,
@@ -188,6 +202,18 @@ export function getRemoteConfig(): { provider: string; model: string; apiKey: st
     provider: config.remoteProvider,
     model:    config.remoteModel,
     apiKey:   config.remoteApiKey,
+  };
+}
+
+/**
+ * Get local Ollama settings
+ */
+export function getLocalConfig(): { timeoutSeconds: number; retryCount: number } {
+  const config = getAgentConfig();
+
+  return {
+    timeoutSeconds: config.localTimeoutSeconds,
+    retryCount:     config.localRetryCount,
   };
 }
 

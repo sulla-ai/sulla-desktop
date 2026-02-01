@@ -206,8 +206,8 @@
 import { computed, onMounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
 
-import type { Skill } from './agent/skillsData';
-import { skillsData } from './agent/skillsData';
+import type { SkillCatalogEntry } from '@pkg/agent/services/SkillService';
+import { getSkillService } from '@pkg/agent/services/SkillService';
 
 const route = useRoute();
 
@@ -217,7 +217,7 @@ const isDark = ref(false);
 const search = ref('');
 const activeTag = ref<string | null>(null);
 
-const skills = ref<Skill[]>(skillsData);
+const skills = ref<SkillCatalogEntry[]>([]);
 
 const topTags = computed(() => {
   const counts = new Map<string, number>();
@@ -278,5 +278,13 @@ onMounted(() => {
   } catch {
     isDark.value = false;
   }
+
+  const svc = getSkillService();
+  svc.listCatalog().then((entries) => {
+    skills.value = entries;
+  }).catch((err) => {
+    console.warn('[Skills] Failed to load catalog:', err);
+    skills.value = [];
+  });
 });
 </script>

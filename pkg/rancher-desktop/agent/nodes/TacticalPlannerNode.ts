@@ -4,8 +4,7 @@
 
 import type { ThreadState, NodeResult } from '../types';
 import { BaseNode } from './BaseNode';
-import { getToolRegistry, registerDefaultTools } from '../tools';
-import { jsonrepair } from 'jsonrepair';
+import { registerDefaultTools } from '../tools';
 
 interface TacticalStep {
   id: string;
@@ -18,6 +17,8 @@ interface TacticalStep {
 interface TacticalPlan {
   milestoneId: string;
   steps: TacticalStep[];
+  recommendedTools: string[];
+  recommendedSkills: string[];
 }
 
 export class TacticalPlannerNode extends BaseNode {
@@ -51,6 +52,16 @@ export class TacticalPlannerNode extends BaseNode {
           // Update milestone status
           nextMilestone.status = 'in_progress';
           console.log(`[Agent:TacticalPlanner] Activated milestone: ${nextMilestone.title}`);
+          // Emit todo_status for UI sidebar (uses DB todoId)
+          const activePlanId = state.metadata.activePlanId as number | undefined;
+          const todoId = (nextMilestone as any).todoId as number | undefined;
+          if (activePlanId && todoId) {
+            emit?.({
+              type: 'progress',
+              threadId: state.threadId,
+              data: { phase: 'todo_status', planId: activePlanId, todoId, title: nextMilestone.title, status: 'in_progress' },
+            });
+          }
         } else {
           // All milestones complete
           console.log(`[Agent:TacticalPlanner] All milestones complete`);
@@ -79,6 +90,11 @@ export class TacticalPlannerNode extends BaseNode {
         const nextStep = pendingSteps[0];
         if (nextStep.status === 'pending') {
           nextStep.status = 'in_progress';
+          emit?.({
+            type: 'progress',
+            threadId: state.threadId,
+            data: { phase: 'tactical_step_status', stepId: nextStep.id, action: nextStep.action, status: 'in_progress' },
+          });
         }
         state.metadata.activeTacticalStep = {
           id: nextStep.id,
@@ -97,6 +113,16 @@ export class TacticalPlannerNode extends BaseNode {
           const m = strategicPlan.milestones.find(m => m.id === milestone.id);
           if (m) {
             m.status = 'completed';
+            // Emit todo_status for UI sidebar (uses DB todoId)
+            const activePlanIdCompleted = state.metadata.activePlanId as number | undefined;
+            const todoIdCompleted = (m as any).todoId as number | undefined;
+            if (activePlanIdCompleted && todoIdCompleted) {
+              emit?.({
+                type: 'progress',
+                threadId: state.threadId,
+                data: { phase: 'todo_status', planId: activePlanIdCompleted, todoId: todoIdCompleted, title: m.title, status: 'done' },
+              });
+            }
           }
         }
         
@@ -116,6 +142,16 @@ export class TacticalPlannerNode extends BaseNode {
           };
           nextMilestone.status = 'in_progress';
           console.log(`[Agent:TacticalPlanner] Moving to next milestone: ${nextMilestone.title}`);
+          // Emit todo_status for UI sidebar (uses DB todoId)
+          const activePlanIdNext = state.metadata.activePlanId as number | undefined;
+          const todoIdNext = (nextMilestone as any).todoId as number | undefined;
+          if (activePlanIdNext && todoIdNext) {
+            emit?.({
+              type: 'progress',
+              threadId: state.threadId,
+              data: { phase: 'todo_status', planId: activePlanIdNext, todoId: todoIdNext, title: nextMilestone.title, status: 'in_progress' },
+            });
+          }
           
           // Recursively plan for the new milestone
           return this.execute(state);
@@ -195,6 +231,8 @@ export class TacticalPlannerNode extends BaseNode {
         toolHints: [],
         status: 'in_progress',
       }],
+      recommendedTools: [],
+      recommendedSkills: [],
     };
 
     state.metadata.tacticalPlan = fallbackPlan;
@@ -212,33 +250,11 @@ export class TacticalPlannerNode extends BaseNode {
     milestone: { id: string; title: string; description: string; successCriteria: string },
     state: ThreadState,
   ): Promise<TacticalPlan | null> {
-    // Get available tools for context
-    registerDefaultTools();
-    const registry = getToolRegistry();
-    const categoryNames = registry.listCategories();
-    const categories = categoryNames.map(name => ({
-      name,
-      tools: registry.listByCategory(name),
-    }));
-    
-    const categoryIndex = categories
-      .map(c => `- ${c.name}`)
-      .join('\n');
-
-    const toolsBlock = categories
-      .flatMap(c => c.tools.map(t => `  - ${t.name}`))
-      .slice(0, 30) // Limit to avoid token overflow
-      .join('\n');
-
-    // Get conversation context
-    const lastUserMessage = state.messages.filter(m => m.role === 'user').pop();
-    const userRequest = lastUserMessage?.content || '';
-
     // Get strategic context
     const strategicPlan = state.metadata.strategicPlan;
     const goal = strategicPlan?.goal || '';
 
-    const prompt = `The user has provided this query: "${ userRequest }".
+    const basePrompt = `Based on the conversation above, create a tactical plan for the current milestone.
 
 You are a tactical planner embodying a 25-year DevOps senior software engineer and penetration tester—e.g., hardened systems for Body Glove's e-com (zero-downtime deploys via Kubernetes, shell-automated CI/CD), pen-tested Zappos funnels for vulns yielding 99.9% uptime. Be ultra-determined: relentlessly pursue milestone via shell-level ops, app access (e.g., invoke any local binary/script via exec), and custom tool-building (e.g., script quick Python/Rust utils for gaps). Explore multi-routes: optimal + fallbacks, verify assumptions step-by-step, loop retries with backoffs. Discard guesses; probe/validate like pros who've secured 1000+ setups.
 
@@ -250,11 +266,7 @@ Title: ${milestone.title}
 Description: ${milestone.description}
 Success Criteria: ${milestone.successCriteria}
 
-## Available Tool Categories
-${categoryIndex}
-
-## Available Tools (sample)
-${toolsBlock} — plus full shell access: treat as gateway to all local apps/binaries (e.g., curl, git, docker, custom scripts). Build ephemeral tools if needed (e.g., "write+exec shell script to parse logs").
+Build your own ephemeral tools if needed (e.g., "write+exec shell script to parse logs").
 
 ## Your Approach
 1. **Deconstruct Milestone**: Atomic steps—start with shell probes to confirm env/state.
@@ -286,28 +298,40 @@ ${toolsBlock} — plus full shell access: treat as gateway to all local apps/bin
       "description": "Detailed description of what this step does",
       "toolHints": ["tool_name_if_applicable"]
     }
-  ]
+  ],
+  "recommendedTools": ["tool_name_1", "tool_name_2"],
+  "recommendedSkills": ["skill_id_1", "skill_id_2"]
 }
 
-Respond with JSON only.`;
+IMPORTANT: You MUST include "recommendedTools" and "recommendedSkills" arrays listing ALL tools and skills you think will be needed to complete this milestone. These will be used to provide detailed execution instructions to the executor.
+
+CRITICAL: You MUST respond with ONLY valid JSON. No markdown, no explanation, no conversation. Start your response with { and end with }. Any non-JSON response will cause a system failure.`;
+
+    const prompt = await this.enrichPrompt(basePrompt, state, {
+      requireJson: true,
+      includeSoul: true,
+      includeAwareness: true,
+      includeTools: true,
+      toolDetail: 'tactical',
+      includeSkills: true,
+      includeStrategicPlan: true,
+    });
+
+    console.log(`[Agent:TacticalPlanner] Prompt (plain text):\n${prompt}`);
 
     try {
-      const response = await this.prompt(prompt, state);
+      const response = await this.prompt(prompt, state, false);
 
       if (!response?.content) {
         console.warn('[Agent:TacticalPlanner] No response from LLM');
         return null;
       }
 
-      const jsonMatch = response.content.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) {
-        console.warn('[Agent:TacticalPlanner] No JSON found in response');
-        return null;
-      }
-
-      const parsed = this.tryParseJson(jsonMatch[0]);
+      console.log(`[Agent:TacticalPlanner] LLM response:\n${response.content.substring(0, 1000)}`);
+      
+      const parsed = this.parseFirstJSONObject<any>(response.content);
       if (!parsed || !Array.isArray(parsed.steps)) {
-        console.warn('[Agent:TacticalPlanner] Invalid plan structure');
+        console.warn('[Agent:TacticalPlanner] Invalid plan structure, response:', response.content.substring(0, 500));
         return null;
       }
 
@@ -320,9 +344,14 @@ Respond with JSON only.`;
         status: 'pending' as const,
       }));
 
+      const recommendedTools = Array.isArray(parsed.recommendedTools) ? parsed.recommendedTools.filter((t: unknown) => typeof t === 'string') : [];
+      const recommendedSkills = Array.isArray(parsed.recommendedSkills) ? parsed.recommendedSkills.filter((s: unknown) => typeof s === 'string') : [];
+
       return {
         milestoneId: milestone.id,
         steps,
+        recommendedTools,
+        recommendedSkills,
       };
 
     } catch (err) {
@@ -331,16 +360,4 @@ Respond with JSON only.`;
     }
   }
 
-  private tryParseJson(jsonStr: string): any {
-    try {
-      return JSON.parse(jsonStr);
-    } catch {
-      try {
-        const repaired = jsonrepair(jsonStr);
-        return JSON.parse(repaired);
-      } catch {
-        return null;
-      }
-    }
-  }
 }

@@ -10,7 +10,7 @@ export class CalendarUpdateEventTool extends BaseTool {
 
   override getPlanningInstructions(): string {
     return [
-      '1) calendar_update_event',
+      '41) calendar_update_event',
       '   - Purpose: Update an existing calendar event.',
       '   - Args:',
       '     - id (number, required): Event ID to update',

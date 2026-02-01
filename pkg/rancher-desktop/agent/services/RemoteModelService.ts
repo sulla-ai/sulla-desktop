@@ -165,7 +165,9 @@ class RemoteModelServiceClass implements ILLMService {
   }
 
   /**
-   * Check if an error is retryable (network errors or server errors)
+   * Check if an error is retryable (network errors, rate limiting)
+   * Note: 503 errors should NOT be retried - they indicate service unavailability
+   * and should fall back to local immediately
    */
   private isRetryableError(err: unknown): boolean {
     if (err instanceof TypeError && err.message === 'Failed to fetch') {
@@ -184,13 +186,25 @@ class RemoteModelServiceClass implements ILLMService {
         return true;
       }
       
-      // Server errors (5xx) are retryable
-      if (msg.includes('500') || msg.includes('502') || msg.includes('503') || msg.includes('504')) {
-        return true;
-      }
-      
       // Rate limiting is retryable
       if (msg.includes('429') || msg.includes('rate limit')) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  /**
+   * Check if an error should trigger immediate fallback (no retry)
+   * 503 Service Unavailable means the service is at capacity - don't waste time retrying
+   */
+  private shouldImmediateFallback(err: unknown): boolean {
+    if (err instanceof Error) {
+      const msg = err.message.toLowerCase();
+
+      // 503 Service Unavailable - immediate fallback, no retry
+      if (msg.includes('503') || msg.includes('service unavailable') || msg.includes('at capacity')) {
         return true;
       }
     }
@@ -318,6 +332,11 @@ class RemoteModelServiceClass implements ILLMService {
 
       console.error(`[RemoteModelService] OpenAI API error: ${res.status}`, errorText);
 
+      // Throw error for server errors (5xx) so retry/fallback logic can handle them
+      if (res.status >= 500 && res.status < 600) {
+        throw new Error(`Server error ${res.status}: ${errorText}`);
+      }
+
       return null;
     }
 
@@ -365,6 +384,11 @@ class RemoteModelServiceClass implements ILLMService {
 
       console.error(`[RemoteModelService] Anthropic API error: ${res.status}`, errorText);
 
+      // Throw error for server errors (5xx) so retry/fallback logic can handle them
+      if (res.status >= 500 && res.status < 600) {
+        throw new Error(`Server error ${res.status}: ${errorText}`);
+      }
+
       return null;
     }
 
@@ -410,6 +434,11 @@ class RemoteModelServiceClass implements ILLMService {
       const errorText = await res.text();
 
       console.error(`[RemoteModelService] Google API error: ${res.status}`, errorText);
+
+      // Throw error for server errors (5xx) so retry/fallback logic can handle them
+      if (res.status >= 500 && res.status < 600) {
+        throw new Error(`Server error ${res.status}: ${errorText}`);
+      }
 
       return null;
     }

@@ -206,60 +206,6 @@ export class Graph {
 }
 
 /**
- * Create the default agent graph (legacy flat planning)
- * Flow: Memory → Planner → Executor → Critic → (loop to Planner or END)
- */
-export function createDefaultGraph(): Graph {
-  // Import nodes dynamically to avoid circular deps
-  const { MemoryNode, PlannerNode, ExecutorNode, CriticNode, FinalCriticNode } = require('./nodes');
-  const { registerDefaultTools } = require('./tools');
-
-  const graph = new Graph();
-
-  registerDefaultTools();
-
-  // Add nodes
-  graph.addNode(new MemoryNode());
-  graph.addNode(new PlannerNode());
-  graph.addNode(new ExecutorNode());
-  graph.addNode(new CriticNode());
-  graph.addNode(new FinalCriticNode());
-
-  // Add edges: Memory → Planner → Executor → Critic
-  graph.addEdge('memory_recall', 'planner');
-  graph.addEdge('planner', 'executor');
-  graph.addEdge('executor', 'critic');
-
-  // Conditional edge from Critic: loop back to Planner, continue executing todos, or run final critic
-  graph.addConditionalEdge('critic', (state: ThreadState) => {
-    const decision = state.metadata.criticDecision;
-
-    if (decision === 'revise') {
-      return 'planner';
-    }
-
-    if (state.metadata.planHasRemainingTodos) {
-      return 'executor';
-    }
-
-    return 'final_critic';
-  });
-
-  graph.addConditionalEdge('final_critic', (state: ThreadState) => {
-    if (state.metadata.finalCriticDecision === 'revise') {
-      return 'planner';
-    }
-    return 'end';
-  });
-
-  // Set entry and end points
-  graph.setEntryPoint('memory_recall');
-  graph.setEndPoints('final_critic');
-
-  return graph;
-}
-
-/**
  * Create the hierarchical planning graph
  * Flow: Memory → StrategicPlanner → [TacticalPlanner → Executor → Critic] → FinalCritic
  * 

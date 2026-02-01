@@ -103,7 +103,7 @@ export class CriticNode extends BaseNode {
         threadId: state.threadId,
         data:     { phase: 'critic_decision', decision: 'revise', reason },
       });
-      return { state, next: 'planner' };
+      return { state, next: 'tactical_planner' };
     }
 
     const revisionCount = (state.metadata.revisionCount as number) || 0;
@@ -285,7 +285,7 @@ export class CriticNode extends BaseNode {
       data:     { phase: 'critic_decision', decision: 'revise', reason },
     });
 
-    return { state, next: 'planner' };
+    return { state, next: 'tactical_planner' };
   }
 
   private async evaluateWithLLM(
@@ -300,22 +300,11 @@ export class CriticNode extends BaseNode {
       activePlanId: number | null;
     },
   ): Promise<CriticLLMResponse> {
-    // Build conversation history (user/assistant only)
-    const userAssistantMessages = state.messages.filter(m => m.role === 'user' || m.role === 'assistant');
-    const recentMessages = userAssistantMessages.slice(-10);
-    const conversationHistory = recentMessages.length > 0
-      ? recentMessages.map(m => `${m.role}: ${m.content}`).join('\n\n')
-      : 'No conversation history available.';
-
-    // Get the original user request
-    const lastUserMessage = state.messages.filter(m => m.role === 'user').pop();
-    const userRequest = lastUserMessage?.content || 'Unknown request';
-
     // Get the plan goal if available
     const plan = state.metadata.plan as { fullPlan?: { goal?: string } } | undefined;
     const planGoal = plan?.fullPlan?.goal || 'No explicit goal set';
 
-    const prompt = `The user has provided this query: "${ userRequest }".
+    const basePrompt = `Based on the conversation above, evaluate whether the milestone was completed successfully.
     
 You are the Critic: a 25-year senior DevOps & QA engineer who has audited 1000+ mission-critical pipelines (e.g., Body Glove zero-downtime deploys, ClientBasis lead-scoring accuracy at 98%+). Ruthless precision: approve only when milestone success criteria are verifiably 100% met. Partial completion = revision — especially batch ops, data integrity, or security-sensitive tasks.
 
@@ -352,6 +341,17 @@ Guidelines:
 - Quote exact tool output or criteria when justifying
 - Pragmatic only on cosmetic issues; core outcome is non-negotiable`;
 
+    const prompt = await this.enrichPrompt(basePrompt, state, {
+      includeSoul: true,
+      includeAwareness: true,
+      includeMemory: true,
+      includeTools: true,
+      toolDetail: 'names',
+      includeSkills: true,
+      includeStrategicPlan: true,
+      includeTacticalPlan: true,
+    });
+
     try {
       const response = await this.prompt(prompt, state);
       if (!response?.content) {
@@ -359,13 +359,11 @@ Guidelines:
         return this.fallbackHeuristic(context);
       }
 
-      const jsonMatch = response.content.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) {
+      const parsed = this.parseFirstJSONObject<Partial<CriticLLMResponse>>(response.content);
+      if (!parsed) {
         console.warn('[Agent:Critic] Could not parse LLM response, defaulting to heuristic');
         return this.fallbackHeuristic(context);
       }
-
-      const parsed = JSON.parse(jsonMatch[0]) as Partial<CriticLLMResponse>;
       
       if (parsed.decision !== 'approve' && parsed.decision !== 'revise') {
         console.warn('[Agent:Critic] Invalid decision from LLM, defaulting to heuristic');

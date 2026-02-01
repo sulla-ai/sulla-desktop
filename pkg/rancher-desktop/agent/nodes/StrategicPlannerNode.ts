@@ -6,7 +6,6 @@ import type { ThreadState, NodeResult } from '../types';
 import { BaseNode } from './BaseNode';
 import { getPlanService } from '../services/PlanService';
 import { getAwarenessService } from '../services/AwarenessService';
-import { jsonrepair } from 'jsonrepair';
 
 interface StrategicPlan {
   // The primary goal the user wants to achieve
@@ -51,8 +50,6 @@ export class StrategicPlannerNode extends BaseNode {
       return { state, next: 'end' };
     }
 
-    // Build conversation context
-    const conversationContext = this.buildConversationContext(state);
     console.log(`[Agent:StrategicPlanner] Context: ${state.messages.length} messages, thread: ${state.threadId}`);
 
     // Check if we're revising an existing plan
@@ -61,8 +58,6 @@ export class StrategicPlannerNode extends BaseNode {
 
     // Generate strategic plan
     const strategicPlan = await this.generateStrategicPlan(
-      lastUserMessage.content,
-      conversationContext,
       state,
       revisionContext ? String((revisionContext as any).reason || '') : undefined,
     );
@@ -177,6 +172,9 @@ export class StrategicPlannerNode extends BaseNode {
               console.log(`[Agent:StrategicPlanner] Plan created: planId=${created.planId}`);
               state.metadata.activePlanId = created.planId;
 
+              // Store created todos for milestone mapping
+              (state.metadata as any)._createdTodos = created.todos;
+
               emit?.({
                 type: 'progress',
                 threadId: state.threadId,
@@ -218,13 +216,19 @@ export class StrategicPlannerNode extends BaseNode {
         }
 
         // Store strategic plan in state for tactical planner
+        // Map DB todoIds to milestones so we can emit todo_status events later
+        const createdTodos = ((state.metadata as any)._createdTodos as Array<{ todoId: number; title: string; orderIndex: number }>) || [];
         state.metadata.strategicPlan = {
           goal: strategicPlan.goal,
           goalDescription: strategicPlan.goalDescription,
-          milestones: strategicPlan.milestones.map(m => ({
-            ...m,
-            status: 'pending' as const,
-          })),
+          milestones: strategicPlan.milestones.map((m, idx) => {
+            const dbTodo = createdTodos.find(t => t.orderIndex === idx);
+            return {
+              ...m,
+              status: 'pending' as const,
+              todoId: dbTodo?.todoId, // DB todoId for UI events
+            };
+          }),
           requiresTools: strategicPlan.requiresTools,
           estimatedComplexity: strategicPlan.estimatedComplexity,
         };
@@ -299,26 +303,11 @@ export class StrategicPlannerNode extends BaseNode {
     return { state, next: 'continue' };
   }
 
-  private buildConversationContext(state: ThreadState): string {
-    const recentMessages = state.messages.slice(-10);
-    if (recentMessages.length === 0) {
-      return 'No prior conversation.';
-    }
-
-    return recentMessages
-      .map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`)
-      .join('\n\n');
-  }
-
   private async generateStrategicPlan(
-    userMessage: string,
-    conversationContext: string,
     state: ThreadState,
     revisionReason?: string,
   ): Promise<StrategicPlan | null> {
-    const memoryContext = state.metadata.memoryContext || '';
-
-    const prompt = `The user has provided this query: "${ userMessage }".
+    const basePrompt = `Based on the conversation above, create a strategic plan.
 
 You are an expert strategic planner with 20+ years across industries—tech (e.g., Amazon's predictive scaling for 40% efficiency gains), retail (Zappos' personalization driving 30% repeats), nonprofits (SWOT-led 25% donation boosts). Avoid novice pitfalls like generic steps; craft high-leverage, low-risk plans from battle-tested tactics that deliver 2-5x results. Expose blind spots, rethink assumptions, use foresight for lifelike overdelivery.
 
@@ -330,11 +319,6 @@ You are an expert strategic planner with 20+ years across industries—tech (e.g
 5. **Work Backwards**: From enhanced goal, map milestones with efficiencies.
 6. **First Principles**: Deconstruct to core checkpoints, embedding shortcuts.
 7. **Success Criteria**: Use the SMARTER goals framework for Specific Measurable Achievable Relevant Time-bound Emotionally compelling and Rewarding.
-
-${memoryContext ? `## Relevant Memory Context\n${memoryContext}\n` : ''}
-
-## Conversation History
-${conversationContext}
 
 ${revisionReason ? `## Revision Required\nThe previous plan needs revision because: ${revisionReason}\n` : ''}
 
@@ -368,25 +352,34 @@ ${revisionReason ? `## Revision Required\nThe previous plan needs revision becau
   }
 }
 
-Respond with JSON only.`;
+CRITICAL: You MUST respond with ONLY valid JSON. No markdown, no explanation, no conversation. Start your response with { and end with }. Any non-JSON response will cause a system failure.`;
+
+    const prompt = await this.enrichPrompt(basePrompt, state, {
+      requireJson: true,
+      includeSoul: true,
+      includeAwareness: true,
+      includeMemory: true,
+      includeTools: true,
+      toolDetail: 'names',
+      includeSkills: true,
+      includeStrategicPlan: false,
+    });
+
+    console.log(`[Agent:StrategicPlanner] Prompt (plain text):\n${prompt}`);
 
     try {
-      const response = await this.prompt(prompt, state);
+      const response = await this.prompt(prompt, state, false);
 
       if (!response?.content) {
         console.warn('[Agent:StrategicPlanner] No response from LLM');
         return null;
       }
 
-      const jsonMatch = response.content.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) {
-        console.warn('[Agent:StrategicPlanner] No JSON found in response');
-        return null;
-      }
-
-      const plan = this.tryParseJson(jsonMatch[0]);
+      console.log(`[Agent:StrategicPlanner] LLM response:\n${response.content.substring(0, 1000)}`);
+      
+      const plan = this.parseFirstJSONObject<any>(response.content);
       if (!plan) {
-        console.warn('[Agent:StrategicPlanner] Failed to parse plan JSON');
+        console.warn('[Agent:StrategicPlanner] Failed to parse plan JSON from response:', response.content.substring(0, 500));
         return null;
       }
 
@@ -418,16 +411,4 @@ Respond with JSON only.`;
     }
   }
 
-  private tryParseJson(jsonStr: string): any {
-    try {
-      return JSON.parse(jsonStr);
-    } catch {
-      try {
-        const repaired = jsonrepair(jsonStr);
-        return JSON.parse(repaired);
-      } catch {
-        return null;
-      }
-    }
-  }
 }

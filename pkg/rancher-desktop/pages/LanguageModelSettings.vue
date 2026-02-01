@@ -145,6 +145,9 @@ export default defineComponent({
       apiKeyVisible:        false,
       remoteRetryCount:     3, // Number of retries before falling back to local LLM
       remoteTimeoutSeconds: 60, // Remote API timeout limit in seconds
+      // Local Ollama settings
+      localTimeoutSeconds:  120, // Local Ollama timeout limit in seconds
+      localRetryCount:      2, // Number of retries for local Ollama
       // Heartbeat settings
       heartbeatEnabled:     true,
       heartbeatDelayMinutes: 30,
@@ -239,6 +242,12 @@ export default defineComponent({
       }
       if (settings.experimental?.remoteTimeoutSeconds !== undefined) {
         this.remoteTimeoutSeconds = settings.experimental.remoteTimeoutSeconds;
+      }
+      if (settings.experimental?.localTimeoutSeconds !== undefined) {
+        this.localTimeoutSeconds = settings.experimental.localTimeoutSeconds;
+      }
+      if (settings.experimental?.localRetryCount !== undefined) {
+        this.localRetryCount = settings.experimental.localRetryCount;
       }
       if (settings.experimental?.heartbeatEnabled !== undefined) {
         this.heartbeatEnabled = settings.experimental.heartbeatEnabled;
@@ -607,6 +616,8 @@ export default defineComponent({
           remoteApiKey:          this.apiKey,
           remoteRetryCount:      this.remoteRetryCount,
           remoteTimeoutSeconds:  this.remoteTimeoutSeconds,
+          localTimeoutSeconds:   this.localTimeoutSeconds,
+          localRetryCount:       this.localRetryCount,
           heartbeatEnabled:      this.heartbeatEnabled,
           heartbeatDelayMinutes: this.heartbeatDelayMinutes,
           heartbeatPrompt:       this.heartbeatPrompt,
@@ -878,6 +889,42 @@ export default defineComponent({
                   ✓ Model is installed and ready to use.
                 </p>
               </div>
+            </div>
+
+            <!-- Timeout Limit (seconds) -->
+            <div class="setting-group">
+              <label class="setting-label">Timeout Limit (seconds)</label>
+              <div class="timeout-input">
+                <input
+                  v-model.number="localTimeoutSeconds"
+                  type="number"
+                  class="text-input"
+                  min="10"
+                  max="600"
+                  style="width: 120px;"
+                >
+              </div>
+              <p class="setting-description">
+                Timeout limit for local Ollama API calls (in seconds). Default is 120 seconds.
+              </p>
+            </div>
+
+            <!-- Retry Count -->
+            <div class="setting-group">
+              <label class="setting-label">Retry Count</label>
+              <div class="retry-input">
+                <input
+                  v-model.number="localRetryCount"
+                  type="number"
+                  class="text-input"
+                  min="0"
+                  max="10"
+                  style="width: 80px;"
+                >
+              </div>
+              <p class="setting-description">
+                Number of retries for failed local Ollama requests. Set to 0 to disable retries.
+              </p>
             </div>
 
           </template>

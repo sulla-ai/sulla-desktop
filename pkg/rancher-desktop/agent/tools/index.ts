@@ -41,6 +41,13 @@ import { CalendarGetEventTool } from './CalendarGetEventTool';
 import { CalendarCreateEventTool } from './CalendarCreateEventTool';
 import { CalendarUpdateEventTool } from './CalendarUpdateEventTool';
 import { CalendarDeleteEventTool } from './CalendarDeleteEventTool';
+import { SkillRunPluginTool } from './SkillRunPluginTool';
+import { SkillListTool } from './SkillListTool';
+import { SkillListEnabledTool } from './SkillListEnabledTool';
+import { SkillInstallTool } from './SkillInstallTool';
+import { SkillEnableTool } from './SkillEnableTool';
+import { SkillDisableTool } from './SkillDisableTool';
+import { ToolListTool } from './ToolListTool';
 
 let registered = false;
 
@@ -84,6 +91,13 @@ export function registerDefaultTools(): void {
   registry.register(new HostGrepTool());
   registry.register(new HostRunCommandTool());
   registry.register(new HostImageMetadataTool());
+  registry.register(new ToolListTool());
+  registry.register(new SkillListTool());
+  registry.register(new SkillListEnabledTool());
+  registry.register(new SkillInstallTool());
+  registry.register(new SkillEnableTool());
+  registry.register(new SkillDisableTool());
+  registry.register(new SkillRunPluginTool());
   registry.register(new EmitChatMessageTool());
   registry.register(new EmitChatImageTool());
   registry.register(new CalendarListEventsTool());

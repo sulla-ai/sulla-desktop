@@ -2,7 +2,7 @@
 // Handles all Ollama operations with consistent error handling
 // Implements ILLMService for interchangeable use with RemoteModelService
 
-import { getOllamaModel, getOllamaBase } from './ConfigService';
+import { getOllamaModel, getOllamaBase, getLocalConfig } from './ConfigService';
 import type { ILLMService, ChatMessage } from './ILLMService';
 
 interface GenerateResponse {
@@ -140,11 +140,12 @@ class OllamaServiceClass implements ILLMService {
         stream: false,
       };
 
+      const { timeoutSeconds } = getLocalConfig();
       const res = await fetch(`${this.getBaseUrl()}/api/generate`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify(body),
-        signal:  AbortSignal.timeout(30000),
+        signal:  AbortSignal.timeout(timeoutSeconds * 1000),
       });
 
       if (res.ok) {
@@ -154,6 +155,33 @@ class OllamaServiceClass implements ILLMService {
       }
     } catch (err) {
       console.warn('[OllamaService] Generate failed:', err);
+    }
+
+    return null;
+  }
+
+  async chatWithModel(messages: ChatMessage[], modelName: string): Promise<string | null> {
+    try {
+      const body: Record<string, unknown> = {
+        model: modelName,
+        messages,
+        stream: false,
+      };
+
+      const { timeoutSeconds } = getLocalConfig();
+      const res = await fetch(`${this.getBaseUrl()}/api/chat`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify(body),
+        signal:  AbortSignal.timeout(timeoutSeconds * 1000),
+      });
+
+      if (res.ok) {
+        const data: ChatResponse = await res.json();
+        return data.message?.content?.trim() || null;
+      }
+    } catch (err) {
+      console.warn('[OllamaService] Chat (model override) failed:', err);
     }
 
     return null;
@@ -170,11 +198,12 @@ class OllamaServiceClass implements ILLMService {
         stream: false,
       };
 
+      const { timeoutSeconds } = getLocalConfig();
       const res = await fetch(`${this.getBaseUrl()}/api/chat`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify(body),
-        signal:  AbortSignal.timeout(60000),
+        signal:  AbortSignal.timeout(timeoutSeconds * 1000),
       });
 
       if (res.ok) {

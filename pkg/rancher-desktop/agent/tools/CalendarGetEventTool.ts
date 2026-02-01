@@ -10,7 +10,7 @@ export class CalendarGetEventTool extends BaseTool {
 
   override getPlanningInstructions(): string {
     return [
-      '1) calendar_get_event',
+      '39) calendar_get_event',
       '   - Purpose: Get details of a specific calendar event by ID.',
       '   - Args:',
       '     - id (number, required): Event ID to retrieve',

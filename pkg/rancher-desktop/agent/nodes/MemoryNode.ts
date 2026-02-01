@@ -111,9 +111,9 @@ export class MemoryNode extends BaseNode {
       ? `Available collections: ${ collections.join(', ') }`
       : 'No collections available';
 
-    const prompt = `The user has provided this query: "${ userQuery }".
+    const basePrompt = `Based on the conversation above, determine if long-term memory search is needed.
 
-Before searching memory, outline 3-5 key elements of a potential strategic plan (e.g., goals, steps, risks, resources, metrics) to accomplish this.
+Before searching memory, outline 3-5 key elements of a potential strategic plan (e.g., goals, steps, risks, resources, metrics) to accomplish the user's request.
 
 From that outline, derive what info from long-term memory would make the plan feasible—focus on gaps in knowledge, precedents, or assets.
 
@@ -130,6 +130,17 @@ Respond in JSON format only:
 }
 `;
 
+    const prompt = await this.enrichPrompt(basePrompt, state, {
+      includeSoul: true,
+      includeAwareness: true,
+      includeTools: true,
+      toolDetail: 'names',
+      includeSkills: true,
+      includeStrategicPlan: true,
+    });
+
+    console.log(`[Agent:Memory] Prompt (plain text):\n${prompt}`);
+
     // Use BaseNode's promptJSON helper
     const parsed = await this.promptJSON<{
       needsMemory?: boolean;
@@ -138,7 +149,7 @@ Respond in JSON format only:
       whereClause?: Record<string, unknown>;
       candidateLimit?: number;
       reasoning?: string;
-    }>(prompt);
+    }>(prompt, state);
 
     if (!parsed) {
       return this.fallbackSearchPlan(userQuery);

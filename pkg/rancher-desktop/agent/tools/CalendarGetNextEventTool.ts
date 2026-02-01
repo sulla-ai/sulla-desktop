@@ -10,7 +10,7 @@ export class CalendarGetNextEventTool extends BaseTool {
 
   override getPlanningInstructions(): string {
     return [
-      '1) calendar_get_next_event',
+      '38) calendar_get_next_event',
       '   - Purpose: Get the next upcoming calendar event.',
       '   - Args: none',
       '   - Output: The next calendar event with id, title, start, end, location, description, or null if none.',

@@ -10,7 +10,7 @@ export class CalendarDeleteEventTool extends BaseTool {
 
   override getPlanningInstructions(): string {
     return [
-      '1) calendar_delete_event',
+      '42) calendar_delete_event',
       '   - Purpose: Delete a calendar event.',
       '   - Args:',
       '     - id (number, required): Event ID to delete',

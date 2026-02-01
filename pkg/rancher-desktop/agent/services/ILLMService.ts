@@ -66,6 +66,8 @@ export interface LLMConfig {
   // Local (Ollama) settings
   localModel: string;
   ollamaBase: string;
+  localTimeoutSeconds?: number;
+  localRetryCount?: number;
   // Remote settings
   remoteProvider: string;
   remoteModel: string;
