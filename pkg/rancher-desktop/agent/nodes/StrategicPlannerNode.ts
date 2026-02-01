@@ -4,8 +4,7 @@
 
 import type { ThreadState, NodeResult } from '../types';
 import { BaseNode, JSON_ONLY_RESPONSE_INSTRUCTIONS } from './BaseNode';
-import { getPlanService } from '../services/PlanService';
-import { getAwarenessService } from '../services/AwarenessService';
+import { StrategicStateService, type StrategicPlanData } from '../services/StrategicStateService';
 
 interface StrategicPlan {
   // The primary goal the user wants to achieve
@@ -73,8 +72,8 @@ export class StrategicPlannerNode extends BaseNode {
       if (strategicPlan.planNeeded && strategicPlan.milestones.length > 0) {
         // Persist to database - milestones become the high-level todos
         try {
-          const planService = getPlanService();
-          await planService.initialize();
+          const strategicState = StrategicStateService.fromThreadState(state);
+          await strategicState.initialize();
 
           const todos = strategicPlan.milestones.map((m, idx) => ({
             title: m.title,
@@ -83,7 +82,7 @@ export class StrategicPlannerNode extends BaseNode {
             categoryHints: [], // Strategic milestones don't have tool hints
           }));
 
-          const planData = {
+          const planData: StrategicPlanData = {
             type: 'strategic',
             goal: strategicPlan.goal,
             goalDescription: strategicPlan.goalDescription,
@@ -94,116 +93,29 @@ export class StrategicPlannerNode extends BaseNode {
           if (priorPlanId && revisionContext) {
             // Revise existing plan
             console.log(`[Agent:StrategicPlanner] Revising plan ${priorPlanId}`);
-            const revised = await planService.revisePlan({
-              planId: priorPlanId,
+            const revised = await strategicState.revisePlan({
+              planId: Number(priorPlanId),
               data: planData,
-              todos,
+              milestones: todos.map(t => ({ title: t.title, description: t.description, orderIndex: t.orderIndex })),
               eventData: { revision_reason: (revisionContext as any).reason },
             });
 
             if (revised) {
               console.log(`[Agent:StrategicPlanner] Plan revised: planId=${revised.planId} revision=${revised.revision}`);
               state.metadata.activePlanId = revised.planId;
-
-              emit?.({
-                type: 'progress',
-                threadId: state.threadId,
-                data: {
-                  phase: 'plan_revised',
-                  planId: revised.planId,
-                  revision: revised.revision,
-                  goal: strategicPlan.goal,
-                },
-              });
-
-              for (const t of revised.todosCreated) {
-                emit?.({
-                  type: 'progress',
-                  threadId: state.threadId,
-                  data: {
-                    phase: 'todo_created',
-                    planId: revised.planId,
-                    todoId: t.todoId,
-                    title: t.title,
-                    orderIndex: t.orderIndex,
-                    status: t.status,
-                  },
-                });
-              }
-
-              for (const t of revised.todosUpdated) {
-                emit?.({
-                  type: 'progress',
-                  threadId: state.threadId,
-                  data: {
-                    phase: 'todo_updated',
-                    planId: revised.planId,
-                    todoId: t.todoId,
-                    title: t.title,
-                    orderIndex: t.orderIndex,
-                    status: t.status,
-                  },
-                });
-              }
-
-              for (const todoId of revised.todosDeleted) {
-                emit?.({
-                  type: 'progress',
-                  threadId: state.threadId,
-                  data: {
-                    phase: 'todo_deleted',
-                    planId: revised.planId,
-                    todoId,
-                  },
-                });
-              }
             }
           } else {
             // Create new plan
             console.log(`[Agent:StrategicPlanner] Creating new strategic plan`);
-            const created = await planService.createPlan({
-              threadId: state.threadId,
+            const createdPlanId = await strategicState.createPlan({
               data: planData,
-              todos,
+              milestones: todos.map(t => ({ title: t.title, description: t.description, orderIndex: t.orderIndex })),
               eventData: { goal: strategicPlan.goal },
             });
 
-            if (created) {
-              console.log(`[Agent:StrategicPlanner] Plan created: planId=${created.planId}`);
-              state.metadata.activePlanId = created.planId;
-
-              // Store created todos for milestone mapping
-              (state.metadata as any)._createdTodos = created.todos;
-
-              emit?.({
-                type: 'progress',
-                threadId: state.threadId,
-                data: {
-                  phase: 'plan_created',
-                  planId: created.planId,
-                  goal: strategicPlan.goal,
-                },
-              });
-
-              for (const t of created.todos) {
-                emit?.({
-                  type: 'progress',
-                  threadId: state.threadId,
-                  data: {
-                    phase: 'todo_created',
-                    planId: created.planId,
-                    todoId: t.todoId,
-                    title: t.title,
-                    orderIndex: t.orderIndex,
-                    status: 'pending',
-                  },
-                });
-              }
-
-              // Update awareness
-              const awareness = getAwarenessService();
-              await awareness.initialize();
-              await awareness.update({ active_plan_ids: [String(created.planId)] });
+            if (createdPlanId) {
+              console.log(`[Agent:StrategicPlanner] Plan created: planId=${createdPlanId}`);
+              state.metadata.activePlanId = createdPlanId;
             }
           }
 
@@ -217,16 +129,16 @@ export class StrategicPlannerNode extends BaseNode {
 
         // Store strategic plan in state for tactical planner
         // Map DB todoIds to milestones so we can emit todo_status events later
-        const createdTodos = ((state.metadata as any)._createdTodos as Array<{ todoId: number; title: string; orderIndex: number }>) || [];
+        const strategicStateForMapping = StrategicStateService.fromThreadState(state);
+        await strategicStateForMapping.initialize();
         state.metadata.strategicPlan = {
           goal: strategicPlan.goal,
           goalDescription: strategicPlan.goalDescription,
           milestones: strategicPlan.milestones.map((m, idx) => {
-            const dbTodo = createdTodos.find(t => t.orderIndex === idx);
             return {
               ...m,
               status: 'pending' as const,
-              todoId: dbTodo?.todoId, // DB todoId for UI events
+              todoId: strategicStateForMapping.getTodoIdByOrderIndex(idx), // DB todoId for UI events
             };
           }),
           requiresTools: strategicPlan.requiresTools,
@@ -244,7 +156,7 @@ export class StrategicPlannerNode extends BaseNode {
           };
         }
 
-        state.metadata.planHasRemainingTodos = true;
+        state.metadata.planHasRemainingTodos = strategicStateForMapping.hasRemainingTodos();
 
         emit?.({
           type: 'progress',

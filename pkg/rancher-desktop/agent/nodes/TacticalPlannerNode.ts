@@ -5,6 +5,7 @@
 import type { ThreadState, NodeResult } from '../types';
 import { BaseNode, JSON_ONLY_RESPONSE_INSTRUCTIONS } from './BaseNode';
 import { registerDefaultTools } from '../tools';
+import { StrategicStateService } from '../services/StrategicStateService';
 
 interface TacticalStep {
   id: string;
@@ -36,6 +37,9 @@ export class TacticalPlannerNode extends BaseNode {
     const activeMilestone = state.metadata.activeMilestone;
     const strategicPlan = state.metadata.strategicPlan;
 
+    const strategicState = StrategicStateService.fromThreadState(state);
+    await strategicState.initialize();
+
     if (!activeMilestone) {
       console.log(`[Agent:TacticalPlanner] No active milestone, checking for next milestone`);
       
@@ -52,20 +56,18 @@ export class TacticalPlannerNode extends BaseNode {
           // Update milestone status
           nextMilestone.status = 'in_progress';
           console.log(`[Agent:TacticalPlanner] Activated milestone: ${nextMilestone.title}`);
-          // Emit todo_status for UI sidebar (uses DB todoId)
-          const activePlanId = state.metadata.activePlanId as number | undefined;
           const todoId = (nextMilestone as any).todoId as number | undefined;
-          if (activePlanId && todoId) {
-            emit?.({
-              type: 'progress',
-              threadId: state.threadId,
-              data: { phase: 'todo_status', planId: activePlanId, todoId, title: nextMilestone.title, status: 'in_progress' },
-            });
+          if (todoId) {
+            await strategicState.inprogressTodo(todoId, nextMilestone.title);
           }
+          
+          // Continue to plan the milestone
+          return this.execute(state);
         } else {
           // All milestones complete
           console.log(`[Agent:TacticalPlanner] All milestones complete`);
-          state.metadata.planHasRemainingTodos = false;
+          await strategicState.refresh();
+          state.metadata.planHasRemainingTodos = strategicState.hasRemainingTodos();
           return { state, next: 'continue' };
         }
       } else {
@@ -107,21 +109,15 @@ export class TacticalPlannerNode extends BaseNode {
       } else {
         // All steps done - milestone complete
         console.log(`[Agent:TacticalPlanner] All tactical steps complete for milestone: ${milestone.title}`);
-        
+      
         // Mark milestone as completed in strategic plan
         if (strategicPlan?.milestones) {
           const m = strategicPlan.milestones.find(m => m.id === milestone.id);
           if (m) {
             m.status = 'completed';
-            // Emit todo_status for UI sidebar (uses DB todoId)
-            const activePlanIdCompleted = state.metadata.activePlanId as number | undefined;
             const todoIdCompleted = (m as any).todoId as number | undefined;
-            if (activePlanIdCompleted && todoIdCompleted) {
-              emit?.({
-                type: 'progress',
-                threadId: state.threadId,
-                data: { phase: 'todo_status', planId: activePlanIdCompleted, todoId: todoIdCompleted, title: m.title, status: 'done' },
-              });
+            if (todoIdCompleted) {
+              await strategicState.completeTodo(todoIdCompleted, m.title);
             }
           }
         }
@@ -142,15 +138,9 @@ export class TacticalPlannerNode extends BaseNode {
           };
           nextMilestone.status = 'in_progress';
           console.log(`[Agent:TacticalPlanner] Moving to next milestone: ${nextMilestone.title}`);
-          // Emit todo_status for UI sidebar (uses DB todoId)
-          const activePlanIdNext = state.metadata.activePlanId as number | undefined;
           const todoIdNext = (nextMilestone as any).todoId as number | undefined;
-          if (activePlanIdNext && todoIdNext) {
-            emit?.({
-              type: 'progress',
-              threadId: state.threadId,
-              data: { phase: 'todo_status', planId: activePlanIdNext, todoId: todoIdNext, title: nextMilestone.title, status: 'in_progress' },
-            });
+          if (todoIdNext) {
+            await strategicState.inprogressTodo(todoIdNext, nextMilestone.title);
           }
           
           // Recursively plan for the new milestone
@@ -158,7 +148,8 @@ export class TacticalPlannerNode extends BaseNode {
         } else {
           // All milestones complete
           console.log(`[Agent:TacticalPlanner] All milestones complete`);
-          state.metadata.planHasRemainingTodos = false;
+          await strategicState.refresh();
+          state.metadata.planHasRemainingTodos = strategicState.hasRemainingTodos();
           return { state, next: 'continue' };
         }
       }
@@ -207,10 +198,17 @@ export class TacticalPlannerNode extends BaseNode {
         const m = strategicPlan.milestones.find(m => m.id === milestone.id);
         if (m) {
           m.status = 'failed';
+          const todoIdFailed = (m as any).todoId as number | undefined;
+          if (todoIdFailed) {
+            await strategicState.blockTodo(todoIdFailed, 'Tactical planning failed', m.title);
+          }
         }
       }
-      delete state.metadata.activeMilestone;
+      
+      // Clear tactical plan
       delete state.metadata.tacticalPlan;
+      delete state.metadata.activeMilestone;
+      delete state.metadata.activeTacticalStep;
       
       // Check for next milestone
       const nextMilestone = strategicPlan?.milestones?.find(m => m.status === 'pending');

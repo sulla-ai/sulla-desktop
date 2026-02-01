@@ -3,7 +3,7 @@
 
 import type { ThreadState, NodeResult } from '../types';
 import { BaseNode, JSON_ONLY_RESPONSE_INSTRUCTIONS } from './BaseNode';
-import { getPlanService, type TodoStatus } from '../services/PlanService';
+import { StrategicStateService } from '../services/StrategicStateService';
 
 export type CriticDecision = 'approve' | 'revise' | 'reject';
 
@@ -45,6 +45,9 @@ export class CriticNode extends BaseNode {
       ? (state.metadata.todoExecution as any)
       : null;
 
+    const strategicState = StrategicStateService.fromThreadState(state);
+    await strategicState.initialize();
+
     const requestedRevision = state.metadata.requestPlanRevision as { reason?: string } | boolean | undefined;
     if (requestedRevision) {
       const reason = (typeof requestedRevision === 'object' && requestedRevision)
@@ -53,19 +56,9 @@ export class CriticNode extends BaseNode {
 
       // Attach full todo state to the revision feedback so the planner has authoritative context.
       try {
-        if (activePlanId) {
-          const planService = getPlanService();
-          await planService.initialize();
-          const loaded = await planService.getPlan(activePlanId);
-          if (loaded) {
-            const todos = loaded.todos.map(t => ({ id: t.id, title: t.title, status: t.status, orderIndex: t.orderIndex }));
-            state.metadata.revisionFeedback = `${reason}\n\nCurrent todos (all statuses):\n${JSON.stringify(todos, null, 2)}`;
-          } else {
-            state.metadata.revisionFeedback = reason;
-          }
-        } else {
-          state.metadata.revisionFeedback = reason;
-        }
+        const snapshot = strategicState.getSnapshot();
+        const todos = snapshot.todos.map(t => ({ id: t.id, title: t.title, status: t.status, orderIndex: t.orderIndex }));
+        state.metadata.revisionFeedback = `${reason}\n\nCurrent todos (all statuses):\n${JSON.stringify(todos, null, 2)}`;
       } catch {
         state.metadata.revisionFeedback = reason;
       }
@@ -73,25 +66,15 @@ export class CriticNode extends BaseNode {
       // Critic owns status transitions: mark current todo blocked in DB (if we have one)
       if (activeTodo && Number.isFinite(Number(activeTodo.id))) {
         try {
-          const planService = getPlanService();
-          await planService.initialize();
           const todoId = Number(activeTodo.id);
           const title = typeof activeTodo.title === 'string' ? activeTodo.title : '';
-          await planService.updateTodoStatus({
-            todoId,
-            status: 'blocked',
-            eventType: 'todo_status',
-            eventData: { status: 'blocked', reason },
-          });
-          emit?.({
-            type:     'progress',
-            threadId: state.threadId,
-            data:     { phase: 'todo_status', planId: activePlanId, todoId, title, status: 'blocked' },
-          });
+          await strategicState.blockTodo(todoId, reason, title);
         } catch {
           // best effort
         }
       }
+
+      await strategicState.requestRevision(reason);
 
       state.metadata.criticDecision = 'revise';
       state.metadata.criticReason = reason;
@@ -113,22 +96,10 @@ export class CriticNode extends BaseNode {
       
       // Mark the todo as done in the database before auto-approving
       if (activePlanId && activeTodo) {
-        const planService = getPlanService();
         try {
-          await planService.initialize();
           const todoId = Number(activeTodo.id);
           console.log(`[Agent:Critic] Auto-approving todo ${todoId} due to max revisions`);
-          await planService.updateTodoStatus({
-            todoId,
-            status: 'done',
-            eventType: 'todo_completed',
-            eventData: { status: 'done', reason: 'Max revisions reached' },
-          });
-          emit?.({
-            type:     'progress',
-            threadId: state.threadId,
-            data:     { phase: 'todo_status', planId: activePlanId, todoId, title: activeTodo.title, status: 'done' },
-          });
+          await strategicState.completeTodo(todoId, typeof activeTodo.title === 'string' ? activeTodo.title : undefined);
         } catch (err) {
           console.error(`[Agent:Critic] Failed to mark todo as done on max revisions:`, err);
         }
@@ -179,58 +150,27 @@ export class CriticNode extends BaseNode {
     });
 
     if (llmDecision.decision === 'approve') {
-      // Critic owns status transitions: persist done to DB.
-      const planService = getPlanService();
       try {
-        await planService.initialize();
         console.log(`[Agent:Critic] Marking todo ${todoId} as done in database...`);
-        await planService.updateTodoStatus({
-          todoId,
-          status: 'done',
-          eventType: 'todo_completed',
-          eventData: { status: 'done' },
-        });
+        await strategicState.completeTodo(todoId, todoTitle);
         console.log(`[Agent:Critic] Todo ${todoId} marked as done successfully`);
-        emit?.({
-          type:     'progress',
-          threadId: state.threadId,
-          data:     { phase: 'todo_status', planId: activePlanId, todoId, title: todoTitle, status: 'done' },
-        });
       } catch (err) {
         console.error(`[Agent:Critic] Failed to mark todo ${todoId} as done:`, err);
       }
 
       // Check if all todos are now complete - if so, mark plan as completed
       try {
-        const refreshed = await planService.getPlan(activePlanId);
-        const remaining = refreshed
-          ? refreshed.todos.some(t => t.status === 'pending' || t.status === 'in_progress' || t.status === 'blocked')
-          : true;
+        await strategicState.refresh();
+        const remaining = strategicState.hasRemainingTodos();
         state.metadata.planHasRemainingTodos = remaining;
-        
+
         if (!remaining) {
           console.log(`[Agent:Critic] All todos complete, marking plan ${activePlanId} as completed`);
-          await planService.addPlanEvent(activePlanId, 'plan_completed', { reason: 'All todos complete' });
-          await planService.updatePlanStatus(activePlanId, 'completed');
+          await strategicState.markPlanCompleted('All todos complete');
 
           // Clear the active plan pointer so the next user prompt starts a new plan.
           delete (state.metadata as any).activePlanId;
           delete (state.metadata as any).activeTodo;
-
-          emit?.({
-            type:     'progress',
-            threadId: state.threadId,
-            data:     { phase: 'plan_completed', planId: activePlanId },
-          });
-
-          try {
-            const { getAwarenessService } = await import('../services/AwarenessService');
-            const awareness = getAwarenessService();
-            await awareness.initialize();
-            await awareness.update({ active_plan_ids: [] });
-          } catch {
-            // best effort
-          }
         }
       } catch (err) {
         console.warn('[Agent:Critic] Failed to check plan completion:', err);
@@ -255,22 +195,12 @@ export class CriticNode extends BaseNode {
       : llmDecision.reason;
 
     try {
-      const planService = getPlanService();
-      await planService.initialize();
-      await planService.updateTodoStatus({
-        todoId,
-        status: 'blocked',
-        eventType: 'todo_status',
-        eventData: { status: 'blocked', reason },
-      });
-      emit?.({
-        type:     'progress',
-        threadId: state.threadId,
-        data:     { phase: 'todo_status', planId: activePlanId, todoId, title: todoTitle, status: 'blocked' },
-      });
+      await strategicState.blockTodo(todoId, reason, todoTitle);
     } catch {
       // best effort
     }
+
+    await strategicState.requestRevision(reason);
 
     state.metadata.criticDecision = 'revise';
     state.metadata.criticReason = reason;

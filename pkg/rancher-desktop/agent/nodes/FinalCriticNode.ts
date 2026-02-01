@@ -2,7 +2,7 @@
 
 import type { ThreadState, NodeResult } from '../types';
 import { BaseNode, JSON_ONLY_RESPONSE_INSTRUCTIONS } from './BaseNode';
-import { getPlanService } from '../services/PlanService';
+import { StrategicStateService } from '../services/StrategicStateService';
 
 export type FinalCriticDecision = 'approve' | 'revise';
 
@@ -29,11 +29,12 @@ export class FinalCriticNode extends BaseNode {
       return { state, next: 'end' };
     }
 
-    const planService = getPlanService();
-    await planService.initialize();
-    const loaded = await planService.getPlan(activePlanId);
+    const strategicState = StrategicStateService.fromThreadState(state);
+    await strategicState.initialize();
+    await strategicState.refresh();
+    const loaded = strategicState.getSnapshot();
 
-    if (!loaded) {
+    if (!loaded.plan) {
       state.metadata.finalCriticDecision = 'approve';
       state.metadata.finalCriticReason = 'Plan not found; ending';
       return { state, next: 'end' };
@@ -41,7 +42,7 @@ export class FinalCriticNode extends BaseNode {
 
     const goal = typeof (loaded.plan.data as any)?.goal === 'string' ? String((loaded.plan.data as any).goal) : '';
     const todos = loaded.todos.map(t => ({ id: t.id, title: t.title, description: t.description, status: t.status, orderIndex: t.orderIndex }));
-    const anyRemaining = loaded.todos.some(t => t.status === 'pending' || t.status === 'in_progress' || t.status === 'blocked');
+    const anyRemaining = strategicState.hasRemainingTodos();
 
     // If anything is pending/in_progress/blocked, the plan is not complete.
     // Request a revision immediately (do not approve/end), otherwise we can get stuck in a loop
@@ -57,6 +58,8 @@ export class FinalCriticNode extends BaseNode {
         reasonParts.push(`pending=${pending.map(t => t.title).join(', ')}`);
       }
       const reason = reasonParts.join(' | ');
+
+      await strategicState.requestRevision(reason);
 
       state.metadata.finalCriticDecision = 'revise';
       state.metadata.finalCriticReason = reason;
