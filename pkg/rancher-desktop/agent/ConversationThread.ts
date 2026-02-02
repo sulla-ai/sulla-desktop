@@ -229,18 +229,22 @@ export class ConversationThread {
     // Extract response from state
     const responseContent = this.extractResponse();
 
-    // Record assistant message
-    const assistantMessage: Message = {
-      id:        generateMessageId(),
-      role:      'assistant',
-      content:   responseContent,
-      timestamp: Date.now(),
-    };
+    const shouldRecordAssistantMessage = responseContent.trim().length > 0;
 
-    this.addMessage(assistantMessage);
+    if (shouldRecordAssistantMessage) {
+      // Record assistant message
+      const assistantMessage: Message = {
+        id:        generateMessageId(),
+        role:      'assistant',
+        content:   responseContent,
+        timestamp: Date.now(),
+      };
 
-    // Persist conversation (async, don't block)
-    this.persistConversation();
+      this.addMessage(assistantMessage);
+
+      // Persist conversation (async, don't block)
+      this.persistConversation();
+    }
 
     // Build response
     const response: AgentResponse = {
@@ -300,7 +304,7 @@ export class ConversationThread {
       return `Error: ${ this.state.metadata.error }`;
     }
 
-    return (this.state.metadata.response as string) || 'No response generated';
+    return (this.state.metadata.response as string) || '';
   }
 
   /**
