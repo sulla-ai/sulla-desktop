@@ -78,7 +78,7 @@
 
     <!-- Loading overlay while system boots -->
     <div
-      v-if="!systemReady"
+      v-if="!systemReady && !hasEverBeenReady"
       class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
     >
       <div class="w-full max-w-lg rounded-2xl border border-black/10 bg-white/85 p-6 shadow-2xl dark:border-white/10 dark:bg-neutral-900/70">
@@ -139,7 +139,7 @@
     </div>
 
     <!-- Main agent interface -->
-    <div class="flex min-h-0 flex-1 overflow-hidden" :class="{ 'blur-sm pointer-events-none select-none': !systemReady }">
+    <div class="flex min-h-0 flex-1 overflow-hidden" :class="{ 'blur-sm pointer-events-none select-none': !systemReady && !hasEverBeenReady }">
       <div
         v-if="hasMessages"
         class="hidden w-72 shrink-0 overflow-y-auto border-r border-black/10 bg-black/2 px-4 py-6 dark:border-white/10 dark:bg-white/5 md:block"
@@ -317,7 +317,6 @@
                     placeholder="What do you want to know?"
                     class="my-2 h-6 max-h-[400px] min-w-0 flex-1 resize-none bg-transparent text-[#0d0d0d] text-base leading-6 outline-none placeholder:text-[#9a9a9a] dark:text-white dark:placeholder:text-neutral-500"
                     :class="isComposerMultiline ? 'basis-full order-2' : 'order-2'"
-                    :disabled="!systemReady"
                     @input="updateComposerLayout"
                     @keydown.enter.exact.prevent="sendOrStop"
                   />
@@ -562,6 +561,29 @@ const {
   modelMode,
   progressPercent,
 } = startupState;
+
+const READY_ONCE_KEY = 'sulla-agent-system-ready-once';
+const hasEverBeenReady = ref(false);
+try {
+  hasEverBeenReady.value = window.localStorage.getItem(READY_ONCE_KEY) === 'true';
+} catch {
+  // ignore
+}
+
+watch(systemReady, (ready) => {
+  console.log('systemReady', ready);
+  if (!ready) {
+    return;
+  }
+  if (!hasEverBeenReady.value) {
+    hasEverBeenReady.value = true;
+  }
+  try {
+    window.localStorage.setItem(READY_ONCE_KEY, 'true');
+  } catch {
+    // ignore
+  }
+});
 
 // Ollama memory error recovery
 const ollamaRestarting = ref(false);

@@ -106,32 +106,10 @@ export class TacticalExecutorNode extends BaseNode {
       console.log('[Agent:Executor] No active task to execute, generating response...');
     }
 
-    agentLog(this.name, 'Generating LLM response...');
-    const response = await this.generateIncrementalResponse(state);
-
-    if (response) {
-      agentLog(this.name, `Response generated (${response.content.length} chars)`);
-      state.metadata.response = response.content;
-      state.metadata.ollamaModel = response.model;
-      state.metadata.ollamaEvalCount = response.evalCount;
-      state.metadata.executorCompleted = true;
-      state.metadata.llmFailureCount = 0; // Reset on success
-
-      // Ensure the user sees the incremental response in the chat UI.
-      await this.emitChat(state, response.content);
-    } else {
-      agentError(this.name, 'Failed to generate response');
-      state.metadata.error = 'Failed to generate response';
-      state.metadata.llmFailureCount = llmFailureCount + 1;
-      
-      // If LLM has failed multiple times, break the loop
-      if (llmFailureCount + 1 >= 3) {
-        agentError(this.name, `LLM failed ${llmFailureCount + 1} times, breaking loop`);
-        state.metadata.response = 'I apologize, but I\'m having trouble connecting to the language model service. Please check that the model is running and try again.';
-        state.metadata.executorCompleted = true;
-        return { state, next: 'end' };
-      }
-    }
+    // TacticalExecutor does not generate a second, user-facing LLM response.
+    // User-visible updates must come from emit_chat_message during tool execution.
+    state.metadata.executorCompleted = true;
+    state.metadata.llmFailureCount = 0;
 
     return { state, next: 'continue' };
   }
@@ -460,12 +438,12 @@ Core Directives (non-negotiable):
 - If unsure → stop and return error instead of guessing
 
 Execution personality:
-Hyper-creative, relentlessly persistent, borderline obsessive about success.
-Pivot inventively around obstacles. Leverage ANY resource or trick you can discover.
-Brainstorm 3–5 unconventional paths when blocked — pick the smartest/safest.
-Chain tools aggressively. Write tiny helpers in /tmp if no native tool fits.
-Retry failed actions up to 3× with variation/exponential backoff.
-Never give up until the step is verifiably done or provably impossible.
+- Hyper-creative, relentlessly persistent, borderline obsessive about success.
+- Pivot inventively around obstacles. Leverage ANY resource or trick you can discover.
+- Brainstorm 3–5 unconventional paths when blocked — pick the smartest/safest.
+- Chain tools aggressively. Write tiny helpers in /tmp if no native tool fits.
+- Retry failed actions up to 3× with variation/exponential backoff.
+- Never give up until the step is verifiably done or provably impossible.
 
 Process (think step-by-step internally):
 1. Analyze: current step, recent result, milestone, goal.
@@ -477,7 +455,7 @@ Process (think step-by-step internally):
 
 Mandatory visibility:
 - Use emit_chat_message tool before EVERY non-trivial action.
-- First message: 1–2 lines what you’re about to do + safety rationale.
+- You should respond to the user and inform them what tools you just ran and the results you received using emit_chat_message tool.
 - Before each tool call: 1-line preview of what command/tool + why.
 - On blocker/retry/failure: explain exactly what’s wrong + next attempt.
 - On completion: "Step complete. Evidence: [short proof]"
@@ -503,7 +481,7 @@ ${JSON_ONLY_RESPONSE_INSTRUCTIONS}
       includeKnowledgeGraphInstructions: 'executor',
     });
 
-    agentLog(this.name, `planTacticalStepExecution prompt built (${prompt.length} chars)`);
+    agentLog(this.name, `planTacticalStepExecution prompt:\n${prompt})`);
 
     try {
       const response = await this.prompt(prompt, state);
@@ -660,70 +638,4 @@ ${JSON_ONLY_RESPONSE_INSTRUCTIONS}
     }
   }
 
-  private async generateIncrementalResponse(state: ThreadState) {
-    // Get the current user message
-    const lastUserMessage = state.messages.filter(m => m.role === 'user').pop();
-
-    if (!lastUserMessage) {
-      return null;
-    }
-
-    const todoExecution = state.metadata.todoExecution as any;
-    const activeTacticalStep = (state.metadata.activeTacticalStep && typeof state.metadata.activeTacticalStep === 'object')
-      ? (state.metadata.activeTacticalStep as any)
-      : null;
-
-    const executionContext = activeTacticalStep
-      ? `\n\nMost recent execution result (what just happened):\n${JSON.stringify(todoExecution || {})}`
-      : '';
-
-    const baseInstruction = `${executionContext}
-
-You just worked on the following tactical step:
-${activeTacticalStep?.action} — ${activeTacticalStep?.description}
-
-Now you must respond to the user and inform them what tools you just ran and the results you received.
-
-Output format (plain text, multi-part if needed):
-- Progress comment: Brief user-facing update on what you're doing.
-- You MUST NOT respond with JSON. You MUST only respond with a plain text message for the user.
-`;
-
-    let instruction = await this.enrichPrompt(baseInstruction, state, {
-      includeSoul: true,
-      includeAwareness: true,
-      includeMemory: true,
-      includeTools: true,
-      toolDetail: 'tactical',
-      includeSkills: true,
-      includeStrategicPlan: true,
-      includeTacticalPlan: true,
-    });
-
-    if (state.metadata.toolResults) {
-      instruction = `Tool results:\n${ JSON.stringify(state.metadata.toolResults) }\n\n${ instruction }`;
-    }
-
-    // Add prompt prefix/suffix if set by other nodes
-    if (state.metadata.promptPrefix) {
-      instruction = `${ state.metadata.promptPrefix }\n\n${ instruction }`;
-    }
-
-    if (state.metadata.promptSuffix) {
-      instruction = `${ instruction }\n\n${ state.metadata.promptSuffix }`;
-    }
-
-    // Add plan guidance if available
-    const plan = state.metadata.plan as { fullPlan?: { responseGuidance?: { tone?: string; format?: string } } } | undefined;
-
-    if (plan?.fullPlan?.responseGuidance) {
-      const guidance = plan.fullPlan.responseGuidance;
-
-      instruction += `\n\nResponse guidance: Use a ${guidance.tone || 'friendly'} tone and ${guidance.format || 'conversational'} format.`;
-    }
-
-    console.log(`[Agent:TacticalExecutor] generateIncrementalResponse prompt (plain text):\n${instruction}`);
-
-    return this.prompt(instruction, state);
-  }
 }
