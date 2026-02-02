@@ -102,7 +102,7 @@ export class HostRunCommandTool extends BaseTool {
   }
 
   override async execute(_state: ThreadState, context: ToolContext): Promise<ToolResult> {
-    let command = String(context.args?.command || '');
+    let command = String(context.args?.command || context.args?.cmd || (context.args as any)?.commandLine || (context.args as any)?.cmdLine || '');
     let args = Array.isArray(context.args?.args) ? (context.args!.args as unknown[]).map(String) : [];
     const timeoutSeconds = Number(context.args?.timeoutSeconds ?? 20);
 

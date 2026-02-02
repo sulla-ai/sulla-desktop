@@ -42,6 +42,7 @@ export class AgentChatController {
   private drainingQueue = false;
 
   private readonly toolCardsByRunId = new Map<string, string>();
+  private readonly toolCallArgsByRunId = new Map<string, Record<string, unknown>>();
 
   private autoScrollEnabled = true;
   private scrollListenerAttached = false;
@@ -222,6 +223,8 @@ export class AgentChatController {
       }
       const toolRunId = String(event.data.toolRunId || `${Date.now()}_${toolName}`);
       const args = (event.data.args && typeof event.data.args === 'object') ? (event.data.args as Record<string, unknown>) : {};
+      this.toolCallArgsByRunId.set(toolRunId, args);
+
       const id = `tool_${toolRunId}`;
       this.toolCardsByRunId.set(toolRunId, id);
 
@@ -234,7 +237,6 @@ export class AgentChatController {
           toolRunId,
           toolName,
           status: 'running',
-          args,
         },
       });
       this.maybeAutoScroll();
@@ -251,6 +253,8 @@ export class AgentChatController {
       const error = event.data.error ? String(event.data.error) : null;
       const result = (event.data && 'result' in event.data) ? event.data.result : undefined;
 
+      const args = toolRunId ? this.toolCallArgsByRunId.get(toolRunId) : undefined;
+
       const existingId = toolRunId ? this.toolCardsByRunId.get(toolRunId) : undefined;
       if (existingId) {
         const idx = this.messages.value.findIndex(m => m.id === existingId);
@@ -264,7 +268,7 @@ export class AgentChatController {
               toolRunId,
               toolName,
               status: success ? 'success' : 'failed',
-              args: prior.toolCard?.args,
+              args: args || prior.toolCard?.args,
               result,
               error,
             },
@@ -284,10 +288,14 @@ export class AgentChatController {
           toolRunId: toolRunId || id,
           toolName,
           status: success ? 'success' : 'failed',
+          args,
           result,
           error,
         },
       });
+      if (toolRunId) {
+        this.toolCardsByRunId.set(toolRunId, id);
+      }
       this.maybeAutoScroll();
       return;
     }

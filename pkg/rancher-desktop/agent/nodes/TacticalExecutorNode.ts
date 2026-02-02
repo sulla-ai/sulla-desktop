@@ -154,13 +154,11 @@ export class TacticalExecutorNode extends BaseNode {
       data: { phase: 'tactical_step_start', step: tacticalStep.action, milestone: milestone?.title },
     });
 
-    await this.emitChat(state, `Working on: ${tacticalStep.action}`);
 
     // Use LLM to decide what tools to call for this step
     const decision = await this.planTacticalStepExecution(state, tacticalStep);
 
     if (!decision) {
-      await this.emitChat(state, 'Could not determine actions for this step. Requesting revision.');
       state.metadata.todoExecution = { 
         todoId: 0, 
         status: 'failed', 
@@ -265,7 +263,6 @@ export class TacticalExecutorNode extends BaseNode {
       await this.emitChat(state, `Tool failed (${lastFailedAction}): ${lastFailedError}`);
       state.metadata.requestPlanRevision = { reason: `Tool failed: ${lastFailedAction} - ${lastFailedError}` };
     } else if (markDone) {
-      await this.emitChat(state, decision.summary ? `Completed: ${decision.summary}` : 'Step completed.');
     }
 
     state.metadata.planHasRemainingTodos = this.hasRemainingTacticalWork(state);
@@ -328,6 +325,13 @@ Your sole job: complete this exact step without deviation, delay, or chit-chat. 
 6. Validate every output against step success before proceeding
 7. Final output: only tool calls or { "done": true, "result": "short summary" }
 
+## Mandatory visibility (chat)
+- You MUST keep the user informed using the emit_chat_message tool.
+- At minimum:
+  - First action: emit_chat_message explaining what you are about to do and why (1-2 lines).
+  - Before each non-chat tool call: emit_chat_message explaining what you are about to run and why (1 line).
+  - If you are stuck, retrying, or looping: emit_chat_message explaining what is blocking you and what you will try next.
+- These visibility messages must be included as actions in your returned JSON plan.
 
 ${JSON_ONLY_RESPONSE_INSTRUCTIONS}
 {

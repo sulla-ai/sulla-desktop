@@ -263,7 +263,6 @@ export class ConversationThread {
    */
   private persistConversation(): void {
     const persistence = getPersistenceService();
-    const memoryPedia = getMemoryPedia();
     const messages = this.state.messages.map(m => ({
       role:    m.role,
       content: m.content,
@@ -273,9 +272,6 @@ export class ConversationThread {
     persistence.storeConversation(this.threadId, messages).catch(err => {
       console.warn(`[Agent:Thread:${this.threadId}] Persist failed:`, err);
     });
-
-    // Queue for MemoryPedia processing (summarization + entity extraction)
-    memoryPedia.queueConversation(this.threadId, messages);
 
     // Update global awareness (async, don't block)
     getAwarenessPlanner().maybeUpdate(this.threadId, messages).catch(err => {
