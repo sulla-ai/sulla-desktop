@@ -941,21 +941,72 @@ const {
 } = chatController;
 
 const chatScrollContainer = ref<HTMLElement | null>(null);
+const autoScrollEnabled = ref(true);
+const autoScrollThreshold = 140; // pixels from bottom to re-enable
+let isUserScrolling = false;
+let scrollTimeout: NodeJS.Timeout | null = null;
 
-// Auto-scroll to bottom when messages change
+// Track user-initiated scrolling with mouse/touch events
+onMounted(() => {
+  const container = chatScrollContainer.value;
+  if (!container) return;
+
+  // Detect when user starts scrolling
+  const startUserScroll = () => {
+    isUserScrolling = true;
+    console.log('[Auto-Scroll] User scroll detected');
+  };
+
+  // Detect when user stops scrolling
+  const endUserScroll = () => {
+    if (scrollTimeout) clearTimeout(scrollTimeout);
+    scrollTimeout = setTimeout(() => {
+      isUserScrolling = false;
+      console.log('[Auto-Scroll] User scroll ended');
+    }, 150);
+  };
+
+  // Mouse wheel events
+  container.addEventListener('wheel', startUserScroll, { passive: true });
+  container.addEventListener('wheel', endUserScroll, { passive: true });
+
+  // Touch events for mobile
+  container.addEventListener('touchstart', startUserScroll, { passive: true });
+  container.addEventListener('touchend', endUserScroll, { passive: true });
+
+  // Track scroll position changes (only when user is scrolling)
+  container.addEventListener('scroll', () => {
+    if (!isUserScrolling) return;
+    
+    const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+    const wasEnabled = autoScrollEnabled.value;
+    autoScrollEnabled.value = distanceFromBottom <= autoScrollThreshold;
+    
+    if (wasEnabled !== autoScrollEnabled.value) {
+      console.log('[Auto-Scroll] State changed:', autoScrollEnabled.value ? 'ENABLED' : 'DISABLED', 
+                  `(${Math.round(distanceFromBottom)}px from bottom)`);
+    }
+  }, { passive: true });
+
+  console.log('[Auto-Scroll] User scroll detection attached');
+});
+
+// Auto-scroll to bottom when messages change (only if enabled)
 watch(() => messages.value.length, async () => {
   await nextTick();
   const container = chatScrollContainer.value;
-  if (container) {
-    console.log('[Auto-Scroll] Scrolling to bottom, messages count:', messages.value.length);
-    console.log('[Auto-Scroll] Container scrollHeight:', container.scrollHeight);
-    container.scrollTo({
-      top: container.scrollHeight,
-      behavior: 'smooth'
-    });
-  } else {
+  if (!container) {
     console.warn('[Auto-Scroll] Container not found');
+    return;
   }
+  
+  if (!autoScrollEnabled.value) {
+    console.log('[Auto-Scroll] SKIPPED - user scrolled up, messages count:', messages.value.length);
+    return;
+  }
+  
+  console.log('[Auto-Scroll] Scrolling to bottom, messages count:', messages.value.length);
+  container.scrollTop = container.scrollHeight; // Instant scroll, no smooth behavior
 }, { flush: 'post' });
 
 const latestChatError = computed(() => {
