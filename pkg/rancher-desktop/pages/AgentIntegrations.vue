@@ -110,15 +110,15 @@
                         {{ integration.category }}
                       </span>
                       
-                      <button
-                        @click="integration.connected ? disconnectIntegration(integration.id) : connectIntegration(integration.id)"
+                      <router-link
+                        :to="`/Integrations/${integration.id}`"
                         class="inline-flex items-center rounded-md px-3 py-1.5 text-xs font-medium transition-colors"
                         :class="integration.connected 
                           ? 'bg-red-600 text-white hover:bg-red-700' 
                           : 'bg-blue-600 text-white hover:bg-blue-700'"
                       >
-                        {{ integration.connected ? 'Disconnect' : 'Connect now' }}
-                      </button>
+                        {{ integration.connected ? 'Manage' : 'Connect now' }}
+                      </router-link>
                     </div>
                   </div>
                 </div>
