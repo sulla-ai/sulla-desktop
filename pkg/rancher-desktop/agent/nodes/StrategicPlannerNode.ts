@@ -119,6 +119,17 @@ export class StrategicPlannerNode extends BaseNode {
             if (revised) {
               console.log(`[Agent:StrategicPlanner] Plan revised: planId=${revised.planId} revision=${revised.revision}`);
               state.metadata.activePlanId = revised.planId;
+              
+              // Emit todo_created events for new todos via WebSocket
+              for (const t of revised.todosCreated) {
+                this.emitPlanUpdate(state, 'todo_created', {
+                  planId: revised.planId,
+                  todoId: t.todoId,
+                  title: t.title,
+                  orderIndex: t.orderIndex,
+                  status: t.status,
+                });
+              }
             }
           } else {
             // Create new plan
@@ -132,6 +143,18 @@ export class StrategicPlannerNode extends BaseNode {
             if (createdPlanId) {
               console.log(`[Agent:StrategicPlanner] Plan created: planId=${createdPlanId}`);
               state.metadata.activePlanId = createdPlanId;
+              
+              // Get the created todos from strategicState and emit todo_created events via WebSocket
+              const snapshot = strategicState.getSnapshot();
+              for (const t of snapshot.todos) {
+                this.emitPlanUpdate(state, 'todo_created', {
+                  planId: createdPlanId,
+                  todoId: t.id,
+                  title: t.title,
+                  orderIndex: t.orderIndex,
+                  status: t.status,
+                });
+              }
             }
           }
 

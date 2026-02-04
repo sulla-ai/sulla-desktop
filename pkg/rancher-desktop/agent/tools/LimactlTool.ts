@@ -3,14 +3,14 @@ import { BaseTool } from './BaseTool';
 import type { ToolContext } from './BaseTool';
 import { runCommand } from './CommandRunner';
 
-export class LimaShellTool extends BaseTool {
+export class LimactlTool extends BaseTool {
   override readonly name = 'lima_shell';
   override readonly category = 'lima';
 
   override getPlanningInstructions(): string {
     return [
-      '10) lima_shell (Lima via limactl)',
-      '   - Purpose: Run a shell command inside a Lima VM instance.',
+      '`limactl` - Execute any limactl command against the clusters main vm using exec form',
+      '   limactl version 2.0.3',
       '   - Args:',
       '     - name (string, required) instance name',
       '     - command (string, required) command to run inside the VM',

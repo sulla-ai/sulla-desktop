@@ -65,6 +65,9 @@ export class AgentPersonaService {
   // Messages stored locally - persona is source of truth (reactive array)
   readonly messages: ChatMessage[] = reactive([]);
 
+  // Track tool run ID to message ID mapping for updating tool cards
+  private readonly toolRunIdToMessageId = new Map<string, string>();
+
   readonly state = reactive<AgentPersonaState>({
     agentId: 'unit-01',
     agentName: 'UNIT_01',
@@ -270,6 +273,7 @@ export class AgentPersonaService {
           const goal = typeof payload?.goal === 'string' ? payload.goal : null;
           if (planId) {
             this.resetPlan(planId, goal);
+            console.log('[AgentPersonaModel] Plan reset. planId:', planId, 'goal:', goal?.substring(0, 50), 'todos count:', this.planState.todos.size);
           }
         }
         
@@ -294,6 +298,61 @@ export class AgentPersonaService {
           // Log step status updates for debugging
           if (stepId) {
             console.log('[AgentPersonaModel] Step status update:', stepId, status);
+          }
+        }
+
+        // Handle tool_call progress events - create tool card message
+        if (phase === 'tool_call') {
+          const toolRunId = typeof payload?.toolRunId === 'string' ? payload.toolRunId : null;
+          const toolName = typeof payload?.toolName === 'string' ? payload.toolName : 'unknown';
+          const args = payload?.args && typeof payload.args === 'object' ? payload.args : {};
+          
+          // Skip tool cards for chat message tools - they emit directly as chat messages
+          if (toolName === 'emit_chat_message' || toolName === 'emit_chat_image') {
+            return;
+          }
+          
+          if (toolRunId) {
+            const messageId = `${Date.now()}_tool_${toolRunId}`;
+            const message: ChatMessage = {
+              id: messageId,
+              channelId: agentId,
+              role: 'assistant',
+              kind: 'tool',
+              content: '',
+              toolCard: {
+                toolRunId,
+                toolName,
+                status: 'running',
+                args,
+              },
+            };
+            this.messages.push(message);
+            this.toolRunIdToMessageId.set(toolRunId, messageId);
+            console.log('[AgentPersonaModel] Tool call message created:', toolName, 'messageId:', messageId);
+          }
+        }
+
+        // Handle tool_result progress events - update tool card status
+        if (phase === 'tool_result') {
+          const toolRunId = typeof payload?.toolRunId === 'string' ? payload.toolRunId : null;
+          const success = payload?.success === true;
+          const error = typeof payload?.error === 'string' ? payload.error : null;
+          const result = payload?.result;
+          
+          if (toolRunId) {
+            const messageId = this.toolRunIdToMessageId.get(toolRunId);
+            if (messageId) {
+              const message = this.messages.find(m => m.id === messageId);
+              if (message && message.toolCard) {
+                message.toolCard.status = success ? 'success' : 'failed';
+                message.toolCard.error = error;
+                message.toolCard.result = result;
+                console.log('[AgentPersonaModel] Tool result updated:', message.toolCard.toolName, 'status:', message.toolCard.status);
+              }
+              // Clean up the mapping
+              this.toolRunIdToMessageId.delete(toolRunId);
+            }
           }
         }
         

@@ -186,7 +186,7 @@ export class StrategicStateService {
     data: StrategicPlanData;
     milestones: Array<{ title: string; description: string; orderIndex: number }>;
     eventData?: Record<string, unknown>;
-  }): Promise<{ planId: number; revision: number } | null> {
+  }): Promise<{ planId: number; revision: number; todosCreated: Array<{ todoId: number; title: string; orderIndex: number; status: TodoStatus }>; todosUpdated: Array<{ todoId: number; title: string; orderIndex: number; status: TodoStatus }>; todosDeleted: number[] } | null> {
     const planService = getPlanService();
     await planService.initialize();
 
@@ -258,7 +258,7 @@ export class StrategicStateService {
       });
     }
 
-    return { planId: revised.planId, revision: revised.revision };
+    return { planId: revised.planId, revision: revised.revision, todosCreated: revised.todosCreated, todosUpdated: revised.todosUpdated, todosDeleted: revised.todosDeleted };
   }
 
   getTodoIdByOrderIndex(orderIndex: number): number | undefined {
