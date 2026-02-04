@@ -11,6 +11,8 @@ import AgentRouter from '../pages/AgentRouter.vue';
 import Agent from '../pages/Agent.vue';
 import AgentCalendar from '../pages/AgentCalendar.vue';
 import AgentKnowledgeBase from '../pages/AgentKnowledgeBase.vue';
+import AgentIntegrations from '../pages/AgentIntegrations.vue';
+import AgentIntegrationDetail from '../pages/AgentIntegrationDetail.vue';
 import AgentSkills from '../pages/AgentSkills.vue';
 import AgentSkillDetail from '../pages/AgentSkillDetail.vue';
 
@@ -21,6 +23,8 @@ const router = createRouter({
     { path: '/Chat', component: Agent, name: 'AgentChat' },
     { path: '/Calendar', component: AgentCalendar, name: 'AgentCalendar' },
     { path: '/KnowledgeBase', component: AgentKnowledgeBase, name: 'AgentKnowledgeBase' },
+    { path: '/Integrations', component: AgentIntegrations, name: 'AgentIntegrations' },
+    { path: '/Integrations/:id', component: AgentIntegrationDetail, name: 'AgentIntegrationDetail' },
     { path: '/Skills', component: AgentSkills, name: 'AgentSkills' },
     { path: '/Skills/:id', component: AgentSkillDetail, name: 'AgentSkillDetail' },
   ],
