@@ -358,6 +358,10 @@ ${JSON_ONLY_RESPONSE_INSTRUCTIONS}
         agentWarn(this.name, '=== FULL LLM RESPONSE END ===');
         return null;
       }
+      
+      // Execute tool calls using BaseNode's executeToolCalls
+      const tools = Array.isArray(parsed.tools) ? parsed.tools : [];
+      const results = tools.length > 0 ? await this.executeToolCalls(state, tools) : null;
 
       // Build tactical plan
       const steps: TacticalStep[] = parsed.steps.map((s: any, idx: number) => ({

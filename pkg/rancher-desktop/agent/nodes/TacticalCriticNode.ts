@@ -14,6 +14,7 @@ interface CriticLLMResponse {
   decision: CriticDecision;
   reason: string;
   suggestedFix?: string;
+  tools?: Array<{ name: string; args: Record<string, unknown> }>;
 }
 
 export class TacticalCriticNode extends BaseNode {
@@ -151,10 +152,13 @@ export class TacticalCriticNode extends BaseNode {
       } catch (err) {
         agentError(this.name, `Failed to mark todo ${todoId} as done`, err);
       }
-
+      
       // Clear any executor issue flags once we accept success.
+      delete state.metadata.activeTacticalStep;
+      delete state.metadata.activeMilestone;
       delete state.metadata.requestPlanRevision;
       delete state.metadata.revisionFeedback;
+      state.metadata.planHasRemainingTodos = false;
 
       // Check if all todos are now complete - if so, mark plan as completed
       try {
@@ -306,6 +310,11 @@ ${JSON_ONLY_RESPONSE_INSTRUCTIONS}
         console.warn('[Agent:TacticalCritic] Could not parse LLM response, defaulting to heuristic');
         return this.fallbackHeuristic(context);
       }
+      
+      // Execute tool calls using BaseNode's executeToolCalls
+      const tools = Array.isArray(parsed.tools) ? parsed.tools : [];
+      const results = tools.length > 0 ? await this.executeToolCalls(state, tools) : null;
+
 
       const emit_chat_message = (parsed as any).emit_chat_message || '';
       if (emit_chat_message){

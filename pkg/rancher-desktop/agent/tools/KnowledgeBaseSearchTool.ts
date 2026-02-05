@@ -26,6 +26,11 @@ export class KnowledgeBaseSearchTool extends BaseTool {
   }
 
   override async execute(state: ThreadState, context: ToolContext): Promise<ToolResult> {
+    const helpResult = await this.handleHelpRequest(context);
+    if (helpResult) {
+      return helpResult;
+    }
+    
     const chroma = getChromaService();
 
     const args = this.getArgsArray(context, 1);

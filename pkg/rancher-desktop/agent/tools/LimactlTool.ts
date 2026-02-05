@@ -1,7 +1,7 @@
 import type { ThreadState, ToolResult } from '../types';
 import { BaseTool } from './BaseTool';
 import type { ToolContext } from './BaseTool';
-import { runCommand } from './CommandRunner';
+import { runCommand } from './util/CommandRunner';
 
 export class LimactlTool extends BaseTool {
   override readonly name = 'lima_shell';
@@ -49,24 +49,26 @@ Advanced Commands:
   }
 
   override async execute(_state: ThreadState, context: ToolContext): Promise<ToolResult> {
-    // Handle exec form: args is string array like ["limactl", "list"] or ["limactl", "shell", "name", "command"]
-    const argsArray = Array.isArray(context.args) ? context.args : context.args?.args;
+    const helpResult = await this.handleHelpRequest(context);
+    if (helpResult) {
+      return helpResult;
+    }
+    
+    // Handle exec form: args is string array directly
+    const argsArray = this.getArgsArray(context);
 
     if (!Array.isArray(argsArray) || argsArray.length === 0) {
       return { toolName: this.name, success: false, error: 'Missing args: args (array of limactl command arguments)' };
     }
 
-    // Convert all args to strings (skip first element which is the tool name)
-    const args = argsArray.slice(1).map(arg => String(arg));
-
     // Execute limactl with the provided args
-    const res = await runCommand('limactl', args, { timeoutMs: 30_000, maxOutputChars: 160_000 });
+    const res = await runCommand('limactl', argsArray, { timeoutMs: 30_000, maxOutputChars: 160_000 });
 
     if (res.exitCode !== 0) {
       return {
         toolName: this.name,
         success: false,
-        error: res.stderr || res.stdout || `limactl ${args.join(' ')} failed with exit code ${res.exitCode}`,
+        error: res.stderr || res.stdout || `limactl ${argsArray.join(' ')} failed with exit code ${res.exitCode}`,
       };
     }
 
@@ -74,7 +76,7 @@ Advanced Commands:
       toolName: this.name,
       success: true,
       result: {
-        command: `limactl ${args.join(' ')}`,
+        command: `limactl ${argsArray.join(' ')}`,
         output: res.stdout,
         stderr: res.stderr || undefined,
       },

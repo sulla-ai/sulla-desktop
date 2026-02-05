@@ -129,7 +129,13 @@ ${JSON_ONLY_RESPONSE_INSTRUCTIONS}
       suggestedTodos?: Array<{ title: string; description?: string; categoryHints?: string[] }>;
       triggerKnowledgeBase?: boolean;
       kbReason?: string;
+      tools?: Array<{ name: string; args: Record<string, unknown> }>;
     }>(prompt);
+
+      
+    // Execute tool calls using BaseNode's executeToolCalls
+    const tools = Array.isArray(critique?.tools) ? critique.tools : [];
+    const results = tools.length > 0 ? await this.executeToolCalls(state, tools) : null;
 
     const decision: StrategicCriticDecision = (critique?.decision === 'revise') ? 'revise' : 'approve';
     const reason = String(critique?.reason || (decision === 'revise' ? 'Strategic critic requested revision' : 'Strategic critic approved'));

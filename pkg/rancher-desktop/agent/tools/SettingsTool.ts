@@ -6,16 +6,16 @@ import { getLLMConfig } from '../services/LLMServiceFactory';
 import { getRemoteModelService } from '../services/RemoteModelService';
 import { ipcRenderer } from '@pkg/utils/ipcRenderer';
 
-export class AgentSettingsTool extends BaseTool {
-  override readonly name = 'agent_settings';
+export class SettingsTool extends BaseTool {
+  override readonly name = 'settings';
   override readonly aliases = ['settings', 'config', 'agent_config'];
 
   override getPlanningInstructions(): string {
-    return `["agent_settings", "get"] - View or update agent LLM/runtime settings
+    return `["settings", "get"] - View or update agent LLM/runtime settings
 
 Examples:
-["agent_settings", "get"]
-["agent_settings", "update", "--modelMode", "remote", "--remoteProvider", "openai", "--remoteModel", "gpt-4o-mini", "--remoteRetryCount", "5", "--remoteTimeoutSeconds", "90"]
+["settings", "get"]
+["settings", "update", "--modelMode", "remote", "--remoteProvider", "openai", "--remoteModel", "gpt-4o-mini", "--remoteRetryCount", "5", "--remoteTimeoutSeconds", "90"]
 
 Subcommands:
 - get                  → returns current full config snapshot
@@ -33,13 +33,16 @@ Allowed update flags:
   }
 
   override async execute(_state: ThreadState, context: ToolContext): Promise<ToolResult> {
+    const helpResult = await this.handleHelpRequest(context);
+    if (helpResult) {
+      return helpResult;
+    }
+    
+    const subcommand = this.getFirstArg(context);
     const args = this.getArgsArray(context, 1);
     if (!args.length) {
       return { toolName: this.name, success: false, error: 'Missing subcommand: get or update' };
     }
-
-    const subcommand = args[0].toLowerCase();
-    const rest = args.slice(1);
 
     try {
       if (subcommand === 'get') {
@@ -62,7 +65,7 @@ Allowed update flags:
       }
 
       if (subcommand === 'update') {
-        const params = this.argsToObject(rest);
+        const params = this.argsToObject(args);
 
         const patch: Record<string, any> = {};
 

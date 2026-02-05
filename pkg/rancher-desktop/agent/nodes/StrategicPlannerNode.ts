@@ -270,7 +270,8 @@ ${JSON_ONLY_RESPONSE_INSTRUCTIONS}
   "responseGuidance": {
     "tone": "formal" | "casual" | "technical" | "friendly",
     "format": "brief" | "detailed" | "json" | "markdown" | "conversational"
-  }
+  },
+  "emit_chat_message": "Tell the user your goal and how you plan on accomplishing it. If this is a revision explain why the first plan was insufficient and what you're going to do different."
 }
 `;
 
@@ -302,6 +303,11 @@ ${JSON_ONLY_RESPONSE_INSTRUCTIONS}
         state.metadata.strategicPlanLastError = 'Failed to parse JSON for strategic plan. Output must be a single valid JSON object matching the required schema.';
         agentWarn(this.name, 'Failed to parse plan JSON from response', { responseLength: response.content.length });
         return null;
+      }
+
+      const emit_chat_message = (plan as any).emit_chat_message || '';
+      if (emit_chat_message){
+        await this.emitChatMessage(state, emit_chat_message);
       }
 
       // Normalize fields (do not hard-fail when the model omits optional high-level fields).

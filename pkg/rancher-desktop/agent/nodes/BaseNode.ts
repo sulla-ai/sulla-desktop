@@ -939,18 +939,25 @@ When to trigger KB generation:
   }
 
   public appendToolResultMessage(state: ThreadState, action: string, result: ToolResult): void {
+    const summary = result.success
+      ? `Tool ${action} succeeded`
+      : `Tool ${action} failed: ${result.error || 'unknown error'}`;
+
     const content = JSON.stringify(
       {
         tool: action,
-        success: !!result.success,
+        success: result.success,
         error: result.error || null,
-        result: result.result,
+        // Only include result if small; otherwise just summary
+        result: result.result && JSON.stringify(result.result).length < 5000
+          ? result.result
+          : '[result truncated — see logs]',
       },
       null,
-      2,
+      2
     );
 
-    const id = `internal_tool_result_${Date.now()}_${Math.floor(Math.random() * 1_000_000)}`;
+    const id = `tool_result_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
     state.messages.push({
       id,
@@ -962,7 +969,8 @@ When to trigger KB generation:
         nodeName: this.name,
         kind: 'tool_result',
         toolName: action,
-        success: !!result.success,
+        success: result.success,
+        summary, // short human-readable line for chat UI
       },
     });
   }
@@ -998,5 +1006,24 @@ When to trigger KB generation:
     };
     (state.metadata as any).toolResultsHistory = [...historyExisting, entry].slice(-12);
   }
-  
+
+  public async promptLLM(state: ThreadState, prompt: string): Promise<string | null> {
+    try {
+      const enriched = await this.enrichPrompt(prompt, state, {
+        includeSoul: false,
+        includeAwareness: false,
+        includeMemory: false,
+      });
+
+      const llm = getLLMService();
+      await llm.initialize();
+      if (!llm.isAvailable()) {
+        return null;
+      }
+
+      return await llm.generate(enriched);
+    } catch {
+      return null;
+    }
+  }
 }

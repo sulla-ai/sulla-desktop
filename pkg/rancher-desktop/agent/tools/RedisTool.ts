@@ -41,6 +41,11 @@ Subcommands:
   }
 
   override async execute(state: ThreadState, context: ToolContext): Promise<ToolResult> {
+    const helpResult = await this.handleHelpRequest(context);
+    if (helpResult) {
+      return helpResult;
+    }
+    
     const subcommand = this.getFirstArg(context);
     const rest = this.getArgsArray(context, 1); // everything after subcommand
 

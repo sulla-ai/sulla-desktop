@@ -805,11 +805,18 @@ const latestChatError = computed(() => {
   return '';
 });
 
+const isRunning = computed<boolean>(() => {
+  const agent = registry.activeAgent.value;
+  if (!agent) return false;
+  return agent.isRunning;
+});
+
 const modelSelector = new AgentModelSelectorController({
   systemReady,
   loading,
   modelName,
   modelMode,
+  isRunning,
 });
 
 onMounted(async () => {
@@ -856,7 +863,7 @@ const sendOrStop = () => {
 };
 
 const handlePrimaryAction = () => {
-  if (loading.value) {
+  if (isRunning.value) {
     sendOrStop();
     return;
   }

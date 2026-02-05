@@ -32,7 +32,12 @@ Subcommands:
   }
 
   override async execute(state: ThreadState, context: ToolContext): Promise<ToolResult> {
-    const args = this.getArgsArray(context, 1);
+    const helpResult = await this.handleHelpRequest(context);
+    if (helpResult) {
+      return helpResult;
+    }
+    
+    const args = this.getArgsArray(context);
     if (!args.length) {
       return { toolName: this.name, success: false, error: 'Missing subcommand' };
     }

@@ -1,7 +1,7 @@
 import type { ThreadState, ToolResult } from '../types';
 import { BaseTool } from './BaseTool';
 import type { ToolContext } from './BaseTool';
-import { runCommand } from './CommandRunner';
+import { runCommand } from './util/CommandRunner';
 
 export class KubectlTool extends BaseTool {
   override readonly name = 'kubectl';
@@ -30,6 +30,11 @@ export class KubectlTool extends BaseTool {
   }
 
   override async execute(_state: ThreadState, context: ToolContext): Promise<ToolResult> {
+    const helpResult = await this.handleHelpRequest(context);
+    if (helpResult) {
+      return helpResult;
+    }
+    
     // Handle exec form: args is string array directly
     const argsArray = this.getArgsArray(context);
 

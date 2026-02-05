@@ -29,7 +29,6 @@ export class ToolRegistry {
     }
 
     const parts: string[] = [];
-    parts.push('Available tools:');
     for (const tool of tools) {
       parts.push(tool.getPlanningInstructions());
       parts.push('');
@@ -45,7 +44,7 @@ export class ToolRegistry {
     }
 
     const lines = tools.map(t => `- ${t.getTacticalInstructions()}`);
-    return `Available tools:\n${lines.join('\n')}`;
+    return `${lines.join('\n')}`;
   }
 
   getCompactPlanningInstructionsBlock(options: { includeNames?: string[] } = {}): string {
@@ -111,9 +110,10 @@ export class ToolRegistry {
         continue;
       }
 
-      if (line.toLowerCase().includes('purpose:')) {
-        purpose.push(line.replace(/^\s*-\s*/,'').trim());
-      }
+      // Add a second line to avail tools
+      //if (line.toLowerCase().includes('purpose:')) {
+      //  purpose.push(line.replace(/^\s*-\s*/,'').trim());
+      //}
     }
 
     const parts: string[] = [];

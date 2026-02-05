@@ -23,6 +23,11 @@ export class KnowledgeBaseGetPageTool extends BaseTool {
   }
 
   override async execute(state: ThreadState, context: ToolContext): Promise<ToolResult> {
+    const helpResult = await this.handleHelpRequest(context);
+    if (helpResult) {
+      return helpResult;
+    }
+    
     const chroma = getChromaService();
 
     // Handle both positional array args and named object args

@@ -1,9 +1,10 @@
 import type { ThreadState, ToolResult } from '../types';
 import { BaseTool } from './BaseTool';
 import type { ToolContext } from './BaseTool';
-import { runCommand } from './CommandRunner';
+import { runCommand } from './util/CommandRunner';
 
 const ALLOWED_COMMANDS = new Set([
+  'sh',
   'ls',
   'cat',
   'pwd',
@@ -37,126 +38,61 @@ const ALLOWED_COMMANDS = new Set([
   'find',
 ]);
 
-function splitCommandLine(commandLine: string): string[] {
-  const out: string[] = [];
-  let cur = '';
-  let inSingle = false;
-  let inDouble = false;
-
-  const push = () => {
-    if (cur.length > 0) {
-      out.push(cur);
-      cur = '';
-    }
-  };
-
-  for (let i = 0; i < commandLine.length; i++) {
-    const ch = commandLine[i];
-
-    if (ch === '\\' && !inSingle) {
-      const next = commandLine[i + 1];
-      if (next !== undefined) {
-        cur += next;
-        i++;
-        continue;
-      }
-    }
-
-    if (ch === "'" && !inDouble) {
-      inSingle = !inSingle;
-      continue;
-    }
-    if (ch === '"' && !inSingle) {
-      inDouble = !inDouble;
-      continue;
-    }
-
-    if (!inSingle && !inDouble && /\s/.test(ch)) {
-      push();
-      continue;
-    }
-
-    cur += ch;
-  }
-
-  push();
-  return out;
-}
-
 export class ExecTool extends BaseTool {
   override readonly name = 'exec';
 
   override getPlanningInstructions(): string {
-    return [
-      '["exec", "command", "arg1", "arg2"] - Is the exec shell runner to run a safe allowlisted commands on the host',
-`
-### Allowed Commands:
-- ls
-- cat
-- pwd
-- whoami
-- uname
-- id
-- hostname
-- date
-- printenv
-- ps
-- top
-- pgrep
-- lsof
-- sysctl
-- echo
-- stat
-- du
-- df
-- head
-- tail
-- sed
-- awk
-- wc
-- nslookup
-- dig
-- ping
-- ifconfig
-- git
-- rg
-- grep
-- find
+    return `["exec", "sh", "-c", "find ~ -maxdepth 3 -name '*.jpg' | head -1"] - Safe shell runner
 
-### Example Usage in exec form
+Examples:
 ["exec", "pwd"]
-["exec", "ls", "-la", "/"]
-["exec", "grep", "-r", "pattern", "/path"]
-["exec", "tree", "-L", "2"]
-["exec", "find", ".", "-type", "f", "-name", "*.ts"]
-`,
-      '   - Output: stdout/stderr/exitCode.',
-    ].join('\n');
+["exec", "ls", "-la", "~"]
+["exec", "sh", "-c", "find ~/Pictures -type f -iname '*.png' -o -iname '*.jpg' | head -3"]
+["exec", "find", ".", "-name", "*.ts"]
+["exec", "stat", "--format", "%s bytes", "/tmp/test.jpg"]
+
+Rules:
+- Simple commands: ["exec", "ls", "-la", "/tmp"]
+- Complex/shell syntax: always use "sh -c" + full script
+- ~ expands automatically in shell
+- No sudo, rm -rf, dangerous ops — blocked
+`.trim();
   }
 
   override async execute(_state: ThreadState, context: ToolContext): Promise<ToolResult> {
+    const helpResult = await this.handleHelpRequest(context);
+    if (helpResult) return helpResult;
 
-    // Handle exec form: args is string array like ["knowledge_base_delete_page", "slug"]
     const argsArray = this.getArgsArray(context, 1);
-    const command = this.getFirstArg(context);
-    
-    if (!command) {
-      return { toolName: this.name, success: false, error: 'Missing args: command' };
+    if (!argsArray.length) {
+      return { toolName: this.name, success: false, error: 'Missing command' };
     }
 
-    if (!ALLOWED_COMMANDS.has(command)) {
-      return { toolName: this.name, success: false, error: `Command not allowlisted: ${command}` };
+    const command = argsArray[0];
+    const subArgs = argsArray.slice(1);
+
+    // Allow simple commands from list
+    if (ALLOWED_COMMANDS.has(command) && command !== 'sh') {
+      console.log('[ExecTool] Simple command:', command, subArgs);
+      const res = await runCommand(command, subArgs, { timeoutMs: 20000 });
+
+      return res.exitCode === 0
+        ? { toolName: this.name, success: true, result: res }
+        : { toolName: this.name, success: false, error: res.stderr || 'command failed' };
     }
 
-    const res = await runCommand(command, argsArray, {
-      timeoutMs: 20 * 1000,
-      maxOutputChars: 200_000,
-    });
+    // Full shell mode: must be sh -c "script"
+    if (command === 'sh' && subArgs[0] === '-c' && subArgs.length >= 2) {
+      const script = subArgs.slice(1).join(' '); // preserve full expression
+      console.log('[ExecTool] Full shell script:', script.substring(0, 200) + '...');
 
-    if (res.exitCode !== 0) {
-      return { toolName: this.name, success: false, error: res.stderr || res.stdout || 'command failed' };
+      const res = await runCommand('sh', ['-c', script], { timeoutMs: 30000 });
+
+      return res.exitCode === 0
+        ? { toolName: this.name, success: true, result: res }
+        : { toolName: this.name, success: false, error: res.stderr || 'shell script failed' };
     }
 
-    return { toolName: this.name, success: true, result: { command, args: argsArray, stdout: res.stdout, stderr: res.stderr || undefined, exitCode: res.exitCode } };
+    return { toolName: this.name, success: false, error: `Invalid command: ${command} (use sh -c for shell features)` };
   }
 }

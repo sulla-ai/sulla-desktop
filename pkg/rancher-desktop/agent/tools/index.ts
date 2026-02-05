@@ -12,7 +12,7 @@ import { ExecTool } from './ExecTool';
 import { PgTool } from './PgTool';
 import { RedisTool } from './RedisTool';
 import { CalendarTool } from './CalendarTool';
-import { AgentSettingsTool } from './SettingsTool';
+import { SettingsTool } from './SettingsTool';
 import { ToolListTool } from './ToolListTool';
 import { EmitChatMessageTool } from './EmitChatMessageTool';
 import { EmitChatImageTool } from './EmitChatImageTool';
@@ -32,12 +32,7 @@ export function registerDefaultTools(): void {
     }
   };
 
-  ensure(new KnowledgeBaseSearchTool());
   ensure(new ChromaTool());
-  ensure(new KnowledgeBaseCountTool());
-  ensure(new KnowledgeBaseDeletePageTool());
-  ensure(new KnowledgeBaseListPagesTool());
-  ensure(new KnowledgeBaseGetPageTool());
   ensure(new KubectlTool());
   ensure(new RdctlTool());
   ensure(new LimactlTool());
@@ -45,7 +40,7 @@ export function registerDefaultTools(): void {
   ensure(new PgTool());
   ensure(new RedisTool());
   ensure(new CalendarTool());
-  ensure(new AgentSettingsTool());
+  ensure(new SettingsTool());
   ensure(new ToolListTool());
   ensure(new EmitChatMessageTool());
   ensure(new EmitChatImageTool());
@@ -66,7 +61,7 @@ export { ExecTool } from './ExecTool';
 export { PgTool } from './PgTool';
 export { RedisTool } from './RedisTool';
 export { CalendarTool } from './CalendarTool';
-export { AgentSettingsTool } from './SettingsTool';
+export { SettingsTool } from './SettingsTool';
 export { RdctlTool } from './RdctlTool';
 export { ToolListTool } from './ToolListTool';
 export { EmitChatMessageTool } from './EmitChatMessageTool';

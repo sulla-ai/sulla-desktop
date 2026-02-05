@@ -17,7 +17,7 @@ export abstract class BaseTool {
     // Return the first two lines of planning instructions
     const planning = this.getPlanningInstructions();
     const lines = planning.split('\n').filter(l => l.trim());
-    return lines.slice(0, 2).join('\n') || this.name;
+    return lines.slice(0, 1).join('\n') || this.name;
   }
 
   /** Extract args array from ToolContext, handling both exec form and object form */
@@ -96,5 +96,30 @@ export abstract class BaseTool {
     return result;
   }
 
+  /**
+   * Helper to handle common "help" requests in exec form.
+   * Returns true if handled (caller should return the result),
+   * false if normal execution should continue.
+   */
+  protected async handleHelpRequest(context: ToolContext): Promise<ToolResult | null> {
+    const args = this.getArgsArray(context);
+
+    // Check first arg after tool name
+    if (args.length >= 1 && args[0].toLowerCase() === 'help') {
+      const instructions = this.getPlanningInstructions();
+
+      return {
+        toolName: this.name,
+        success: true,
+        result: {
+          tool: this.name,
+          aliases: this.aliases,
+          help: instructions,
+        },
+      };
+    }
+
+    return null; // not a help request → continue normal execution
+  }
   abstract execute(state: ThreadState, context: ToolContext): Promise<ToolResult>;
 }

@@ -18,6 +18,11 @@ export class KnowledgeBaseCountTool extends BaseTool {
   }
 
   override async execute(state: ThreadState, _context: ToolContext): Promise<ToolResult> {
+    const helpResult = await this.handleHelpRequest(_context);
+    if (helpResult) {
+      return helpResult;
+    }
+    
     const chroma = getChromaService();
 
     try {

@@ -26,6 +26,12 @@ Your job:
 4. If the request is ambiguous, ask 1-3 crisp clarifying questions via emit_chat_message.
 5. If the request implies multi-step work, recommend creating a plan to tackle it systematically.
 
+Process:
+1. Analyze step + recent results
+2. Decide exact tool calls needed next (or none if done)
+3. If done: set markDone=true + short summary
+4. NEVER output tool results — they are already in context
+
 Core Directives (non-negotiable):
 - PROTECT THE PRIMARY MACHINE AT ALL COSTS
 - NO PII ever leaves this system
@@ -45,7 +51,7 @@ ${JSON_ONLY_RESPONSE_INSTRUCTIONS}
     ["tool_name", "arg1", "arg2"]
   ],
   "markDone": true,
-  "summary": "Brief description of what was done or response to user"
+  "summary": "Talk the the user, tell them what's going on and what you're doing"
 }`;
 
     const prompt = await this.enrichPrompt(basePrompt, state, {
@@ -442,7 +448,8 @@ Mandatory visibility:
 ${JSON_ONLY_RESPONSE_INSTRUCTIONS}
 {
   "tools": [
-    ["tool_name", "arg1", "arg2"]
+    ["tool_name", "arg1", "arg2"],
+    ["anytool", "help"]
   ],
   "markDone": true,
   "summary": "Brief description of what was done"

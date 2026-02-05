@@ -20,6 +20,11 @@ export class KnowledgeBaseListPagesTool extends BaseTool {
   }
 
   override async execute(state: ThreadState, context: ToolContext): Promise<ToolResult> {
+    const helpResult = await this.handleHelpRequest(context);
+    if (helpResult) {
+      return helpResult;
+    }
+    
     const chroma = getChromaService();
 
     // Handle exec form: args is string array like ["knowledge_base_list_pages", "limit", "includeContent"]
