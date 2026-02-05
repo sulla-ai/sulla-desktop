@@ -12,7 +12,7 @@ export interface Integration {
     type: 'image' | 'youtube';
     url: string;
     alt: string;
-    caption: string;
+    caption?: string;
   }>;
   features?: Array<{
     title: string;
@@ -47,29 +47,32 @@ export const integrations: Record<string, Integration> = {
     name: 'Intercom',
     description: 'Customer communication platform that helps you build better customer relationships through personalized, messenger-based experiences. Perfect for support, marketing, and sales teams.',
     category: 'Customer Support',
-    icon: 'intercom-icon-svgrepo-com.svg',
+    icon: 'intercom.svg',
     connected: false,
     version: '2.1.0',
     lastUpdated: '1 day ago',
     developer: 'Intercom Inc.',
     media: [
       {
-        type: 'image',
-        url: 'https://images.unsplash.com/photo-1611224923853-80b023f02d71?w=800&h=450&fit=crop',
-        alt: 'Intercom Dashboard',
-        caption: 'Main dashboard with conversation overview and team performance metrics'
+        type: 'youtube',
+        url: 'qU1fbFKzf6w',
+        alt: 'What is Intercom?',
+        caption: 'Intercom Customer Service Suite'
       },
       {
         type: 'image',
-        url: 'https://images.unsplash.com/photo-1556656793-08538906a9f8?w=800&h=450&fit=crop',
-        alt: 'Live Chat Interface',
-        caption: 'Real-time customer chat interface with automated responses'
+        url: 'intercom-media-1.webp',
+        alt: 'Intercom - 1'
       },
       {
         type: 'image',
-        url: 'https://images.unsplash.com/photo-1559028006-848a6538c4f9?w=800&h=450&fit=crop',
-        alt: 'Team Collaboration',
-        caption: 'Team inbox and assignment features for efficient customer support'
+        url: 'intercom-media-2.webp',
+        alt: 'Intercom - 2'
+      },
+      {
+        type: 'image',
+        url: 'intercom-media-3.webp',
+        alt: 'Intercom - 3'
       }
     ],
     features: [
@@ -142,7 +145,7 @@ export const integrations: Record<string, Integration> = {
     name: 'Twilio',
     description: 'Programmable communication platform for SMS, voice, video, and email. Enable SULLA to send notifications, make calls, and handle customer communications through powerful APIs.',
     category: 'Communication API',
-    icon: 'twilio-icon-svgrepo-com.svg',
+    icon: 'twilio.svg',
     connected: false,
     version: '3.0.1',
     lastUpdated: '3 days ago',
@@ -250,29 +253,38 @@ export const integrations: Record<string, Integration> = {
     name: 'HubSpot',
     description: 'All-in-one marketing, sales, and service platform. Help SULLA manage customer relationships, track interactions, and automate communication workflows across the entire customer lifecycle.',
     category: 'CRM & Marketing',
-    icon: 'hubspot-svgrepo-com.svg',
+    icon: 'hubspot.svg',
     connected: false,
     version: '1.8.2',
     lastUpdated: '2 days ago',
     developer: 'HubSpot, Inc.',
     media: [
       {
-        type: 'image',
-        url: 'https://images.unsplash.com/photo-1559028006-848a6538c4f9?w=800&h=450&fit=crop',
-        alt: 'HubSpot CRM Dashboard',
-        caption: 'Complete view of your customer relationships and pipeline'
+        type: 'youtube',
+        url: 'GnIREMgz-SQ',
+        alt: 'What is HubSpot?',
+        caption: 'Discover the powerful, flexible, and easy-to-use HubSpot Customer Platform'
+      },
+      {
+        type: 'youtube',
+        url: 'yZOIPlpJwr4',
+        alt: 'What is a Sales Process? by HubSpot CRO, Mark Roberge',
+        caption: "HubSpot's Chief Revenue Officer Mark Roberge covers some of the details you should consider when outlining your sales process"
       },
       {
         type: 'image',
-        url: 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=800&h=450&fit=crop',
-        alt: 'Marketing Automation',
-        caption: 'Create automated email campaigns and customer journeys'
+        url: 'hubspot-media-1.avif',
+        alt: 'HubSpot - 1'
       },
       {
         type: 'image',
-        url: 'https://images.unsplash.com/photo-1556656793-08538906a9f8?w=800&h=450&fit=crop',
-        alt: 'Email Templates',
-        caption: 'Design beautiful emails with drag-and-drop editor'
+        url: 'hubspot-media-2.avif',
+        alt: 'HubSpot - 2'
+      },
+      {
+        type: 'image',
+        url: 'hubspot-media-3.avif',
+        alt: 'HubSpot - 3'
       }
     ],
     features: [
@@ -345,7 +357,7 @@ export const integrations: Record<string, Integration> = {
     name: 'Slack',
     description: 'Team collaboration platform that brings all your communication together. Enable SULLA to send notifications, share updates, and interact with team members through channels and direct messages.',
     category: 'Team Communication',
-    icon: 'slack-svgrepo-com.svg',
+    icon: 'slack.svg',
     connected: false,
     version: '2.4.0',
     lastUpdated: '5 days ago',
@@ -359,7 +371,7 @@ export const integrations: Record<string, Integration> = {
       },
       {
         type: 'image',
-        url: 'slack-ia4-client-windows-desktop.png',
+        url: 'slack-media-1.png',
         alt: 'Slack Desktop Client',
         caption: 'Native Slack desktop application for Windows with all features'
       }
@@ -447,7 +459,7 @@ export const integrations: Record<string, Integration> = {
     name: 'Mailgun',
     description: 'Powerful email API service for developers. Enable SULLA to send, receive, and track emails programmatically with advanced analytics, validation, and deliverability features.',
     category: 'Email Service',
-    icon: 'mailgun-icon-svgrepo-com.svg',
+    icon: 'mailgun.svg',
     connected: false,
     version: '1.5.3',
     lastUpdated: '1 week ago',
@@ -549,7 +561,7 @@ export const integrations: Record<string, Integration> = {
     name: 'SendGrid',
     description: 'Cloud-based email delivery platform that reliably delivers emails on behalf of SULLA. Advanced features include email marketing campaigns, automation, and detailed analytics.',
     category: 'Email Service',
-    icon: 'sendgrid-icon-svgrepo-com.svg',
+    icon: 'sendgrid.svg',
     connected: false,
     version: '3.2.1',
     lastUpdated: '4 days ago',
@@ -639,7 +651,7 @@ export const integrations: Record<string, Integration> = {
     name: 'WhatsApp Business',
     description: 'Connect with customers on the world\'s most popular messaging platform. Enable SULLA to send notifications, provide support, and automate conversations through WhatsApp Business API.',
     category: 'Messaging',
-    icon: 'whatsapp-symbol-logo-svgrepo-com.svg',
+    icon: 'whatsapp.svg',
     connected: false,
     version: '2.3.1',
     lastUpdated: '1 week ago',
@@ -745,7 +757,7 @@ export const integrations: Record<string, Integration> = {
     name: 'Telegram',
     description: 'Cloud-based instant messaging service with powerful bot capabilities. Enable SULLA to create bots, send messages, and automate communication through Telegram\'s flexible API.',
     category: 'Messaging',
-    icon: 'telegram-svgrepo-com.svg',
+    icon: 'telegram.svg',
     connected: false,
     version: '1.8.0',
     lastUpdated: '3 days ago',
@@ -835,7 +847,7 @@ export const integrations: Record<string, Integration> = {
     name: 'Discord',
     description: 'Voice, video, and text communication platform designed for communities. Enable SULLA to join servers, send messages, and automate community management through Discord bots.',
     category: 'Community',
-    icon: 'discord-icon-svgrepo-com.svg',
+    icon: 'discord.svg',
     connected: false,
     version: '2.0.5',
     lastUpdated: '2 days ago',
@@ -908,32 +920,6 @@ export const integrations: Record<string, Integration> = {
           minLength: 59,
           maxLength: 59
         }
-      },
-      {
-        key: 'client_id',
-        title: 'Client ID',
-        hint: 'Your Discord application client ID',
-        type: 'text',
-        required: true,
-        placeholder: '',
-        validation: {
-          pattern: '^\\d{17,19}$',
-          minLength: 17,
-          maxLength: 19
-        }
-      },
-      {
-        key: 'guild_id',
-        title: 'Server ID',
-        hint: 'Discord server ID where the bot will operate',
-        type: 'text',
-        required: false,
-        placeholder: '',
-        validation: {
-          pattern: '^\\d{17,19}$',
-          minLength: 17,
-          maxLength: 19
-        }
       }
     ]
   },
@@ -943,7 +929,7 @@ export const integrations: Record<string, Integration> = {
     name: 'Signal',
     description: 'Privacy-focused messaging app with end-to-end encryption. Enable SULLA to send secure messages and notifications through Signal\'s privacy-preserving platform.',
     category: 'Secure Messaging',
-    icon: 'signal-svgrepo-com.svg',
+    icon: 'signal.svg',
     connected: false,
     version: '1.2.0',
     lastUpdated: '1 week ago',
@@ -1038,7 +1024,7 @@ export const integrations: Record<string, Integration> = {
     name: 'LinkedIn',
     description: 'Professional networking platform for business development and recruitment. Enable SULLA to manage professional connections, share business content, and engage with industry professionals through LinkedIn\'s powerful network.',
     category: 'Professional Network',
-    icon: 'linkedin-svgrepo-com.svg',
+    icon: 'linkedin.svg',
     connected: false,
     version: '1.5.0',
     lastUpdated: '4 days ago',
@@ -1099,45 +1085,6 @@ export const integrations: Record<string, Integration> = {
       }
     ],
     properties: [
-      {
-        key: 'client_id',
-        title: 'Client ID',
-        hint: 'Your LinkedIn application client ID',
-        type: 'text',
-        required: true,
-        placeholder: '',
-        validation: {
-          pattern: '^[a-zA-Z0-9]{16}$',
-          minLength: 16,
-          maxLength: 16
-        }
-      },
-      {
-        key: 'client_secret',
-        title: 'Client Secret',
-        hint: 'Your LinkedIn application client secret',
-        type: 'password',
-        required: true,
-        placeholder: '',
-        validation: {
-          pattern: '^[a-zA-Z0-9]{16}$',
-          minLength: 16,
-          maxLength: 16
-        }
-      },
-      {
-        key: 'access_token',
-        title: 'Access Token',
-        hint: 'OAuth 2.0 access token (optional, can be obtained during flow)',
-        type: 'password',
-        required: false,
-        placeholder: '',
-        validation: {
-          pattern: '^AQX[a-zA-Z0-9]{100,200}$',
-          minLength: 103,
-          maxLength: 203
-        }
-      }
     ]
   }
 };
