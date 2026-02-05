@@ -107,9 +107,6 @@ ${JSON_ONLY_RESPONSE_INSTRUCTIONS}
     // Clear previous iteration's revision request - each execution starts fresh
     delete state.metadata.requestPlanRevision;
     
-    // Track consecutive LLM failures to prevent infinite loops
-    const llmFailureCount = ((state.metadata.llmFailureCount as number) || 0);
-    
     // Only execute hierarchical tactical steps.
     let executed = false;
     if (state.metadata.activeTacticalStep) {
@@ -121,12 +118,36 @@ ${JSON_ONLY_RESPONSE_INSTRUCTIONS}
       await this.handleNoPlanResponse(state);
     }
 
-    // TacticalExecutor does not generate a second, user-facing LLM response.
-    // User-visible updates must come from emit_chat_message during tool execution.
-    state.metadata.executorCompleted = true;
-    state.metadata.llmFailureCount = 0;
+    // TacticalExecutor controls its own flow - decide whether to continue or go to critic
+    const shouldContinue = this.shouldContinueExecution(state);
+    state.metadata.executorContinue = shouldContinue;
+    
+    return { state, next: shouldContinue ? 'continue' : 'end' };
+  }
 
-    return { state, next: 'continue' };
+  /**
+   * Determine if executor should continue with more work or go to critic
+   */
+  private shouldContinueExecution(state: ThreadState): boolean {
+
+    // Track consecutive LLM failures to prevent infinite loops
+    const llmFailureCount = ((state.metadata.llmFailureCount as number) || 0);
+    if (llmFailureCount >= 3) {
+      return false;
+    }
+
+    // Check if the current step explicitly requested to continue (markDone: false)
+    const todoExecution = state.metadata.todoExecution as any;
+    if (todoExecution && todoExecution.markDone === false) {
+      return true; // LLM said more work needed, continue looping
+    }
+
+    // If there are remaining tactical steps or milestones, continue execution
+    if (this.hasRemainingTacticalWork(state)) {
+      return true;
+    }
+
+    return false;
   }
 
   /**

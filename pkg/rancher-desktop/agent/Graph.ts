@@ -181,11 +181,21 @@ export class Graph {
         break;
       }
 
-      // Handle loop back
+      // Handle loop back to same node with counter
       if (nextNodeId === currentNodeId) {
-        // Prevent infinite loops on same node
-        console.warn(`Loop detected on node ${ currentNodeId }, forcing end`);
-        break;
+        // Track consecutive loops on same node
+        const loopCount = ((state.metadata as any).sameNodeLoopCount as number) || 0;
+        (state.metadata as any).sameNodeLoopCount = loopCount + 1;
+        
+        if (loopCount + 1 >= 15) {
+          console.warn(`Node ${currentNodeId} looped ${loopCount + 1} times on itself, forcing end`);
+          break;
+        }
+        
+        console.log(`Node ${currentNodeId} looping on itself (${loopCount + 1}/15)`);
+      } else {
+        // Reset loop counter when moving to different node
+        (state.metadata as any).sameNodeLoopCount = 0;
       }
 
       currentNodeId = nextNodeId;
@@ -309,7 +319,15 @@ export function createHierarchicalGraph(): Graph {
   graph.addEdge('memory_recall', 'strategic_planner');
   graph.addEdge('strategic_planner', 'tactical_planner');
   graph.addEdge('tactical_planner', 'tactical_executor');
-  graph.addEdge('tactical_executor', 'tactical_critic');
+
+  // Conditional edge from TacticalExecutor - let it decide whether to loop or continue
+  graph.addConditionalEdge('tactical_executor', (state: ThreadState) => {
+    // Check if executor wants to continue with more work
+    if (state.metadata.executorContinue) {
+      return 'tactical_executor'; // Loop back to itself
+    }
+    return 'tactical_critic'; // Move to critic
+  });
 
   // Conditional edge from Critic
   graph.addConditionalEdge('tactical_critic', (state: ThreadState) => {
@@ -320,13 +338,7 @@ export function createHierarchicalGraph(): Graph {
       return 'tactical_planner';
     }
 
-    // Check if there are more tactical steps or milestones
-    if (state.metadata.planHasRemainingTodos) {
-      // Go back to tactical planner to get next step or next milestone
-      return 'tactical_planner';
-    }
-
-    // All done - final review
+    // Executor handles its own flow now, so just go to final review
     return 'strategic_critic';
   });
 
@@ -384,7 +396,15 @@ export function createHeartbeatGraph(): Graph {
   // Hierarchical flow
   graph.addEdge('strategic_planner', 'tactical_planner');
   graph.addEdge('tactical_planner', 'tactical_executor');
-  graph.addEdge('tactical_executor', 'tactical_critic');
+
+  // Conditional edge from TacticalExecutor - let it decide whether to loop or continue
+  graph.addConditionalEdge('tactical_executor', (state: ThreadState) => {
+    // Check if executor wants to continue with more work
+    if (state.metadata.executorContinue) {
+      return 'tactical_executor'; // Loop back to itself
+    }
+    return 'tactical_critic'; // Move to critic
+  });
 
   graph.addConditionalEdge('tactical_critic', (state: ThreadState) => {
     const decision = state.metadata.criticDecision;
@@ -393,10 +413,7 @@ export function createHeartbeatGraph(): Graph {
       return 'tactical_planner';
     }
 
-    if (state.metadata.planHasRemainingTodos) {
-      return 'tactical_planner';
-    }
-
+    // Executor handles its own flow now, so just go to final review
     return 'strategic_critic';
   });
 

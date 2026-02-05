@@ -144,6 +144,8 @@ export interface TaskState {
   // Graph execution
   maxIterationsReached?: boolean;
   llmFailureCount?: number;
+  executorContinue?: boolean;
+  sameNodeLoopCount?: number;
   
   // LLM response
   response?: string;
