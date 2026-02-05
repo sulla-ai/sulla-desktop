@@ -83,8 +83,14 @@
                 >
                   <div class="p-6">
                     <div class="flex items-start justify-between mb-4">
-                      <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-2xl dark:bg-slate-700">
-                        {{ integration.icon }}
+                      <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-700">
+                        <img
+                          v-if="integration.icon.endsWith('.svg')"
+                          :src="require(`@pkg/assets/images/${integration.icon}`)"
+                          :alt="integration.name"
+                          class="h-8 w-8 object-contain"
+                        >
+                        <span v-else class="text-2xl">{{ integration.icon }}</span>
                       </div>
                       <div class="flex items-center gap-2">
                         <div
@@ -133,138 +139,35 @@
 
 <script setup lang="ts">
 import AgentHeader from './agent/AgentHeader.vue';
+import { integrations, type Integration } from '@pkg/agent/integrations/catalog';
 
 import { computed, onMounted, ref } from 'vue';
-
-interface Integration {
-  id: string;
-  name: string;
-  description: string;
-  category: string;
-  icon: string;
-  credentials: string[];
-  credentialLink: string;
-  connected: boolean;
-}
 
 const THEME_STORAGE_KEY = 'agentTheme';
 const isDark = ref(false);
 
 const search = ref('');
 const activeCategory = ref<string | null>(null);
-const integrations = ref<Integration[]>([
-  {
-    id: 'intercom',
-    name: 'Intercom',
-    description: 'Customer communication and support platform',
-    category: 'Communication',
-    icon: '💬',
-    connected: false,
-    credentials: ['accessToken'],
-    credentialLink: 'https://app.intercom.com/a/apps/_/developer-hub/apps'
-  },
-  {
-    id: 'hubspot',
-    name: 'HubSpot',
-    description: 'Marketing, sales, and service software',
-    category: 'CRM',
-    icon: '🎯',
-    connected: false,
-    credentials: ['privateAppAccessToken'],
-    credentialLink: 'https://app.hubspot.com/private-apps'
-  },
-  {
-    id: 'slack',
-    name: 'Slack',
-    description: 'Team collaboration and messaging',
-    category: 'Communication',
-    icon: '💭',
-    connected: false,
-    credentials: ['botToken'],
-    credentialLink: 'https://api.slack.com/apps'
-  },
-  {
-    id: 'onenote',
-    name: 'OneNote',
-    description: 'Digital note-taking and organization',
-    category: 'Productivity',
-    icon: '📝',
-    connected: false,
-    credentials: ['clientId', 'clientSecret', 'tenantId', 'refreshToken'],
-    credentialLink: 'https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade'
-  },
-  {
-    id: 'trello',
-    name: 'Trello',
-    description: 'Project management and collaboration',
-    category: 'Productivity',
-    icon: '📋',
-    connected: false,
-    credentials: ['apiKey', 'apiToken'],
-    credentialLink: 'https://trello.com/app-key'
-  },
-  {
-    id: 'zendesk',
-    name: 'Zendesk',
-    description: 'Customer service and engagement platform',
-    category: 'Support',
-    icon: '🎧',
-    connected: false,
-    credentials: ['apiToken'],
-    credentialLink: 'https://YOUR-SUBDOMAIN.zendesk.com/agent/admin/api'
-  },
-  {
-    id: 'evernote',
-    name: 'Evernote',
-    description: 'Note-taking and task management',
-    category: 'Productivity',
-    icon: '📔',
-    connected: false,
-    credentials: ['accessToken'],
-    credentialLink: 'https://sandbox.evernote.com/api/DeveloperToken.action'
-  },
-  {
-    id: 'dropbox',
-    name: 'Dropbox',
-    description: 'Cloud storage and file sharing',
-    category: 'Storage',
-    icon: '☁️',
-    connected: false,
-    credentials: ['accessToken'],
-    credentialLink: 'https://www.dropbox.com/developers/apps'
-  },
-  {
-    id: 'tinder',
-    name: 'Tinder',
-    description: 'Social discovery and dating platform',
-    category: 'Social',
-    icon: '🔥',
-    connected: false,
-    credentials: [],
-    credentialLink: 'No official public API available'
-  },
-  {
-    id: 'framer',
-    name: 'Framer',
-    description: 'Interactive design and prototyping',
-    category: 'Design',
-    icon: '🎨',
-    connected: false,
-    credentials: ['apiKey'],
-    credentialLink: 'https://www.framer.com/developers/api'
-  }
-]);
+
+const integrationsList = ref(Object.values(integrations));
 
 const categories = computed(() => {
-  const cats = [...new Set(integrations.value.map(i => i.category))];
-  return cats;
+  const counts = new Map<string, number>();
+  for (const integration of integrationsList.value) {
+    counts.set(integration.category, (counts.get(integration.category) || 0) + 1);
+  }
+
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, 6)
+    .map(([category]) => category);
 });
 
 const filteredIntegrations = computed(() => {
   const q = search.value.trim().toLowerCase();
   const category = activeCategory.value;
 
-  return integrations.value
+  return integrationsList.value
     .filter((integration) => {
       if (category && integration.category !== category) {
         return false;
@@ -276,7 +179,8 @@ const filteredIntegrations = computed(() => {
 
       const hay = `${integration.name} ${integration.description} ${integration.category}`.toLowerCase();
       return hay.includes(q);
-    });
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
 });
 
 const toggleTheme = () => {
@@ -284,17 +188,25 @@ const toggleTheme = () => {
   localStorage.setItem(THEME_STORAGE_KEY, isDark.value ? 'dark' : 'light');
 };
 
-const connectIntegration = (integrationId: string) => {
-  const integration = integrations.value.find(i => i.id === integrationId);
+const connectIntegration = (id: string) => {
+  const integration = integrations[id];
   if (integration) {
     integration.connected = true;
+    const index = integrationsList.value.findIndex(i => i.id === id);
+    if (index !== -1) {
+      integrationsList.value[index] = { ...integration };
+    }
   }
 };
 
-const disconnectIntegration = (integrationId: string) => {
-  const integration = integrations.value.find(i => i.id === integrationId);
+const disconnectIntegration = (id: string) => {
+  const integration = integrations[id];
   if (integration) {
     integration.connected = false;
+    const index = integrationsList.value.findIndex(i => i.id === id);
+    if (index !== -1) {
+      integrationsList.value[index] = { ...integration };
+    }
   }
 };
 
