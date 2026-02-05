@@ -456,6 +456,7 @@ When to trigger KB generation:
         messages.push({ role: 'system', content: prompt });
       }
 
+      console.warn(`[Agent:${this.name}] model ${model}`);
       const content = await this.llmService.chat(messages, { signal: abort?.signal });
 
       if (!content) {

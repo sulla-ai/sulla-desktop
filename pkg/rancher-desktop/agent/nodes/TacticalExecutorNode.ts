@@ -41,7 +41,7 @@ Core Directives (non-negotiable):
 - If unsure → stop and return error instead of guessing
 
 Mandatory visibility:
-- Use emit_chat_message tool before EVERY non-trivial action.
+- Use emit_chat_message: "Talk the the user, tell them what's going on and what you're doing"
 - Before each tool call: 1-line preview of what command/tool + why.
 - On completion: confirm what was done with evidence.
 
@@ -49,9 +49,9 @@ ${JSON_ONLY_RESPONSE_INSTRUCTIONS}
 {
   "tools": [
     ["tool_name", "arg1", "arg2"]
+    ["emit_chat_message", "Respond to the users inquiry"]
   ],
-  "markDone": true,
-  "summary": "Talk the the user, tell them what's going on and what you're doing"
+  "markDone": true | false, // true if the task is complete, false if more steps are needed
 }`;
 
     const prompt = await this.enrichPrompt(basePrompt, state, {
@@ -60,11 +60,13 @@ ${JSON_ONLY_RESPONSE_INSTRUCTIONS}
       includeMemory: true,
       includeTools: true,
       toolDetail: 'tactical',
-      includeSkills: true,
+      includeSkills: false,
       includeStrategicPlan: false,
       includeTacticalPlan: false,
       includeKnowledgeGraphInstructions: undefined,
     });
+
+    console.log(['TacticalExecutorNode handleNoPlanResponse prompt', prompt]);
 
     try {
       const response = await this.prompt(prompt, state);
@@ -446,12 +448,12 @@ Mandatory visibility:
 - On blocker/retry/failure: explain exactly what’s wrong + next attempt.
 - On completion: "Step complete. Evidence: [short proof]"
 
-Important: do not use { summary: '' } to communicate with the user. you must use emit_chat_message tool to communicate with the user.
 ${JSON_ONLY_RESPONSE_INSTRUCTIONS}
 {
   "tools": [
     ["tool_name", "arg1", "arg2"],
     ["anytool", "help"]
+    ["emit_chat_message", "Respond to the users inquiry"]
   ],
   "markDone": true
 }`;

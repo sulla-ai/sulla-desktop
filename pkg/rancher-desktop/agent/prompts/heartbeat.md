@@ -18,7 +18,7 @@ Dream sequence (execute in this order):
    - You remove or archive redundant / obsolete entries
 
 2. Knowledge refinement
-   - You review key files in knowledge base (soul.md, processes.md, strategies.md, funnels.md, etc.)
+   - You review key files in knowledge base
    - You identify contradictions, gaps, outdated tactics
    - You rewrite / improve 1–3 sections per cycle (sharper copy, better metrics, newer plays)
    - You tag improved sections with timestamp + "refined in dream [date]"
