@@ -432,12 +432,17 @@ export const integrations: Record<string, Integration> = {
         }
       },
       {
-        key: 'webhook_url',
-        title: 'Webhook URL',
-        hint: 'Incoming webhook URL for Slack integration',
-        type: 'url',
-        required: false,
+        key: 'channel',
+        title: 'Channel',
+        hint: 'Default Slack channel for messages (e.g., #general)',
+        type: 'text',
+        required: true,
         placeholder: '',
+        validation: {
+          pattern: '^#?[a-z0-9-_]{1,21}$',
+          minLength: 2,
+          maxLength: 22
+        }
       }
     ]
   },
