@@ -5,9 +5,9 @@ export interface Integration {
   category: string;
   icon: string;
   connected: boolean;
-  version?: string;
-  lastUpdated?: string;
-  developer?: string;
+  version: string;
+  lastUpdated: string;
+  developer: string;
   media?: Array<{
     type: 'image' | 'youtube';
     url: string;
@@ -49,9 +49,9 @@ export const integrations: Record<string, Integration> = {
     category: 'Customer Support',
     icon: 'intercom.svg',
     connected: false,
-    version: '2.1.0',
-    lastUpdated: '1 day ago',
-    developer: 'Intercom Inc.',
+    version: '1.0.0',
+    lastUpdated: '2025-02-08 21:00:00',
+    developer: 'Sulla Team',
     media: [
       {
         type: 'youtube',
@@ -147,9 +147,9 @@ export const integrations: Record<string, Integration> = {
     category: 'Communication API',
     icon: 'twilio.svg',
     connected: false,
-    version: '3.0.1',
-    lastUpdated: '3 days ago',
-    developer: 'Twilio Inc.',
+    version: '1.0.0',
+    lastUpdated: '2025-02-08 21:00:00',
+    developer: 'Sulla Team',
     media: [
       {
         type: 'image',
@@ -255,9 +255,9 @@ export const integrations: Record<string, Integration> = {
     category: 'CRM & Marketing',
     icon: 'hubspot.svg',
     connected: false,
-    version: '1.8.2',
-    lastUpdated: '2 days ago',
-    developer: 'HubSpot, Inc.',
+    version: '1.0.0',
+    lastUpdated: '2025-02-08 21:00:00',
+    developer: 'Sulla Team',
     media: [
       {
         type: 'youtube',
@@ -364,9 +364,9 @@ export const integrations: Record<string, Integration> = {
     category: 'Team Communication',
     icon: 'slack.svg',
     connected: false,
-    version: '2.4.0',
-    lastUpdated: '5 days ago',
-    developer: 'Slack Technologies',
+    version: '1.0.0',
+    lastUpdated: '2025-02-08 21:00:00',
+    developer: 'Sulla Team',
     media: [
       {
         type: 'youtube',
@@ -472,9 +472,9 @@ export const integrations: Record<string, Integration> = {
     category: 'Email Service',
     icon: 'mailgun.svg',
     connected: false,
-    version: '1.5.3',
-    lastUpdated: '1 week ago',
-    developer: 'Mailgun Technologies',
+    version: '1.0.0',
+    lastUpdated: '2025-02-08 21:00:00',
+    developer: 'Sulla Team',
     media: [
       {
         type: 'image',
@@ -574,9 +574,9 @@ export const integrations: Record<string, Integration> = {
     category: 'Email Service',
     icon: 'sendgrid.svg',
     connected: false,
-    version: '3.2.1',
-    lastUpdated: '4 days ago',
-    developer: 'Twilio Inc.',
+    version: '1.0.0',
+    lastUpdated: '2025-02-08 21:00:00',
+    developer: 'Sulla Team',
     media: [
       {
         type: 'image',
@@ -664,9 +664,9 @@ export const integrations: Record<string, Integration> = {
     category: 'Messaging',
     icon: 'whatsapp.svg',
     connected: false,
-    version: '2.3.1',
-    lastUpdated: '1 week ago',
-    developer: 'Meta',
+    version: '1.0.0',
+    lastUpdated: '2025-02-08 21:00:00',
+    developer: 'Sulla Team',
     media: [
       {
         type: 'image',
@@ -770,9 +770,9 @@ export const integrations: Record<string, Integration> = {
     category: 'Messaging',
     icon: 'telegram.svg',
     connected: false,
-    version: '1.8.0',
-    lastUpdated: '3 days ago',
-    developer: 'Telegram Messenger LLP',
+    version: '1.0.0',
+    lastUpdated: '2025-02-08 21:00:00',
+    developer: 'Sulla Team',
     media: [
       {
         type: 'image',
@@ -860,9 +860,9 @@ export const integrations: Record<string, Integration> = {
     category: 'Community',
     icon: 'discord.svg',
     connected: false,
-    version: '2.0.5',
-    lastUpdated: '2 days ago',
-    developer: 'Discord Inc.',
+    version: '1.0.0',
+    lastUpdated: '2025-02-08 21:00:00',
+    developer: 'Sulla Team',
     media: [
       {
         type: 'youtube',
@@ -947,9 +947,9 @@ export const integrations: Record<string, Integration> = {
     category: 'Secure Messaging',
     icon: 'signal.svg',
     connected: false,
-    version: '1.2.0',
-    lastUpdated: '1 week ago',
-    developer: 'Signal Foundation',
+    version: '1.0.0',
+    lastUpdated: '2025-02-08 21:00:00',
+    developer: 'Sulla Team',
     media: [
       {
         type: 'youtube',
@@ -1048,9 +1048,9 @@ export const integrations: Record<string, Integration> = {
     category: 'Professional Network',
     icon: 'linkedin.svg',
     connected: false,
-    version: '1.5.0',
-    lastUpdated: '4 days ago',
-    developer: 'Microsoft Corporation',
+    version: '1.0.0',
+    lastUpdated: '2025-02-08 21:00:00',
+    developer: 'Sulla Team',
     media: [
       {
         type: 'image',

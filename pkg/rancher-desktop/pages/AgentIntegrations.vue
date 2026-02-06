@@ -116,6 +116,12 @@
                         {{ integration.category }}
                       </span>
                       
+                      <div class="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                        <span>Updated {{ formatFuzzyTime(integration.lastUpdated) }}</span>
+                      </div>
+                    </div>
+                    
+                    <div class="flex items-center justify-between mt-3">
                       <router-link
                         :to="`/Integrations/${integration.id}`"
                         class="inline-flex items-center rounded-md px-3 py-1.5 text-xs font-medium transition-colors"
@@ -141,6 +147,7 @@
 import AgentHeader from './agent/AgentHeader.vue';
 import { integrations, type Integration } from '@pkg/agent/integrations/catalog';
 import { getIntegrationService } from '@pkg/agent/services/IntegrationService';
+import { formatFuzzyTime } from '@pkg/utils/dateFormat';
 
 import { computed, onMounted, ref } from 'vue';
 

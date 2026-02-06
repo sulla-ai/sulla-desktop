@@ -50,6 +50,12 @@
                         {{ integration.connected ? 'Connected' : 'Not Connected' }}
                       </span>
                     </div>
+                    <div class="flex items-center gap-1 text-sm text-slate-500 dark:text-slate-400">
+                      <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <span>Updated {{ formatFuzzyTime(integration.lastUpdated) }}</span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -124,7 +130,7 @@
               </div>
 
               <!-- Features -->
-              <div class="space-y-4">
+              <!-- <div class="space-y-4">
                 <h2 class="text-xl font-semibold text-slate-900 dark:text-white">Features</h2>
                 <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div
@@ -143,7 +149,7 @@
                     </div>
                   </div>
                 </div>
-              </div>
+              </div> -->
 
               <!-- Connect/Disconnect Card -->
               <div class="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-slate-800">
@@ -200,7 +206,7 @@
               </div>
 
               <!-- Guide Links -->
-              <div v-if="integration.guideLinks && integration.guideLinks.length > 0" class="space-y-4">
+              <!-- <div v-if="integration.guideLinks && integration.guideLinks.length > 0" class="space-y-4">
                 <h2 class="text-xl font-semibold text-slate-900 dark:text-white">Guides & Documentation</h2>
                 <div class="space-y-3">
                   <a
@@ -227,11 +233,11 @@
                     </svg>
                   </a>
                 </div>
-              </div>
+              </div> -->
             </div>
 
             <!-- Sidebar -->
-            <div class="space-y-6">
+            <div class="lg:col-span-2 space-y-8">
               <!-- Quick Info -->
               <div class="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-slate-800">
                 <h3 class="text-lg font-semibold text-slate-900 dark:text-white mb-4">Quick Info</h3>
@@ -246,17 +252,17 @@
                   </div>
                   <div>
                     <p class="text-xs font-medium text-slate-500 dark:text-slate-400">Last Updated</p>
-                    <p class="text-sm text-slate-900 dark:text-white">{{ integration.lastUpdated || '2 days ago' }}</p>
+                    <p class="text-sm text-slate-900 dark:text-white capitalize">{{ formatFuzzyTime(integration.lastUpdated) }}</p>
                   </div>
                   <div>
                     <p class="text-xs font-medium text-slate-500 dark:text-slate-400">Developer</p>
-                    <p class="text-sm text-slate-900 dark:text-white">{{ integration.developer || 'Sulla Team' }}</p>
+                    <p class="text-sm text-slate-900 dark:text-white">{{ integration.developer }}</p>
                   </div>
                 </div>
               </div>
 
               <!-- Support -->
-              <div class="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-slate-800">
+              <!-- <div class="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-slate-800">
                 <h3 class="text-lg font-semibold text-slate-900 dark:text-white mb-4">Need Help?</h3>
                 <div class="space-y-3">
                   <a
@@ -278,7 +284,7 @@
                     Contact Support
                   </a>
                 </div>
-              </div>
+              </div> -->
             </div>
           </div>
 
@@ -300,6 +306,7 @@ import AgentHeader from './agent/AgentHeader.vue';
 import { integrations, type Integration } from '@pkg/agent/integrations/catalog';
 import YouTubePlayer from '@pkg/components/YouTubePlayer.vue';
 import { getIntegrationService } from '@pkg/agent/services/IntegrationService';
+import { formatFuzzyTime } from '@pkg/utils/dateFormat';
 
 import { onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
