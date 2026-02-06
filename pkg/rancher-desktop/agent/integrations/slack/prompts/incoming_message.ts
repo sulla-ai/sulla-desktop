@@ -1,9 +1,4 @@
 // When Sulla receives an event notification
-import { SlackTool } from '../SlackTool';
-
-function getSlackInstructions(): string {
-  return new SlackTool().getPlanningInstructions();
-}
 
 export const incomingMessage = `
 This message was sent to you via Slack.
@@ -17,5 +12,4 @@ Rules:
 5. Never hallucinate — stick to visible facts in payload
 
 ## Slack usage instructions
-${getSlackInstructions()}
 `;
