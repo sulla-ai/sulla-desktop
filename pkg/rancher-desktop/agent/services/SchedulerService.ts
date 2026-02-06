@@ -1,6 +1,7 @@
 import schedule from 'node-schedule';
 import { getCalendarService, CalendarEvent } from './CalendarService';
 import { getWebSocketClientService, type WebSocketMessage } from './WebSocketClientService';
+import { eventPrompt } from '../prompts/event';
 
 const FRONTEND_CHANNEL_ID = 'chat-controller';
 const BACKEND_CHANNEL_ID = 'chat-controller-backend';
@@ -76,6 +77,7 @@ export class SchedulerService {
       return;
     }
 
+    // Trigger the event reminder
     const job = schedule.scheduleJob(startTime, async () => {
       console.log(`[SchedulerService] CRON JOB FIRED for event: ${event.id} - "${event.title}"`);
       console.log(`[SchedulerService]   Scheduled time: ${startTime.toISOString()}`);
@@ -107,7 +109,7 @@ export class SchedulerService {
     try {
       console.log(`[SchedulerService] Sending event prompt via WS: ${event.id} - "${event.title}"`);
       const prompt = this.buildEventPrompt(event);
-      console.log(`[SchedulerService]   Built prompt (${prompt.length} chars)`);
+      console.log(`[SchedulerService] Built prompt (${prompt.length} chars)`);
 
       const acknowledged = await this.sendToFrontend(event, prompt);
       if (acknowledged) {
@@ -220,14 +222,17 @@ export class SchedulerService {
     });
 
     const parts = [
-      `[CALENDAR EVENT NOTIFICATION]`,
+      `${eventPrompt}`,
+      `## Event Details`,
       ``,
-      `A scheduled event is starting now:`,
+      `Title: ${event.title}`,
+      `Description: ${event.description}`,
+      `Invitees: ${event.people}`,
+      `Start datetime: ${startFormatted}`,
+      `End datetime: ${endFormatted}`,
+      `allDay: ${event.allDay}`,
+      `createdAt: ${event.createdAt}`,
       ``,
-      `**Event ID:** ${event.id}`,
-      `**Title:** ${event.title}`,
-      `**Start:** ${startFormatted}`,
-      `**End:** ${endFormatted}`,
     ];
 
     if (event.location) {
@@ -237,10 +242,6 @@ export class SchedulerService {
     if (event.description) {
       parts.push(`**Description:** ${event.description}`);
     }
-
-    parts.push(``);
-    parts.push(`This is an automated background notification. You may take any appropriate action based on this event, such as preparing relevant information, sending reminders, or noting the event in your awareness.`);
-
     return parts.join('\n');
   }
 
