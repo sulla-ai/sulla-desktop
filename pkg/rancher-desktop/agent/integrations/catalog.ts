@@ -200,9 +200,9 @@ export const integrations: Record<string, Integration> = {
   messenger: {
     id: 'messenger',
     name: 'Facebook Messenger',
-    description: 'Connect with billions of users through Facebook\'s messaging platform. Enable SULLA to send messages, provide customer support, and automate conversations through Messenger Platform API.',
+    description: 'Automate your customer support and handle all conversations through Facebook\'s popular messaging platform. Keep track of customer interactions, provide instant responses, and manage your business communications seamlessly from one central hub.',
     category: 'Messaging',
-    icon: 'messenger.svg',
+    icon: 'messenger.avif',
     connected: false,
     version: '1.0.0',
     lastUpdated: '2025-02-08 21:00:00',
@@ -269,32 +269,6 @@ export const integrations: Record<string, Integration> = {
         'Users must initiate conversations - bots cannot message first'
       ]
     },
-    media: [
-      {
-        type: 'youtube',
-        url: 'h4J2q9Y2cL4',
-        alt: 'Messenger Platform Overview',
-        caption: 'Getting Started with Messenger Platform'
-      },
-      {
-        type: 'image',
-        url: 'messenger-media-1.webp',
-        alt: 'Messenger Interface',
-        caption: 'Facebook Messenger desktop and mobile interface'
-      },
-      {
-        type: 'image',
-        url: 'messenger-media-2.jpg',
-        alt: 'Business Messaging',
-        caption: 'Customer support through Messenger'
-      },
-      {
-        type: 'image',
-        url: 'messenger-media-3.png',
-        alt: 'Rich Messages',
-        caption: 'Interactive messages with buttons and carousels'
-      }
-    ],
     features: [
       {
         title: 'Rich Messaging',
@@ -385,9 +359,9 @@ export const integrations: Record<string, Integration> = {
   whatsapp: {
     id: 'whatsapp',
     name: 'WhatsApp Business',
-    description: 'Connect with customers on the world\'s most popular messaging platform. Enable SULLA to send notifications, provide support, and automate conversations through WhatsApp Business API.',
+    description: 'Reach your customers wherever they are and manage all your business conversations in one place. Send notifications, provide support, and keep track of customer interactions through the world\'s most popular messaging app.',
     category: 'Messaging',
-    icon: 'whatsapp.svg',
+    icon: 'whatsapp.avif',
     connected: false,
     version: '1.0.0',
     lastUpdated: '2025-02-08 21:00:00',
@@ -523,9 +497,9 @@ export const integrations: Record<string, Integration> = {
   telegram: {
     id: 'telegram',
     name: 'Telegram',
-    description: 'Cloud-based instant messaging service with powerful bot capabilities. Enable SULLA to create bots, send messages, and automate communication through Telegram\'s flexible API.',
+    description: 'Engage your community and automate your messaging workflows with powerful bots. Handle customer inquiries, send notifications, and manage all your Telegram conversations efficiently from a single interface.',
     category: 'Messaging',
-    icon: 'telegram.svg',
+    icon: 'telegram.avif',
     connected: false,
     version: '1.0.0',
     lastUpdated: '2025-02-08 21:00:00',
@@ -648,9 +622,9 @@ export const integrations: Record<string, Integration> = {
   youtube: {
     id: 'youtube',
     name: 'YouTube',
-    description: 'World\'s largest video platform for content creation and sharing. Enable SULLA to manage channels, upload videos, analyze performance, and engage with your audience through YouTube Data API and YouTube Analytics API.',
+    description: 'Manage your YouTube content and grow your audience with automated workflows. Upload videos, track performance, engage with subscribers, and handle all your video publishing from one central dashboard.',
     category: 'Video Platform',
-    icon: 'youtube.svg',
+    icon: 'youtube.avif',
     connected: false,
     version: '1.0.0',
     lastUpdated: '2025-02-08 21:00:00',
@@ -721,30 +695,6 @@ export const integrations: Record<string, Integration> = {
       ]
     },
     media: [
-      {
-        type: 'youtube',
-        url: 'h4J2q9Y2cL4',
-        alt: 'YouTube API Overview',
-        caption: 'Getting Started with YouTube Data API v3'
-      },
-      {
-        type: 'image',
-        url: 'youtube-media-1.jpg',
-        alt: 'YouTube Studio',
-        caption: 'YouTube Studio dashboard for creators'
-      },
-      {
-        type: 'image',
-        url: 'youtube-media-2.png',
-        alt: 'Analytics Dashboard',
-        caption: 'YouTube analytics and performance metrics'
-      },
-      {
-        type: 'image',
-        url: 'youtube-media-3.webp',
-        alt: 'Content Management',
-        caption: 'Video upload and content management interface'
-      }
     ],
     features: [
       {
@@ -841,167 +791,12 @@ export const integrations: Record<string, Integration> = {
     ]
   },
 
-  signal: {
-    id: 'signal',
-    name: 'Signal',
-    description: 'Privacy-focused messaging app with end-to-end encryption. Enable SULLA to send secure messages and notifications through Signal\'s privacy-preserving platform.',
-    category: 'Secure Messaging',
-    icon: 'signal.svg',
-    connected: false,
-    version: '1.0.0',
-    lastUpdated: '2025-02-08 21:00:00',
-    developer: 'Sulla Team',
-    formGuide: 'Signal API access requires approval. Apply at support@signal.org for API credentials and documentation.',
-    installationGuide: {
-      title: 'Signal API Setup Guide',
-      description: 'Get access to Signal\'s private API for secure messaging (approval required)',
-      steps: [
-        {
-          title: 'Request API Access',
-          content: `1. Send an email to support@signal.org
-2. Include your organization details and use case
-3. Describe your technical requirements and expected volume
-4. Provide your development team\'s technical background
-5. Wait for approval from Signal\'s team (may take 1-2 weeks)`
-        },
-        {
-          title: 'Set Up Development Environment',
-          content: `1. Once approved, you\'ll receive API documentation
-2. Set up a Signal client for testing (desktop or mobile)
-3. Register your development phone number
-4. Install the Signal CLI or SDK for your programming language
-5. Configure your development environment with API endpoints`
-        },
-        {
-          title: 'Configure API Credentials',
-          content: `1. Receive API credentials from Signal team
-2. Set up authentication headers and tokens
-3. Configure your phone number in E.164 format (+countrycode-number)
-4. Obtain your Signal UUID from the client settings
-5. Test API connectivity with a simple request`
-        },
-        {
-          title: 'Implement Message Handling',
-          content: `1. Set up webhooks for receiving incoming messages
-2. Implement message encryption/decryption using Signal Protocol
-3. Configure rate limiting and error handling
-4. Set up message delivery confirmations
-5. Test end-to-end encryption with a test contact`
-        },
-        {
-          title: 'Test and Deploy',
-          content: `1. Send test messages between verified contacts
-2. Test group messaging if required
-3. Verify message delivery receipts work
-4. Test file sharing and media messages
-5. Deploy to production with proper monitoring`
-        }
-      ],
-      importantNotes: [
-        'Signal API access is limited and requires manual approval',
-        'All messages are end-to-end encrypted by default',
-        'Signal does not store message metadata or content',
-        'API usage may be subject to rate limiting',
-        'Signal\'s privacy policy restricts certain types of automation'
-      ]
-    },
-    media: [
-      {
-        type: 'youtube',
-        url: 'vjdlMZQbSQs',
-        alt: 'Signal Interface',
-        caption: 'Clean, privacy-focused messaging interface'
-      },
-      {
-        type: 'image',
-        url: 'signal-media-1.webp',
-        alt: 'Secure Messaging',
-        caption: 'End-to-end encrypted conversations'
-      },
-      {
-        type: 'image',
-        url: 'signal-media-2.webp',
-        alt: 'Voice & Video Calls',
-        caption: 'Secure voice and video calling'
-      },
-      {
-        type: 'image',
-        url: 'signal-media-3.png',
-        alt: 'Backup Plans',
-        caption: 'Secure backup and recovery options'
-      }
-    ],
-    features: [
-      {
-        title: 'End-to-End Encryption',
-        description: 'Military-grade encryption for all communications'
-      },
-      {
-        title: 'Privacy Protection',
-        description: 'No metadata collection or tracking'
-      },
-      {
-        title: 'Secure Groups',
-        description: 'Encrypted group conversations and file sharing'
-      },
-      {
-        title: 'Self-Destructing Messages',
-        description: 'Messages that automatically delete after set time'
-      }
-    ],
-    guideLinks: [
-      {
-        title: 'Signal Protocol',
-        description: 'Technical documentation on Signal encryption',
-        url: 'https://signal.org/docs/'
-      },
-      {
-        title: 'Privacy Guide',
-        description: 'Understanding Signal privacy features',
-        url: 'https://signal.org/privacy/'
-      },
-      {
-        title: 'Security Best Practices',
-        description: 'Tips for secure communication',
-        url: 'https://signal.org/blog/security-best-practices/'
-      }
-    ],
-    properties: [
-      {
-        key: 'phone_number',
-        title: 'Phone Number',
-        hint: 'Your Signal registered phone number in E.164 format',
-        type: 'text',
-        required: true,
-        placeholder: '',
-        validation: {
-          pattern: '^\\+[1-9]\\d{1,14}$',
-          minLength: 10,
-          maxLength: 16
-        }
-      },
-      {
-        key: 'uuid',
-        title: 'UUID',
-        hint: 'Your Signal UUID (optional, can be retrieved via API)',
-        type: 'text',
-        required: false,
-        placeholder: '',
-        validation: {
-          pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
-          minLength: 36,
-          maxLength: 36
-        }
-      }
-    ]
-  },
-
   teams: {
     id: 'teams',
     name: 'Microsoft Teams',
-    description: 'Collaboration platform with chat, video meetings, and file sharing. Enable SULLA to participate in team conversations, share files, and automate workflows through Microsoft Teams API.',
+    description: 'Collaborate with your team and automate your workflow in one powerful platform. Handle team conversations, share files, manage meetings, and keep all your project communication organized and accessible.',
     category: 'Collaboration',
-    icon: 'teams.svg',
+    icon: 'teams.avif',
     connected: false,
     version: '1.0.0',
     lastUpdated: '2025-02-08 21:00:00',
@@ -1069,30 +864,6 @@ export const integrations: Record<string, Integration> = {
       ]
     },
     media: [
-      {
-        type: 'youtube',
-        url: '1F2x3iQ2V8k',
-        alt: 'Microsoft Teams Overview',
-        caption: 'Getting Started with Microsoft Teams Development'
-      },
-      {
-        type: 'image',
-        url: 'teams-media-1.jpg',
-        alt: 'Teams Interface',
-        caption: 'Microsoft Teams desktop and web interface'
-      },
-      {
-        type: 'image',
-        url: 'teams-media-2.png',
-        alt: 'Team Collaboration',
-        caption: 'Chat, channels, and collaboration features'
-      },
-      {
-        type: 'image',
-        url: 'teams-media-3.webp',
-        alt: 'Meetings and Calls',
-        caption: 'Video meetings and voice calling capabilities'
-      }
     ],
     features: [
       {
@@ -1192,7 +963,7 @@ export const integrations: Record<string, Integration> = {
   intercom: {
     id: 'intercom',
     name: 'Intercom',
-    description: 'Customer communication platform that helps you build better customer relationships through personalized, messenger-based experiences. Perfect for support, marketing, and sales teams.',
+    description: 'Deliver exceptional customer service and manage all your support conversations in one place. Handle live chat, automate responses, track customer history, and provide personalized support at scale.',
     category: 'Customer Support',
     icon: 'intercom.svg',
     connected: false,
@@ -1291,9 +1062,9 @@ export const integrations: Record<string, Integration> = {
   x: {
     id: 'x',
     name: 'X (Twitter)',
-    description: 'Real-time social media platform for news, trends, and public conversations. Enable SULLA to post tweets, monitor mentions, analyze trends, and engage with your audience through X API v2.',
+    description: 'Grow your brand and engage with your audience through real-time conversations. Post updates, monitor trends, respond to mentions, and manage all your social media presence from one unified platform.',
     category: 'Social Media',
-    icon: 'x.svg',
+    icon: 'x.png',
     connected: false,
     version: '1.0.0',
     lastUpdated: '2025-02-08 21:00:00',
@@ -1494,9 +1265,9 @@ export const integrations: Record<string, Integration> = {
   instagram: {
     id: 'instagram',
     name: 'Instagram',
-    description: 'Visual social media platform for photos, videos, and stories. Enable SULLA to manage business accounts, schedule posts, analyze engagement, and interact with followers through Instagram Basic Display API and Instagram Graph API.',
+    description: 'Showcase your visual content and engage with your followers effortlessly. Schedule posts, manage your business profile, track engagement, and handle all your visual marketing from one beautiful interface.',
     category: 'Social Media',
-    icon: 'instagram.svg',
+    icon: 'instagram.avif',
     connected: false,
     version: '1.0.0',
     lastUpdated: '2025-02-08 21:00:00',
@@ -1565,32 +1336,7 @@ export const integrations: Record<string, Integration> = {
         'Webhooks require HTTPS endpoints for real-time updates'
       ]
     },
-    media: [
-      {
-        type: 'youtube',
-        url: 'h4J2q9Y2cL4',
-        alt: 'Instagram API Overview',
-        caption: 'Getting Started with Instagram Basic Display API'
-      },
-      {
-        type: 'image',
-        url: 'instagram-media-1.jpg',
-        alt: 'Instagram Interface',
-        caption: 'Instagram mobile and web interface'
-      },
-      {
-        type: 'image',
-        url: 'instagram-media-2.png',
-        alt: 'Business Features',
-        caption: 'Instagram business and creator tools'
-      },
-      {
-        type: 'image',
-        url: 'instagram-media-3.webp',
-        alt: 'Content Management',
-        caption: 'Instagram content creation and management'
-      }
-    ],
+    media: [],
     features: [
       {
         title: 'Content Publishing',
@@ -1693,9 +1439,9 @@ export const integrations: Record<string, Integration> = {
   tiktok: {
     id: 'tiktok',
     name: 'TikTok',
-    description: 'Short-form video platform with creative content and viral trends. Enable SULLA to manage business accounts, analyze performance, and engage with your audience through TikTok for Business API.',
+    description: 'Create viral content and grow your audience with automated workflows. Manage your TikTok presence, track performance, engage with trends, and handle all your short-form video marketing efficiently.',
     category: 'Social Media',
-    icon: 'tiktok.svg',
+    icon: 'tiktok.avif',
     connected: false,
     version: '1.0.0',
     lastUpdated: '2025-02-08 21:00:00',
@@ -1767,30 +1513,6 @@ export const integrations: Record<string, Integration> = {
       ]
     },
     media: [
-      {
-        type: 'youtube',
-        url: 'a7XU2k3I9sM',
-        alt: 'TikTok API Overview',
-        caption: 'Getting Started with TikTok for Business API'
-      },
-      {
-        type: 'image',
-        url: 'tiktok-media-1.jpg',
-        alt: 'TikTok Interface',
-        caption: 'TikTok mobile and desktop interface'
-      },
-      {
-        type: 'image',
-        url: 'tiktok-media-2.png',
-        alt: 'Creator Tools',
-        caption: 'TikTok Creator and Business tools dashboard'
-      },
-      {
-        type: 'image',
-        url: 'tiktok-media-3.webp',
-        alt: 'Analytics Dashboard',
-        caption: 'TikTok analytics and performance metrics'
-      }
     ],
     features: [
       {
@@ -1900,7 +1622,7 @@ export const integrations: Record<string, Integration> = {
   linkedin: {
     id: 'linkedin',
     name: 'LinkedIn',
-    description: 'Professional networking platform for business development and recruitment. Enable SULLA to manage professional connections, share business content, and engage with industry professionals through LinkedIn\'s powerful network.',
+    description: 'Build your professional network and grow your business connections effortlessly. Share business content, engage with industry leaders, manage your professional presence, and handle all your career networking from one platform.',
     category: 'Professional Network',
     icon: 'linkedin.svg',
     connected: false,
@@ -1951,7 +1673,7 @@ export const integrations: Record<string, Integration> = {
   discord: {
     id: 'discord',
     name: 'Discord',
-    description: 'Voice, video, and text communication platform designed for communities. Enable SULLA to join servers, send messages, and automate community management through Discord bots.',
+    description: 'Build and manage your community with powerful communication tools. Handle server conversations, automate community management, engage with members, and keep all your community interactions organized in one place.',
     category: 'Community',
     icon: 'discord.svg',
     connected: false,
@@ -2095,9 +1817,9 @@ export const integrations: Record<string, Integration> = {
   gmail: {
     id: 'gmail',
     name: 'Gmail',
-    description: 'Google\'s email service with powerful search and organization features. Enable SULLA to send emails, manage inbox, search messages, and automate email workflows through Gmail API.',
+    description: 'Manage all your email communication and never miss an important message. Send emails, search your inbox, organize conversations, and automate your email workflows for maximum productivity.',
     category: 'Productivity',
-    icon: 'gmail.svg',
+    icon: 'gmail.avif',
     connected: false,
     version: '1.0.0',
     lastUpdated: '2025-02-08 21:00:00',
@@ -2280,9 +2002,9 @@ export const integrations: Record<string, Integration> = {
   google_calendar: {
     id: 'google_calendar',
     name: 'Google Calendar',
-    description: 'Google\'s scheduling and calendar management service. Enable SULLA to create events, manage schedules, set reminders, and sync calendars through Google Calendar API.',
+    description: 'Organize your schedule and never miss an important meeting. Manage your calendar, schedule events, set reminders, and keep track of all your appointments in one unified system.',
     category: 'Productivity',
-    icon: 'google-calendar.svg',
+    icon: 'google_calendar.avif',
     connected: false,
     version: '1.0.0',
     lastUpdated: '2025-02-08 21:00:00',
@@ -2353,30 +2075,6 @@ export const integrations: Record<string, Integration> = {
       ]
     },
     media: [
-      {
-        type: 'youtube',
-        url: 'h4J2q9Y2cL4',
-        alt: 'Google Calendar API Overview',
-        caption: 'Getting Started with Google Calendar API'
-      },
-      {
-        type: 'image',
-        url: 'google-calendar-media-1.jpg',
-        alt: 'Google Calendar Interface',
-        caption: 'Google Calendar web and mobile interface'
-      },
-      {
-        type: 'image',
-        url: 'google-calendar-media-2.png',
-        alt: 'Event Management',
-        caption: 'Calendar event creation and management features'
-      },
-      {
-        type: 'image',
-        url: 'google-calendar-media-3.webp',
-        alt: 'Scheduling Features',
-        caption: 'Advanced scheduling and calendar sharing'
-      }
     ],
     features: [
       {
@@ -2473,9 +2171,9 @@ export const integrations: Record<string, Integration> = {
   google_docs: {
     id: 'google_docs',
     name: 'Google Docs',
-    description: 'Google\'s collaborative document editing platform. Enable SULLA to create, edit, format documents, and collaborate in real-time through Google Docs API.',
+    description: 'Create and edit documents seamlessly with your team in real-time. Write, collaborate, format content, and manage all your document workflows from one collaborative workspace.',
     category: 'Productivity',
-    icon: 'google-docs.svg',
+    icon: 'google_docs.avif',
     connected: false,
     version: '1.0.0',
     lastUpdated: '2025-02-08 21:00:00',
@@ -2546,30 +2244,6 @@ export const integrations: Record<string, Integration> = {
       ]
     },
     media: [
-      {
-        type: 'youtube',
-        url: 'h4J2q9Y2cL4',
-        alt: 'Google Docs API Overview',
-        caption: 'Getting Started with Google Docs API'
-      },
-      {
-        type: 'image',
-        url: 'google-docs-media-1.jpg',
-        alt: 'Google Docs Interface',
-        caption: 'Google Docs web and mobile interface'
-      },
-      {
-        type: 'image',
-        url: 'google-docs-media-2.png',
-        alt: 'Document Editing',
-        caption: 'Rich text editing and formatting features'
-      },
-      {
-        type: 'image',
-        url: 'google-docs-media-3.webp',
-        alt: 'Collaboration Features',
-        caption: 'Real-time collaboration and sharing'
-      }
     ],
     features: [
       {
@@ -2666,9 +2340,9 @@ export const integrations: Record<string, Integration> = {
   zoom: {
     id: 'zoom',
     name: 'Zoom',
-    description: 'Video conferencing and online meeting platform. Enable SULLA to schedule meetings, manage participants, record sessions, and automate meeting workflows through Zoom API.',
+    description: 'Run professional meetings and collaborate with your team from anywhere. Schedule video calls, manage participants, record sessions, and handle all your video conferencing needs efficiently.',
     category: 'Productivity',
-    icon: 'zoom.svg',
+    icon: 'zoom.avif',
     connected: false,
     version: '1.0.0',
     lastUpdated: '2025-02-08 21:00:00',
@@ -2743,30 +2417,6 @@ export const integrations: Record<string, Integration> = {
       ]
     },
     media: [
-      {
-        type: 'youtube',
-        url: 'h4J2q9Y2cL4',
-        alt: 'Zoom API Overview',
-        caption: 'Getting Started with Zoom API'
-      },
-      {
-        type: 'image',
-        url: 'zoom-media-1.jpg',
-        alt: 'Zoom Interface',
-        caption: 'Zoom desktop and web interface'
-      },
-      {
-        type: 'image',
-        url: 'zoom-media-2.png',
-        alt: 'Meeting Management',
-        caption: 'Zoom meeting scheduling and management features'
-      },
-      {
-        type: 'image',
-        url: 'zoom-media-3.webp',
-        alt: 'Recording Features',
-        caption: 'Cloud recording and meeting analytics'
-      }
     ],
     features: [
       {
@@ -2867,9 +2517,9 @@ export const integrations: Record<string, Integration> = {
   google_meet: {
     id: 'google_meet',
     name: 'Google Meet',
-    description: 'Google\'s video conferencing solution integrated with Workspace. Enable SULLA to schedule meetings, manage video calls, and integrate with Google Calendar through Google Meet API.',
+    description: 'Connect with your team through high-quality video meetings integrated with your calendar. Schedule calls, manage video conferences, sync with your schedule, and handle all your video collaboration needs seamlessly.',
     category: 'Productivity',
-    icon: 'google-meet.svg',
+    icon: 'google_meet.avif',
     connected: false,
     version: '1.0.0',
     lastUpdated: '2025-02-08 21:00:00',
@@ -2943,30 +2593,6 @@ export const integrations: Record<string, Integration> = {
       ]
     },
     media: [
-      {
-        type: 'youtube',
-        url: 'h4J2q9Y2cL4',
-        alt: 'Google Meet API Overview',
-        caption: 'Getting Started with Google Meet API'
-      },
-      {
-        type: 'image',
-        url: 'google-meet-media-1.jpg',
-        alt: 'Google Meet Interface',
-        caption: 'Google Meet web and mobile interface'
-      },
-      {
-        type: 'image',
-        url: 'google-meet-media-2.png',
-        alt: 'Video Conferencing',
-        caption: 'Google Meet video conference features'
-      },
-      {
-        type: 'image',
-        url: 'google-meet-media-3.webp',
-        alt: 'Integration Features',
-        caption: 'Calendar integration and meeting management'
-      }
     ],
     features: [
       {

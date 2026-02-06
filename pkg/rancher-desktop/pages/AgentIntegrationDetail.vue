@@ -91,7 +91,7 @@
               <div class="flex items-start gap-6">
                 <div class="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl bg-slate-100 dark:bg-slate-800">
                   <img
-                    v-if="integration.icon.endsWith('.svg')"
+                    v-if="integration.icon && (integration.icon.endsWith('.svg') || integration.icon.endsWith('.png') || integration.icon.endsWith('.avif') || integration.icon.endsWith('.jpg') || integration.icon.endsWith('.jpeg') || integration.icon.endsWith('.webp'))"
                     :src="require(`@pkg/assets/images/${integration.icon}`)"
                     :alt="integration.name"
                     class="h-12 w-12 object-contain"
