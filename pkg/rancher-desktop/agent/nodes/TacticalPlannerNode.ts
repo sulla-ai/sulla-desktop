@@ -87,9 +87,15 @@ export class TacticalPlannerNode extends BaseNode {
     const idx = plan.activeMilestoneIndex;
     const currentModel = plan.milestones[idx]?.model as any;
     
+    
+    let potentialRevisionPrompt: string = '';
+
     // Already have tactical plan for this milestone?
-    // MIGHT IT NEED TO REVISE???
     if (state.metadata.currentSteps?.length && state.metadata.activeStepIndex < state.metadata.currentSteps.length) {
+
+      // ============================================================================
+      // We already have steps. Potentially meaning we need to start over, or revise
+      // ============================================================================
 
       console.log('TacticalPlanner: Checking existing steps', {
         hasSteps: !!state.metadata.currentSteps?.length,
@@ -97,12 +103,34 @@ export class TacticalPlannerNode extends BaseNode {
         activeStepIndex: state.metadata.activeStepIndex,
         condition: state.metadata.currentSteps?.length && state.metadata.activeStepIndex < state.metadata.currentSteps.length
       });
-      return { state, decision: { type: 'next' } }; //next
+
+      // set aside the currentSteps in-case of replanning
+      const oldSteps = state.metadata.currentSteps;
+      const oldStepIndex = state.metadata.activeStepIndex;
+
+      // Check for tactical critic verdict to include revision feedback
+      const verdict = state.metadata.tacticalCriticVerdict;
+
+      if (verdict && (verdict.status === 'revise' || verdict.status === 'escalate')) {
+        console.log('TacticalPlanner: Including revision feedback', verdict);
+        potentialRevisionPrompt += `\n\n## Revision Feedback\nStatus: ${verdict.status}\nReason: ${verdict.reason}`;
+        
+        // Attach old steps for context
+        if (oldSteps && oldSteps.length > 0) {
+          potentialRevisionPrompt += `\n\n## Previous Steps Attempted:\n${oldSteps.map((step, idx) => 
+            `${idx + 1}. ${step.description} [${step.done ? 'completed' : 'incomplete'}]`
+          ).join('\n')}`;
+        }
+      }
+
+      // Clear current steps for re-planning
+      state.metadata.currentSteps = [];
+      state.metadata.activeStepIndex = 0;
     }
 
     // Generate fresh tactical plan
     const enriched = await this.enrichPrompt(
-      TACTICAL_PLAN_PROMPT,
+      TACTICAL_PLAN_PROMPT + potentialRevisionPrompt,
       state,
       {
         includeSoul: true,
@@ -125,12 +153,14 @@ export class TacticalPlannerNode extends BaseNode {
       return { state, decision: { type: 'continue' } }; //continue
     }
 
+    // Formatting the steps to look exactly like the state object
     const data = llmResponse as { steps: any[] };
     const steps = (data.steps || []).filter(s => s?.action?.trim()).map((s: any, i: number) => ({
       id: s.id || `s${i + 1}`,
       action: s.action.trim(),
       description: s.description?.trim() || s.action,
       done: false,
+      resultSummary: s.resultSummary || undefined,
       toolHints: Array.isArray(s.toolHints) ? s.toolHints.filter((t: unknown) => typeof t === 'string') : [],
     }));
 
@@ -138,8 +168,11 @@ export class TacticalPlannerNode extends BaseNode {
       return { state, decision: { type: 'continue' } }; //continue
     }
 
+    // resetting the state object with the steps
     state.metadata.currentSteps = steps;
     state.metadata.activeStepIndex = 0;
+
+    console.log('TacticalPlanner: Generated steps', steps);
 
     return { state, decision: { type: 'next' } }; //next
   }

@@ -82,11 +82,13 @@ export class TacticalCriticNode extends BaseNode {
     const milestoneIdx = plan.activeMilestoneIndex;
     const todo = plan.milestones[milestoneIdx]?.model as AgentPlanTodo | undefined;
     if (!todo) {
+      console.log('TacticalCritic: No todo found', todo);
       return { state, decision: { type: 'next' } };
     }
 
     const step = state.metadata.currentSteps?.[state.metadata.activeStepIndex];
     if (!step || step.done === false) {
+      console.log('TacticalCritic: Step not done', step);
       return { state, decision: { type: 'next' } };
     }
 
@@ -127,14 +129,27 @@ export class TacticalCriticNode extends BaseNode {
         + (data.suggestedFix ? `\n\nSuggested fix: ${data.suggestedFix}` : ''),
       at: Date.now(),
     };
+    console.log('TacticalCritic: Verdict', state.metadata.tacticalCriticVerdict);
 
     if (data.emit_chat_message?.trim()) {
       this.wsChatMessage(state, data.emit_chat_message, 'assistant', 'progress');
     }
 
     if (decision === 'approve') {
+      console.log('TacticalCritic: Approving', todo, state.metadata.currentSteps);
       todo.markStatus('done');
       await todo.save();
+
+      // Check if all steps are completed and clear tactical state
+      const steps = state.metadata.currentSteps;
+      const activeIndex = state.metadata.activeStepIndex;
+      
+      if (steps && steps.length > 0 && activeIndex >= steps.length - 1) {
+        // All steps completed, clear tactical plan state
+        console.log('TacticalCritic: All steps completed, clearing tactical state');
+        state.metadata.currentSteps = [];
+        state.metadata.activeStepIndex = 0;
+      }
 
       return { state, decision: { type: 'next' } };
     }

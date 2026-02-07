@@ -15,6 +15,7 @@ import { getCurrentModel, getCurrentMode } from '../languagemodels';
 const DEFAULT_WS_CHANNEL = 'chat-controller-backend';
 const DEFAULT_MAX_ITERATIONS = 10;
 const DEFAULT_MAX_REVISION_COUNT = 3;
+const MAX_CONSECTUIVE_LOOP = 12; //12
 
 // ============================================================================
 // INTERFACES AND TYPES
@@ -362,7 +363,7 @@ export class Graph<TState = HierarchicalThreadState> {
 
       if (nextId === (state as any).metadata.currentNodeId) {
         (state as any).metadata.consecutiveSameNode++;
-        if ((state as any).metadata.consecutiveSameNode >= 12) {
+        if ((state as any).metadata.consecutiveSameNode >= MAX_CONSECTUIVE_LOOP) {
           console.warn(`Max consecutive loop — forcing end`);
           break;
         }

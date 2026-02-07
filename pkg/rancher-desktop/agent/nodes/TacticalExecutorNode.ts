@@ -128,7 +128,7 @@ export class TacticalExecutorNode extends BaseNode {
 
     if (!llmResponse) {
       step.done = false; // retry next loop
-      return { state, decision: { type: 'continue' } };
+      return { state, decision: { type: 'continue' } }; // continue
     }
 
     const data = llmResponse as { tools: any[]; markDone: boolean };
@@ -143,6 +143,7 @@ export class TacticalExecutorNode extends BaseNode {
     if (data.markDone === true) {
       step.done = true;
       if (currentTodo) {
+        console.log('TacticalExecutor: Marking milestone todo done', currentTodo);
         currentTodo.markStatus('done');
         await currentTodo.save();
       }
@@ -150,18 +151,18 @@ export class TacticalExecutorNode extends BaseNode {
       // Advance step or finish milestone
       if (idx + 1 < steps.length) {
         state.metadata.activeStepIndex = idx + 1;
-        return { state, decision: { type: 'continue' } };
+        return { state, decision: { type: 'continue' } }; // continue
       }
 
       if (plan) {
-        plan.activeMilestoneIndex = milestoneIdx + 1;
-        plan.allMilestonesComplete = plan.activeMilestoneIndex >= (plan.milestones?.length ?? 0);
+        state.metadata.plan.activeMilestoneIndex = milestoneIdx + 1;
+        state.metadata.plan.allMilestonesComplete = state.metadata.plan.activeMilestoneIndex >= (state.metadata.plan.milestones?.length ?? 0);
       }
 
-      return { state, decision: { type: 'next' } };
+      return { state, decision: { type: 'next' } }; // next
     }
 
     // More work needed
-    return { state, decision: { type: 'continue' } };
+    return { state, decision: { type: 'continue' } }; // continue
   }
 }

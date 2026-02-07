@@ -296,7 +296,7 @@ export class AgentPersonaService {
         }
         
         // Handle todo-related progress events
-        if (phase === 'todo_created' || phase === 'todo_updated') {
+        if (phase === 'todo_created' || phase === 'todo_updated' || phase === 'todo_completed') {
           const todoId = data?.todoId ? Number(data.todoId) : null;
           const title = typeof data?.title === 'string' ? data.title : '';
           const orderIndex = data?.orderIndex !== undefined ? Number(data.orderIndex) : 0;

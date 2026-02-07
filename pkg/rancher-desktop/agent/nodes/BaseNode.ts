@@ -320,7 +320,8 @@ export abstract class BaseNode {
             return null;
         }
 
-        const goal = plan.model.data || '';
+        const goal = plan.model.attributes.goal || '';
+        const goaldescription = plan.model.attributes.goaldescription || '';
         const activeIndex = plan.activeMilestoneIndex;
 
         const milestoneLines = plan.milestones.map((mWrapper: { model: { status?: string, title?: string } }, idx: number) => {
@@ -337,19 +338,19 @@ export abstract class BaseNode {
             return ` ${statusIcon} Milestone ${idx + 1}: ${title} [${status}]`;
         });
 
-        return `## Strategic Plan\nGoal: ${goal}\n\n### Milestones:\n${milestoneLines.join('\n')}`;
+        return `## Strategic Plan\nGoal: ${goal}\nGoal Description: ${goaldescription}\n\n### Milestones:\n${milestoneLines.join('\n')}`;
     }
 
     /**
      * Build a context block showing tactical plan progress for current milestone
      */
     protected buildTacticalPlanContextBlock(state: any): string | null {
-        const steps = state.metadata.kbCurrentSteps;
+        const steps = state.metadata.currentSteps;
         if (!steps || steps.length === 0) {
             return null;
         }
 
-        const activeIndex = state.metadata.kbActiveStepIndex;
+        const activeIndex = state.metadata.activeStepIndex;
 
         const stepLines = steps.map((s:any, idx:number) => {
             const status = s.done ? 'done' : (idx === activeIndex ? 'in_progress' : 'pending');
