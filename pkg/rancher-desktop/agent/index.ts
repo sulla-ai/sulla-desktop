@@ -22,8 +22,6 @@ export { KnowledgeWriterNode } from './nodes/KnowledgeWriterNode';
 // Services
 export { getSchedulerService, SchedulerService } from './services/SchedulerService';
 export { getHeartbeatService, HeartbeatService } from './services/HeartbeatService';
-export { getKnowledgeGraph, KnowledgeGraphClass } from './services/KnowledgeGraph';
-export type { KnowledgeFinalPage, KnowledgePageSection, KnowledgeGoal } from './services/KnowledgeState';
 export { FrontendGraphWebSocketService } from './services/FrontendGraphWebSocketService';
 export { getBackendGraphWebSocketService, BackendGraphWebSocketService } from './services/BackendGraphWebSocketService';
 export { getIntegrationService, IntegrationService } from './services/IntegrationService';

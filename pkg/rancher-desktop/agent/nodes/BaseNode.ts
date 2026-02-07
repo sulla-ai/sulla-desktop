@@ -1,14 +1,12 @@
 import type { BaseThreadState, HierarchicalThreadState, NodeResult } from './Graph';
 import type { ToolResult, ToolCall, ThreadState } from '../types';
 import type { WebSocketMessageHandler } from '../services/WebSocketClientService';
-import { getOllamaService } from '../services/OllamaService';
-import { getCurrentModel, getCurrentMode, getCurrentConfig } from '../languagemodels';
+import { getCurrentMode, getLocalService, getService } from '../languagemodels';
 import { parseJson } from '../services/JsonParseService';
 import { getWebSocketClientService } from '../services/WebSocketClientService';
 import { getToolRegistry } from '../tools';
 import { getAgentConfig } from '../services/ConfigService';
 import { AgentAwareness } from '../database/models/AgentAwareness';
-import { getService, getLocalService } from '../languagemodels'
 import { BaseLanguageModel, ChatMessage, NormalizedResponse } from '../languagemodels/BaseLanguageModel';
 
 // ============================================================================
@@ -427,8 +425,8 @@ export abstract class BaseNode {
             return false;
         }
 
-        const ollama = getOllamaService();
-        return ollama.pullModel(modelName);
+        const ollama = getService('local', modelName) as any;
+        return ollama.pullModel?.(modelName) ?? false;
     }
 
     /**

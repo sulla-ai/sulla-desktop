@@ -1,11 +1,5 @@
-// StrategicCriticNode.ts
-// Final gatekeeper: approves plan completion or requests revision
-// Triggers KB generation if LLM suggests high-ROI documentation
-
 import type { HierarchicalThreadState, NodeResult } from './Graph';
 import { BaseNode, JSON_ONLY_RESPONSE_INSTRUCTIONS } from './BaseNode';
-import { AgentPlan } from '../database/models/AgentPlan';
-import { getKnowledgeGraph } from '../services/KnowledgeGraph';
 
 const STRATEGIC_CRITIC_PROMPT = `
 You are the Strategic Critic: 25-year veteran systems architect & outcome auditor.

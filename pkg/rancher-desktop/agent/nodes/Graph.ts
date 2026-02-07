@@ -163,7 +163,7 @@ export interface HierarchicalThreadState extends BaseThreadState {
 
   metadata: BaseThreadState['metadata'] & {
     // Strategic
-    plan?: {
+    plan: {
       model: AgentPlanInterface | undefined;
       milestones: Array<{ model: AgentPlanTodoInterface }>;
       activeMilestoneIndex: number;

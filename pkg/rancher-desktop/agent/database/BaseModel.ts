@@ -22,7 +22,7 @@ export abstract class BaseModel<T extends ModelAttributes = ModelAttributes> {
   constructor(attributes: Partial<T> = {}) {
   }
 
-  protected fill(attributes: Partial<T>) {
+  public fill(attributes: Partial<T>) {
     // Get fillable from the instance prototype to handle minification
     const instance = this as any;
     const instanceFillable = instance.fillable || [];

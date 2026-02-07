@@ -130,7 +130,11 @@ pg-connect:
     @echo "Starting port-forward in background (auto-stops on exit)..."
     @trap 'kill 0' EXIT; \
      just pg-forward & \
-     sleep 3 && \
+        sleep 3 && \
+        echo "Connecting to psql..." && \
+        PGPASSWORD=sulla_dev_password psql -h localhost -p 5432 -U sulla -d sulla
+
+pg-conn:
      echo "Connecting to psql..." && \
      PGPASSWORD=sulla_dev_password psql -h localhost -p 5432 -U sulla -d sulla
 

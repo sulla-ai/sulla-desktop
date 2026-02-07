@@ -1,8 +1,8 @@
 import type { SensoryInput, AgentResponse, ThreadState } from '../types';
 import { BaseThreadState, HierarchicalThreadState, createHierarchicalGraph } from '../nodes/Graph';
-import { emitAgentEvent } from './AgentEventBus';
 import { AbortService } from './AbortService';
 import { getCurrentModel, getCurrentMode } from '../languagemodels';
+import { saveThreadState, loadThreadState } from '../nodes/ThreadStateStore';
 
 let threadCounter = 0;
 let messageCounter = 0;
@@ -15,7 +15,7 @@ function nextMessageId(): string {
   return `msg_${Date.now()}_${++messageCounter}`;
 }
 
-function buildInitialState(input: SensoryInput, threadId?: string): HierarchicalThreadState {
+function buildInitialState(input: SensoryInput, wsChannel: string, threadId?: string): HierarchicalThreadState {
   const now = Date.now();
   const id = threadId ?? nextThreadId();
 
@@ -29,7 +29,7 @@ function buildInitialState(input: SensoryInput, threadId?: string): Hierarchical
     } as any],
     metadata: {
       threadId: id,
-      wsChannel: 'default',
+      wsChannel: wsChannel,
       llmModel: getCurrentModel(),
       llmLocal: getCurrentMode() === 'local',
       options: { abort: undefined, confirm: undefined },
@@ -52,7 +52,12 @@ function buildInitialState(input: SensoryInput, threadId?: string): Hierarchical
       finalState: 'running',
       returnTo: null,
       // Hierarchical-specific fields
-      plan: undefined,
+      plan: {
+        model:  undefined,
+        milestones: [],
+        activeMilestoneIndex: 0,
+        allMilestonesComplete: true
+      },
       currentSteps: [],
       activeStepIndex: 0
     }
@@ -66,19 +71,38 @@ export async function runHierarchicalGraph(params: {
   onAgentResponse?: (resp: AgentResponse) => void;
   abort?: AbortService;
 }): Promise<AgentResponse | null> {
-  const state = buildInitialState(params.input, params.threadId);
+  let state: HierarchicalThreadState;
+
+  // Resume existing thread if threadId provided and state exists
+  if (params.threadId) {
+    const saved = loadThreadState(params.threadId);
+    if (saved) {
+      state = saved;
+      console.log(`[GraphExec] Resuming thread ${params.threadId} at ${state.metadata.currentNodeId}`);
+    } else {
+      state = buildInitialState(params.input, params.wsChannel, params.threadId);
+    }
+  } else {
+    state = buildInitialState(params.input, params.wsChannel);
+  }
+
   state.metadata.wsChannel = params.wsChannel;
 
-  (state.metadata as any).__emitAgentEvent = (event: { type: 'progress' | 'complete' | 'error' | 'chunk'; data: any }) => {
-    emitAgentEvent({
-      type: event.type,
-      threadId: state.metadata.threadId,
-      data: event.data,
-      timestamp: Date.now(),
-    });
+  // Append new user message (always add to messages array)
+  const newUserMsg = {
+    id: nextMessageId(),
+    role: 'user',
+    content: params.input.data,
+    timestamp: Date.now(),
+    metadata: { ...params.input.metadata },
   };
+  state.messages.push(newUserMsg as any);
 
-  emitAgentEvent({ type: 'progress', threadId: state.metadata.threadId, data: { phase: 'start' }, timestamp: Date.now() });
+  // Reset iteration counters only on new thread
+  if (!params.threadId || !loadThreadState(params.threadId)) {
+    state.metadata.iterations = 0;
+    state.metadata.consecutiveSameNode = 0;
+  }
 
   const graph = createHierarchicalGraph();
 
@@ -88,26 +112,23 @@ export async function runHierarchicalGraph(params: {
     }
     await graph.execute(state, undefined, { abort: params.abort });
   } catch (err) {
-    emitAgentEvent({ type: 'error', threadId: state.metadata.threadId, data: { message: String(err) }, timestamp: Date.now() });
     return null;
   } finally {
-    delete (state.metadata as any).__emitAgentEvent;
     delete (state.metadata as any).__abort;
+    saveThreadState(state); // persist after every run
   }
 
   const responseContent = typeof (state.metadata as any).response === 'string' ? (state.metadata as any).response.trim() : '';
 
   const response: AgentResponse = {
-    id:        `resp_${Date.now()}`,
-    threadId:  state.metadata.threadId,
-    type:      'text',
-    content:   responseContent,
-    refined:   !!(state.metadata as any).criticDecision,
-    metadata:  { ...state.metadata },
+    id: `resp_${Date.now()}`,
+    threadId: state.metadata.threadId,
+    type: 'text',
+    content: responseContent,
+    refined: !!(state.metadata as any).criticDecision,
+    metadata: { ...state.metadata },
     timestamp: Date.now(),
   };
-
-  emitAgentEvent({ type: 'complete', threadId: state.metadata.threadId, data: response, timestamp: Date.now() });
 
   params.onAgentResponse?.(response);
 

@@ -200,7 +200,7 @@ export class AgentPersonaService {
 
   deleteTodo(todoId: number): void {
     this.planState.todos.delete(todoId);
-    this.planState.todoOrder = this.planState.todoOrder.filter(id => id !== todoId);
+    this.planState.todoOrder = this.planState.todoOrder.filter((id: number) => id !== todoId);
   }
 
   updateTodoStatus(todoId: number, status: TodoStatus): void {

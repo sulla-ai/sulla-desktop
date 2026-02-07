@@ -1,4 +1,5 @@
 import { BaseModel } from '../BaseModel';
+import { AgentPlan } from './AgentPlan';
 import { getWebSocketClientService } from '../../services/WebSocketClientService';
 
 export type TodoStatus = 'pending' | 'in_progress' | 'done' | 'blocked';
@@ -35,6 +36,9 @@ export interface AgentPlanTodoInterface {
   
   // Instance method (delegates to static)
   findForPlan(planId: number): Promise<AgentPlanTodoInterface[]>;
+  
+  // Method to get the parent plan
+  getParentPlan(): Promise<AgentPlan | null>;
 }
 
 export class AgentPlanTodo extends BaseModel<PlanTodoAttributes> implements AgentPlanTodoInterface {
@@ -76,23 +80,45 @@ export class AgentPlanTodo extends BaseModel<PlanTodoAttributes> implements Agen
     return this.where({ plan_id: planId });
   }
 
+  async getParentPlan(): Promise<AgentPlan | null> {
+    if (!this.attributes.plan_id) {
+      return null;
+    }
+    
+    const plans = await AgentPlan.where({ id: this.attributes.plan_id });
+    return plans[0] ?? null;
+  }
+
+  async getWsChannel(): Promise<string | false> {
+    const plan = await this.getParentPlan();
+    if (plan) {
+      if (plan.attributes.wsChannel) {
+        return plan.attributes.wsChannel;
+      }
+    }
+    return false;
+  }
+
   async delete(): Promise<boolean> {
     if (!this.exists) return false;
 
     const planId = this.attributes.plan_id;
     const todoId = this.attributes.id;
+    const wsChannel = await this.getWsChannel();
     
-    // Emit todo deleted event before actual deletion
-    getWebSocketClientService().send('chat-controller-backend', {
-      type: 'progress',
-      threadId: 'unknown', // Will be set by service layer
-      data: {
-        phase: 'todo_deleted',
-        planId: planId,
-        todoId: todoId,
-      },
-      timestamp: Date.now()
-    });
+    if (wsChannel) {
+      // Emit todo deleted event before actual deletion
+      getWebSocketClientService().send(wsChannel, {
+        type: 'progress',
+        threadId: 'unknown', // Will be set by service layer
+        data: {
+          phase: 'todo_deleted',
+          planId: planId,
+          todoId: todoId,
+        },
+        timestamp: Date.now()
+      });
+    }
 
     const result = await super.delete();
     
@@ -101,55 +127,57 @@ export class AgentPlanTodo extends BaseModel<PlanTodoAttributes> implements Agen
 
   async save(): Promise<this> {
     const result = await super.save();
+    const wsChannel = await this.getWsChannel();
     
-    // Emit WebSocket events for todo changes
-    if (!this.exists && this.attributes.status === 'pending') {
-      // Todo was created
-      getWebSocketClientService().send('chat-controller-backend', {
-        type: 'progress',
-        threadId: 'unknown', // Will be set by service layer
-        data: {
-          phase: 'todo_created',
-          planId: this.attributes.plan_id,
-          todoId: this.attributes.id,
-          title: this.attributes.title,
-          orderIndex: this.attributes.order_index,
-          status: 'pending',
-        },
-        timestamp: Date.now()
-      });
-    } else if (this.exists && this.attributes.status === 'done') {
-      // Todo was completed
-      getWebSocketClientService().send('chat-controller-backend', {
-        type: 'progress',
-        threadId: 'unknown', // Will be set by service layer
-        data: {
-          phase: 'todo_completed',
-          planId: this.attributes.plan_id,
-          todoId: this.attributes.id,
-          title: this.attributes.title,
-          orderIndex: this.attributes.order_index,
-          status: 'done',
-        },
-        timestamp: Date.now()
-      });
-    } else if (this.exists) {
-      // Todo was updated
-      getWebSocketClientService().send('chat-controller-backend', {
-        type: 'progress',
-        threadId: 'unknown', // Will be set by service layer
-        data: {
-          phase: 'todo_updated',
-          planId: this.attributes.plan_id,
-          todoId: this.attributes.id,
-          title: this.attributes.title,
-          orderIndex: this.attributes.order_index,
-          status: this.attributes.status,
-        },
-        timestamp: Date.now()
-      });
+    if (wsChannel) {
+      // Emit WebSocket events for todo changes
+      if (!this.exists && this.attributes.status === 'pending') {
+        // Todo was created
+        getWebSocketClientService().send(wsChannel, {
+          type: 'progress',
+          threadId: 'unknown', // Will be set by service layer
+          data: {
+            phase: 'todo_created',
+            planId: this.attributes.plan_id,
+            todoId: this.attributes.id,
+            title: this.attributes.title,
+            orderIndex: this.attributes.order_index,
+            status: 'pending',
+          },
+          timestamp: Date.now()
+        });
+      } else if (this.exists && this.attributes.status === 'done') {
+        // Todo was completed
+        getWebSocketClientService().send(wsChannel, {
+          type: 'progress',
+          threadId: 'unknown', // Will be set by service layer
+          data: {
+            phase: 'todo_completed',
+            planId: this.attributes.plan_id,
+            todoId: this.attributes.id,
+            title: this.attributes.title,
+            orderIndex: this.attributes.order_index,
+            status: 'done',
+          },
+          timestamp: Date.now()
+        });
+      } else if (this.exists) {
+        // Todo was updated
+        getWebSocketClientService().send(wsChannel, {
+          type: 'progress',
+          threadId: 'unknown', // Will be set by service layer
+          data: {
+            phase: 'todo_updated',
+            planId: this.attributes.plan_id,
+            todoId: this.attributes.id,
+            title: this.attributes.title,
+            orderIndex: this.attributes.order_index,
+            status: this.attributes.status,
+          },
+          timestamp: Date.now()
+        });
+      }
     }
-    
     return result;
   }
 

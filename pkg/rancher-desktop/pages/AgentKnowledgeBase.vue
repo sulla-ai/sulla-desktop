@@ -239,19 +239,14 @@
     </div>
   </div>
 </template>
-
 <script setup lang="ts">
 import AgentHeader from './agent/AgentHeader.vue';
-
+import { Article } from '../agent/database/models/Article';
 import { computed, onMounted, ref, watch } from 'vue';
-
 import DOMPurify from 'dompurify';
 import { marked } from 'marked';
-
 import './assets/AgentKnowledgeBase.css';
 
-import type { KnowledgeBaseNav, KnowledgeBasePage, KnowledgeBasePageSummary } from '@pkg/agent/services/KnowledgeBaseService';
-import { getKnowledgeBaseService } from '@pkg/agent/services/KnowledgeBaseService';
 const THEME_STORAGE_KEY = 'agentTheme';
 const isDark = ref(false);
 const query = ref('');
@@ -260,9 +255,9 @@ const splashUrl = new URL('./assets/splash.png', import.meta.url).toString();
 const splash2Url = new URL('./assets/splash2.png', import.meta.url).toString();
 
 const loadingPages = ref(false);
-const pages = ref<KnowledgeBasePageSummary[]>([]);
+const pages = ref<any[]>([]);
 const activeSlug = ref<string | null>(null);
-const activePage = ref<KnowledgeBasePage | null>(null);
+const activePage = ref<any>(null);
 const loadingPage = ref(false);
 const articleContentEl = ref<HTMLElement | null>(null);
 
@@ -282,49 +277,28 @@ function slugifyHeading(text: string): string {
 
 function scrollToHeading(id: string): void {
   const targetId = String(id || '').trim();
-  if (!targetId) {
-    return;
-  }
+  if (!targetId) return;
 
   const container = articleContentEl.value;
   const el = container?.querySelector(`[id="${targetId}"]`) || document.getElementById(targetId);
-  if (!el) {
-    return;
-  }
+  if (!el) return;
 
   el.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 const renderedContent = computed(() => {
-  if (!activePage.value?.article) {
-    return '';
-  }
-  const article = activePage.value.article;
-  const sections = article.sections || [];
+  if (!activePage.value?.document) return '<p class="text-slate-500">No content available.</p>';
 
-  // Build markdown from sections
-  let markdown = '';
-  for (const section of sections) {
-    if (section.content) {
-      markdown += `${section.content}\n\n`;
-    }
-  }
-
-  if (!markdown.trim()) {
-    return '<p class="text-slate-500">No content available.</p>';
-  }
+  const markdown = activePage.value.document;
 
   const renderer = new marked.Renderer();
-  (renderer as any).heading = ({ tokens, depth }: { tokens: any[]; depth: number }) => {
-    const plainText = Array.isArray(tokens)
-      ? tokens.map(t => String((t && (t.raw ?? t.text)) || '')).join('')
-      : '';
-    const htmlText = marked.Parser.parseInline(tokens as any);
-    const id = slugifyHeading(plainText);
-    return `<h${depth} id="${id}">${htmlText}</h${depth}>`;
+  renderer.heading = ({ tokens, depth }) => {
+    const text = tokens.map((t: any) => t.text || '').join('');
+    const id = slugifyHeading(text);
+    return `<h${depth} id="${id}">${marked.parseInline(text)}</h${depth}>`;
   };
 
-  const html = (marked(markdown, { renderer }) as string) || '';
+  const html = marked(markdown, { renderer }) as string;
   return DOMPurify.sanitize(html, {
     USE_PROFILES: { html: true },
     ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto|tel):|data:image\/(?:png|gif|jpe?g|webp);base64,|\/|\.|#)/i,
@@ -332,9 +306,8 @@ const renderedContent = computed(() => {
 });
 
 const tableOfContents = computed<TocHeading[]>(() => {
-  if (!renderedContent.value) {
-    return [];
-  }
+  if (!renderedContent.value) return [];
+
   const headings: TocHeading[] = [];
   const regex = /<h([12])[^>]*id="([^"]*)"[^>]*>([^<]*)<\/h[12]>/gi;
   let match;
@@ -345,6 +318,7 @@ const tableOfContents = computed<TocHeading[]>(() => {
       text: match[3].trim(),
     });
   }
+
   if (headings.length === 0) {
     const simpleRegex = /<h([12])[^>]*>([^<]*)<\/h[12]>/gi;
     let idx = 0;
@@ -355,86 +329,85 @@ const tableOfContents = computed<TocHeading[]>(() => {
       idx++;
     }
   }
+
   return headings;
 });
 
 const filteredPages = computed(() => {
   const q = query.value.trim().toLowerCase();
-  if (!q) {
-    return pages.value;
-  }
+  if (!q) return pages.value;
   return pages.value.filter(p => (p.title || '').toLowerCase().includes(q));
 });
 
 const sortedPagesByDate = computed(() => {
-  const parseTime = (v: string | null): number => {
-    if (!v) {
-      return 0;
-    }
-    const t = Date.parse(v);
-    return Number.isFinite(t) ? t : 0;
-  };
+  const parseTime = (v: string | null): number => Date.parse(v || '') || 0;
 
   return [...filteredPages.value].sort((a, b) => {
     const ta = parseTime(a.updated_at);
     const tb = parseTime(b.updated_at);
-    if (ta !== tb) {
-      return ta - tb;
-    }
-    if (a.order !== b.order) {
-      return (a.order || 0) - (b.order || 0);
-    }
+    if (ta !== tb) return ta - tb;
+    if (a.order !== b.order) return Number(a.order || 0) - Number(b.order || 0);
     return String(a.slug).localeCompare(String(b.slug));
   });
 });
 
-const nextPage = computed<KnowledgeBasePageSummary | null>(() => {
+const nextPage = computed<any | null>(() => {
   const slug = activeSlug.value;
-  if (!slug) {
-    return null;
-  }
+  if (!slug) return null;
   const idx = sortedPagesByDate.value.findIndex(p => p.slug === slug);
-  if (idx < 0) {
-    return null;
-  }
-  return sortedPagesByDate.value[idx + 1] || null;
+  return idx < sortedPagesByDate.value.length - 1 ? sortedPagesByDate.value[idx + 1] : null;
 });
 
-const prevPage = computed<KnowledgeBasePageSummary | null>(() => {
+const prevPage = computed<any | null>(() => {
   const slug = activeSlug.value;
-  if (!slug) {
-    return null;
-  }
+  if (!slug) return null;
   const idx = sortedPagesByDate.value.findIndex(p => p.slug === slug);
-  if (idx <= 0) {
-    return null;
-  }
-  return sortedPagesByDate.value[idx - 1] || null;
+  return idx > 0 ? sortedPagesByDate.value[idx - 1] : null;
 });
 
-const nav = computed<KnowledgeBaseNav>(() => {
-  const svc = getKnowledgeBaseService();
-  return svc.buildNav(filteredPages.value);
-});
+const nav = computed(() => {
+  const grouped = new Map<string, any[]>();
 
-const renderMarkdown = (markdown: string): string => {
-  const raw = typeof markdown === 'string' ? markdown : String(markdown || '');
-  const html = (marked(raw) as string) || '';
-  return DOMPurify.sanitize(html, {
-    USE_PROFILES: { html: true },
-    ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto|tel):|data:image\/(?:png|gif|jpe?g|webp);base64,|\/|\.|#)/i,
+  filteredPages.value.forEach(p => {
+    const tag = p.tags?.[0] || p.section || p.category || 'Uncategorized';
+    if (!grouped.has(tag)) grouped.set(tag, []);
+    grouped.get(tag)!.push(p);
   });
-};
+
+  return Array.from(grouped.entries()).map(([tag, pages]) => ({ tag, pages }));
+});
 
 const selectPage = async (slug: string) => {
   const id = String(slug || '').trim();
-  if (!id) {
-    return;
-  }
+  if (!id) return;
+
   activeSlug.value = id;
   loadingPage.value = true;
+
   try {
-    activePage.value = await getKnowledgeBaseService().getPage(id);
+    const articles = await Article.search('', 10, { slug: id });
+    if (!articles.length) {
+      activePage.value = null;
+      return;
+    }
+
+    const a = articles[0].attributes;
+    activePage.value = {
+      slug: a.slug,
+      title: a.title,
+      tags: a.tags,
+      document: a.document,
+      section: a.section,
+      category: a.category,
+      order: a.order,
+      author: a.author,
+      related_slugs: a.related_slugs,
+      created_at: a.created_at,
+      updated_at: a.updated_at,
+    };
+  } catch (err) {
+    console.error('Failed to load article:', err);
+    activePage.value = null;
   } finally {
     loadingPage.value = false;
   }
@@ -444,26 +417,32 @@ onMounted(async () => {
   try {
     const saved = localStorage.getItem(THEME_STORAGE_KEY);
     isDark.value = saved === 'dark';
-  } catch {
-    isDark.value = false;
-  }
+  } catch {}
 
   loadingPages.value = true;
   try {
-    pages.value = await getKnowledgeBaseService().listPages();
+    const articles = await Article.search('', 100);
+    pages.value = articles.map(a => ({
+      slug: a.attributes.slug,
+      title: a.attributes.title,
+      tags: a.attributes.tags,
+      order: a.attributes.order,
+      updated_at: a.attributes.updated_at,
+      section: a.attributes.section,
+      category: a.attributes.category,
+    }));
+  } catch (err) {
+    console.error('Failed to load articles:', err);
   } finally {
     loadingPages.value = false;
   }
 
   if (!activeSlug.value && pages.value.length > 0) {
-    const first = pages.value[0];
-    if (first?.slug) {
-      await selectPage(first.slug);
-    }
+    await selectPage(pages.value[0].slug);
   }
 });
 
-watch(() => query.value, async () => {
+watch(() => query.value, () => {
   if (activeSlug.value) {
     const stillVisible = filteredPages.value.some(p => p.slug === activeSlug.value);
     if (!stillVisible) {

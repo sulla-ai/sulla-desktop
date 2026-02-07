@@ -129,36 +129,46 @@ export class StrategicPlannerNode extends BaseNode {
       let planModel = state.metadata.plan?.model;
       if (planModel) {
 
-        planModel.setData({
+        planModel.fill({
+          thread_id: state.metadata.threadId,
+          status: 'active',
           goal: plan.goal,
           goalDescription: plan.goalDescription,
           complexity: plan.estimatedComplexity,
           requiresTools: plan.requiresTools,
+          wsChannel: state.metadata.wsChannel,
         });
         await planModel.incrementRevision();
         await planModel.deleteAllTodos();
 
+        console.log('[StrategicPlanner] edit Plan created:', planModel.attributes);
+
       // Create a new plan
       } else {
 
-        planModel = new AgentPlan({
+        planModel = new AgentPlan();
+        planModel.fill({
           thread_id: state.metadata.threadId,
           status: 'active',
-          data: {
-            goal: plan.goal,
-            goalDescription: plan.goalDescription,
-            complexity: plan.estimatedComplexity,
-            requiresTools: plan.requiresTools,
-          },
-        });
+          goal: plan.goal,
+          goalDescription: plan.goalDescription,
+          complexity: plan.estimatedComplexity,
+          requiresTools: plan.requiresTools,
+          wsChannel: state.metadata.wsChannel,
+        })
+
+        console.log('[StrategicPlanner] create Plan created:', planModel.attributes);
+
         await planModel.save();
+        state.metadata.plan.model = planModel;
 
       }
 
       // Create new todos
       const todos: AgentPlanTodo[] = [];
       for (const [idx, m] of plan.milestones.entries()) {
-        const todo = new AgentPlanTodo({
+        const todo = new AgentPlanTodo();
+        todo.fill({
           plan_id: planModel.attributes.id!,
           title: m.title,
           description: `${m.description}\n\nSuccess: ${m.successCriteria}`,
@@ -177,10 +187,10 @@ export class StrategicPlannerNode extends BaseNode {
         allMilestonesComplete: false,
       };
 
-      return { state, decision: { type: 'next' } };
+      return { state, decision: { type: 'end' } };
     } catch(err) {
       console.error('[StrategicPlanner] Plan persistence failed:', err);
-      return { state, decision: { type: 'continue' } };
+      return { state, decision: { type: 'end' } };
     }
   }
 }

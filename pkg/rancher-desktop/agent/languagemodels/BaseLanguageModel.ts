@@ -310,6 +310,11 @@ export interface ILLMService {
    * Health check
    */
   healthCheck(): Promise<boolean>;
+
+  /**
+   * Pull a model from the service (only available for local services)
+   */
+  pullModel?(modelName: string, onProgress?: (status: string) => void): Promise<boolean>;
 }
 
 /**

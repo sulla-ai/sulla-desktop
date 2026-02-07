@@ -80,6 +80,7 @@ export class TacticalPlannerNode extends BaseNode {
   async execute(state: HierarchicalThreadState): Promise<NodeResult<HierarchicalThreadState>> {
     const plan = state.metadata.plan;
     if (!plan?.model || !plan.milestones?.length) {
+      console.log('TacticalPlanner: No plan or milestones found', plan);
       return { state, decision: { type: 'continue' } };
     }
 

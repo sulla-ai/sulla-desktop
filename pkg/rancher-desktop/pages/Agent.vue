@@ -678,12 +678,6 @@ const onAgentResponse = (resp: AgentResponse) => {
   // This handler can be used for additional response processing if needed
 };
 
-const onAgentEvent = (event: { type: string; threadId: string; data: any; timestamp: number }) => {
-  // Plan events (plan_created, plan_revised, todo_created, etc.) are now handled
-  // by AgentPersonaService which updates the planState reactive object.
-  // The UI accesses this via ChatInterface's computed properties.
-};
-
 const chatController = new ChatInterface();
 
 const frontendGraphController = new FrontendGraphWebSocketService({

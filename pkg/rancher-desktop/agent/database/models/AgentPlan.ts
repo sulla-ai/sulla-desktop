@@ -11,7 +11,11 @@ export interface PlanAttributes {
   thread_id: string;
   revision?: number;
   status?: PlanStatus;
-  data: Record<string, unknown>;
+  goal: string;
+  goalDescription: string;
+  complexity: 'simple' | 'moderate' | 'complex';
+  requiresTools: boolean;
+  wsChannel: string;
   created_at?: string;
   updated_at?: string;
 }
@@ -20,12 +24,12 @@ export interface AgentPlanInterface {
   attributes: Partial<PlanAttributes>;
 
   setStatus(status: PlanStatus): void;
-  setData(data: Record<string, unknown>): void;
   setRevision(revision: number): void;
   incrementRevision(): Promise<this>;
   save(): Promise<this>;
   delete(): Promise<boolean>;
   deleteAllTodos(): Promise<number>;
+  fill(attributes: Partial<PlanAttributes>): void;
 }
 
 export class AgentPlan extends BaseModel<PlanAttributes> {
@@ -33,7 +37,7 @@ export class AgentPlan extends BaseModel<PlanAttributes> {
   protected primaryKey = 'id';
 
   // Explicit fillable – required for mass assignment
-  public fillable = ['thread_id', 'revision', 'status', 'data'];
+  public fillable = ['thread_id', 'revision', 'status', 'goal', 'goalDescription', 'complexity', 'requiresTools', 'wsChannel'];
   public attributes: Partial<PlanAttributes> = {};
 
   // Guard everything else
@@ -53,10 +57,6 @@ export class AgentPlan extends BaseModel<PlanAttributes> {
     this.attributes.revision = revision;
   }
 
-  setData(data: Record<string, unknown>): void {
-    this.attributes.data = data;
-  }
-
   setStatus(status: PlanStatus): void {
     this.attributes.status = status;
   }
@@ -67,27 +67,30 @@ export class AgentPlan extends BaseModel<PlanAttributes> {
     const threadId = this.attributes.thread_id;
     const planId = this.id;
 
-    if (!this.exists && this.attributes.status === 'active') {
-      getWebSocketClientService().send('chat-controller-backend', {
-        type: 'progress',
-        threadId,
-        data: { phase: 'plan_created', planId, goal: (this.attributes.data as any)?.goal },
-        timestamp: Date.now()
-      });
-    } else if (this.exists && this.attributes.status === 'completed') {
-      getWebSocketClientService().send('chat-controller-backend', {
-        type: 'progress',
-        threadId,
-        data: { phase: 'plan_completed', planId },
-        timestamp: Date.now()
-      });
-    } else if (this.exists && Number(this.attributes.revision) > 1) {
-      getWebSocketClientService().send('chat-controller-backend', {
-        type: 'progress',
-        threadId,
-        data: { phase: 'plan_revised', planId, revision: this.attributes.revision, goal: (this.attributes.data as any)?.goal },
-        timestamp: Date.now()
-      });
+    console.log('[agentplan] wsChannel', this.attributes.wsChannel);
+    if (this.attributes.wsChannel){
+      if (this.attributes.status === 'active') {
+        getWebSocketClientService().send(this.attributes.wsChannel, {
+          type: 'progress',
+          threadId,
+          data: { phase: 'plan_created', planId, goal: (this.attributes as any)?.goal },
+          timestamp: Date.now()
+        });
+      } else if (this.attributes.status === 'completed') {
+        getWebSocketClientService().send(this.attributes.wsChannel, {
+          type: 'progress',
+          threadId,
+          data: { phase: 'plan_completed', planId },
+          timestamp: Date.now()
+        });
+      } else if (Number(this.attributes.revision) > 1) {
+        getWebSocketClientService().send(this.attributes.wsChannel, {
+          type: 'progress',
+          threadId,
+          data: { phase: 'plan_revised', planId, revision: this.attributes.revision, goal: (this.attributes as any)?.goal },
+          timestamp: Date.now()
+        });
+      }
     }
 
     return result;
@@ -97,12 +100,14 @@ export class AgentPlan extends BaseModel<PlanAttributes> {
     const planId = this.id;
     const threadId = this.attributes.thread_id;
 
-    getWebSocketClientService().send('chat-controller-backend', {
-      type: 'progress',
-      threadId,
-      data: { phase: 'plan_deleted', planId },
-      timestamp: Date.now()
-    });
+    if (this.attributes.wsChannel){
+      getWebSocketClientService().send(this.attributes.wsChannel, {
+        type: 'progress',
+        threadId,
+        data: { phase: 'plan_deleted', planId },
+        timestamp: Date.now()
+      });
+    }
 
     return super.delete();
   }

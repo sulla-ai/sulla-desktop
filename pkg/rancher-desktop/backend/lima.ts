@@ -2027,7 +2027,7 @@ export default class LimaBackend extends events.EventEmitter implements VMBacken
           });
 
           await this.progressTracker.action('Booting Virtual Container Environment...', 60, async () => {
-            const containers = ['ws-server', 'redis', 'postgres', 'chroma', 'coqui-tts', 'whisper-stt', 'ollama'];
+            const containers = ['ws-server', 'redis', 'postgres', 'chroma', 'ollama'];
             
             // Track each container individually
             for (const container of containers) {

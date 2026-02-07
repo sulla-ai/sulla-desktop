@@ -4,7 +4,11 @@ export const up = `
     thread_id   VARCHAR(255) NOT NULL,
     revision    INTEGER NOT NULL DEFAULT 1,
     status      VARCHAR(32) NOT NULL DEFAULT 'active',
-    data        JSONB NOT NULL DEFAULT '{}',
+    goal        TEXT NOT NULL,
+    goalDescription TEXT NOT NULL,
+    complexity  VARCHAR(32) NOT NULL,
+    requiresTools BOOLEAN NOT NULL,
+    wsChannel   VARCHAR(255) NOT NULL,
     created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   );

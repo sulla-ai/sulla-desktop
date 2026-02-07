@@ -1,6 +1,11 @@
 # Sulla Desktop - Default Kubernetes Deployments
 # These deployments are applied automatically when Sulla Desktop starts
-
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: sulla
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
