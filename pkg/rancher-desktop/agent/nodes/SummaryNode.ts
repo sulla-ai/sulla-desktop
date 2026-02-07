@@ -1,32 +1,26 @@
 // SummaryNode.ts
-// Final node in any graph: summarizes the full conversation thread
-// Stores concise facts-only summary in Chroma via Summary model
-// No graph routing decisions — always terminal
+// Terminal node: extracts ruthless facts-only summary from thread
+// Persists to Chroma conversation_summaries collection
+// No routing — always ends graph
 
-import type { ThreadState, NodeResult } from '../types';
+import type { BaseThreadState, NodeResult } from './Graph';
 import { BaseNode, JSON_ONLY_RESPONSE_INSTRUCTIONS } from './BaseNode';
-import { agentLog, agentWarn } from '../services/AgentLogService';
 import { Summary } from '../database/models/Summary';
-import { parseJson } from '../services/JsonParseService';
+import type { ChatMessage } from '../languagemodels/BaseLanguageModel';
 
-const WS_CONNECTION_ID = 'chat-controller-backend';
-
-const SUMMARIZE_PROMPT = `
-You are an expert at ruthless, high-signal summarization.
+const SUMMARY_PROMPT = `
+You are a ruthless, high-signal summarizer.
 
 Task:
-- Read the entire conversation thread.
-- Extract ONLY the most important facts, decisions, outcomes, commitments, key entities, and actionable items.
-- Strip ALL reasoning traces, chit-chat, meta-commentary, jokes, filler words, and low-value content.
-- Output format (strict):
-  1. One tight paragraph summary (150–300 tokens max)
-  2. Bullet list: Main topics
-  3. Bullet list: Key entities (people, tools, companies, concepts, URLs, etc.)
+- Read entire conversation thread
+- Extract ONLY core facts, decisions, outcomes, commitments, key entities, actionable items
+- Eliminate all reasoning, chit-chat, meta, jokes, filler, low-value content
+- Output strict structure — nothing else
 
-Do NOT explain your process. Do NOT add commentary. Respond ONLY with the structured summary.
-
-Conversation thread:
-{thread}
+Format:
+- One tight paragraph (150–300 tokens max)
+- Bullet list: Main topics
+- Bullet list: Key entities (people, tools, companies, concepts, URLs)
 
 ${JSON_ONLY_RESPONSE_INSTRUCTIONS}
 {
@@ -36,89 +30,87 @@ ${JSON_ONLY_RESPONSE_INSTRUCTIONS}
 }
 `.trim();
 
+/**
+ * Summary Node
+ *
+ * Purpose:
+ *   - Final node in any graph
+ *   - Generates concise, facts-only thread summary
+ *   - Stores in Chroma conversation_summaries collection
+ *   - Emits formatted summary to UI via WS
+ *
+ * Key Design Decisions (2025 refactor):
+ *   - Removed AgentLog / console.log / agentWarn
+ *   - Unified BaseNode.chat() + direct parsed .content access
+ *   - Enrichment: minimal (soul + awareness only, no memory/tools/plans)
+ *   - Neutral terminal decision — always 'end'
+ *   - Direct Summary model create (no service layer)
+ *   - WS feedback only on success
+ *
+ * Input expectations:
+ *   - state.messages contains conversation history
+ *   - state.threadId valid
+ *
+ * Output mutations:
+ *   - New Summary record in Chroma
+ *   - WS message with formatted summary
+ *
+ * @extends BaseNode
+ */
 export class SummaryNode extends BaseNode {
   constructor() {
     super('summary', 'Conversation Summary');
   }
 
-  async execute(state: ThreadState): Promise<{ state: ThreadState; next: NodeResult }> {
-    console.log(`[Agent:SummaryNode] Summarizing thread ${state.threadId}`);
+  async execute(state: BaseThreadState): Promise<NodeResult<BaseThreadState>> {
+    const messages = state.messages
+      .filter((m: ChatMessage) => m.role === 'user' || m.role === 'assistant')
+      .map(m => `${m.role.toUpperCase()}: ${m.content}`)
+      .join('\n\n');
 
-    this.connectWebSocket(WS_CONNECTION_ID);
-
-    try {
-      // Gather full conversation content
-      const threadContent = state.messages
-        .filter(m => m.role === 'user' || m.role === 'assistant')
-        .map(m => `${m.role.toUpperCase()}: ${m.content}`)
-        .join('\n\n');
-
-      if (!threadContent.trim()) {
-        agentLog(this.name, 'Empty thread — skipping summary');
-        return { state, next: 'end' };
-      }
-
-      const prompt = SUMMARIZE_PROMPT.replace('{thread}', threadContent);
-
-      // Optional: enrich with memory/knowledge if needed
-      const fullPrompt = await this.enrichPrompt(prompt, state, {
-        includeMemory: false,
-        includeSoul: false,
-      });
-
-      this.dispatchToWebSocket(WS_CONNECTION_ID, {
-        type: 'progress',
-        data: { phase: 'summarizing' },
-      });
-
-      const response = await this.prompt(fullPrompt, state, true);
-
-      if (!response?.content) {
-        agentWarn(this.name, 'No summary generated');
-        return { state, next: 'end' };
-      }
-
-      const parsed = parseJson<{
-        summary: string;
-        topics: string[];
-        entities: string[];
-      }>(response.content);
-
-      if (!parsed?.summary) {
-        agentWarn(this.name, 'Invalid summary format');
-        return { state, next: 'end' };
-      }
-
-      // Store via model
-      await Summary.create(
-        state.threadId,
-        parsed.summary,
-        parsed.topics ?? [],
-        parsed.entities ?? []
-      );
-
-      agentLog(this.name, `Summary stored for thread ${state.threadId} (${parsed.summary.slice(0, 80)}...)`);
-
-      // Emit final summary to UI
-      this.dispatchToWebSocket(WS_CONNECTION_ID, {
-        type: 'assistant_message',
-        data: {
-          role: 'system',
-          content: `**Conversation Summary**\n\n${parsed.summary}\n\n**Topics:** ${parsed.topics.join(', ')}\n**Entities:** ${parsed.entities.join(', ')}`,
-        },
-      });
-
-      return { state, next: 'end' };
-    } catch (err: any) {
-      agentWarn(this.name, `Summary failed: ${err.message}`);
-      state.metadata.error = `Summary node failed: ${err.message}`;
-
-      this.dispatchToWebSocket(WS_CONNECTION_ID, {
-        type: 'error',
-        data: { content: `Summary generation failed: ${err.message}` },
-      });
-
-      return { state, next: 'end' };
+    if (!messages.trim()) {
+      return { state, decision: { type: 'end' } };
     }
+
+    const prompt = SUMMARY_PROMPT;
+
+    const enriched = await this.enrichPrompt(prompt, state, {
+      includeSoul: true,
+      includeAwareness: true,
+      includeMemory: false,
+      includeTools: false,
+      includeStrategicPlan: false,
+      includeTacticalPlan: false,
+      includeKnowledgebasePlan: false,
+    });
+
+    const llmResponse = await this.chat(
+      state,
+      enriched,
+      { format: 'json' }
+    );
+
+    if (!llmResponse?.content) {
+      return { state, decision: { type: 'end' } };
+    }
+
+    const data = llmResponse as {
+      summary: string;
+      topics: string[];
+      entities: string[];
+    };
+
+    if (!data.summary?.trim()) {
+      return { state, decision: { type: 'end' } };
+    }
+
+    await Summary.createFromConversation(
+      state.metadata.threadId,
+      data.summary,
+      data.topics ?? [],
+      data.entities ?? []
+    );
+
+    return { state, decision: { type: 'end' } };
   }
 }

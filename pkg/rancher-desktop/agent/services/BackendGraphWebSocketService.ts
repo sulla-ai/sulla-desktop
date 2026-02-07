@@ -86,7 +86,7 @@ export class BackendGraphWebSocketService {
 
       await runHierarchicalGraph({
         input,
-        wsConnectionId: BACKEND_CHANNEL_ID,
+        wsChannel: BACKEND_CHANNEL_ID,
       });
     } catch (err) {
       console.error('[BackendGraphWebSocketService] Failed to process message:', err);

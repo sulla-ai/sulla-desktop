@@ -66,7 +66,7 @@ Examples:
       }
     }
 
-    const connectionId = (state.metadata?.wsConnectionId as string) || 'chat-controller';
+    const connectionId = (state.metadata?.wsChannel as string) || 'chat-controller';
 
     const wsService = getWebSocketClientService();
     wsService.send(connectionId, {

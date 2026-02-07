@@ -2,13 +2,13 @@
 // Orchestrates KnowledgeBase page generation
 // Updated: uses Summary model instead of PersistenceService.loadConversation
 
-import { Graph } from '../nodes/Graph';
+import { Graph, KnowledgeThreadState } from '../nodes/Graph';
 import { KnowledgePlannerNode } from '../nodes/KnowledgePlannerNode';
 import { KnowledgeExecutorNode } from '../nodes/KnowledgeExecutorNode';
 import { KnowledgeCriticNode } from '../nodes/KnowledgeCriticNode';
 import { KnowledgeWriterNode } from '../nodes/KnowledgeWriterNode';
-import { Summary } from '../database/models/Summary'; 
-import type { ThreadState } from '../types';
+import { Summary } from '../database/models/Summary';
+import { getCurrentModel, getCurrentMode } from '../languagemodels';
 
 export interface KnowledgeGraphRequest {
   threadId: string;
@@ -29,13 +29,13 @@ type QueueItem = {
 };
 
 class KnowledgeGraphClass {
-  private graph: Graph | null = null;
+  private graph: Graph<KnowledgeThreadState> | null = null;
   private queue: QueueItem[] = [];
   private processing = false;
   private initialized = false;
 
-  private buildGraph(): Graph {
-    const graph = new Graph();
+  private buildGraph(): Graph<KnowledgeThreadState> {
+    const graph = new Graph<KnowledgeThreadState>();
 
     graph.addNode(new KnowledgePlannerNode());
     graph.addNode(new KnowledgeExecutorNode());
@@ -118,7 +118,7 @@ class KnowledgeGraphClass {
     this.processing = false;
   }
 
-  private async buildInitialState(request: KnowledgeGraphRequest): Promise<ThreadState | null> {
+  private async buildInitialState(request: KnowledgeGraphRequest): Promise<KnowledgeThreadState | null> {
     let messages = request.messages;
 
     // Load messages from Summary model (last relevant summary for thread)
@@ -137,24 +137,51 @@ class KnowledgeGraphClass {
 
     const now = Date.now();
 
-    const state: ThreadState = {
-      threadId: request.threadId,
+    const state: KnowledgeThreadState = {
       messages: messages.map((m, i) => ({
         id: `msg_kg_${i}`,
         role: m.role as 'user' | 'assistant' | 'system',
         content: m.content,
         timestamp: now,
       })),
-      shortTermMemory: [],
-      metadata: {},
-      createdAt: now,
-      updatedAt: now,
+      metadata: {
+        threadId: request.threadId,
+        wsChannel: 'knowledge-graph',
+        llmModel: getCurrentModel(),
+        llmLocal: getCurrentMode() === 'local',
+        options: { abort: undefined, confirm: undefined },
+        currentNodeId: 'knowledge_planner',
+        consecutiveSameNode: 0,
+        iterations: 0,
+        revisionCount: 0,
+        maxIterationsReached: false,
+        memory: {
+          knowledgeBaseContext: '',
+          chatSummariesContext: ''
+        },
+        subGraph: {
+          state: 'completed',
+          name: 'knowledge',
+          prompt: '',
+          response: ''
+        },
+        finalSummary: '',
+        finalState: 'running',
+        returnTo: null,
+        // Knowledge-specific fields
+        kbTopic: '',
+        kbGoal: '',
+        kbArticleSchema: {},
+        kbStatus: 'draft',
+        kbCurrentSteps: [],
+        kbActiveStepIndex: 0
+      }
     };
 
     return state;
   }
 
-  private extractResponse(state: ThreadState): KnowledgeGraphResponse {
+  private extractResponse(state: KnowledgeThreadState): KnowledgeGraphResponse {
     const writerResult = (state.metadata as any).knowledgeWriterResult as { slug: string; title: string } | undefined;
     const writerError = (state.metadata as any).knowledgeWriterError as string | undefined;
 

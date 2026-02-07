@@ -45,7 +45,7 @@ export class SchedulerService {
       const events = await CalendarEvent.findUpcoming(100, now);
 
       for (const event of events) {
-        this.scheduleEvent(event.attributesSnapshot as any);
+        this.scheduleEvent(event.attributes as any);
       }
 
       console.log(`[SchedulerService] Scheduled ${events.length} upcoming events`);

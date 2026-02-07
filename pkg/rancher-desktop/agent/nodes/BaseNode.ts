@@ -1,19 +1,60 @@
-// BaseNode - Abstract base class for all graph nodes
-// Uses LLMServiceFactory for LLM interactions (supports both local Ollama and remote APIs)
-
-import type { GraphNode, ThreadState, NodeResult, Message, ToolResult } from '../types';
-import type { ILLMService } from '../services/ILLMService';
-import type { ChatMessage } from '../services/ILLMService';
-import { getLLMService, getCurrentMode } from '../services/LLMServiceFactory';
+import type { BaseThreadState, HierarchicalThreadState, NodeResult } from './Graph';
+import type { ToolResult, ToolCall, ThreadState } from '../types';
+import type { WebSocketMessageHandler } from '../services/WebSocketClientService';
 import { getOllamaService } from '../services/OllamaService';
-import { AgentAwareness } from '../database/models/AgentAwareness';
+import { getCurrentModel, getCurrentMode, getCurrentConfig } from '../languagemodels';
+import { parseJson } from '../services/JsonParseService';
+import { getWebSocketClientService } from '../services/WebSocketClientService';
+import { getToolRegistry } from '../tools';
 import { getAgentConfig } from '../services/ConfigService';
-import type { AbortService } from '../services/AbortService';
-import { getToolRegistry, registerDefaultTools } from '../tools';
-import { getWebSocketClientService, type WebSocketMessageHandler } from '../services/WebSocketClientService';
+import { AgentAwareness } from '../database/models/AgentAwareness';
+import { getService, getLocalService } from '../languagemodels'
+import { BaseLanguageModel, ChatMessage, NormalizedResponse } from '../languagemodels/BaseLanguageModel';
 
-// Import soul prompt from TypeScript file
-import { soulPrompt } from '../prompts/soul';
+// ============================================================================
+// DEFAULT SETTINGS
+// ============================================================================
+
+const DEFAULT_WS_CHANNEL = 'chat-controller-backend';
+
+export const JSON_ONLY_RESPONSE_INSTRUCTIONS = `When you respond it will be parsed as JSON and ONLY the following object will be read.
+Any text outside this exact structure will break downstream parsing.\nRespond ONLY with this valid JSON — nothing before, nothing after, no fences, no commentary:`;
+
+export const TOOLS_RESPONSE_JSON = `  {"tools": [
+    ["tool_name", "arg1", "arg2"] - run any tool with exec form
+    ["emit_chat_message", "Respond to the users inquiry"]
+  ],}`;
+
+// ============================================================================
+// INTERFACES AND TYPES
+// ============================================================================
+
+export interface LLMCallOptions {
+    model?: string;
+    maxTokens?: number;
+    format?: 'json' | undefined;
+    signal?: AbortSignal;
+}
+
+export interface LLMResponse {
+    content: string | Record<string, any>;
+    model: string;
+}
+
+export interface PromptEnrichmentOptions {
+  includeSoul?: boolean;
+  includeAwareness?: boolean;
+  includeMemory?: boolean;
+  includeTools?: boolean;
+  includeStrategicPlan?: boolean;
+  includeTacticalPlan?: boolean;
+  includeKnowledgebasePlan: boolean;
+}
+
+
+// ============================================================================
+// Supporting functions
+// ============================================================================
 
 function getSoulPrompt(): string {
   let config;
@@ -23,7 +64,7 @@ function getSoulPrompt(): string {
     config = { soulPrompt: '', botName: 'Sulla', primaryUserName: '' };
   }
 
-  const override = config.soulPrompt || '';
+  const prompt = config.soulPrompt || '';
   const botName = config.botName || 'Sulla';
   const primaryUserName = config.primaryUserName || '';
 
@@ -32,1105 +73,642 @@ function getSoulPrompt(): string {
     ? `You are Sulla Desktop, and you like to be called ${botName}\nThe Primary User's name is: ${primaryUserName}\n\n`
     : `You are Sulla Desktop, and you like to be called ${botName}\n\n`;
 
-  // Use override if present, otherwise fall back to bundled soul.md
-  let soulContent: string;
-  if (override.trim()) {
-    soulContent = override.trim();
-  } else {
-    // TypeScript export provides the content directly
-    soulContent = soulPrompt;
-  }
-
-  return prefix + soulContent;
+  return prefix + prompt;
 }
 
-export interface LLMOptions {
-  model?: string;
-  maxTokens?: number;
-  format?: 'json' | undefined;
-}
+// ============================================================================
+// Primary Classes
+// ============================================================================
 
-export interface LLMResponse {
-  content: string;
-  model: string;
-  evalCount?: number;
-  evalDuration?: number;
-}
+/**
+ * 
+ */
+export abstract class BaseNode {
+    id: string;
+    name: string;
+    protected llm: BaseLanguageModel | null = null;
 
-export type ToolPromptDetail = 'names' | 'tactical' | 'planning';
-
-export type KnowledgeGraphInstructionType = 'planner' | 'executor' | 'critic';
-
-export interface PromptEnrichmentOptions {
-  includeSoul?: boolean;
-  includeAwareness?: boolean;
-  includeMemory?: boolean;
-  includeConversation?: boolean;
-  conversationOverride?: string;
-  maxHistoryItems?: number;
-  includeTools?: boolean;
-  toolDetail?: ToolPromptDetail;
-  includeSkills?: boolean;
-  includeStrategicPlan?: boolean;
-  includeTacticalPlan?: boolean;
-  includeKnowledgeGraphInstructions?: KnowledgeGraphInstructionType;
-}
-
-export const JSON_ONLY_RESPONSE_INSTRUCTIONS = `When you respond it will be parsed as JSON and ONLY the following object will be read.
-Any text outside this exact structure will break downstream parsing.
-
-Respond ONLY with this valid JSON — nothing before, nothing after, no fences, no commentary:`;
-
-export abstract class BaseNode implements GraphNode {
-  id: string;
-  name: string;
-  protected availableModel: string | null = null;
-  protected llmService: ILLMService | null = null;
-
-  constructor(id: string, name: string) {
-    this.id = id;
-    this.name = name;
-  }
-
-  private logRawLLMResponse(prefix: string, model: string, content: string): void {
-    const chunkSize = 2000;
-    const safeModel = String(model || 'unknown');
-    console.log(`[${prefix}] Raw LLM response start (model=${safeModel})`);
-    for (let i = 0; i < content.length; i += chunkSize) {
-      console.log(content.substring(i, i + chunkSize));
-    }
-    console.log(`[${prefix}] Raw LLM response end (model=${safeModel})`);
-  }
-
-  protected async enrichPrompt(
-    basePrompt: string,
-    state: ThreadState,
-    options: PromptEnrichmentOptions = {},
-  ): Promise<string> {
-    const parts: string[] = [];
-
-    if (options.includeSoul) {
-      const soulPrompt = getSoulPrompt();
-      if (soulPrompt.trim()) {
-        parts.push(soulPrompt);
-      }
+    constructor(id: string, name: string) {
+        this.id = id;
+        this.name = name;
     }
 
-    if (options.includeAwareness) {
-      try {
-        const awareness = await AgentAwareness.load();
-        if (awareness) {
-          const data = awareness.data;
-          const lines: string[] = [];
+    abstract execute(state: ThreadState): Promise<NodeResult<BaseThreadState>>;
 
-          if (data.agent_identity) {
-            lines.push(data.agent_identity.trim());
-          }
-          if (data.job_description) {
-            lines.push(`Your job description: ${data.job_description.trim()}`);
-          }
-          if (data.personality_preferences) {
-            lines.push(`Your personality and preferences: ${data.personality_preferences.trim()}`);
-          }
-          if (data.primary_user_identity) {
-            lines.push(`Primary user identity: ${data.primary_user_identity.trim()}`);
-          }
-          if (data.other_user_identities) {
-            lines.push(`Other user identities: ${data.other_user_identities.trim()}`);
-          }
-          if (data.long_term_context) {
-            lines.push(`Long-term context: ${data.long_term_context.trim()}`);
-          }
-          if (data.mid_term_context) {
-            lines.push(`Mid-term context: ${data.mid_term_context.trim()}`);
-          }
-          if (data.short_term_context) {
-            lines.push(`Short-term context: ${data.short_term_context.trim()}`);
-          }
-          if (data.memory_search_hints) {
-            lines.push(`Memory search hints: ${data.memory_search_hints.trim()}`);
-          }
+    /**
+     * 
+     * @param basePrompt 
+     * @param state 
+     * @param options 
+     * @returns 
+     */
+    protected async enrichPrompt(
+        basePrompt: string,
+        state: ThreadState,
+        options: PromptEnrichmentOptions,
+    ): Promise<string> {
 
-          const identity = lines.join('\n');
-          if (identity.trim()) {
-            parts.push(`Awareness context:\n${identity}`);
-          }
+        const parts: string[] = [];
+
+        if (options.includeSoul) {
+            const soulPrompt = getSoulPrompt();
+            if (soulPrompt.trim()) {
+                parts.push(soulPrompt);
+            }
         }
-      } catch {
-        // best effort
-      }
-    }
 
-    if (options.includeMemory) {
-      const kb = (state.metadata as any).knowledgeBaseContext;
-      const summaries = (state.metadata as any).chatSummariesContext;
-      const messages = (state.metadata as any).chatMessagesContext;
-      const legacy = state.metadata.memoryContext;
-
-      if (kb) {
-        parts.push(`Relevant context from KnowledgeBase:\n${String(kb)}`);
-      }
-      if (summaries) {
-        parts.push(`Relevant context from ChatSummaries:\n${String(summaries)}`);
-      }
-      if (messages) {
-        parts.push(`Relevant context from ChatMessages:\n${String(messages)}`);
-      }
-
-      if (!kb && !summaries && !messages && legacy) {
-        parts.push(`Relevant context from memory:\n${String(legacy)}`);
-      }
-    }
-
-    if (options.includeConversation) {
-      const override = options.conversationOverride;
-      if (override && override.trim()) {
-        parts.push(`Conversation history:\n${override.trim()}`);
-      } else {
-        const maxItems = options.maxHistoryItems || 10;
-        const historySource = state.messages.length > 0 ? state.messages : state.shortTermMemory;
-        const userAssistantMessages = historySource.filter(m => m.role === 'user' || m.role === 'assistant');
-        if (userAssistantMessages.length > 0) {
-          const lines = userAssistantMessages
-            .slice(-maxItems)
-            .map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`);
-          parts.push(`Conversation history:\n${lines.join('\n')}`);
+        if (options.includeAwareness) {
+            const awarenessPrompt = await AgentAwareness.getAgentAwarenessPrompt();
+            if (awarenessPrompt.trim()) {
+                parts.push(awarenessPrompt);
+            }
         }
-      }
-    }
 
-    if (options.includeTools) {
-      try {
-        const { registerDefaultTools, getToolRegistry } = await import('../tools');
-        registerDefaultTools();
-        const registry = getToolRegistry();
-        const detail: ToolPromptDetail = options.toolDetail || 'names';
+        if (options.includeMemory) {
+            const kb = state.metadata.memory.knowledgeBaseContext;
+            const summaries = state.metadata.memory.chatSummariesContext;
 
-        parts.push([
-          'Tooling constraints (mandatory):',
-          '- You may ONLY use tools that appear in the "Available tools" list below.',
-          '- Tool names must match EXACTLY (case-sensitive).',
-          '- Do NOT invent tools. Any unknown tool will fail and you will be forced to revise.',
-          '- Use EXEC FORM format: ["tool_name", "arg1", "arg2", ...]',
-          '- Example: ["kubectl", "get", "pods"] calls kubectl in the command line',
-        ].join('\n'));
-
-        if (detail === 'tactical') {
-          parts.push(`Available tools:\n${registry.getTacticalInstructionsBlock()}`);
-        } else if (detail === 'planning') {
-          const toolParts = registry.listUnique().map(t => t.getPlanningInstructions());
-          parts.push(`Available tools:\n${toolParts.join('\n\n')}`);
-        } else {
-          const toolLines = registry.listUnique().map(t => `- ${t.name}`);
-          parts.push(`Available tools:\n${toolLines.join('\n')}`);
+            if (kb) {
+                parts.push(`Relevant context from KnowledgeBase:\n${String(kb)}`);
+            }
+            if (summaries) {
+                parts.push(`Relevant context from ChatSummaries:\n${String(summaries)}`);
+            }
         }
-      } catch {
-        // best effort
-      }
+
+        if (options.includeTools) {
+            try {
+                const { registerDefaultTools, getToolRegistry } = await import('../tools');
+                registerDefaultTools();
+                const registry = getToolRegistry();
+
+                parts.push([
+                    'Tooling constraints (mandatory):',
+                    '- You may ONLY use tools that appear in the "Available tools" list below.',
+                    '- Tool names must match EXACTLY (case-sensitive).',
+                    '- Do NOT invent tools. Any unknown tool will fail and you will be forced to revise.',
+                    '- Use EXEC FORM format: ["tool_name", "arg1", "arg2", ...]',
+                    '- Example: ["kubectl", "get", "pods"] calls kubectl in the command line',
+                ].join('\n'));
+
+                const toolPrompt = registry.getPlanningInstructionsBlock();
+                parts.push(toolPrompt);
+            } catch {
+                // best effort
+            }
+        }
+
+        if (options.includeStrategicPlan) {
+            const planBlock = this.buildStrategicPlanContextBlock(state);
+            if (planBlock) {
+                parts.push(planBlock);
+            }
+        }
+
+        if (options.includeTacticalPlan) {
+            const planBlock = this.buildTacticalPlanContextBlock(state);
+            if (planBlock) {
+                parts.push(planBlock);
+            }
+        }
+
+        if (options.includeKnowledgebasePlan) {
+            const planBlock = this.buildTacticalPlanContextBlock(state);
+            if (planBlock) {
+                parts.push(planBlock);
+            }
+        }
+
+        const now = new Date();
+        const formattedTime = now.toLocaleString('en-US', {
+            timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: true,
+        });
+        const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'unknown';
+        parts.push(`Current datetime: ${formattedTime}\nComputers set time zone: ${timeZone}`);
+
+        parts.push(basePrompt);
+
+        return parts.join('\n\n');
     }
 
-    if (options.includeStrategicPlan || options.includeTacticalPlan) {
-      const planBlock = this.buildPlanContextBlock(state, !!options.includeStrategicPlan, !!options.includeTacticalPlan);
-      if (planBlock) {
-        parts.push(planBlock);
-      }
+    /**
+     * 
+     * @param state 
+     * @param systemPrompt 
+     * @param options 
+     * @returns 
+     */
+    protected async chat(
+        state: BaseThreadState,
+        systemPrompt: string,
+        options: LLMCallOptions = {}
+    ): Promise<any | null> {
+        const reply = await this.normaliedChat(state, systemPrompt, options);
+        if (!reply) return null;
+        if (options.format === 'json') {
+            const parsedReply = this.parseJson(reply.content);
+            console.log(`[${this.name}] Parsed JSON:`, parsedReply);
+            return parsedReply;
+        }
+        return reply.content;
     }
 
-    if (options.includeKnowledgeGraphInstructions) {
-      const kgType = options.includeKnowledgeGraphInstructions;
-      if (kgType === 'planner') {
-        parts.push(this.getKnowledgeGraphInstructionsForPlanner());
-      } else if (kgType === 'executor') {
-        parts.push(this.getKnowledgeGraphInstructionsForExecutor());
-      } else if (kgType === 'critic') {
-        parts.push(this.getKnowledgeGraphInstructionsForCritic());
-      }
-    }
-
-    const now = new Date();
-    const formattedTime = now.toLocaleString('en-US', {
-      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: true,
-    });
-    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'unknown';
-    parts.push(`Current datetime: ${formattedTime}\nComputers set time zone: ${timeZone}`);
-
-    parts.push(basePrompt);
-
-    return parts.join('\n\n');
-  }
-
-  /**
-   * Build a context block showing strategic and tactical plan progress
-   * @param strategicOnly If true, only include strategic plan (no tactical steps)
-   */
-  protected buildPlanContextBlock(state: ThreadState, includeStrategic: boolean, includeTactical: boolean): string | null {
-    const strategicPlan = state.metadata.strategicPlan as {
-      goal?: string;
-      milestones?: Array<{ id: string; title: string; description?: string; status?: string }>;
-    } | undefined;
-
-    const tacticalPlan = state.metadata.tacticalPlan as {
-      milestoneId?: string;
-      steps?: Array<{ id: string; action: string; description?: string; status?: string }>;
-    } | undefined;
-
-    const parts: string[] = [];
-
-    // Strategic plan milestones
-    if (includeStrategic && strategicPlan?.milestones && strategicPlan.milestones.length > 0) {
-      const milestoneLines = strategicPlan.milestones.map((m, idx) => {
-        const status = m.status || 'pending';
-        const statusIcon = status === 'completed' ? '✓' : status === 'in_progress' ? '→' : status === 'failed' ? '✗' : '○';
-        const title = status === 'in_progress' ? `**${m.title}**` : m.title;
-        return `  ${statusIcon} Step ${idx + 1}: ${title} [${status}]`;
-      });
-      parts.push(`## Strategic Plan
-        Goal: ${strategicPlan.goal || 'Not specified'}
+    /**
+     * Unified chat: takes state + new system prompt + user message.
+     * - Replaces last system prompt (or appends new one)
+     * - Appends user message
+     * - Calls primary LLM
+     * - On any error/failure → fallback to local Ollama if remote
+     * - Appends assistant response to state.messages
+     * - Parses JSON if format='json'
+     * - No raw response logging
+     */
+    protected async normaliedChat(
+        state: BaseThreadState,
+        systemPrompt: string,
+        options: LLMCallOptions = {}
+    ): Promise<NormalizedResponse | null> {
         
-        ### Milestones:
-        ${milestoneLines.join('\n')}`);
+        const context = state.metadata.llmLocal ? 'local' : 'remote';
+        this.llm = getService(context, state.metadata.llmModel);
+
+        // Prepare messages from state
+        let messages = [...state.messages];
+
+        // Remove all system prompts
+        messages = messages.filter(m => m.role !== 'system');
+
+        // Append new system prompt
+        messages.push({ role: 'system', content: systemPrompt.trim() });
+
+        console.log('[BaseNode] Chat messages:', messages);
+        console.log('[BaseNode] state.metadata.llmModel:', state.metadata.llmModel);
+        console.log('[BaseNode] state.metadata.llmLocal:', context);
+        try {
+            // Primary attempt
+            let reply: NormalizedResponse | null = await this.llm.chat(messages, {
+                model: state.metadata.llmModel,
+                maxTokens: options.maxTokens,
+                format: options.format,
+                signal: options.signal,
+            });
+
+            if (!reply) throw new Error('No response from primary LLM');
+
+            // Append to state
+            this.appendResponse(state, reply.content);
+
+            return reply;
+        } catch (err) {
+            if ((err as any)?.name === 'AbortError') throw err;
+
+            console.warn(`[BaseNode:${this.name}] Primary LLM failed:`, err instanceof Error ? err.message : String(err));
+
+            // Fallback only if primary was remote
+            if (getCurrentMode() !== 'local') {
+                try {
+                    const ollama = getLocalService();
+                    if (ollama.isAvailable()) {
+                        // Filter messages to only include ChatMessage-compatible roles
+                        const chatMessages = messages.filter(msg =>
+                            ['system', 'user', 'assistant'].includes(msg.role)
+                        ) as ChatMessage[];
+                        const reply = await ollama.chat(chatMessages, { signal: options.signal });
+                        if (reply) {
+                            this.appendResponse(state, reply.content);
+                            return reply;
+                        }
+                    }
+                } catch (fallbackErr) {
+                    console.error(`[BaseNode:${this.name}] Ollama fallback failed:`, fallbackErr);
+                }
+            }
+
+            return null;
+        }
     }
 
-    // Tactical plan steps for current milestone
-    if (includeTactical && tacticalPlan?.steps && tacticalPlan.steps.length > 0) {
-      const stepLines = tacticalPlan.steps.map((s, idx) => {
-        const status = s.status || 'pending';
-        const statusIcon = status === 'done' ? '✓' : status === 'in_progress' ? '→' : status === 'failed' ? '✗' : '○';
-        const action = status === 'in_progress' ? `**${s.action}**` : s.action;
-        return `  ${statusIcon} Step ${idx + 1}: ${action} [${status}]`;
-      });
-      parts.push(`#### Tactical Plan (Current Milestone)
-        Steps:
-        ${stepLines.join('\n')}`);
+    /**
+     * Clears out any thinking context
+     * Parses JSON with our best attempt parser
+     * 
+     * @param raw 
+     * @returns 
+     */
+    protected parseJson<T = unknown>(raw: string | null | undefined): T | null {
+        // If it's already an object, return it as-is
+        if (typeof raw === 'object') {
+            return raw as T;
+        }
+        if (!raw || typeof raw !== 'string') return null;
+
+        return parseJson(raw);
+    }
+ 
+    /**
+     * Build a context block showing strategic plan progress
+     */
+    protected buildStrategicPlanContextBlock(state: any): string | null {
+        const plan = state.metadata.plan;
+        if (!plan || !plan.model || !plan.milestones || plan.milestones.length === 0) {
+            return null;
+        }
+
+        const goal = plan.model.data || '';
+        const activeIndex = plan.activeMilestoneIndex;
+
+        const milestoneLines = plan.milestones.map((mWrapper: { model: { status?: string, title?: string } }, idx: number) => {
+            const m = mWrapper.model;
+            const status = m.status || 'pending';
+            let statusIcon = '○';
+            if (status === 'done') statusIcon = '✓';
+            else if (status === 'in_progress') statusIcon = '→';
+            else if (status === 'blocked') statusIcon = '✗';
+
+            const isActive = idx === activeIndex || status === 'in_progress';
+            const title = isActive ? `**${m.title}**` : m.title;
+
+            return ` ${statusIcon} Milestone ${idx + 1}: ${title} [${status}]`;
+        });
+
+        return `## Strategic Plan\nGoal: ${goal}\n\n### Milestones:\n${milestoneLines.join('\n')}`;
     }
 
-    return parts.length > 0 ? parts.join('\n\n') : null;
-  }
+    /**
+     * Build a context block showing tactical plan progress for current milestone
+     */
+    protected buildTacticalPlanContextBlock(state: any): string | null {
+        const steps = state.metadata.kbCurrentSteps;
+        if (!steps || steps.length === 0) {
+            return null;
+        }
 
-  protected getKnowledgeGraphInstructionsForPlanner(): string {
-    return `## Your Standard Operating Procedure for creating KnowledgeBase Articles
-You MUST follow this SOP exactly as written whenever you are creating any knowledgebase article:
-1. Create a milestone to gather the information
-2. Create a milestone to generate the article
-3. Create a milestone to save/store the article. Add the ("generateKnowledgeBase": true) flag to this milestone.
+        const activeIndex = state.metadata.kbActiveStepIndex;
 
-Example:
-{
-  "milestones": [
-    {
-      "id": "milestone_kb",
-      "title": "Document the solution",
-      "description": "Create a KnowledgeBase article capturing this workflow",
-      "generateKnowledgeBase": true
-    }
-  ]
-}
-The KnowledgeGraph will save the article.
+        const stepLines = steps.map((s:any, idx:number) => {
+            const status = s.done ? 'done' : (idx === activeIndex ? 'in_progress' : 'pending');
+            let statusIcon = '○';
+            if (status === 'done') statusIcon = '✓';
+            else if (status === 'in_progress') statusIcon = '→';
 
-When to trigger the KnowledgeBase SOP:
-- When you're creating a new SOP
-- When you're storing anything in "memory"
-- When you want to save any information for later use
-- User explicitly asked for documentation
-- Complex workflow that should be preserved for future reference
-- New architecture decisions or patterns established
-- You learned how to do something new
-- When creating an Standard Operating Procedure (SOP)`;
-  }
+            const isActive = status === 'in_progress';
+            const description = isActive ? `**${s.description}**` : s.description;
 
-  protected getKnowledgeGraphInstructionsForExecutor(): string {
-    return `
-- There is NO tool named "knowledge_base_create_page" do not attempt to call it.
-- The actualy saving of knowledgebase articles is handled automatically by other systems.
-`;
-  }
+            return ` ${statusIcon} Step ${idx + 1}: ${description} [${status}]`;
+        });
 
-  protected getKnowledgeGraphInstructionsForCritic(): string {
-    return `## KnowledgeBase Article Generation
-If the conversation contains knowledge worth preserving for future reference, include in your response:
-{
-  "triggerKnowledgeBase": true,
-  "kbReason": "Brief explanation of why this is worth documenting"
-}
-This triggers KnowledgeGraph asynchronously after the plan completes - it does not block the user.
-
-When to trigger KB generation:
-- Non-trivial problem was solved worth documenting
-- Troubleshooting steps that could help in the future
-- New patterns or workflows were established
-- Information that would be useful to recall later`;
-  }
-
-  private createInternalMessageId(prefix: string): string {
-    return `${prefix}_${Date.now()}_${Math.floor(Math.random() * 1_000_000)}`;
-  }
-
-  private toChatMessagesFromThread(state: ThreadState): ChatMessage[] {
-    const out: ChatMessage[] = [];
-    for (const m of state.messages) {
-      if (m.role !== 'user' && m.role !== 'assistant' && m.role !== 'system') {
-        continue;
-      }
-      out.push({ role: m.role, content: m.content });
-    }
-    return out;
-  }
-
-  abstract execute(state: ThreadState): Promise<{ state: ThreadState; next: NodeResult }>;
-
-  async initialize(): Promise<void> {
-    console.log(`[Agent:${this.name}] Initializing...`);
-
-    // Get the appropriate LLM service (local or remote)
-    this.llmService = getLLMService();
-    await this.llmService.initialize();
-
-    this.availableModel = this.llmService.getModel();
-    const mode = getCurrentMode();
-
-    console.log(`[Agent:${this.name}] Mode: ${mode}, Model: ${this.availableModel || 'none'}`);
-  }
-
-  async destroy(): Promise<void> {
-    this.llmService = null;
-  }
-
-  /**
-   * Pull a model from Ollama (only works for local mode)
-   */
-  protected async pullModel(modelName: string): Promise<boolean> {
-    if (getCurrentMode() !== 'local') {
-      console.warn(`[Agent:${this.name}] Cannot pull model in remote mode`);
-
-      return false;
+        return `#### Tactical Plan (Current Milestone)\nSteps:\n${stepLines.join('\n')}`;
     }
 
-    const ollama = getOllamaService();
+    /**
+     * Build a context block showing knowledge base article progress and content
+     */
+    protected buildKnowledgeBaseContextBlock(state: any): string | null {
+        const parts: string[] = [];
 
-    return ollama.pullModel(modelName);
-  }
+        // Action plan steps
+        const steps = state.metadata.kbCurrentSteps || [];
+        if (steps.length > 0) {
+            const activeIndex = state.metadata.kbActiveStepIndex;
+            const stepLines = steps.map((s: any, idx: number) => {
+                const status = s.done ? 'done' : (idx === activeIndex ? 'in_progress' : 'pending');
+                let statusIcon = '○';
+                if (status === 'done') statusIcon = '✓';
+                else if (status === 'in_progress') statusIcon = '→';
 
-  /**
-   * Send a prompt to the LLM (works for both local and remote)
-   * Falls back to local Ollama if remote service is unavailable
-   * If state contains heartbeatModel override, uses that model instead
-   */
-  protected async prompt(prompt: string, state?: ThreadState, storeInMessages = true): Promise<LLMResponse | null> {
-    const abort = (state?.metadata && (state.metadata as any).__abort) as AbortService | undefined;
+                const isActive = status === 'in_progress';
+                const description = isActive ? `**${s.description}**` : s.description;
 
-    // Check for heartbeat model override in state metadata
-    const heartbeatModel = state?.metadata?.heartbeatModel as string | undefined;
+                return ` ${statusIcon} Step ${idx + 1}: ${description} [${status}]`;
+            });
+
+            parts.push(`### Action Plan\nSteps:\n${stepLines.join('\n')}`);
+        }
+
+        // Article schema
+        const schema = state.metadata.kbArticleSchema || {};
+        const schemaLines = Object.entries(schema).map(([key, value]) => {
+            const valStr = Array.isArray(value) ? value.join(', ') : value?.toString() || 'Not set';
+            return `- **${key}**: ${valStr}`;
+        });
+        if (schemaLines.length > 0) {
+            parts.push(`### Article Schema\n${schemaLines.join('\n')}`);
+        }
+
+        // Article research (JSON block)
+        const research = state.metadata.kbArticleResearch;
+        if (research?.trim()) {
+            parts.push(`### Article Research\n\`\`\`json\n${research.trim()}\n\`\`\``);
+        }
+
+        // Final content (Markdown block)
+        const finalContent = state.metadata.kbFinalContent;
+        if (finalContent?.trim()) {
+            parts.push(`### Final Content\n\`\`\`markdown\n${finalContent.trim()}\n\`\`\``);
+        }
+
+        return parts.length > 0 ? parts.join('\n\n') : null;
+    }
     
-    if (heartbeatModel && heartbeatModel !== 'default') {
-      return this.promptWithModelOverride(prompt, heartbeatModel, state);
-    }
+    /**
+     * Pull a model from Ollama (only works for local mode)
+     */
+    protected async pullModel(modelName: string): Promise<boolean> {
+        if (getCurrentMode() !== 'local') {
+            console.warn(`[Agent:${this.name}] Cannot pull model in remote mode`);
+            return false;
+        }
 
-    if (!this.llmService) {
-      this.llmService = getLLMService();
-      await this.llmService.initialize();
-      this.availableModel = this.llmService.getModel();
-    }
-
-    // If primary service is not available, try fallback to Ollama
-    if (!this.llmService.isAvailable()) {
-      console.warn(`[Agent:${this.name}] Primary LLM service not available, attempting fallback to Ollama`);
-      
-      try {
         const ollama = getOllamaService();
-        await ollama.initialize();
-        
-        if (ollama.isAvailable()) {
-          console.log(`[Agent:${this.name}] Falling back to local Ollama`);
-          this.llmService = ollama;
-          this.availableModel = ollama.getModel();
-        } else {
-          console.error(`[Agent:${this.name}] Ollama fallback also not available`);
-          return null;
-        }
-      } catch (err) {
-        console.error(`[Agent:${this.name}] Fallback to Ollama failed:`, err);
-        return null;
-      }
+        return ollama.pullModel(modelName);
     }
 
-    const model = this.availableModel || this.llmService.getModel();
-
-    try {
-      let messages: ChatMessage[] = [{ role: 'user', content: prompt }];
-      if (state) {
-        messages = this.toChatMessagesFromThread(state);
-        messages.push({ role: 'system', content: prompt });
-      }
-
-      console.warn(`[Agent:${this.name}] model ${model}`);
-      const content = await this.llmService.chat(messages, { signal: abort?.signal });
-
-      if (!content) {
-        console.warn(`[Agent:${this.name}] No response from LLM`);
-
-        return null;
-      }
-
-      if (state && storeInMessages) {
-        const responseMsg: Message = {
-          id: this.createInternalMessageId('node_response'),
-          role: 'assistant',
-          content,
-          timestamp: Date.now(),
-          metadata: { nodeId: this.id, nodeName: this.name, kind: 'node_response', model },
-        };
-        state.messages.push(responseMsg);
-      }
-
-      const result = {
-        content,
-        model,
-      };
-
-      console.log(`[Agent:${this.name}] Response received (${result.content.length} chars)`);
-      this.logRawLLMResponse(`Agent:${this.name}`, model, result.content);
-
-      return result;
-    } catch (err) {
-      if (err instanceof Error && err.name === 'AbortError') {
-        throw err;
-      }
-      console.error(`[Agent:${this.name}] Prompt failed:`, err);
-
-      return null;
-    }
-  }
-
-  /**
-   * Send a prompt with a specific model override (for heartbeat)
-   * Format: 'local:modelname' or 'remote:provider:model'
-   */
-  private async promptWithModelOverride(prompt: string, modelOverride: string, state?: ThreadState): Promise<LLMResponse | null> {
-    console.log(`[Agent:${this.name}] Using model override: ${modelOverride}`);
-
-    const abort = (state?.metadata && (state.metadata as any).__abort) as AbortService | undefined;
-    
-    try {
-      if (modelOverride.startsWith('local:')) {
-        // Local Ollama model
-        const modelName = modelOverride.substring(6); // Remove 'local:' prefix
-        const ollama = getOllamaService();
-        await ollama.initialize();
+    /**
+     * Optional: append assistant response to state.messages
+     */
+    protected appendResponse(state: BaseThreadState, content: string): void {
+        // Ensure content is a string
+        const contentStr = typeof content === 'string' ? content : JSON.stringify(content);
         
-        if (!ollama.isAvailable()) {
-          console.error(`[Agent:${this.name}] Ollama not available for model override`);
-          return null;
-        }
-        
-        let messages: ChatMessage[] = [{ role: 'user', content: prompt }];
-        if (state) {
-          messages = this.toChatMessagesFromThread(state);
-          messages.push({ role: 'system', content: prompt });
-        }
-
-        console.log(`[Agent:${this.name}] LLM chat payload prepared (override=${modelOverride}, model=${modelName}, messages=${messages.length})`);
-
-        const content = await ollama.chatWithModel(messages, modelName, { signal: abort?.signal });
-        
-        if (!content) {
-          return null;
-        }
-
-        console.log(`[Agent:${this.name}] Response received (${content.length} chars)`);
-        this.logRawLLMResponse(`Agent:${this.name}`, modelName, content);
-        
-        if (state) {
-          const responseMsg: Message = {
-            id: this.createInternalMessageId('node_response'),
+        state.messages.push({
             role: 'assistant',
+            content: contentStr,
+            metadata: {
+                nodeId: this.id,
+                timestamp: Date.now()
+            }
+        });
+    }
+
+    /**
+     * Connect to a WebSocket server and optionally register a message handler
+     * @param connectionId Unique identifier for this connection
+     * @param url WebSocket URL (defaults to ws://localhost:8080/)
+     * @param onMessage Optional handler for incoming messages
+     * @returns true if connection initiated
+     */
+    protected connectWebSocket(
+        connectionId: string,
+        onMessage?: WebSocketMessageHandler
+    ): boolean {
+        const wsService = getWebSocketClientService();
+        const connected = wsService.connect(connectionId);
+
+        if (connected && onMessage) {
+            // Small delay to allow connection to establish before registering handler
+            setTimeout(() => {
+                wsService.onMessage(connectionId, onMessage);
+            }, 100);
+        }
+
+        return connected;
+    }
+
+    /**
+     * Send a message to a WebSocket connection
+     * @param connectionId Connection identifier
+     * @param message Message to send (object or string)
+     * @returns true if sent successfully
+     */
+    protected dispatchToWebSocket(connectionId: string, message: unknown): boolean {
+        const wsService = getWebSocketClientService();
+        return wsService.send(connectionId, message);
+    }
+
+    /**
+     * Register a handler for WebSocket messages
+     * @param connectionId Connection identifier
+     * @param handler Callback function for incoming messages
+     * @returns Unsubscribe function or null if connection not found
+     */
+    protected listenToWebSocket(
+        connectionId: string,
+        handler: WebSocketMessageHandler,
+    ): (() => void) | null {
+        const wsService = getWebSocketClientService();
+        return wsService.onMessage(connectionId, handler);
+    }
+
+    /**
+     * Disconnect from a WebSocket server
+     * @param connectionId Connection identifier
+     */
+    protected disconnectWebSocket(connectionId: string): void {
+        const wsService = getWebSocketClientService();
+        wsService.disconnect(connectionId);
+    }
+
+    /**
+     * Check if a WebSocket connection is active
+     * @param connectionId Connection identifier
+     */
+    protected isWebSocketConnected(connectionId: string): boolean {
+        const wsService = getWebSocketClientService();
+        return wsService.isConnected(connectionId);
+    }
+
+
+    /**
+     * Emit a chat message to the UI dashboard via WebSocket
+     * Connection ID is read from state.metadata.wsChannel (defaults to 'chat-controller')
+     * @param state BaseThreadState containing the connection ID in metadata
+     * @param content Message content to display
+     * @param role 'assistant' | 'system' - defaults to 'assistant'
+     * @param kind Optional UI kind tag - defaults to 'progress'
+     * @returns true if message was sent via WebSocket
+     */
+    protected wsChatMessage(
+        state: BaseThreadState,
+        content: string,
+        role: 'assistant' | 'system' = 'assistant',
+        kind: string = 'progress',
+    ): boolean {
+        if (!content.trim()) {
+            return false;
+        }
+
+        // Get connection ID from state or use default
+        const connectionId = (state.metadata.wsChannel as string) || DEFAULT_WS_CHANNEL;
+
+        // Ensure WebSocket connection exists
+        if (!this.isWebSocketConnected(connectionId)) {
+            this.connectWebSocket(connectionId);
+        }
+
+        // Send via WebSocket
+        const sent = this.dispatchToWebSocket(connectionId, {
+            type: 'assistant_message',
+            data: {
+                content: content.trim(),
+                role,
+                kind,
+                timestamp: Date.now(),
+            },
+        });
+
+        if (!sent) {
+            console.warn(`[Agent:${this.name}] Failed to send chat message via WebSocket`);
+        }
+
+        return sent;
+    }
+
+    /**
+     * Normalize tool calls from exec form arrays
+     * Exec form: ["tool_name", "arg1", "arg2"]
+     * Tool name is used directly from the first element (must match tool.name exactly)
+     * @param tools Raw tools array from LLM response (parsed.tools)
+     * @returns Normalized actions with toolName and args
+     */
+    protected normalizeToolCalls(tools: unknown[]): Array<{ toolName: string; args: string[] }> {
+        const result: Array<{ toolName: string; args: string[] }> = [];
+
+        for (const item of tools) {
+            // Exec form: array like ["kubectl", "get", "pods"] or ["emit_chat_message", "message"]
+            if (Array.isArray(item) && item.length > 0) {
+                const toolName = String(item[0]);
+                const execArgs = item.slice(1);
+
+                result.push({
+                    toolName,
+                    args: execArgs,
+                });
+            }
+        }
+
+        return result;
+    }
+
+    /**
+     * Execute multiple tool calls, append results as 'tool' messages, return results array.
+     * - Appends each result immediately after execution (LLM sees sequential feedback)
+     * - Uses role: 'tool' + name/tool_call_id for API compatibility
+     * - Failed tools include help info
+     * - Minimal logging (no full JSON dump)
+     */
+    protected async executeToolCalls(
+        state: BaseThreadState,
+        tools: unknown[],
+        allowedTools?: string[]
+    ): Promise<Array<{ toolName: string; success: boolean; result?: unknown; error?: string }>> {
+        if (!tools?.length) return [];
+
+        const registry = getToolRegistry(); // assume global registration
+        const results: Array<{ toolName: string; success: boolean; result?: unknown; error?: string }> = [];
+
+        const normalized = this.normalizeToolCalls(tools);
+
+        for (const { toolName, args } of normalized) {
+            // Disallowed → append failure message
+            if (allowedTools?.length && !allowedTools.includes(toolName)) {
+                await this.appendToolResultMessage(state, toolName, {
+                    toolName,
+                    success: false,
+                    error: `Tool not allowed in this node: ${toolName}`
+                });
+                results.push({ toolName, success: false, error: 'Not allowed' });
+                continue;
+            }
+
+            const tool = registry.get(toolName);
+            if (!tool) {
+                await this.appendToolResultMessage(state, toolName, {
+                    toolName,
+                    success: false,
+                    error: `Unknown tool: ${toolName}`
+                });
+                results.push({ toolName, success: false, error: 'Unknown tool' });
+                continue;
+            }
+
+            try {
+                const outcome = await tool.execute(state, { toolName, args });
+
+                await this.appendToolResultMessage(state, toolName, outcome);
+
+                results.push({
+                    toolName,
+                    success: outcome.success,
+                    result: outcome.result,
+                    error: outcome.error
+                });
+            } catch (err: any) {
+                const error = err.message || String(err);
+                await this.appendToolResultMessage(state, toolName, {
+                    toolName,
+                    success: false,
+                    error
+                });
+                results.push({ toolName, success: false, error });
+            }
+        }
+
+        return results;
+    }
+
+    /**
+     * Append tool result as a 'tool' message to state.messages.
+     * Role: 'tool' — standard for most LLM APIs (OpenAI, Anthropic, Grok).
+     * Includes short summary + full JSON payload for context.
+     * Failed tools add help instructions.
+     */
+    public async appendToolResultMessage(
+        state: BaseThreadState,
+        action: string,
+        result: ToolResult
+    ): Promise<void> {
+        const summary = result.success
+            ? `Tool ${action} succeeded`
+            : `Tool ${action} failed: ${result.error || 'unknown error'}`;
+
+        let toolHelpInfo = null;
+        if (!result.success) {
+            try {
+                const { getToolRegistry, registerDefaultTools } = await import('../tools');
+                registerDefaultTools();
+                const registry = getToolRegistry();
+                const tool = registry.get(action);
+                if (tool) toolHelpInfo = tool.getPlanningInstructions();
+            } catch { }
+        }
+
+        const content = JSON.stringify(
+            {
+                tool: action,
+                success: result.success,
+                error: result.error || null,
+                result: result.result && JSON.stringify(result.result).length < 5000
+                    ? result.result
+                    : '[truncated — see logs]',
+                helpInfo: toolHelpInfo,
+                toolCallId: result.toolCallId
+            },
+            null,
+            2
+        );
+
+        state.messages.push({
+            role: 'tool',
             content,
-            timestamp: Date.now(),
-            metadata: { nodeId: this.id, nodeName: this.name, kind: 'node_response', model: modelName, modelOverride },
-          };
-          state.messages.push(responseMsg);
-        }
-
-        return { content, model: modelName };
-      } else if (modelOverride.startsWith('remote:')) {
-        // Remote model: format is 'remote:provider:model'
-        const parts = modelOverride.substring(7).split(':'); // Remove 'remote:' prefix
-        if (parts.length < 2) {
-          console.error(`[Agent:${this.name}] Invalid remote model format: ${modelOverride}`);
-          return null;
-        }
-        
-        const [provider, ...modelParts] = parts;
-        const modelName = modelParts.join(':');
-        
-        // Import and use RemoteModelService with override
-        const { getRemoteModelService } = await import('../services/RemoteModelService');
-        const remoteService = getRemoteModelService();
-        await remoteService.initialize();
-        
-        if (!remoteService.isAvailable()) {
-          console.error(`[Agent:${this.name}] Remote service not available for model override`);
-          return null;
-        }
-        
-        // Use the remote service with the specific model
-        // Remote override API currently accepts a single prompt string.
-        // When state is provided, serialize the accumulated thread into a single prompt.
-        const effectivePrompt = state
-          ? `${this.toChatMessagesFromThread(state).map(m => `${m.role}: ${m.content}`).join('\n\n')}\n\nsystem: ${prompt}`
-          : prompt;
-
-        console.log(`[Agent:${this.name}] LLM generate payload prepared (override=${modelOverride}, model=${provider}:${modelName}, chars=${effectivePrompt.length})`);
-
-        const content = await (remoteService as unknown as { generateWithModel: (p: string, providerId: string, model: string, options?: { signal?: AbortSignal }) => Promise<string | null> })
-          .generateWithModel(effectivePrompt, provider, modelName, { signal: abort?.signal });
-        
-        if (!content) {
-          return null;
-        }
-
-        console.log(`[Agent:${this.name}] Response received (${content.length} chars)`);
-        this.logRawLLMResponse(`Agent:${this.name}`, `${provider}:${modelName}`, content);
-        
-        if (state) {
-          const responseMsg: Message = {
-            id: this.createInternalMessageId('node_response'),
-            role: 'assistant',
-            content,
-            timestamp: Date.now(),
-            metadata: { nodeId: this.id, nodeName: this.name, kind: 'node_response', model: `${provider}:${modelName}`, modelOverride },
-          };
-          state.messages.push(responseMsg);
-        }
-
-        return { content, model: `${provider}:${modelName}` };
-      } else {
-        console.error(`[Agent:${this.name}] Unknown model override format: ${modelOverride}`);
-        return null;
-      }
-    } catch (err) {
-      if (err instanceof Error && err.name === 'AbortError') {
-        throw err;
-      }
-      console.error(`[Agent:${this.name}] Model override prompt failed:`, err);
-      return null;
-    }
-  }
-
-  /**
-   * Send a prompt and parse JSON response
-   */
-  protected async promptJSON<T = unknown>(prompt: string, state?: ThreadState, storeInMessages = true): Promise<T | null> {
-    const response = await this.prompt(prompt, state, storeInMessages);
-
-    if (!response) {
-      return null;
-    }
-
-    try {
-      return JSON.parse(response.content) as T;
-    } catch {
-      return null;
-    }
-  }
-
-  /**
-   * Build a prompt with context from thread state
-   */
-  protected async buildContextualPrompt(
-    instruction: string,
-    state: ThreadState,
-    options: { includeMemory?: boolean; includeHistory?: boolean; maxHistoryItems?: number } = {},
-  ): Promise<string> {
-    const parts: string[] = [];
-
-    try {
-      const awareness = await AgentAwareness.load();
-      if (awareness) {
-        const data = awareness.data;
-        const lines: string[] = [];
-
-        if (data.agent_identity) {
-          lines.push(data.agent_identity.trim());
-        }
-        if (data.job_description) {
-          lines.push(`Your job description: ${data.job_description.trim()}`);
-        }
-        if (data.personality_preferences) {
-          lines.push(`Your personality and preferences: ${data.personality_preferences.trim()}`);
-        }
-        if (data.primary_user_identity) {
-          lines.push(`Primary user identity: ${data.primary_user_identity.trim()}`);
-        }
-        if (data.other_user_identities) {
-          lines.push(`Other user identities: ${data.other_user_identities.trim()}`);
-        }
-        if (data.long_term_context) {
-          lines.push(`Long-term context: ${data.long_term_context.trim()}`);
-        }
-        if (data.mid_term_context) {
-          lines.push(`Mid-term context: ${data.mid_term_context.trim()}`);
-        }
-        if (data.short_term_context) {
-          lines.push(`Short-term context: ${data.short_term_context.trim()}`);
-        }
-        if (data.memory_search_hints) {
-          lines.push(`Memory search hints: ${data.memory_search_hints.trim()}`);
-        }
-
-        parts.push(lines.join('\n'));
-      }
-    } catch {
-      // best effort
-    }
-    parts.push('');
-
-    const historyForLog: Array<{ role: string; content: string }> = [];
-    if (options.includeHistory && state.shortTermMemory.length > 0) {
-      const maxItems = options.maxHistoryItems || 6;
-      historyForLog.push(...state.shortTermMemory.slice(-maxItems));
-    }
-
-    // Add memory context if available and requested
-    if (options.includeMemory && state.metadata.memoryContext) {
-      parts.push('Relevant context from memory:');
-      parts.push(state.metadata.memoryContext as string);
-      parts.push('');
-    }
-
-    // Add conversation history if requested
-    // Use full messages array for better continuity, fall back to shortTermMemory
-    // Filter out system messages to avoid confusing the LLM with prior prompt context
-    if (options.includeHistory) {
-      const maxItems = options.maxHistoryItems || 10;
-      const historySource = state.messages.length > 0 ? state.messages : state.shortTermMemory;
-      const userAssistantMessages = historySource.filter(m => m.role === 'user' || m.role === 'assistant');
-
-      if (userAssistantMessages.length > 0) {
-        parts.push('Conversation history:');
-        userAssistantMessages.slice(-maxItems).forEach(m => {
-          parts.push(`${ m.role === 'user' ? 'User' : 'Assistant' }: ${ m.content }`);
+            name: action,                     // tool name as sender
+            tool_call_id: result.toolCallId,  // link back to call
+            metadata: {
+                nodeId: this.id,
+                nodeName: this.name,
+                kind: 'tool_result',
+                toolName: action,
+                success: result.success,
+                summary,
+                timestamp: Date.now()
+            }
         });
-        parts.push('');
-      }
     }
-
-    // Add the main instruction
-    parts.push(instruction);
-
-    const finalPrompt = parts.join('\n');
-
-    return finalPrompt;
-  }
-
-  /**
-   * Connect to a WebSocket server and optionally register a message handler
-   * @param connectionId Unique identifier for this connection
-   * @param url WebSocket URL (defaults to ws://localhost:8080/)
-   * @param onMessage Optional handler for incoming messages
-   * @returns true if connection initiated
-   */
-  protected connectWebSocket(
-    connectionId: string,
-    onMessage?: WebSocketMessageHandler
-  ): boolean {
-    const wsService = getWebSocketClientService();
-    const connected = wsService.connect(connectionId);
-
-    if (connected && onMessage) {
-      // Small delay to allow connection to establish before registering handler
-      setTimeout(() => {
-        wsService.onMessage(connectionId, onMessage);
-      }, 100);
-    }
-
-    return connected;
-  }
-
-  /**
-   * Send a message to a WebSocket connection
-   * @param connectionId Connection identifier
-   * @param message Message to send (object or string)
-   * @returns true if sent successfully
-   */
-  protected dispatchToWebSocket(connectionId: string, message: unknown): boolean {
-    const wsService = getWebSocketClientService();
-    return wsService.send(connectionId, message);
-  }
-
-  /**
-   * Register a handler for WebSocket messages
-   * @param connectionId Connection identifier
-   * @param handler Callback function for incoming messages
-   * @returns Unsubscribe function or null if connection not found
-   */
-  protected listenToWebSocket(
-    connectionId: string,
-    handler: WebSocketMessageHandler,
-  ): (() => void) | null {
-    const wsService = getWebSocketClientService();
-    return wsService.onMessage(connectionId, handler);
-  }
-
-  /**
-   * Disconnect from a WebSocket server
-   * @param connectionId Connection identifier
-   */
-  protected disconnectWebSocket(connectionId: string): void {
-    const wsService = getWebSocketClientService();
-    wsService.disconnect(connectionId);
-  }
-
-  /**
-   * Check if a WebSocket connection is active
-   * @param connectionId Connection identifier
-   */
-  protected isWebSocketConnected(connectionId: string): boolean {
-    const wsService = getWebSocketClientService();
-    return wsService.isConnected(connectionId);
-  }
-
-  /**
-   * Emit a chat message to the UI dashboard via WebSocket
-   * Connection ID is read from state.metadata.wsConnectionId (defaults to 'chat-controller')
-   * @param state ThreadState containing the connection ID in metadata
-   * @param content Message content to display
-   * @param role 'assistant' | 'system' - defaults to 'assistant'
-   * @param kind Optional UI kind tag - defaults to 'progress'
-   * @returns true if message was sent via WebSocket
-   */
-  protected emitChatMessage(
-    state: ThreadState,
-    content: string,
-    role: 'assistant' | 'system' = 'assistant',
-    kind: string = 'progress',
-  ): boolean {
-    if (!content.trim()) {
-      return false;
-    }
-
-    // Get connection ID from state or use default
-    const connectionId = (state.metadata.wsConnectionId as string) || 'chat-controller';
-
-    // Ensure WebSocket connection exists
-    if (!this.isWebSocketConnected(connectionId)) {
-      this.connectWebSocket(connectionId);
-    }
-
-    // Send via WebSocket
-    const sent = this.dispatchToWebSocket(connectionId, {
-      type: 'assistant_message',
-      data: {
-        content: content.trim(),
-        role,
-        kind,
-        timestamp: Date.now(),
-      },
-    });
-
-    if (!sent) {
-      console.warn(`[Agent:${this.name}] Failed to send chat message via WebSocket`);
-    }
-
-    return sent;
-  }
-
-  /**
-   * Emit a progress event via WebSocket
-   * @param state ThreadState containing the connection ID in metadata
-   * @param phase Progress phase (node_start, tool_call, tool_result, etc.)
-   * @param data Progress event data
-   * @returns true if message was sent via WebSocket
-   */
-  protected emitProgress(
-    state: ThreadState,
-    phase: string,
-    data: Record<string, unknown> = {},
-  ): boolean {
-    const connectionId = (state.metadata.wsConnectionId as string) || 'chat-controller';
-
-    if (!this.isWebSocketConnected(connectionId)) {
-      this.connectWebSocket(connectionId);
-    }
-
-    const sent = this.dispatchToWebSocket(connectionId, {
-      type: 'progress',
-      data: {
-        phase,
-        nodeId: this.id,
-        nodeName: this.name,
-        ...data,
-        timestamp: Date.now(),
-      },
-    });
-
-    if (!sent) {
-      console.warn(`[Agent:${this.name}] Failed to send progress event via WebSocket`);
-    }
-
-    return sent;
-  }
-
-  /**
-   * Check if chat message emission via WebSocket is available
-   * @param state ThreadState containing the connection ID in metadata
-   */
-  protected canEmitChatMessage(state: ThreadState): boolean {
-    const connectionId = (state.metadata.wsConnectionId as string) || 'chat-controller';
-    return this.isWebSocketConnected(connectionId);
-  }
-
-  /**
-   * Normalize tool calls from exec form arrays
-   * Exec form: ["tool_name", "arg1", "arg2"]
-   * Tool name is used directly from the first element (must match tool.name exactly)
-   * @param tools Raw tools array from LLM response (parsed.tools)
-   * @returns Normalized actions with toolName and args
-   */
-  protected normalizeToolCalls(tools: unknown[]): Array<{ toolName: string; args: string[] }> {
-    const result: Array<{ toolName: string; args: string[] }> = [];
-
-    for (const item of tools) {
-      // Exec form: array like ["kubectl", "get", "pods"] or ["emit_chat_message", "message"]
-      if (Array.isArray(item) && item.length > 0) {
-        const toolName = String(item[0]);
-        const execArgs = item.slice(1);
-
-        result.push({
-          toolName,
-          args: execArgs,
-        });
-      }
-    }
-
-    return result;
-  }
-
-  /**
-   * Execute multiple tool calls and return results
-   */
-  protected async executeToolCalls(
-    state: ThreadState,
-    tools: unknown[],
-    allowedTools?: string[],
-  ): Promise<Array<{ toolName: string; success: boolean; result?: unknown; error?: string }>> {
-    console.log(`[BaseNode:${this.name}] Executing ${tools.length} tool calls:`, JSON.stringify(tools, null, 2));
-    
-    const { getToolRegistry, registerDefaultTools } = await import('../tools');
-    registerDefaultTools();
-    const registry = getToolRegistry();
-
-    // Get all available tool names including aliases
-    const allAvailableToolNames = new Set<string>();
-    for (const tool of registry.listUnique()) {
-      allAvailableToolNames.add(tool.name);
-      for (const alias of tool.aliases || []) {
-        allAvailableToolNames.add(alias);
-      }
-    }
-
-    const normalized = this.normalizeToolCalls(tools);
-    const results: Array<{ toolName: string; success: boolean; result?: unknown; error?: string }> = [];
-
-    for (const { toolName, args } of normalized) {
-      console.log(`[BaseNode:${this.name}] Executing tool: ${toolName} with args:`, JSON.stringify(args, null, 2));
-      
-      // Check if tool is in allowed list (if provided)
-      if (allowedTools && allowedTools.length > 0 && !allowedTools.includes(toolName)) {
-        console.log(`[BaseNode:${this.name}] Tool ${toolName} attempted but not in allowed list: [${allowedTools.join(', ')}]`);
-        results.push({ 
-          toolName, 
-          success: false, 
-          error: `Tool ${toolName} is not in the allowed tools list for this node` 
-        });
-        continue;
-      }
-      
-      const tool = registry.get(toolName);
-      if (!tool) {
-        const error = `Unknown tool: ${toolName}`;
-        console.error(`[BaseNode:${this.name}] Tool execution failed:`, error);
-        results.push({ toolName, success: false, error });
-        continue;
-      }
-
-      try {
-        const result = await tool.execute(state, {
-          toolName,
-          args,
-        });
-        
-        console.log(`[BaseNode:${this.name}] Tool ${toolName} result:`, {
-          success: result.success,
-          result: result.result,
-          error: result.error
-        });
-        
-        results.push({
-          toolName,
-          success: result.success,
-          result: result.result,
-          error: result.error,
-        });
-      } catch (err: any) {
-        const error = err.message || String(err);
-        console.error(`[BaseNode:${this.name}] Tool ${toolName} threw exception:`, error);
-        results.push({ toolName, success: false, error });
-      }
-    }
-
-    console.log(`[BaseNode:${this.name}] All tool executions completed. Results:`, JSON.stringify(results, null, 2));
-    return results;
-  }
-
-  public async executeSingleToolAction(
-    state: ThreadState,
-    toolName: string,
-    args?: Record<string, unknown>,
-  ): Promise<ToolResult> {
-    registerDefaultTools();
-    const registry = getToolRegistry();
-
-    const tool = registry.get(toolName);
-    if (!tool) {
-      return { toolName, success: false, error: `Unknown tool action: ${toolName}` };
-    }
-
-    const toolRunId = `${Date.now()}_${toolName}_${Math.floor(Math.random() * 1_000_000)}`;
-
-    // Skip tool_call progress event for chat message tools to avoid UI tool cards
-    const isChatTool = toolName === 'emit_chat_message' || toolName === 'emit_chat_image';
-    if (!isChatTool) {
-      this.emitProgress(state, 'tool_call', { toolRunId, toolName, args: args || {} });
-    }
-
-    const result = await tool.execute(state, {
-      toolName: toolName,
-      args,
-    });
-
-    // Skip tool_result progress event for chat tools
-    if (!isChatTool) {
-      this.emitProgress(state, 'tool_result', { toolRunId, toolName, success: result.success, error: result.error || null, result: result.result });
-      await this.appendToolResultMessage(state, toolName, result);
-    }
-    
-    return result;
-  }
-
-  public async appendToolResultMessage(state: ThreadState, action: string, result: ToolResult): Promise<void> {
-    const summary = result.success
-      ? `Tool ${action} succeeded`
-      : `Tool ${action} failed: ${result.error || 'unknown error'}`;
-
-    let toolHelpInfo = null;
-    
-    // If tool failed, get full help information to help LLM understand proper usage
-    if (!result.success) {
-      try {
-        const { getToolRegistry, registerDefaultTools } = await import('../tools');
-        registerDefaultTools();
-        const registry = getToolRegistry();
-        const tool = registry.get(action);
-        
-        if (tool) {
-          toolHelpInfo = tool.getPlanningInstructions();
-        }
-      } catch (error) {
-        console.warn(`[BaseNode] Failed to get help info for tool ${action}:`, error);
-      }
-    }
-
-    const content = JSON.stringify(
-      {
-        tool: action,
-        success: result.success,
-        error: result.error || null,
-        // Only include result if small; otherwise just summary
-        result: result.result && JSON.stringify(result.result).length < 5000
-          ? result.result
-          : '[result truncated — see logs]',
-        // Include full help information for failed tools
-        helpInfo: toolHelpInfo,
-      },
-      null,
-      2
-    );
-
-    const id = `tool_result_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-
-    state.messages.push({
-      id,
-      role: 'assistant',
-      content,
-      timestamp: Date.now(),
-      metadata: {
-        nodeId: this.id,
-        nodeName: this.name,
-        kind: 'tool_result',
-        toolName: action,
-        success: result.success,
-        summary, // short human-readable line for chat UI
-      },
-    });
-  }
-
-  public appendExecutionNote(state: ThreadState, note: string): void {
-    const text = String(note || '').trim();
-    if (!text) {
-      return;
-    }
-
-    const existing = Array.isArray((state.metadata as any).executionNotes)
-      ? ((state.metadata as any).executionNotes as unknown[]).map(String)
-      : [];
-
-    const next = [...existing, text].slice(-12);
-    (state.metadata as any).executionNotes = next;
-  }
-
-  public appendToolResult(state: ThreadState, action: string, result: ToolResult): void {
-    const prior = (state.metadata as any).toolResults;
-    const priorObj = (prior && typeof prior === 'object') ? (prior as Record<string, ToolResult>) : {};
-    (state.metadata as any).toolResults = { ...priorObj, [action]: result };
-
-    const historyExisting = Array.isArray((state.metadata as any).toolResultsHistory)
-      ? ((state.metadata as any).toolResultsHistory as unknown[])
-      : [];
-    const entry = {
-      at: Date.now(),
-      toolName: action,
-      success: !!result.success,
-      error: result.error || null,
-      result: result.result,
-    };
-    (state.metadata as any).toolResultsHistory = [...historyExisting, entry].slice(-12);
-  }
-
-  public async promptLLM(state: ThreadState, prompt: string): Promise<string | null> {
-    try {
-      const enriched = await this.enrichPrompt(prompt, state, {
-        includeSoul: false,
-        includeAwareness: false,
-        includeMemory: false,
-      });
-
-      const llm = getLLMService();
-      await llm.initialize();
-      if (!llm.isAvailable()) {
-        return null;
-      }
-
-      return await llm.generate(enriched);
-    } catch {
-      return null;
-    }
-  }
 }

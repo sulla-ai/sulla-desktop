@@ -34,7 +34,8 @@ async function initialize(): Promise<void> {
       continue;
     }
 
-    const article = new Article({
+    const article = new Article();
+    article.fill({
       schemaversion: Number(meta.schemaversion) || 1,
       slug: String(meta.slug).trim(),
       title: String(meta.title).trim(),
@@ -44,9 +45,8 @@ async function initialize(): Promise<void> {
       author: typeof meta.author === 'string' ? meta.author.trim() : 'seed',
       created_at: typeof meta.created_at === 'string' ? meta.created_at : now,
       updated_at: typeof meta.updated_at === 'string' ? meta.updated_at : now,
+      document: fmMatch[2] || '', // The content body after frontmatter
     });
-
-    articles.push(article);
   }
 
   if (articles.length === 0) {
@@ -56,10 +56,10 @@ async function initialize(): Promise<void> {
 
   for (const article of articles) {
     try {
-      await article.save(seedPedia[article.slug as keyof typeof seedPedia] as string);
-      console.log(`[KB] Upserted: ${article.slug}`);
+      await article.save();
+      console.log(`[KB] Upserted: ${article.attributes.slug}`);
     } catch (err) {
-      console.error(`[KB] Failed to save ${article.slug}:`, err);
+      console.error(`[KB] Failed to save ${article.attributes.slug}:`, err);
     }
   }
 

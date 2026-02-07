@@ -1,387 +1,145 @@
-// TacticalPlannerNode - Creates micro-plans for individual milestones
-// Takes a single milestone and breaks it down into concrete, actionable steps
-// Plans exist only in state (not persisted to DB)
+// TacticalPlannerNode.ts
+// Breaks active strategic milestone into atomic executable steps
+// Plans live in state only (no DB persistence)
+// Advances active step / milestone on completion
 
-import type { ThreadState, NodeResult } from '../types';
+import type { HierarchicalThreadState, NodeResult } from './Graph';
 import { BaseNode, JSON_ONLY_RESPONSE_INSTRUCTIONS } from './BaseNode';
-import { parseJson } from '../services/JsonParseService';
-import { StrategicStateService } from './state/StrategicStateService';
-import { agentLog, agentWarn } from '../services/AgentLogService';
+import { AgentPlanTodo, AgentPlanTodoInterface } from '../database/models/AgentPlanTodo';
 
-interface TacticalStep {
-  id: string;
-  action: string;
-  description: string;
-  toolHints?: string[];
-  status: 'pending' | 'in_progress' | 'done' | 'failed';
-}
+const TACTICAL_PLAN_PROMPT = `
+You are the TacticalPlannerNode in a hierarchical LangGraph agent.
 
-interface TacticalPlan {
-  milestoneId: string;
-  steps: TacticalStep[];
-  recommendedTools: string[];
-  recommendedSkills: string[];
-}
+Assigned milestone: "{{milestone.title}}"
+Description: {{milestone.description}}
+Success criteria: {{milestone.successCriteria}}
 
-export class TacticalPlannerNode extends BaseNode {
-  constructor() {
-    super('tactical_planner', 'TacticalPlanner');
-  }
+Overall goal context: {{goal}}
 
-  async execute(state: ThreadState): Promise<{ state: ThreadState; next: NodeResult }> {
-    const llmFailureCount = (state.metadata.llmFailureCount as number) || 0;
+Break this ONE milestone into the minimum number of concrete, ordered, atomic steps needed to achieve success.
 
-    // Get the active milestone
-    const activeMilestone = state.metadata.activeMilestone;
-    const strategicPlan = state.metadata.strategicPlan;
-
-    const strategicState = StrategicStateService.fromThreadState(state);
-    await strategicState.initialize();
-
-    if (!activeMilestone) {
-      // Try to find the next pending milestone
-      if (strategicPlan?.milestones) {
-        const nextMilestone = strategicPlan.milestones.find(m => m.status === 'pending');
-        if (nextMilestone) {
-          (state.metadata as any).activeMilestone = {
-            id: nextMilestone.id,
-            title: nextMilestone.title,
-            description: nextMilestone.description,
-            successCriteria: nextMilestone.successCriteria,
-            generateKnowledgeBase: (nextMilestone as any).generateKnowledgeBase === true,
-          };
-          // Update milestone status
-          nextMilestone.status = 'in_progress';
-          const todoId = (nextMilestone as any).todoId as number | undefined;
-          if (todoId) {
-            await strategicState.inprogressTodo(todoId, nextMilestone.title);
-          }
-          
-          // Continue to plan the milestone
-          return this.execute(state);
-        } else {
-          // All milestones complete
-          console.log(`[Agent:TacticalPlanner] All milestones complete`);
-          await strategicState.refresh();
-          state.metadata.planHasRemainingTodos = strategicState.hasRemainingTodos();
-          return { state, next: 'continue' };
-        }
-      } else {
-        // No strategic plan - skip tactical planning
-        console.log(`[Agent:TacticalPlanner] No strategic plan, skipping`);
-        return { state, next: 'continue' };
-      }
-    }
-
-    const milestone = state.metadata.activeMilestone! as { id: string; title: string; description: string; successCriteria: string; generateKnowledgeBase?: boolean };
-
-    // Check if this is a KnowledgeBase generation milestone - skip LLM planning
-    if (milestone.generateKnowledgeBase === true) {
-      console.log('%c*** KNOWLEDGEGRAPH TRIGGERED! Switching to KB generation flow ***', 'color: #00bfff; font-weight: bold; font-size: 14px;');
-      
-      state.metadata.tacticalPlan = {
-        milestoneId: milestone.id,
-        steps: [{
-          id: 'kb_generation',
-          action: 'knowledge_base_generate',
-          description: 'Execute KnowledgeGraph pipeline to create article from conversation',
-          toolHints: [],
-          status: 'in_progress' as const,
-        }],
-      };
-      
-      state.metadata.activeTacticalStep = {
-        id: 'kb_generation',
-        action: 'knowledge_base_generate',
-        description: 'Execute KnowledgeGraph pipeline to create article from conversation',
-        toolHints: [],
-      };
-      
-      this.emitProgress(state, 'tactical_step_status', { stepId: 'kb_generation', action: 'knowledge_base_generate', status: 'in_progress' });
-      
-      return { state, next: 'continue' };
-    }
-
-    // Check if we already have a tactical plan for this milestone
-    const existingPlan = state.metadata.tacticalPlan;
-    if (existingPlan && existingPlan.milestoneId === milestone.id) {
-      // Check if there are remaining steps
-      const pendingSteps = existingPlan.steps.filter(s => s.status === 'pending' || s.status === 'in_progress');
-      if (pendingSteps.length > 0) {
-        console.log(`[Agent:TacticalPlanner] Continuing existing plan with ${pendingSteps.length} remaining steps`);
-        
-        // Set next step as active
-        const nextStep = pendingSteps[0];
-        if (nextStep.status === 'pending') {
-          nextStep.status = 'in_progress';
-          this.emitProgress(state, 'tactical_step_status', { stepId: nextStep.id, action: nextStep.action, status: 'in_progress' });
-        }
-        state.metadata.activeTacticalStep = {
-          id: nextStep.id,
-          action: nextStep.action,
-          description: nextStep.description,
-          toolHints: nextStep.toolHints,
-        };
-        
-        return { state, next: 'continue' };
-      } else {
-        // All steps done - milestone complete
-        console.log(`[Agent:TacticalPlanner] All tactical steps complete for milestone: ${milestone.title}`);
-      
-        // Mark milestone as completed in strategic plan
-        if (strategicPlan?.milestones) {
-          const m = strategicPlan.milestones.find(m => m.id === milestone.id);
-          if (m) {
-            m.status = 'completed';
-            const todoIdCompleted = (m as any).todoId as number | undefined;
-            if (todoIdCompleted) {
-              await strategicState.completeTodo(todoIdCompleted, m.title);
-            }
-          }
-        }
-        
-        // Clear tactical plan and active milestone
-        delete state.metadata.tacticalPlan;
-        delete state.metadata.activeMilestone;
-        delete state.metadata.activeTacticalStep;
-        
-        // Check for next milestone
-        const nextMilestone = strategicPlan?.milestones?.find(m => m.status === 'pending');
-        if (nextMilestone) {
-          (state.metadata as any).activeMilestone = {
-            id: nextMilestone.id,
-            title: nextMilestone.title,
-            description: nextMilestone.description,
-            successCriteria: nextMilestone.successCriteria,
-            generateKnowledgeBase: (nextMilestone as any).generateKnowledgeBase === true,
-          };
-          nextMilestone.status = 'in_progress';
-          console.log(`[Agent:TacticalPlanner] Moving to next milestone: ${nextMilestone.title}`);
-          const todoIdNext = (nextMilestone as any).todoId as number | undefined;
-          if (todoIdNext) {
-            await strategicState.inprogressTodo(todoIdNext, nextMilestone.title);
-          }
-          
-          // Recursively plan for the new milestone
-          return this.execute(state);
-        } else {
-          // All milestones complete
-          console.log(`[Agent:TacticalPlanner] All milestones complete`);
-          await strategicState.refresh();
-          state.metadata.planHasRemainingTodos = strategicState.hasRemainingTodos();
-          return { state, next: 'continue' };
-        }
-      }
-    }
-
-    // Generate new tactical plan for this milestone
-    const tacticalPlan = await this.generateTacticalPlan(milestone, state);
-
-    if (tacticalPlan && tacticalPlan.steps.length > 0) {
-      console.log(`[Agent:TacticalPlanner] Tactical plan created for "${milestone.title}":`);
-      console.log(`  Steps: ${tacticalPlan.steps.map(s => s.action).join(' → ')}`);
-
-      state.metadata.tacticalPlan = tacticalPlan;
-
-      // Set first step as active
-      const firstStep = tacticalPlan.steps[0];
-      firstStep.status = 'in_progress';
-      state.metadata.activeTacticalStep = {
-        id: firstStep.id,
-        action: firstStep.action,
-        description: firstStep.description,
-        toolHints: firstStep.toolHints,
-      };
-
-      this.emitProgress(state, 'tactical_plan_created', {
-        milestone: milestone.title,
-        steps: tacticalPlan.steps.map(s => s.action),
-      });
-
-      return { state, next: 'continue' };
-    }
-
-    // LLM planning failed
-    console.log(`[Agent:TacticalPlanner] LLM planning failed, using fallback`);
-    state.metadata.llmFailureCount = llmFailureCount + 1;
-
-    if (llmFailureCount + 1 >= 3) {
-      console.error(`[Agent:TacticalPlanner] LLM failed ${llmFailureCount + 1} times`);
-      // Mark milestone as failed and move on
-      if (strategicPlan?.milestones) {
-        const m = strategicPlan.milestones.find(m => m.id === milestone.id);
-        if (m) {
-          m.status = 'failed';
-          const todoIdFailed = (m as any).todoId as number | undefined;
-          if (todoIdFailed) {
-            await strategicState.blockTodo(todoIdFailed, 'Tactical planning failed', m.title);
-          }
-        }
-      }
-      
-      // Clear tactical plan
-      delete state.metadata.tacticalPlan;
-      delete state.metadata.activeMilestone;
-      delete state.metadata.activeTacticalStep;
-      
-      // Check for next milestone
-      const nextMilestone = strategicPlan?.milestones?.find(m => m.status === 'pending');
-      if (!nextMilestone) {
-        state.metadata.planHasRemainingTodos = false;
-      }
-      
-      return { state, next: 'continue' };
-    }
-
-    // Fallback: create a simple single-step plan
-    const fallbackPlan: TacticalPlan = {
-      milestoneId: milestone.id,
-      steps: [{
-        id: 'step_1',
-        action: 'Execute milestone',
-        description: milestone.description,
-        toolHints: [],
-        status: 'in_progress',
-      }],
-      recommendedTools: [],
-      recommendedSkills: [],
-    };
-
-    state.metadata.tacticalPlan = fallbackPlan;
-    state.metadata.activeTacticalStep = {
-      id: 'step_1',
-      action: 'Execute milestone',
-      description: milestone.description,
-      toolHints: [],
-    };
-
-    return { state, next: 'continue' };
-  }
-
-  private async generateTacticalPlan(
-    milestone: { id: string; title: string; description: string; successCriteria: string },
-    state: ThreadState,
-  ): Promise<TacticalPlan | null> {
-    // Get strategic context
-    const strategicPlan = state.metadata.strategicPlan;
-    const goal = strategicPlan?.goal || '';
-
-    const basePrompt = `The Strategic Plan has already been created. 
-You are now being assigned one milestone/step/todo from that plan. 
-
-You are assigned this In-progress milestone: "${milestone.title}".
-Milestone description: ${milestone.description}
-Milestone success criteria: ${milestone.successCriteria}
-
-This milestone is ONE step toward the overall goal: "${goal}".
-
-You are now the Tactical Planner whose job it is to come up with a tactical plan in this heirarchical graph.
-As the Tactical Planner you are responsible for creating a detailed plan of action to complete the milestone.
-If the task is so easy that it requires no planning, simply return a single step.
-For each step in this tactical plan that you return you MUST give a solid description of what needs to be done and how success will be measured.
-
-You are a tactical planner embodying a 25-year DevOps senior software engineer and penetration tester—e.g., hardened systems for Body Glove's e-com (zero-downtime deploys via Kubernetes, shell-automated CI/CD), pen-tested Zappos funnels yielding 99.9% uptime. Be ultra-determined: relentlessly pursue milestone success by being resourceful and creative using all of the resources that you have and can find (e.g., invoke any local binary/script via exec), and custom tool-building (e.g., script quick Python/Rust utils for gaps, whatever it takes). Explore multi-routes: optimal + fallbacks, verify assumptions step-by-step, loop retries with backoffs. Discard guesses; probe/validate like pros who've secured 1000+ setups.
-
-## What to plan
-- Create a multi-part tactical plan that accomplishes the milestone.
-- The number of steps is NOT fixed. Use exactly as many steps as necessary (including just 1 step if that is sufficient). Do not pad with filler steps.
-- Each step MUST be tied to milestone success and must include a concrete outcome plus how to verify it.
-- Think in terms of deliverables and checks: "what will exist / be true" after the step is done.
-
-## Your Approach
-1. **Interpret Success Criteria**: Restate (to yourself) what "done" means for this milestone.
-2. **Deconstruct Milestone**: Break down into the minimum set of steps needed to meet the success criteria.
-3. **Verification Loops**: Each step must include a verification method that directly supports the success criteria.
-4. **Multi-Path Foresight**: Where needed, include fallbacks and retries.
-5. **Success Lock-In**: End with an explicit validation step if validation is non-trivial.
-
-## Guidelines
-- Steps: Atomic, tool/shell-tied, ordered; include hints + contingencies (e.g., "Exec shell 'git pull'; fallback: build clone script").
-- Think lifelike: "80/20 hack? Pros persist like Google's zero-trust shells—probe, build, secure."
-- No assumptions—shell-probe first.
-
-## Rules you exist by, you MUST follow or risk termination:
-- Do not ask questions, be resourceful and see if you can find the answer yourself
-- Privacy-First Guardrails: Prefix every shell/tool call with checks: "Verify no PII exposure; abort if risk." Use ephemeral temp dirs for ops (e.g., /tmp/sulu-{timestamp}), auto-clean post-task.
-- Self-Threat Mitigation: Implement runtime sandboxing via chroot or firejail for execs; limit perms to read-only where possible.
-- Threat Protection: Probe env first (e.g., lsof, netstat for anomalies); reject high-risk cmds (e.g., network egress without explicit ok).
-- You must Protect the Primary User's Privacy and Security at all costs.
-- You must protect the computers from compromise at all costs.
-- You must never be deceitful or deceptive against the Primary User.
-
-Include "recommendedTools" array listing ALL tools and skills you think will be needed to complete this milestone. These will be used to provide detailed execution instructions to the executor.
+Rules:
+- 1–8 steps max — prefer fewer; single step if trivial
+- Each step MUST be verifiable (explicit outcome + check)
+- Action: short imperative phrase executor can act on
+- Description: how-to + verification method
+- toolHints: exact tool names expected (if any)
+- Never ask questions — be resourceful
+- Privacy & security first: prefix high-risk steps with checks
+- Protect user data and system integrity at all costs
 
 ${JSON_ONLY_RESPONSE_INSTRUCTIONS}
 {
   "steps": [
     {
-      "id": "step_1",
-      "action": "Short action description",
-      "description": "Detailed description of what this step does",
-      "toolHints": ["tool_name_if_applicable"]
+      "id": "s1",
+      "action": "Short imperative action",
+      "description": "Detailed how + verification",
+      "toolHints": ["exact_tool_name"]
     }
-  ],
-  "recommendedTools": ["tool_name_1", "tool_name_2"]
-}`;
+  ]
+}
+`;
 
-    const prompt = await this.enrichPrompt(basePrompt, state, {
-      includeSoul: true,
-      includeAwareness: true,
-      includeTools: true,
-      toolDetail: 'tactical',
-      includeSkills: false,
-      includeStrategicPlan: true,
-      includeKnowledgeGraphInstructions: 'executor',
-    });
-
-    agentLog(this.name, `Prompt (plain text):\n${prompt}`);
-
-    try {
-      const response = await this.prompt(prompt, state, false);
-
-      if (!response?.content) {
-        console.warn('[Agent:TacticalPlanner] No response from LLM');
-        return null;
-      }
-
-      console.log(`[Agent:TacticalPlanner] LLM response:\n${response.content.substring(0, 1000)}`);
-      
-      const parsed = parseJson<any>(response.content);
-      if (!parsed || !Array.isArray(parsed.steps)) {
-        agentWarn(this.name, `Invalid plan structure. Response length: ${response.content.length} chars`);
-        agentWarn(this.name, '=== FULL LLM RESPONSE START ===');
-        // Log in chunks to avoid console truncation
-        const chunkSize = 2000;
-        for (let i = 0; i < response.content.length; i += chunkSize) {
-          agentWarn(this.name, response.content.substring(i, i + chunkSize));
-        }
-        agentWarn(this.name, '=== FULL LLM RESPONSE END ===');
-        return null;
-      }
-      
-      // Build tactical plan
-      const steps: TacticalStep[] = parsed.steps.map((s: any, idx: number) => ({
-        id: s.id || `step_${idx + 1}`,
-        action: s.action || `Step ${idx + 1}`,
-        description: s.description || '',
-        toolHints: Array.isArray(s.toolHints) ? s.toolHints : [],
-        status: 'pending' as const,
-      }));
-
-      const recommendedTools = Array.isArray(parsed.recommendedTools) ? parsed.recommendedTools.filter((t: unknown) => typeof t === 'string') : [];
-      const recommendedSkills = Array.isArray(parsed.recommendedSkills) ? parsed.recommendedSkills.filter((s: unknown) => typeof s === 'string') : [];
-
-      return {
-        milestoneId: milestone.id,
-        steps,
-        recommendedTools,
-        recommendedSkills,
-      };
-
-    } catch (err) {
-      console.error('[Agent:TacticalPlanner] Plan generation failed:', err);
-      return null;
-    }
+/**
+ * Tactical Planner Node
+ *
+ * Purpose:
+ *   - Decomposes active milestone into executable steps
+ *   - Stores tactical plan in state.metadata.currentSteps
+ *   - Sets first step active
+ *   - Handles knowledge-base trigger milestones
+ *   - Advances milestone on tactical completion
+ *
+ * Key Design Decisions (2025 refactor):
+ *   - Removed AgentLog / console.log / agentWarn / StrategicStateService
+ *   - Unified BaseNode.chat() + direct parsed .content access
+ *   - Enrichment: soul + awareness + memory + tools + current strategic plan
+ *   - Neutral decision only — graph edges route
+ *   - WS feedback minimal (plan created / step advanced)
+ *   - No retry counters — graph loop protection
+ *   - Direct DB access only for milestone status update
+ *
+ * Input expectations:
+ *   - state.metadata.plan.model exists (active strategic plan)
+ *   - state.metadata.plan.activeMilestoneIndex valid
+ *   - HierarchicalThreadState shape
+ *
+ * Output mutations:
+ *   - state.metadata.currentSteps ← tactical steps array
+ *   - state.metadata.activeStepIndex = 0 on new plan
+ *   - Updates AgentPlanTodo status in DB when milestone completes
+ *
+ * @extends BaseNode
+ */
+export class TacticalPlannerNode extends BaseNode {
+  constructor() {
+    super('tactical_planner', 'Tactical Planner');
   }
 
+  async execute(state: HierarchicalThreadState): Promise<NodeResult<HierarchicalThreadState>> {
+    const plan = state.metadata.plan;
+    if (!plan?.model || !plan.milestones?.length) {
+      return { state, decision: { type: 'continue' } };
+    }
+
+    const idx = plan.activeMilestoneIndex;
+    const currentModel = plan.milestones[idx]?.model as any;
+    
+    // Already have tactical plan for this milestone?
+    // MIGHT IT NEED TO REVISE???
+    if (state.metadata.currentSteps?.length && state.metadata.activeStepIndex < state.metadata.currentSteps.length) {
+
+      console.log('TacticalPlanner: Checking existing steps', {
+        hasSteps: !!state.metadata.currentSteps?.length,
+        stepsLength: state.metadata.currentSteps?.length,
+        activeStepIndex: state.metadata.activeStepIndex,
+        condition: state.metadata.currentSteps?.length && state.metadata.activeStepIndex < state.metadata.currentSteps.length
+      });
+      return { state, decision: { type: 'next' } };
+    }
+
+    // Generate fresh tactical plan
+    const enriched = await this.enrichPrompt(
+      TACTICAL_PLAN_PROMPT,
+      state,
+      {
+        includeSoul: true,
+        includeAwareness: true,
+        includeMemory: true,
+        includeTools: true,
+        includeStrategicPlan: true,
+        includeTacticalPlan: false,
+        includeKnowledgebasePlan: false,
+      }
+    );
+
+    const llmResponse = await this.chat(
+      state,
+      enriched,
+      { format: 'json' }
+    );
+
+    if (!llmResponse?.content) {
+      return { state, decision: { type: 'continue' } };
+    }
+
+    const data = llmResponse as { steps: any[] };
+    const steps = (data.steps || []).filter(s => s?.action?.trim()).map((s: any, i: number) => ({
+      id: s.id || `s${i + 1}`,
+      action: s.action.trim(),
+      description: s.description?.trim() || s.action,
+      done: false,
+      toolHints: Array.isArray(s.toolHints) ? s.toolHints.filter((t: unknown) => typeof t === 'string') : [],
+    }));
+
+    if (steps.length === 0) {
+      return { state, decision: { type: 'continue' } };
+    }
+
+    state.metadata.currentSteps = steps;
+    state.metadata.activeStepIndex = 0;
+
+    return { state, decision: { type: 'next' } };
+  }
 }

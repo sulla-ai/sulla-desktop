@@ -54,14 +54,14 @@ Subcommands:
             toolName: this.name,
             success: true,
             result: {
-              slug: article.slug,
-              title: article.title,
-              tags: article.tags,
-              order: article.order,
-              locked: article.locked,
-              author: article.author,
-              created_at: article.created_at,
-              updated_at: article.updated_at,
+              slug: article.attributes.slug,
+              title: article.attributes.title,
+              tags: article.attributes.tags,
+              order: article.attributes.order,
+              locked: article.attributes.locked,
+              author: article.attributes.author,
+              created_at: article.attributes.created_at,
+              updated_at: article.attributes.updated_at,
               content: 'Full markdown content available in document field (truncated here)',
               // Note: actual content is in document, not returned in full for brevity
             }
@@ -79,10 +79,10 @@ Subcommands:
             toolName: this.name,
             success: true,
             result: results.map(a => ({
-              slug: a.slug,
-              title: a.title,
-              tags: a.tags,
-              order: a.order,
+              slug: a.attributes.slug,
+              title: a.attributes.title,
+              tags: a.attributes.tags,
+              order: a.attributes.order,
               score: 'semantic similarity (higher = better)',
             }))
           };
@@ -95,7 +95,7 @@ Subcommands:
           return {
             toolName: this.name,
             success: true,
-            result: results.map(a => a.attributesSnapshot)
+            result: results.map(a => a.attributes)
           };
         }
 
@@ -104,7 +104,8 @@ Subcommands:
 
           const [slug, title, content, tagsStr, orderStr, lockedStr, author] = args;
 
-          const article = new Article({
+          const article = new Article();
+          article.fill({
             slug,
             title,
             tags: tagsStr ? tagsStr.split(',').map(t => t.trim()) : [],
@@ -113,9 +114,10 @@ Subcommands:
             author: author ?? 'seed',
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
+            document: content
           });
 
-          await article.save(content);
+          await article.save();
           return { toolName: this.name, success: true, result: { slug: article.slug, created: true } };
         }
 
@@ -126,7 +128,7 @@ Subcommands:
           const existing = await Article.find(slug);
           if (!existing) return { toolName: this.name, success: false, error: 'Article not found' };
 
-          const updates = {
+          existing.fill({
             title: args[1] || undefined,
             // content not updated via metadata — would require re-save with new document
             tags: args[2] ? args[2].split(',').map((t: string) => t.trim()) : undefined,
@@ -134,13 +136,9 @@ Subcommands:
             locked: args[4]?.toLowerCase() === 'true' ? true : args[4]?.toLowerCase() === 'false' ? false : undefined,
             author: args[5] || undefined,
             updated_at: new Date().toISOString(),
-          };
+          });
 
-          Object.assign(existing, Object.fromEntries(
-            Object.entries(updates).filter(([_, v]) => v !== undefined)
-          ));
-
-          await existing.save(existing.attributesSnapshot.document || ''); // preserve existing content
+          await existing.save(); // preserve existing content
           return { toolName: this.name, success: true, result: { slug, updated: true } };
         }
 

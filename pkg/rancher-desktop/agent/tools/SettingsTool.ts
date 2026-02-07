@@ -2,7 +2,7 @@ import type { ThreadState, ToolResult } from '../types';
 import { BaseTool } from './BaseTool';
 import type { ToolContext } from './BaseTool';
 import { getAgentConfig, updateAgentConfigFull } from '../services/ConfigService';
-import { getLLMConfig } from '../services/LLMServiceFactory';
+import { getCurrentModel, getCurrentMode, getCurrentConfig } from '../languagemodels';
 import { getRemoteModelService } from '../services/RemoteModelService';
 import { ipcRenderer } from '@pkg/utils/ipcRenderer';
 
@@ -47,7 +47,7 @@ Allowed update flags:
     try {
       if (subcommand === 'get') {
         const agentConfig = getAgentConfig();
-        const llmConfig = getLLMConfig();
+        const llmConfig = getCurrentConfig();
         const remote = getRemoteModelService();
 
         const snapshot = {

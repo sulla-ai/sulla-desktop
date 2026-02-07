@@ -16,13 +16,12 @@ export abstract class ChromaBaseModel {
   protected abstract required: string[];        // must exist
   protected abstract defaults: Record<string, any>; // default values
 
-  protected attributes: Record<string, any> = {};
+  public attributes: Record<string, any> = {};
 
-  constructor(data: Record<string, any> = {}) {
-    this.fill(data);
+  constructor() {
   }
 
-  protected fill(data: Record<string, any>) {
+  public fill(data: Record<string, any>) {
     for (const [key, value] of Object.entries(data)) {
       if (this.fillable.includes(key)) {
         this.attributes[key] = value;
@@ -35,20 +34,11 @@ export abstract class ChromaBaseModel {
   // Static factory + save in one call
   static async create<T extends ChromaBaseModel>(
     this: new (data?: Record<string, any>) => T,
-    threadId: string,
-    summary: string,
-    topics: string[] = [],
-    entities: string[] = []
+    attributes: Record<string, any>
   ): Promise<T> {
-    const instance = new this({
-      threadId,
-      summary,
-      topics,
-      entities,
-      timestamp: Date.now(),
-    });
-
-    await instance.save(summary); // document = summary text
+    const instance = new this();
+    instance.fill(attributes);
+    await instance.save();
 
     return instance;
   }
@@ -75,7 +65,7 @@ export abstract class ChromaBaseModel {
   // Core persistence
   // ────────────────────────────────────────────────
 
-  async save(document: string): Promise<void> {
+  async save(): Promise<void> {
     this.validateAndApplyDefaults();
 
     const id = this.attributes[this.idField];
@@ -83,7 +73,9 @@ export abstract class ChromaBaseModel {
       throw new Error(`Missing '${this.idField}' for save operation`);
     }
 
+    const document = this.attributes.document;
     const metadata = { ...this.attributes };
+    delete metadata.document;
 
     await chromaClient.addDocuments(
       this.collectionName,

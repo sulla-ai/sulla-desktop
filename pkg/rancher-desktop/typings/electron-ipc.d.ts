@@ -173,6 +173,7 @@ export interface IpcRendererEvents {
     settings: import('@pkg/config/settings').Settings
   ) => void;
   'settings-read':    (settings: import('@pkg/config/settings').Settings) => void;
+  'settings-write-error': (error: any) => void;
   'get-app-version':  (version: string) => void;
   'update-state':     (state: import('@pkg/main/update').UpdateState) => void;
   'always-debugging': (status: boolean) => void;

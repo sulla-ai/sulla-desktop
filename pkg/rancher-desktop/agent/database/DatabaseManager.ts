@@ -24,20 +24,53 @@ export function getDatabaseManager(): DatabaseManager {
 
 export class DatabaseManager {
   private initialized = false;
+  private pollingInterval: NodeJS.Timeout | null = null;
+  private isPolling = false;
 
   async initialize(): Promise<void> {
     if (this.initialized) return;
+    if (this.isPolling) return;
 
-    try {
-      await this.runMigrations();
-      await this.runSeeders();
+    this.isPolling = true;
+    
+    this.pollingInterval = setInterval(async () => {
+      try {
+        // Test database connection
+        await postgresClient.initialize();
+        console.log('[DB] after postgresClient.initialize');
+        await postgresClient.query('SELECT 1');
+        console.log('[DB] after postgresClient.query');
+        
+        // Stop polling once connected
+        if (this.pollingInterval) {
+          clearInterval(this.pollingInterval);
+          this.pollingInterval = null;
+        }
+        
+        // Run migrations and seeders
+        await this.runMigrations();
+        await this.runSeeders();
 
-      this.initialized = true;
-      console.log('[DB] Database ready');
-    } catch (err) {
-      console.error('[DB] Initialization failed:', err);
-      throw err;
+        this.initialized = true;
+        this.isPolling = false;
+        console.log('[DB] Database ready');
+      } catch (err: any) {
+        // Quiet polling - only debug log connection attempts
+        if (err.message && err.message.includes('Postgres not connected')) {
+          console.debug('[DB] Waiting for PostgreSQL to become available...');
+        } else {
+          console.debug('[DB] Connection attempt failed, retrying...');
+        }
+      }
+    }, 2000); // Poll every 2 seconds
+  }
+
+  async stop(): Promise<void> {
+    if (this.pollingInterval) {
+      clearInterval(this.pollingInterval);
+      this.pollingInterval = null;
     }
+    this.isPolling = false;
   }
 
   private async getExecuted(table: string): Promise<Set<string>> {
@@ -48,7 +81,35 @@ export class DatabaseManager {
   private async runMigrations(): Promise<void> {
     console.log('[DB] Running migrations...');
 
+    // Ensure migrations table exists
+    try {
+      await postgresClient.query(`
+        CREATE TABLE IF NOT EXISTS ${MIGRATIONS_TABLE} (
+          id SERIAL PRIMARY KEY,
+          name VARCHAR(255) UNIQUE NOT NULL,
+          executed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+      console.log('[DB] Migrations table created successfully');
+    } catch (err: any) {
+      if (err.code === '42P07') {
+        console.log('[DB] Migrations table already exists');
+      } else {
+        console.error('[DB] Failed to create migrations table:', err);
+        throw err;
+      }
+    }
+
     const executed = await this.getExecuted(MIGRATIONS_TABLE);
+    
+    // Log migration counts
+    const totalMigrations = migrationsRegistry.length;
+    const alreadyRunCount = Array.from(executed).filter(name => 
+      migrationsRegistry.some(mig => mig.name === name)
+    ).length;
+    const needToRunCount = totalMigrations - alreadyRunCount;
+    
+    console.log(`[DB] ${alreadyRunCount} migrations already run, ${needToRunCount} migrations need to be run`);
 
     for (const mig of migrationsRegistry) {
       if (executed.has(mig.name)) {
@@ -57,13 +118,14 @@ export class DatabaseManager {
       }
 
       try {
-        console.log(`[DB] Applying: ${mig.name}`);
+        console.log(`[DB] Running migration: ${mig.name}`);
         await postgresClient.query(mig.up);
 
         await postgresClient.query(
           `INSERT INTO ${MIGRATIONS_TABLE} (name) VALUES ($1) ON CONFLICT DO NOTHING`,
           [mig.name]
         );
+        console.log(`[DB] Migration completed: ${mig.name}`);
       } catch (err) {
         console.error(`Migration failed: ${mig.name}`, err);
         throw err; // fail fast on migrations

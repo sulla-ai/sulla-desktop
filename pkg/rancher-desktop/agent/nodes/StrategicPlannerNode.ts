@@ -1,14 +1,189 @@
 // StrategicPlannerNode.ts
-// Updated: uses AgentPlan / AgentPlanTodo models directly
-// Removed PlanService dependency — no breaking changes to API/signature
+// High-level goal decomposition into milestones
+// Persists to AgentPlan / AgentPlanTodo models
+// Returns neutral decision — graph edges route next
 
-import type { ThreadState, NodeResult } from '../types';
+import type { HierarchicalThreadState, NodeResult } from './Graph';
 import { BaseNode, JSON_ONLY_RESPONSE_INSTRUCTIONS } from './BaseNode';
-import { parseJson } from '../services/JsonParseService';
-import { agentLog, agentWarn } from '../services/AgentLogService';
-import { StrategicStateService, type StrategicPlanData } from './state/StrategicStateService';
-import { AgentPlan } from '../database/models/AgentPlan';
-import { AgentPlanTodo } from '../database/models/AgentPlanTodo';
+import { AgentPlan, AgentPlanInterface } from '../database/models/AgentPlan';
+import { AgentPlanTodo, AgentPlanTodoInterface } from '../database/models/AgentPlanTodo';
+
+const STRATEGIC_PLAN_PROMPT = `
+For this request you're job is to be the StrategicPlannerNode in a hierarchical LangGraph agent.
+
+Think like a 20+ year battle-tested strategist: Amazon predictive scaling (40% efficiency), Zappos personalization (30% repeat rate), nonprofit SWOT pivots (25% donation lift). Avoid generic fluff. Focus on high-leverage, low-risk sequences with proven multipliers.
+
+Core Rules:
+- If the user goal needs >1 meaningful step → planNeeded: true
+- If simple/direct answer suffices → planNeeded: false + emit_chat_message = full response
+- Never ask questions
+- Never call tools yourself
+- Prefer 3–6 tight milestones max
+- Each milestone must have clear success criteria (SMARTER style)
+- Include 1–2 stretch/enhancement ideas where high ROI possible
+
+${JSON_ONLY_RESPONSE_INSTRUCTIONS}
+{
+  "goal": "One-sentence primary objective",
+  "goalDescription": "What true success looks like",
+  "requiresTools": boolean,
+  "estimatedComplexity": "simple" | "moderate" | "complex",
+  "planNeeded": boolean,
+  "milestones": [
+    {
+      "id": "m1",
+      "title": "Short actionable title",
+      "description": "What this step achieves",
+      "successCriteria": "Measurable completion condition",
+      "dependsOn": ["m0"]   // empty array if none
+    }
+  ],
+  "responseGuidance": {
+    "tone": "technical" | "casual" | "formal" | "friendly",
+    "format": "brief" | "detailed" | "markdown" | "conversational"
+  },
+  "emit_chat_message": "Optional message to show user immediately (only if planNeeded)"
+}`;
+
+/**
+ * Strategic Planner Node
+ *
+ * Purpose:
+ *   - Decomposes user intent into high-level goal + milestones
+ *   - Persists plan to DB (AgentPlan + AgentPlanTodo)
+ *   - Activates first milestone if plan created
+ *   - Handles simple vs multi-step paths
+ *
+ * Key Design Decisions (2025 refactor):
+ *   - Removed AgentLog / console.log / agentWarn
+ *   - Unified BaseNode.chat() + direct parsed .content access
+ *   - Enrichment: soul + awareness + memory + tools (names only)
+ *   - Persists via AgentPlan / AgentPlanTodo models directly
+ *   - Neutral decision only — graph edges decide next
+ *   - WS feedback only on plan creation / simple response
+ *   - No retry counter bloat — graph-level protection
+ *
+ * Input expectations:
+ *   - Recent user message in state.messages
+ *   - HierarchicalThreadState shape
+ *
+ * Output mutations:
+ *   - state.metadata.plan ← { model, milestones[], activeMilestoneIndex, allMilestonesComplete }
+ *   - DB: new/existing AgentPlan + AgentPlanTodo records
+ *   - state.metadata.activeMilestoneIndex = 0 on new plan
+ *
+ * @extends BaseNode
+ */
+export class StrategicPlannerNode extends BaseNode {
+  constructor() {
+    super('strategic_planner', 'Strategic Planner');
+  }
+
+  async execute(state: HierarchicalThreadState): Promise<NodeResult<HierarchicalThreadState>> {
+
+    const enriched = await this.enrichPrompt(STRATEGIC_PLAN_PROMPT, state, {
+      includeSoul: true,
+      includeAwareness: true,
+      includeMemory: true,
+      includeTools: true,
+      includeStrategicPlan: false,
+      includeTacticalPlan: false,
+      includeKnowledgebasePlan: false,
+    });
+
+    const llmResponse = await this.chat(
+      state,
+      enriched,
+      { format: 'json' }
+    );
+
+    if (!llmResponse) {
+      return { state, decision: { type: 'continue' } };
+    }
+
+    const plan = llmResponse as StrategicPlan;
+    if (!plan || !plan.goal?.trim()) {
+      return { state, decision: { type: 'continue' } };
+    }
+
+    if (plan.emit_chat_message?.trim()) {
+      this.wsChatMessage(state, plan.emit_chat_message, 'assistant', 'response');
+    }
+
+    // ============================================================================
+    // No complete plan needed
+    // ============================================================================
+
+    if (!plan.planNeeded) {
+      return { state, decision: { type: 'end' } };
+    }
+
+
+    // ============================================================================
+    // Thorough thought processes need to carry out this task
+    // First task is to get or update the plan
+    // ============================================================================
+
+    try {
+      // check if the plan is already in the state object
+      let planModel = state.metadata.plan?.model;
+      if (planModel) {
+
+        planModel.setData({
+          goal: plan.goal,
+          goalDescription: plan.goalDescription,
+          complexity: plan.estimatedComplexity,
+          requiresTools: plan.requiresTools,
+        });
+        await planModel.incrementRevision();
+        await planModel.deleteAllTodos();
+
+      // Create a new plan
+      } else {
+
+        planModel = new AgentPlan({
+          thread_id: state.metadata.threadId,
+          status: 'active',
+          data: {
+            goal: plan.goal,
+            goalDescription: plan.goalDescription,
+            complexity: plan.estimatedComplexity,
+            requiresTools: plan.requiresTools,
+          },
+        });
+        await planModel.save();
+
+      }
+
+      // Create new todos
+      const todos: AgentPlanTodo[] = [];
+      for (const [idx, m] of plan.milestones.entries()) {
+        const todo = new AgentPlanTodo({
+          plan_id: planModel.attributes.id!,
+          title: m.title,
+          description: `${m.description}\n\nSuccess: ${m.successCriteria}`,
+          order_index: idx,
+          status: idx === 0 ? 'in_progress' : 'pending',
+        });
+        await todo.save();
+        todos.push(todo);
+      }
+
+      // Update state shape
+      state.metadata.plan = {
+        model: planModel,
+        milestones: todos.map(todo => ({ model: todo })),
+        activeMilestoneIndex: 0,
+        allMilestonesComplete: false,
+      };
+
+      return { state, decision: { type: 'next' } };
+    } catch(err) {
+      console.error('[StrategicPlanner] Plan persistence failed:', err);
+      return { state, decision: { type: 'continue' } };
+    }
+  }
+}
 
 interface StrategicPlan {
   goal: string;
@@ -22,287 +197,10 @@ interface StrategicPlan {
     description: string;
     successCriteria: string;
     dependsOn: string[];
-    status: 'pending' | 'completed' | 'in_progress' | 'failed';
-    todoId?: number;
   }>;
   responseGuidance: {
-    tone: 'formal' | 'casual' | 'technical' | 'friendly';
-    format: 'brief' | 'detailed' | 'json' | 'markdown' | 'conversational';
+    tone: string;
+    format: string;
   };
   emit_chat_message?: string;
-}
-
-export class StrategicPlannerNode extends BaseNode {
-  constructor() {
-    super('strategic_planner', 'StrategicPlanner');
-  }
-
-  async execute(state: ThreadState): Promise<{ state: ThreadState; next: NodeResult }> {
-    console.log(`[Agent:StrategicPlanner] Executing...`);
-
-    const llmFailureCount = (state.metadata.llmFailureCount as number) || 0;
-    const strategicPlanRetryCount = (state.metadata.strategicPlanRetryCount as number) || 0;
-
-    const lastUserMessage = state.messages.filter(m => m.role === 'user').pop();
-    if (!lastUserMessage) {
-      console.log(`[Agent:StrategicPlanner] No user message, ending`);
-      return { state, next: 'end' };
-    }
-
-    const revisionContext = state.metadata.requestPlanRevision;
-    const priorPlanId = state.metadata.activePlanId;
-    const lastStrategicPlanError = typeof state.metadata.strategicPlanLastError === 'string'
-      ? String(state.metadata.strategicPlanLastError)
-      : '';
-
-    const strategicPlan = await this.generateStrategicPlan(
-      state,
-      revisionContext ? String((revisionContext as any).reason || '') : (lastStrategicPlanError || undefined),
-    );
-
-    if (!strategicPlan) {
-      state.metadata.llmFailureCount = llmFailureCount + 1;
-      state.metadata.strategicPlanRetryCount = strategicPlanRetryCount + 1;
-
-      if (strategicPlanRetryCount + 1 >= 2) {
-        console.error(`[Agent:StrategicPlanner] Strategic plan failed after ${strategicPlanRetryCount + 1} attempts`);
-        state.metadata.error = state.metadata.strategicPlanLastError || 'Strategic planning failed';
-        return { state, next: 'end' };
-      }
-
-      agentWarn(this.name, 'Strategic plan invalid; retrying', {
-        attempt: strategicPlanRetryCount + 1,
-      });
-
-      return { state, next: 'strategic_planner' };
-    }
-
-    delete state.metadata.strategicPlanLastError;
-    state.metadata.strategicPlanRetryCount = 0;
-
-    if (strategicPlan.planNeeded && strategicPlan.milestones.length > 0) {
-      try {
-        const strategicState = StrategicStateService.fromThreadState(state);
-        await strategicState.initialize();
-
-        const todos = strategicPlan.milestones.map((m, idx) => ({
-          title: m.title,
-          description: `${m.description}\n\nSuccess Criteria: ${m.successCriteria}`,
-          orderIndex: idx,
-          categoryHints: [],
-        }));
-
-        const planData: StrategicPlanData = {
-          type: 'strategic',
-          goal: strategicPlan.goal,
-          goalDescription: strategicPlan.goalDescription,
-          estimatedComplexity: strategicPlan.estimatedComplexity,
-          responseGuidance: strategicPlan.responseGuidance,
-        };
-
-        if (priorPlanId && revisionContext) {
-          console.log(`[Agent:StrategicPlanner] Revising plan ${priorPlanId}`);
-          const revised = await strategicState.revisePlan({
-            planId: Number(priorPlanId),
-            data: planData,
-            milestones: todos.map(t => ({ title: t.title, description: t.description, orderIndex: t.orderIndex })),
-          });
-
-          if (revised) {
-            state.metadata.activePlanId = revised.planId;
-          }
-        } else {
-          console.log(`[Agent:StrategicPlanner] Creating new plan`);
-          const createdPlanId = await strategicState.createPlan({
-            data: planData,
-            milestones: todos.map(t => ({ title: t.title, description: t.description, orderIndex: t.orderIndex })),
-          });
-
-          if (createdPlanId) {
-            state.metadata.activePlanId = createdPlanId;
-          }
-        }
-
-        // Clear revision flags
-        delete state.metadata.requestPlanRevision;
-        delete state.metadata.revisionFeedback;
-
-        // Map milestones to DB todos for state
-        await strategicState.refresh();
-        state.metadata.strategicPlan = {
-          goal: strategicPlan.goal,
-          goalDescription: strategicPlan.goalDescription,
-          milestones: strategicPlan.milestones.map((m, idx) => ({
-            ...m,
-            status: 'pending' as const,
-            todoId: strategicState.getTodoIdByOrderIndex(idx),
-          })) as Array<{
-            id: string;
-            title: string;
-            description: string;
-            successCriteria: string;
-            dependsOn: string[];
-            status: 'pending' | 'completed' | 'in_progress' | 'failed';
-            todoId?: number;
-          }>,
-          requiresTools: strategicPlan.requiresTools,
-          estimatedComplexity: strategicPlan.estimatedComplexity,
-        };
-
-        // Activate first milestone
-        if (strategicPlan.milestones.length > 0) {
-          const first = strategicPlan.milestones[0];
-          const firstMilestone = state.metadata.strategicPlan.milestones.find((m: any) => m.id === first.id);
-          if (firstMilestone) {
-            firstMilestone.status = 'in_progress';
-            const todoId = firstMilestone.todoId as number | undefined;
-            if (todoId) {
-              await strategicState.inprogressTodo(todoId, first.title);
-            }
-          }
-          (state.metadata as any).activeMilestone = {
-            id: first.id,
-            title: first.title,
-            description: first.description,
-            successCriteria: first.successCriteria,
-            generateKnowledgeBase: (first as any).generateKnowledgeBase === true,
-          };
-        }
-
-        state.metadata.planHasRemainingTodos = strategicState.hasRemainingTodos();
-
-      } catch (err) {
-        console.error(`[Agent:StrategicPlanner] Failed to persist plan:`, err);
-        state.metadata.strategicPlanLastError = err instanceof Error ? err.message : String(err);
-      }
-
-      if (strategicPlan.emit_chat_message) {
-        await this.emitChatMessage(state, strategicPlan.emit_chat_message);
-      }
-
-      return { state, next: 'continue' };
-    }
-
-    // No plan needed — simple response
-    console.log(`[Agent:StrategicPlanner] No strategic plan needed`);
-    state.metadata.planHasRemainingTodos = false;
-    state.metadata.plan = {
-      planNeeded: false,
-      goal: strategicPlan.goal,
-      requiresTools: false,
-    };
-
-    if (strategicPlan.emit_chat_message) {
-      await this.emitChatMessage(state, strategicPlan.emit_chat_message);
-    }
-
-    return { state, next: 'end' };
-  }
-
-  private async generateStrategicPlan(
-    state: ThreadState,
-    revisionReason?: string,
-  ): Promise<StrategicPlan | null> {
-    const basePrompt = `IMPORTANT: YOU ARE A STRATEGICPLANNERNODE INSIDE OF A HIERARCHICAL LANG GRAPH.
-You need to think like an expert strategic planner with 20+ years across industries—tech (e.g., Amazon's predictive scaling for 40% efficiency gains), retail (Zappos' personalization driving 30% repeats), nonprofits (SWOT-led 25% donation boosts). Avoid novice pitfalls like generic steps; craft high-leverage, low-risk plans from battle-tested tactics that deliver 2-5x results. Expose blind spots, rethink assumptions, use foresight for lifelike overdelivery.
-
-${revisionReason ? 
-`## Revision Required
-The previous plan needs revision because: ${revisionReason}
-` : `
-## Decision Tree
-if (the inquiry does require a plan to be successful) {
-  planNeeded = true;
-  emit_chat_message = reiterate the goal of the inquiry and conversationally explain the plan;
-  Important: use the milestones array to outline the plan
-}
-else {
-  planNeeded = false; 
-  IMPORTANT: emit_chat_message = respond to the user
-}`}
-
-## Your Approach
-1. Identify Primary Goal: Uncover the true win-condition.
-2. Anticipate Beyond: Predict unstated delights.
-3. Expert Lens: Prioritize proven plays.
-4. Scenario Planning: Outline optimal/fallback/stretch paths.
-5. Work Backwards: Map milestones with efficiencies.
-6. First Principles: Deconstruct to core checkpoints.
-7. Success Criteria: Use SMARTER goals.
-
-## Guidelines
-- If more than one step → create plan
-- Do not ask questions
-- Do not run tools yourself
-- Milestones: fewer preferred; include 1-2 enhancements
-- Abstract goals only
-
-${JSON_ONLY_RESPONSE_INSTRUCTIONS}
-{
-  "goal": "Primary objective in one sentence",
-  "goalDescription": "What success looks like",
-  "requiresTools": boolean,
-  "estimatedComplexity": "simple" | "moderate" | "complex",
-  "planNeeded": boolean,
-  "milestones": [
-    {
-      "id": "milestone_1",
-      "title": "Short title",
-      "description": "What it accomplishes",
-      "successCriteria": "How we know it's done",
-      "dependsOn": []
-    }
-  ],
-  "responseGuidance": {
-    "tone": "formal" | "casual" | "technical" | "friendly",
-    "format": "brief" | "detailed" | "json" | "markdown" | "conversational"
-  },
-  "emit_chat_message": "string to show user if planNeeded"
-}
-`;
-
-    const prompt = await this.enrichPrompt(basePrompt, state, {
-      includeSoul: true,
-      includeAwareness: true,
-      includeMemory: true,
-      includeTools: true,
-      toolDetail: 'names',
-      includeSkills: false,
-      includeStrategicPlan: false,
-      includeKnowledgeGraphInstructions: 'planner',
-    });
-
-    agentLog(this.name, `Prompt built (${prompt.length} chars)`);
-
-    try {
-      const response = await this.prompt(prompt, state, false);
-
-      if (!response?.content) {
-        agentWarn(this.name, 'No response from LLM');
-        return null;
-      }
-
-      const plan = parseJson<StrategicPlan>(response.content);
-      if (!plan) {
-        state.metadata.strategicPlanLastError = 'Failed to parse JSON for strategic plan';
-        agentWarn(this.name, 'Failed to parse plan JSON');
-        return null;
-      }
-
-      // Normalize & defaults
-      plan.goal = plan.goal?.trim() || 'Unspecified goal';
-      plan.goalDescription = plan.goalDescription?.trim() || '';
-      plan.requiresTools = !!plan.requiresTools;
-      plan.estimatedComplexity = plan.estimatedComplexity || 'moderate';
-      plan.planNeeded = !!plan.planNeeded;
-      plan.milestones = Array.isArray(plan.milestones) ? plan.milestones : [];
-      plan.responseGuidance = plan.responseGuidance || { tone: 'technical', format: 'detailed' };
-
-      return plan;
-    } catch (err) {
-      state.metadata.strategicPlanLastError = `Strategic plan generation error: ${String(err)}`;
-      console.error('[Agent:StrategicPlanner] Plan generation failed:', err);
-      return null;
-    }
-  }
 }

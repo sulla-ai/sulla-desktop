@@ -69,7 +69,7 @@ Args:
 
           if (!event?.id) throw new Error('Failed to create event');
 
-          return { toolName: this.name, success: true, result: event.attributesSnapshot };
+          return { toolName: this.name, success: true, result: event.attributes };
         }
 
         case 'list':
@@ -90,14 +90,14 @@ Args:
           }
 
           const events = await CalendarEvent.findUpcoming(50, options.startAfter);
-          return { toolName: this.name, success: true, result: events.map(e => e.attributesSnapshot) };
+          return { toolName: this.name, success: true, result: events.map(e => e.attributes) };
         }
 
         case 'get': {
           const id = parseInt(rest[0], 10);
           if (isNaN(id)) throw new Error('Invalid event ID');
           const event = await CalendarEvent.find(id);
-          return { toolName: this.name, success: !!event, result: event?.attributesSnapshot || 'Not found' };
+          return { toolName: this.name, success: !!event, result: event?.attributes || 'Not found' };
         }
 
         case 'update': {
@@ -108,7 +108,7 @@ Args:
           const evt = await CalendarEvent.find(id);
           if (!evt) return { toolName: this.name, success: false, result: 'Not found' };
 
-          const currentAttrs = evt.attributesSnapshot;
+          const currentAttrs = evt.attributes;
           evt.updateAttributes({
             title: params.title ?? currentAttrs.title,
             start_time: params.start ?? params.startTime ?? currentAttrs.start_time,
@@ -122,7 +122,7 @@ Args:
 
           await evt.save();
 
-          return { toolName: this.name, success: true, result: evt.attributesSnapshot };
+          return { toolName: this.name, success: true, result: evt.attributes };
         }
 
         case 'delete': {

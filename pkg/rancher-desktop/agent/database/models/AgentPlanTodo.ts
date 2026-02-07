@@ -15,10 +15,62 @@ export interface PlanTodoAttributes {
   updated_at?: string;
 }
 
-export class AgentPlanTodo extends BaseModel<PlanTodoAttributes> {
+export interface AgentPlanTodoInterface {
+  // Properties from getters
+  id: string;
+  title: string;
+  description: string;
+  orderIndex: number;
+  status: TodoStatus;
+  done: boolean;
+  
+  // Methods from AgentPlanTodo class
+  save(): Promise<this>;
+  delete(): Promise<boolean>;
+  markStatus(status: TodoStatus): Promise<this>;
+  setOrderIndex(orderIndex: number): void;
+  setTitle(title: string): void;
+  setDescription(description: string): void;
+  setCategoryHints(hints: string[]): void;
+  
+  // Instance method (delegates to static)
+  findForPlan(planId: number): Promise<AgentPlanTodoInterface[]>;
+}
+
+export class AgentPlanTodo extends BaseModel<PlanTodoAttributes> implements AgentPlanTodoInterface {
   protected tableName = 'agent_plan_todos';
   protected primaryKey = 'id';
   protected fillable = ['plan_id', 'status', 'order_index', 'title', 'description', 'category_hints'];
+
+  // Interface properties
+  get id(): string {
+    return this.attributes.id?.toString() || '';
+  }
+
+  get title(): string {
+    return this.attributes.title || '';
+  }
+
+  get description(): string {
+    return this.attributes.description || '';
+  }
+
+  get orderIndex(): number {
+    return this.attributes.order_index || 0;
+  }
+
+  get status(): TodoStatus {
+    return this.attributes.status || 'pending';
+  }
+
+  get done(): boolean {
+    return this.attributes.status === 'done';
+  }
+
+  // Static method (as instance method for interface)
+  async findForPlan(planId: number): Promise<AgentPlanTodoInterface[]> {
+    return AgentPlanTodo.findForPlan(planId);
+  }
 
   static async findForPlan(planId: number): Promise<AgentPlanTodo[]> {
     return this.where({ plan_id: planId });

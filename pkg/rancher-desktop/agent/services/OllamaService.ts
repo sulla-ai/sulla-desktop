@@ -3,7 +3,7 @@
 // Implements ILLMService for interchangeable use with RemoteModelService
 
 import { getOllamaModel, getOllamaBase, getLocalConfig } from './ConfigService';
-import type { ILLMService, ChatMessage } from './ILLMService';
+import type { ILLMService, ChatMessage } from '../languagemodels/BaseLanguageModel';
 
 interface GenerateResponse {
   response: string;
@@ -161,7 +161,11 @@ class OllamaServiceClass implements ILLMService {
    * Generate a completion (non-chat)
    */
   async generate(prompt: string, options?: { signal?: AbortSignal }): Promise<string | null> {
-    return this.generateWithModel(prompt, this.getModel(), options);
+    console.log('[OllamaService] Calling Generate');
+    return this.chatWithModel([{
+        role: 'user',
+        content: prompt
+    }], this.getModel(), options);
   }
 
   /**
@@ -208,6 +212,7 @@ class OllamaServiceClass implements ILLMService {
   }
 
   async chatWithModel(messages: ChatMessage[], modelName: string, options?: { signal?: AbortSignal }): Promise<string | null> {
+    console.log('[OllamaService] Calling ChatWithModel');
     try {
       const body: Record<string, unknown> = {
         model: modelName,
@@ -215,13 +220,17 @@ class OllamaServiceClass implements ILLMService {
         stream: false,
       };
 
+      const url = `${this.getBaseUrl()}/api/chat`;
       const { timeoutSeconds } = getLocalConfig();
-      const res = await fetch(`${this.getBaseUrl()}/api/chat`, {
+      const payload = {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify(body),
         signal:  combineSignals(timeoutSeconds * 1000, options?.signal),
-      });
+      };
+
+      console.log('[OllamaService] Calling ChatWithModel', payload);
+      const res = await fetch(url, payload);
 
       if (res.ok) {
         const data: ChatResponse = await res.json();
@@ -249,25 +258,46 @@ class OllamaServiceClass implements ILLMService {
   /**
    * Chat completion
    */
-  async chat(messages: ChatMessage[], options?: { signal?: AbortSignal }): Promise<string | null> {
+  async chat(messages: ChatMessage[], options?: { 
+    model?: string;
+    maxTokens?: number;
+    format?: 'json' | undefined;
+    signal?: AbortSignal;
+  }): Promise<string | null> {
+
     try {
       const body: Record<string, unknown> = {
-        model: this.getModel(),
+        model: options?.model || this.getModel(),
         messages,
         stream: false,
       };
 
+      // Add format option if specified
+      if (options?.format === 'json') {
+        body.format = 'json';
+      }
+
+      // Add max_tokens option if specified
+      if (options?.maxTokens) {
+        body.options = {
+          ...(body.options as Record<string, unknown> || {}),
+          num_predict: options.maxTokens,
+        };
+      }
+
+      const url = `${this.getBaseUrl()}/api/chat`;
       const { timeoutSeconds } = getLocalConfig();
-      const res = await fetch(`${this.getBaseUrl()}/api/chat`, {
+      const payload = {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify(body),
         signal:  combineSignals(timeoutSeconds * 1000, options?.signal),
-      });
+      };
+      
+      const res = await fetch(url, payload);
 
       if (res.ok) {
         const data: ChatResponse = await res.json();
-
         return data.message?.content?.trim() || null;
       }
     } catch (err) {
@@ -284,30 +314,6 @@ class OllamaServiceClass implements ILLMService {
         model: this.getModel(),
         messagesCount: messages.length
       });
-    }
-
-    return null;
-  }
-
-  /**
-   * Generate and parse JSON response
-   */
-  async generateJSON<T>(prompt: string, options?: { signal?: AbortSignal }): Promise<T | null> {
-    const response = await this.generate(prompt, options);
-
-    if (!response) {
-      return null;
-    }
-
-    try {
-      // Try to extract JSON from response
-      const jsonMatch = response.match(/\{[\s\S]*\}/);
-
-      if (jsonMatch) {
-        return JSON.parse(jsonMatch[0]) as T;
-      }
-    } catch {
-      console.warn('[OllamaService] JSON parse failed');
     }
 
     return null;

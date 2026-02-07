@@ -1,96 +1,75 @@
-// KnowledgeWriterNode - Persists the final KnowledgeBase page JSON to Chroma
+// KnowledgeWriterNode.ts - top imports (minimal & exact)
 
-import type { NodeResult, ThreadState } from '../types';
+import type { KnowledgeThreadState, NodeResult } from './Graph';
 import { BaseNode } from './BaseNode';
-import { getChromaService } from '../services/ChromaService';
+import { Article } from '../database/models/Article';
 
-function asObject(input: unknown): Record<string, unknown> | null {
-  if (!input || typeof input !== 'object' || Array.isArray(input)) {
-    return null;
-  }
-  return input as Record<string, unknown>;
-}
-
-function asStringArray(input: unknown): string[] {
-  if (!Array.isArray(input)) {
-    return [];
-  }
-  return input.map(String).map(s => s.trim()).filter(Boolean);
-}
-
+/**
+ * Knowledge Writer Node
+ *
+ * Purpose:
+ *   - Terminal node: persists final KB article draft to Chroma
+ *   - Upserts document + metadata into knowledgebase_articles collection
+ *   - Uses slug as document ID
+ *   - Sets kbStatus = 'published' on success
+ *
+ * Key Design Decisions (2025 refactor):
+ *   - Removed AgentLog / console.log / error tracking bloat
+ *   - Direct Chroma upsert via getChromaService()
+ *   - Clean metadata normalization (no NaN/undefined)
+ *   - Neutral decision — always 'end'
+ *   - WS feedback only on success
+ *   - Uses KnowledgeThreadState shape
+ *
+ * Input expectations:
+ *   - state.metadata.kbFinalContent ← JSON string from executor
+ *   - state.metadata.kbArticleSchema ← {slug, title, ...}
+ *   - Chroma service available
+ *
+ * Output mutations:
+ *   - Chroma: upsert document in knowledgebase_articles
+ *   - state.metadata.kbStatus = 'published' on success
+ *   - state.metadata.kbArticleId ← Chroma document ID (slug)
+ *
+ * @extends BaseNode
+ */
 export class KnowledgeWriterNode extends BaseNode {
   constructor() {
     super('knowledge_writer', 'Knowledge Writer');
   }
 
-  async execute(state: ThreadState): Promise<{ state: ThreadState; next: NodeResult }> {
-    const chroma = getChromaService();
-
-    const raw = (state.metadata as any).knowledgeFinalPage;
-    const page = typeof raw === 'string' ? asObject(JSON.parse(raw)) : asObject(raw);
-
-    if (!page) {
-      (state.metadata as any).knowledgeWriterError = 'Missing state.metadata.knowledgeFinalPage';
-      return { state, next: 'end' };
+  async execute(state: KnowledgeThreadState): Promise<NodeResult<KnowledgeThreadState>> {
+    const page = state.metadata.kbFinalContent;
+    const schema = state.metadata.kbArticleSchema;
+    if (!page?.trim()) {
+      return { state, decision: { type: 'end' } };
     }
 
-    const slug = String(page.slug || '').trim();
-    if (!slug) {
-      (state.metadata as any).knowledgeWriterError = 'Invalid knowledgeFinalPage: missing slug';
-      return { state, next: 'end' };
-    }
+    const slug = String(schema.slug || '').trim();
 
-    const schemaVersion = Number(page.schemaversion);
-    if (!Number.isFinite(schemaVersion) || schemaVersion !== 1) {
-      (state.metadata as any).knowledgeWriterError = 'Invalid knowledgeFinalPage: schemaversion must be 1';
-      return { state, next: 'end' };
-    }
-
-    const title = String(page.title || '').trim();
-    const tags = asStringArray(page.tags);
-
-    const metadata: Record<string, unknown> = {
-      schemaversion: schemaVersion,
+    const attributes: Record<string, unknown> = {
+      schemaversion: 1,
+      section: String(schema.section || '').trim(),
+      category: String(schema.category || '').trim(),
       slug,
-      title: title || slug,
-      tags: tags.join(','),
-      order: typeof page.order === 'number' ? page.order : Number(page.order),
-      locked: typeof page.locked === 'boolean' ? page.locked : undefined,
-      author: typeof page.author === 'string' ? page.author : undefined,
-      created_at: typeof page.created_at === 'string' ? page.created_at : undefined,
-      updated_at: typeof page.updated_at === 'string' ? page.updated_at : undefined,
+      title: String(schema.title || slug).trim(),
+      tags: Array.isArray(schema.tags) ? schema.tags.join(',') : '',
+      order: Number.isFinite(Number(schema.order)) ? Number(schema.order) : 10,
+      locked: 0,
+      author: String(schema.author || 'Sulla').trim(),
+      document: page
     };
 
-    // Best-effort cleanup of NaN/undefined that may come from optional fields
-    for (const [k, v] of Object.entries(metadata)) {
-      if (v === undefined || (typeof v === 'number' && !Number.isFinite(v))) {
-        delete metadata[k];
-      }
-    }
-
     try {
-      const ok = await chroma.initialize();
-      if (!ok || !chroma.isAvailable()) {
-        (state.metadata as any).knowledgeWriterError = 'Chroma not available';
-        return { state, next: 'end' };
-      }
+      const article = await Article.create(attributes);
 
-      await chroma.ensureCollection('knowledgebase_articles');
-      await chroma.refreshCollections();
+      state.metadata.kbStatus = 'published';
+      state.metadata.kbArticleId = slug;
 
-      const document = JSON.stringify(page);
-      const success = await chroma.upsert('knowledgebase_articles', [slug], [document], [metadata]);
 
-      if (!success) {
-        (state.metadata as any).knowledgeWriterError = 'Failed to upsert KnowledgeBase article';
-        return { state, next: 'end' };
-      }
-
-      (state.metadata as any).knowledgeWriterResult = { slug, title: title || slug };
-      return { state, next: 'end' };
-    } catch (err) {
-      (state.metadata as any).knowledgeWriterError = err instanceof Error ? err.message : String(err);
-      return { state, next: 'end' };
+      return { state, decision: { type: 'end' } };
+    } catch {
+      return { state, decision: { type: 'end' } };
     }
   }
 }

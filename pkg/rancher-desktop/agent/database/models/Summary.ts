@@ -61,16 +61,17 @@ export class Summary extends ChromaBaseModel {
   ): Promise<Summary> {
     const summaryDoc = `${summaryText}\n\nTopics: ${topics.join(', ')}\nEntities: ${entities.join(', ')}`;
     
-    const summary = new Summary({
+    const summary = new Summary();
+    summary.fill({
       threadId,
-      summary: summaryText,
+      summary: summaryDoc,
       topics,
       entities,
       timestamp: Date.now(),
       conversationId,
     });
 
-    await summary.save(summaryDoc);
+    await summary.save();
     return summary;
   }
 

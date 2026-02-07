@@ -787,19 +787,32 @@ ipcMainProxy.on('get-debugging-statuses', () => {
   window.send('always-debugging', settingsImpl.runInDebugMode(false));
 });
 function writeSettings(arg: RecursivePartial<RecursiveReadonly<settings.Settings>>) {
-  settingsImpl.save(settingsImpl.merge(cfg, arg));
-  mainEvents.emit('settings-update', cfg);
+  try {
+    console.log('[Background] Writing settings:', JSON.stringify(arg, null, 2));
+    settingsImpl.save(settingsImpl.merge(cfg, arg));
+    mainEvents.emit('settings-update', cfg);
+  } catch (err) {
+    console.error('[Background] Error writing settings:', err);
+    throw err;
+  }
 }
 
 ipcMainProxy.handle('settings-write', (event, arg) => {
-  writeSettings(arg);
+  try {
+    writeSettings(arg);
 
-  // dashboard requires kubernetes, so we want to close it if kubernetes is disabled
-  if (arg?.kubernetes?.enabled === false) {
-    closeDashboard();
+    // dashboard requires kubernetes, so we want to close it if kubernetes is disabled
+    if (arg?.kubernetes?.enabled === false) {
+      closeDashboard();
+    }
+
+    event.sender.sendToFrame(event.frameId, 'settings-update', cfg);
+  } catch (err) {
+    console.error('[Background] Error in settings-write handler:', err);
+    // Send error back to renderer
+    event.sender.sendToFrame(event.frameId, 'settings-write-error', err);
+    throw err;
   }
-
-  event.sender.sendToFrame(event.frameId, 'settings-update', cfg);
 });
 
 mainEvents.on('settings-write', writeSettings);
@@ -1345,7 +1358,12 @@ function newK8sManager() {
         const { getDatabaseManager } = require('@pkg/agent/database/DatabaseManager');
         const dbManager = getDatabaseManager();
         await dbManager.initialize().catch((err: any) => {
-          console.error('[Background] DatabaseManager failed to initialize:', err);
+          // Make database initialization errors quieter during startup
+          if (err.message && err.message.includes('Postgres not connected')) {
+            console.debug('[Background] Database not ready yet (PostgreSQL not available)');
+          } else {
+            console.error('[Background] DatabaseManager failed to initialize:', err);
+          }
         });
       }
       if (pendingRestartContext !== undefined && !backendIsBusy()) {

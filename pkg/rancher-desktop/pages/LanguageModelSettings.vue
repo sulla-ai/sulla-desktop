@@ -287,6 +287,12 @@ export default defineComponent({
   },
 
   async mounted() {
+    // Listen for settings write errors from main process
+    ipcRenderer.on('settings-write-error', (_event: unknown, error: any) => {
+      console.error('[LM Settings] Settings write error from main process:', error);
+      this.activationError = `Failed to save settings: ${error?.message || 'Unknown error'}`;
+    });
+
     // Load saved settings
     ipcRenderer.on('settings-read', (_event: unknown, settings: {
       experimental?: {
@@ -373,6 +379,9 @@ export default defineComponent({
       clearInterval(this.statsInterval);
       this.statsInterval = null;
     }
+    // Clean up IPC listeners
+    ipcRenderer.removeAllListeners('settings-write-error');
+    ipcRenderer.removeAllListeners('settings-read');
   },
 
   methods: {
@@ -710,26 +719,36 @@ export default defineComponent({
     },
 
     async writeExperimentalSettings(extra: Record<string, unknown> = {}) {
-      await ipcRenderer.invoke('settings-write', {
-        experimental: {
-          ...extra,
-          sullaModel:            this.pendingModel,
-          soulPrompt:            this.soulPrompt,
-          botName:               this.botName,
-          primaryUserName:       this.primaryUserName,
-          remoteProvider:        this.selectedProvider,
-          remoteModel:           this.selectedRemoteModel,
-          remoteApiKey:          this.apiKey,
-          remoteRetryCount:      this.remoteRetryCount,
-          remoteTimeoutSeconds:  this.remoteTimeoutSeconds,
-          localTimeoutSeconds:   this.localTimeoutSeconds,
-          localRetryCount:       this.localRetryCount,
-          heartbeatEnabled:      this.heartbeatEnabled,
-          heartbeatDelayMinutes: this.heartbeatDelayMinutes,
-          heartbeatPrompt:       this.heartbeatPrompt,
-          heartbeatModel:        this.heartbeatModel,
-        },
-      });
+
+      try {
+        // Validate and sanitize data before sending
+        const settingsData = {
+          experimental: {
+            ...extra,
+            sullaModel:            String(this.pendingModel || ''),
+            soulPrompt:            String(this.soulPrompt || ''),
+            botName:               String(this.botName || ''),
+            primaryUserName:       String(this.primaryUserName || ''),
+            remoteProvider:        String(this.selectedProvider || ''),
+            remoteModel:           String(this.selectedRemoteModel || ''),
+            remoteApiKey:          String(this.apiKey || ''),
+            remoteRetryCount:      Number(this.remoteRetryCount) || 3,
+            remoteTimeoutSeconds:  Number(this.remoteTimeoutSeconds) || 60,
+            localTimeoutSeconds:   Number(this.localTimeoutSeconds) || 120,
+            localRetryCount:       Number(this.localRetryCount) || 2,
+            heartbeatEnabled:      Boolean(this.heartbeatEnabled),
+            heartbeatDelayMinutes: Number(this.heartbeatDelayMinutes) || 30,
+            heartbeatPrompt:       String(this.heartbeatPrompt || ''),
+            heartbeatModel:        String(this.heartbeatModel || ''),
+          },
+        };
+        
+        console.log('[LM Settings] Writing settings:', JSON.stringify(settingsData, null, 2));
+        await ipcRenderer.invoke('settings-write', settingsData);
+      } catch (err) {
+        console.error('[LM Settings] Error in writeExperimentalSettings:', err);
+        throw err;
+      }
     },
 
     closeWindow() {

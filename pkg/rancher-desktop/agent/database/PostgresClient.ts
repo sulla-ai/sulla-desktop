@@ -17,6 +17,10 @@ export class PostgresClient {
     return this.client;
   }
 
+  isConnected(): boolean {
+    return this.connected;
+  }
+
   async initialize(): Promise<boolean> {
     if (this.connected) return true;
 
@@ -43,7 +47,13 @@ export class PostgresClient {
         this.connected = true;
         return true;
       }
-      console.error('[PostgresClient] Connection failed:', error);
+      // Make connection errors quieter during startup
+      if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND') {
+        // Only log at debug level during startup
+        console.debug('[PostgresClient] Connection refused (PostgreSQL not ready yet)');
+      } else {
+        console.error('[PostgresClient] Connection failed:', error);
+      }
       this.connected = false;
       return false;
     }
@@ -58,6 +68,7 @@ export class PostgresClient {
     try {
       return await this.client.query(text, params) as pg.QueryResult<T>;
     } catch (error: any) {
+      console.log(error);
       if (error.code === '57P01') {
         console.warn('[PostgresClient] Connection terminated by admin — reconnecting once');
         this.connected = false;

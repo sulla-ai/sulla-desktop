@@ -6,18 +6,9 @@ export class Article extends ChromaBaseModel {
   protected collectionName = 'knowledgebase_articles';
   protected idField = 'slug';
 
-  // Explicit property definitions for TypeScript
-  public schemaversion?: number;
-  public slug?: string;
-  public title?: string;
-  public tags?: string[];
-  public order?: string;
-  public locked?: boolean;
-  public author?: string;
-  public created_at?: string;
-  public updated_at?: string;
-
   protected fillable = [
+    'section',
+    'category',
     'schemaversion',
     'slug',
     'title',
@@ -25,6 +16,8 @@ export class Article extends ChromaBaseModel {
     'order',
     'locked',
     'author',
+    'related_slugs',
+    'document',
     'created_at',
     'updated_at',
   ];
@@ -33,6 +26,7 @@ export class Article extends ChromaBaseModel {
     'schemaversion',
     'slug',
     'title',
+    'document',
     'created_at',
     'updated_at',
   ];
@@ -40,8 +34,8 @@ export class Article extends ChromaBaseModel {
   protected defaults = {
     schemaversion: 1,
     tags: [],
-    order: '0',
+    order: '100',
     locked: false,
-    author: 'seed',
+    author: 'Jonathon Byrdziak',
   };
 }

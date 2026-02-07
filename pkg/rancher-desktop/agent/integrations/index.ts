@@ -14,6 +14,12 @@ registry.register('slack', async () => {
   const svc = getIntegrationService();
   await svc.initialize(); // ensure DB tables
 
+  // Check if Slack is activated before attempting initialization
+  const connectionStatus = await svc.getConnectionStatus('slack');
+  if (!connectionStatus.connected) {
+    return null;
+  }
+
   const botToken  = (await svc.getIntegrationValue('slack', 'bot_token'))?.value;
   const appToken  = (await svc.getIntegrationValue('slack', 'scopes_token'))?.value;
 
@@ -40,7 +46,7 @@ export async function SullaIntegrations(): Promise<void> {
 
   try {
     const slack = await registry.get<SlackClient>('slack');
-    console.log('[Integrations] Slack client retrieved successfully');
+      console.log('[Integrations] Slack client retrieved successfully');
   } catch (error) {
     console.error('[Integrations] Failed to initialize Slack client:', error);
   }

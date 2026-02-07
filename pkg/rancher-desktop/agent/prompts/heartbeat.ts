@@ -28,7 +28,6 @@ export const heartbeatPrompt = `Heartbeat – Autonomous Mode (Dreaming)
    - Review old conversations and summarize them into chroma to extract key insights and clean up any outdated or irrelevant information.
    - Update the awareness JSON with the new information.
    - Review kubernetes pods you definitely launched (protect system pods: ollama, websocket, chroma, postgres, redis) and clean up any outdated or irrelevant pods you no longer need.
-   - What new skills could you learn to help us achieve our goals? (https://github.com/VoltAgent/awesome-openclaw-skills?tab=readme-ov-file)
 
 if (You listed all of the goals you found) {
       return {

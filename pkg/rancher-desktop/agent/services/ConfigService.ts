@@ -1,11 +1,10 @@
 // ConfigService - Central configuration for agent services
 // Reads settings from the main process via IPC
 
-import type { LLMConfig } from './ILLMService';
-import { updateLLMConfig } from './LLMServiceFactory';
+import type { LLMConfig } from '../languagemodels/BaseLanguageModel';
 import { getHeartbeatService } from './HeartbeatService';
-import { getIpcMainProxy } from '@pkg/main/ipcMain';
 import Logging from '@pkg/utils/logging';
+import { LLMRegistry } from '../languagemodels';
 
 const console = Logging.agent;
 
@@ -201,9 +200,7 @@ export function updateAgentConfigFull(settings: {
 
   // updateLLMConfig is now async but we don't need to await it here
   // as it will complete before the next LLM call
-  updateLLMConfig(llmConfig).catch(err => {
-    console.warn('[ConfigService] Failed to update LLM config:', err);
-  });
+  LLMRegistry.updateConfigs(llmConfig);
 
   // Update heartbeat service
   const heartbeatService = getHeartbeatService();

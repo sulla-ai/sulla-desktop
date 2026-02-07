@@ -1,8 +1,9 @@
 // HeartbeatService - Triggers periodic sensory input for the agent to check in
 // Uses setInterval for simple periodic scheduling based on config settings
 
-import type { ThreadState } from '../types';
+import type { OverlordThreadState } from '../nodes/Graph';
 import { createHeartbeatGraph } from '../nodes/Graph';
+import { getCurrentModel, getCurrentMode } from '../languagemodels';
 
 export interface HeartbeatConfig {
   enabled: boolean;
@@ -118,24 +119,42 @@ export class HeartbeatService {
       // Build a minimal ThreadState and execute nodes directly (skip Sensory/ContextDetector/ConversationThread)
       const now = Date.now();
       const threadId = `heartbeat_${ now }`;
-      const state: ThreadState = {
-        threadId,
+      const state: OverlordThreadState = {
         messages:        [{
-          id:        `msg_${ now }_heartbeat`,
           role:      'user',
           content:   prompt,
-          timestamp: now,
           metadata:  { source: 'heartbeat' },
         }],
-        shortTermMemory: [],
-        metadata:        {},
-        createdAt:       now,
-        updatedAt:       now,
+        metadata: {
+          threadId,
+          wsChannel: 'chat-controller-backend',
+          llmModel: this.getHeartbeatModel(),
+          llmLocal: this.isHeartbeatLocal(),
+          options: {},
+          currentNodeId: '',
+          consecutiveSameNode: 0,
+          iterations: 0,
+          revisionCount: 0,
+          maxIterationsReached: false,
+          memory: {
+            knowledgeBaseContext: '',
+            chatSummariesContext: '',
+          },
+          subGraph: {
+            state: 'completed',
+            name: 'hierarchical',
+            prompt: '',
+            response: '',
+          },
+          finalSummary: '',
+          finalState: 'running',
+          returnTo: null,
+          primaryProject: '',
+          projectDescription: '',
+          projectGoals: [],
+          projectState: 'continue',
+        },
       };
-
-      if (this.config.model !== 'default') {
-        state.metadata.heartbeatModel = this.config.model;
-      }
 
       console.log(`[HeartbeatService] 🧠 Executing heartbeat graph (OverLord → HierarchicalGraph → OverLord) (threadId=${threadId})`);
       const graph = createHeartbeatGraph();
@@ -173,6 +192,37 @@ export class HeartbeatService {
 
   isRunning(): boolean {
     return this.intervalId !== null;
+  }
+
+  /**
+   * Parse the heartbeat model configuration and return the model name
+   * Format: 'default', 'local:modelname', or 'remote:provider:modelname'
+   */
+  private getHeartbeatModel(): string {
+    if (this.config.model === 'default') {
+      return getCurrentModel();
+    }
+
+    const parts = this.config.model.split(':');
+    if (parts.length === 2 && parts[0] === 'local') {
+      return parts[1]; // local:modelname
+    } else if (parts.length >= 3 && parts[0] === 'remote') {
+      return parts.slice(2).join(':'); // remote:provider:modelname (handle model names with colons)
+    }
+
+    // Fallback to current model if format is unexpected
+    return getCurrentModel();
+  }
+
+  /**
+   * Determine if the heartbeat is configured to use local or remote
+   */
+  private isHeartbeatLocal(): boolean {
+    if (this.config.model === 'default') {
+      return getCurrentMode() === 'local';
+    }
+
+    return this.config.model.startsWith('local:');
   }
 
   destroy(): void {

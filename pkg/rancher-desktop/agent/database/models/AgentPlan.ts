@@ -1,6 +1,7 @@
 // src/models/AgentPlan.ts
 
 import { BaseModel } from '../BaseModel';
+import { AgentPlanTodo, AgentPlanTodoInterface } from './AgentPlanTodo';
 import { getWebSocketClientService } from '../../services/WebSocketClientService';
 
 export type PlanStatus = 'active' | 'completed' | 'abandoned';
@@ -13,6 +14,18 @@ export interface PlanAttributes {
   data: Record<string, unknown>;
   created_at?: string;
   updated_at?: string;
+}
+
+export interface AgentPlanInterface {
+  attributes: Partial<PlanAttributes>;
+
+  setStatus(status: PlanStatus): void;
+  setData(data: Record<string, unknown>): void;
+  setRevision(revision: number): void;
+  incrementRevision(): Promise<this>;
+  save(): Promise<this>;
+  delete(): Promise<boolean>;
+  deleteAllTodos(): Promise<number>;
 }
 
 export class AgentPlan extends BaseModel<PlanAttributes> {
@@ -92,5 +105,25 @@ export class AgentPlan extends BaseModel<PlanAttributes> {
     });
 
     return super.delete();
+  }
+
+  /**
+   * Load all AgentPlanTodo records for this plan and delete them all
+   * @returns Promise<number> - Number of todos deleted
+   */
+  async deleteAllTodos(): Promise<number> {
+    if (!this.attributes.id) {
+      return 0;
+    }
+    
+    const todos = await AgentPlanTodo.findForPlan(this.attributes.id);
+    let deletedCount = 0;
+    
+    for (const todo of todos) {
+      await todo.delete();
+      deletedCount++;
+    }
+    
+    return deletedCount;
   }
 }

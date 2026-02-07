@@ -100,7 +100,7 @@ export class FrontendGraphWebSocketService {
 
       const response = await runHierarchicalGraph({
         input,
-        wsConnectionId: channelId,
+        wsChannel: channelId,
         threadId: this.deps.currentThreadId.value || undefined,
         onAgentResponse: this.deps.onAgentResponse,
         abort: this.activeAbort,

@@ -3,7 +3,7 @@
 // Includes critique step for coherence refinement
 
 import type { AgentResponse } from './types';
-import { getLLMService } from './services/LLMServiceFactory';
+import { getLLMService, getCurrentMode, getCurrentConfig } from './languagemodels';
 
 export class ResponseHandler {
   /**
@@ -89,15 +89,17 @@ export class ResponseHandler {
     }
 
     try {
-      const llm = getLLMService();
-      const refined = await llm.generate(
-        `Refine this response for clarity and coherence. Keep it concise. Only output the refined response, nothing else:\n\n${ response.content }`,
-      );
+      const llm = getLLMService(getCurrentMode());
+      const refined = await llm.chat([{
+        role: 'user',
+        content: `Refine this response for clarity and coherence. Keep it concise. Only output the refined response, nothing else:\n\n${ response.content }`
+      }]);
+      const reply = refined?.content;
 
-      if (refined && refined.length > 0) {
+      if (reply && reply.length > 0) {
         return {
           ...response,
-          content: refined,
+          content: reply,
           refined: true,
         };
       }

@@ -47,7 +47,7 @@ Examples:
     }
 
     // Get connection ID (same as before)
-    const connectionId = (state.metadata?.wsConnectionId as string) || 'chat-controller';
+    const connectionId = (state.metadata?.wsChannel as string) || 'chat-controller';
 
     console.log(`[emit_chat_message] Sending:`, { role, kind, content });
 

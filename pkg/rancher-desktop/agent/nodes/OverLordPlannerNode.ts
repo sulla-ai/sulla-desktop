@@ -1,137 +1,154 @@
-// OverLordPlannerNode - High-level autonomous planning triggered by heartbeat
-// Performs strategic oversight and long-term planning during idle periods
+// OverLordPlannerNode.ts
+// Autonomous high-level oversight during heartbeat/idle periods
+// Decides: trigger hierarchical graph, continue looping, or end
 
-import type { ThreadState, NodeResult } from '../types';
-import { BaseNode, JSON_ONLY_RESPONSE_INSTRUCTIONS } from './BaseNode';
-import { parseJson } from '../services/JsonParseService';
-import { agentLog, agentWarn } from '../services/AgentLogService';
+import type { OverlordThreadState, NodeResult } from './Graph';
+import { BaseNode,JSON_ONLY_RESPONSE_INSTRUCTIONS, TOOLS_RESPONSE_JSON } from './BaseNode';
 import { getAgentConfig } from '../services/ConfigService';
-
-// Import heartbeat prompt from TypeScript file
 import { heartbeatPrompt } from '../prompts/heartbeat';
-const WS_CONNECTION_ID = 'chat-controller-backend';
 
-type OverLordDecision = {
-  action: 'trigger_hierarchical' | 'end' | 'continue';
-  reason?: string;
-};
+const OVERLORD_DECISION_PROMPT = `
+Your job right now is to decide what needs to be done.
 
+Here are your only options:
+1. You can { action: "trigger_hierarchical" } which will instruct your heirarchical graph agent to complete the instructions you prompt it with.
+2. You can { action: "trigger_knowledge" } which will instruct your knowledge graph agent to create a knowledgebase article using the instructions you prompt it with. Do this when you need to update your memory.
+3. You can { action: "continue" } which will allow you to run again if you need to continue working on your current task.
+3.1 If you choose to continue you can trigger any tools you need to help complete your task.
+4. You can { action: "end" } which will put you to sleep. Do this only after you have completed all your tasks.
+
+${JSON_ONLY_RESPONSE_INSTRUCTIONS}
+{
+${TOOLS_RESPONSE_JSON}
+  "action": "trigger_hierarchical" | "continue" | "end",
+  "instructions_prompt": "complete instructions for the next node"
+}
+
+Safety Guidelines:
+- Document things you want to remember in knowledge base
+- Organize your day of tasks on the calendar to keep yourself productive
+- Use the full suite of tools available to you to carry out your tasks
+`;
+
+/**
+ * OverLord Planner Node
+ *
+ * Purpose:
+ *   - Runs on heartbeat trigger during idle periods
+ *   - Makes high-level decision: trigger full hierarchical graph, loop, or stop
+ *   - Drives long-term autonomous momentum without constant user input
+ *
+ * Key Design Decisions (2025 refactor):
+ *   - Removed AgentLog / console.log entirely
+ *   - Uses BaseNode.chat() with JSON format + direct .content object access
+ *   - Enrichment: soul + awareness + memory only
+ *   - Neutral decisions only ('continue' / 'next' / 'end')
+ *   - Routing lives in heartbeat graph conditional edge
+ *   - WS feedback only on trigger/end via wsChatMessage()
+ *   - No iteration counter — graph-level loop protection handles it
+ *
+ * Input expectations:
+ *   - state.metadata.subGraph exists (OverlordThreadState shape)
+ *   - Recent messages/context available
+ *
+ * Output mutations:
+ *   - state.metadata.subGraph.state = 'trigger_subgraph' on trigger
+ *   - state.metadata.subGraph.name = 'hierarchical'
+ *   - state.metadata.subGraph.prompt = reason or default trigger message
+ *
+ * Failure modes:
+ *   - No valid LLM response → continue (safe default)
+ *   - Invalid/missing action → continue
+ *   - Config fallback to default heartbeat prompt
+ *
+ * @extends BaseNode
+ */
 export class OverLordPlannerNode extends BaseNode {
   constructor() {
     super('overlord_planner', 'OverLord Planner');
   }
 
-  async execute(state: ThreadState): Promise<{ state: ThreadState; next: NodeResult }> {
-    console.log(`[Agent:OverLordPlanner] Executing...`);
+  async execute(state: OverlordThreadState): Promise<NodeResult<OverlordThreadState>> {
 
-    // Connect to WebSocket for emitting messages (backend channel)
-    this.connectWebSocket(WS_CONNECTION_ID);
+    const config = getAgentConfig();
+    const basePrompt = config.heartbeatPrompt || heartbeatPrompt;
+    const decisionPrompt = `${basePrompt}\n\n${OVERLORD_DECISION_PROMPT}`;
 
-    // Set the connection ID in state so hierarchical graph uses backend channel
-    state.metadata.wsConnectionId = WS_CONNECTION_ID;
+    const enriched = await this.enrichPrompt(decisionPrompt, state, {
+      includeSoul: true,
+      includeAwareness: true,
+      includeMemory: true,
+      includeTools: false,
+      includeStrategicPlan: false,
+      includeTacticalPlan: false,
+      includeKnowledgebasePlan: false,
+    });
 
-    try {
-      const iteration = Number((state.metadata as any).__overlordIteration || 0);
-      if (iteration >= 25) {
-        delete (state.metadata as any).__overlordRunHierarchy;
-        agentWarn(this.name, 'OverLord max iterations reached');
-        return { state, next: 'end' };
-      }
+    const llmResponse = await this.chat(
+      state,
+      enriched,
+      { format: 'json' }
+    );
 
-      (state.metadata as any).__overlordIteration = iteration + 1;
-
-      const config = getAgentConfig();
-
-      let finalHeartbeatPrompt = heartbeatPrompt;
-      if (config.heartbeatPrompt) {
-        finalHeartbeatPrompt = config.heartbeatPrompt;
-      }
-      
-      const decisionPrompt = `${finalHeartbeatPrompt}
-
-## Safety Guidelines
-- Whenever possible, work on your projects inside of a kubernetes pod
-- Document your projects in the knowledgebase so you can recall the details later
-- Schedule reminders and tasks for yourself on the calendar when necessary
-
-${JSON_ONLY_RESPONSE_INSTRUCTIONS}
-{
-  "action": "trigger_hierarchical" | "end" | "continue",
-  "reason": "optional"
-}`;
-
-      const fullprompt = await this.enrichPrompt(decisionPrompt, state, {
-        includeSoul: true,
-        includeMemory: true,
-        includeConversation: true,
-      });
-      console.log('[OVERLORD] Full prompt:', fullprompt);
-
-      // Emit via WebSocket
-      this.dispatchToWebSocket(WS_CONNECTION_ID, { type: 'progress', data: { phase: 'overlord_llm' } });
-
-      const response = await this.prompt(fullprompt, state, true);
-
-      if (!response?.content) {
-        delete (state.metadata as any).__overlordRunHierarchy;
-        return { state, next: 'end' };
-      }
-
-      const parsed = parseJson<OverLordDecision>(response.content);
-      const action = parsed?.action;
-
-      if (action === 'continue') {
-        agentLog(this.name, `Decision: loop (${parsed?.reason || ''})`);
-        return { state, next: 'continue' };
-      }
-      
-      if (action === 'trigger_hierarchical') {
-        (state.metadata as any).__overlordRunHierarchy = true;
-        (state.metadata as any).__overlordLastDecision = parsed;
-        agentLog(this.name, `Decision: trigger_hierarchical (${parsed?.reason || ''})`);
-
-        // Emit decision via WebSocket
-        this.dispatchToWebSocket(WS_CONNECTION_ID, {
-          type: 'assistant_message',
-          data: {
-            role: 'system',
-            content: `OverLord: Triggering hierarchical planning (${parsed?.reason || 'no reason provided'})`,
-          },
-        });
-
-        return { state, next: 'trigger_hierarchical' };
-      }
-
-      delete (state.metadata as any).__overlordRunHierarchy;
-      (state.metadata as any).__overlordLastDecision = parsed;
-      agentLog(this.name, `Decision: stop (${parsed?.reason || ''})`);
-
-      // Emit decision via WebSocket
-      this.dispatchToWebSocket(WS_CONNECTION_ID, {
-        type: 'assistant_message',
-        data: {
-          role: 'system',
-          content: `OverLord: Stopping (${parsed?.reason || 'no reason provided'})`,
-        },
-      });
-
-      return { state, next: 'end' };
-    } catch (err: any) {
-      agentWarn(this.name, `OverLord failed: ${err.message}`);
-      state.metadata.error = `OverLord failed: ${err.message}`;
-      delete (state.metadata as any).__overlordRunHierarchy;
-
-      // Emit error via WebSocket
-      this.dispatchToWebSocket(WS_CONNECTION_ID, {
-        type: 'error',
-        data: {
-          role: 'error',
-          content: `OverLord failed: ${err.message}`,
-        },
-      });
-
-      return { state, next: 'end' };
+    if (!llmResponse?.content) {
+      return { state, decision: { type: 'continue' } };
     }
-    // Note: WebSocket connection stays alive for reuse across executions
+
+    const data = llmResponse as { action: string; reason?: string };
+    const action = data.action;
+
+    if (!action) {
+      return { state, decision: { type: 'end' } };
+    }
+    
+    if (action === 'trigger_hierarchical') {
+      state.metadata.subGraph = {
+        state: 'trigger_subgraph',
+        name: 'hierarchical',
+        prompt: data.reason?.trim() || "OverLord initiating planning cycle",
+        response: ''
+      };
+
+      this.wsChatMessage(
+        state,
+        `OverLord → Executing on a complex task: ${data.reason || 'cycle'}`,
+        'system',
+        'progress'
+      );
+
+      return { state, decision: { type: 'next' } };
+
+    } else if (action === 'trigger_knowledge') {
+
+      state.metadata.subGraph = {
+        state: 'trigger_subgraph',
+        name: 'knowledge',
+        prompt: data.reason?.trim() || "OverLord initiating knowledge base cycle",
+        response: ''
+      };
+
+      this.wsChatMessage(
+        state,
+        `OverLord → Working on the knowledgebase: ${data.reason || 'cycle'}`,
+        'system',
+        'progress'
+      );
+
+      return { state, decision: { type: 'next' } };
+    }
+
+    if (action === 'end') {
+      this.wsChatMessage(
+        state,
+        `OverLord → Ending cycle: ${data.reason || 'complete'}`,
+        'system',
+        'progress'
+      );
+
+      return { state, decision: { type: 'end' } };
+    }
+
+    // Default: continue loop
+    return { state, decision: { type: 'continue' } };
   }
 }

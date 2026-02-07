@@ -1,137 +1,121 @@
-// KnowledgeCriticNode - Validates metadata/structure and passes final JSON to state.metadata.knowledgeFinalPage
+// KnowledgeCriticNode.ts
+// Validates KB draft structure, content quality, and completeness
+// Requests revision if major issues; approves to writer otherwise
 
-import type { ThreadState, NodeResult } from '../types';
-import { BaseNode } from './BaseNode';
-import type { KnowledgeFinalPage, KnowledgePageSection } from '../services/KnowledgeState';
+import type { KnowledgeThreadState, NodeResult } from './Graph';
+import { BaseNode, JSON_ONLY_RESPONSE_INSTRUCTIONS } from './BaseNode';
 
+const KB_CRITIC_PROMPT = `
+You are the Knowledge Critic: 25-year senior technical writer & QA engineer auditing mission-critical documentation.
+
+Rules:
+- Approve ONLY if:
+  - All planned goals/sections are present and well-covered
+  - Content is factual, professional, markdown-correct
+  - No hallucinations, contradictions, or missing key facts
+  - Structure is logical and complete (intro → core → conclusion)
+- Revise if:
+  - Missing sections or shallow coverage
+  - Grammar/formatting issues
+  - Factual errors or gaps from source conversation
+  - Poor readability (long walls of text, no lists/code blocks)
+- Be ruthless: partial or low-quality docs get rejected
+
+${JSON_ONLY_RESPONSE_INSTRUCTIONS}
+{
+  "decision": "approve" | "revise",
+  "reason": "one tight sentence + evidence",
+  "suggestedFix": "precise next action if revise (optional)",
+  "emit_chat_message": "user-facing update (optional)"
+}
+`.trim();
+
+/**
+ * Knowledge Critic Node
+ *
+ * Purpose:
+ *   - Reviews executor-generated KB draft for completeness & quality
+ *   - Approves for writer or requests revision
+ *   - Updates state metadata verdict
+ *
+ * Key Design Decisions (2025 refactor):
+ *   - Removed AgentLog / console.log / retry counters
+ *   - Unified BaseNode.chat() + direct parsed .content
+ *   - Neutral decision — 'next' (writer) or 'knowledge_executor'
+ *   - Minimal enrichment (soul + awareness)
+ *   - Uses KnowledgeThreadState shape
+ *   - WS feedback only on revise
+ *
+ * Input expectations:
+ *   - state.metadata.kbArticleSchema exists
+ *   - state.metadata.kbFinalContent ← markdown from executor
+ *
+ * Output mutations:
+ *   - state.metadata.kbCriticVerdict = { status, reason, at }
+ *   - state.metadata.kbStatus = 'reviewed' on approve
+ *
+ * @extends BaseNode
+ */
 export class KnowledgeCriticNode extends BaseNode {
   constructor() {
     super('knowledge_critic', 'Knowledge Critic');
   }
 
-  async execute(state: ThreadState): Promise<{ state: ThreadState; next: NodeResult }> {
-    console.log(`[KnowledgeCriticNode] Executing for thread: ${state.threadId}`);
+  async execute(state: KnowledgeThreadState): Promise<NodeResult<KnowledgeThreadState>> {
+    const schema = state.metadata.kbArticleSchema;
+    const content = state.metadata.kbFinalContent;
 
-    const draftPage = (state.metadata as any).knowledgeDraftPage as Partial<KnowledgeFinalPage> | undefined;
-
-    if (!draftPage) {
-      (state.metadata as any).knowledgeCriticError = 'No draft page from executor';
-      return { state, next: 'end' };
+    if (!schema?.title || !content?.trim()) {
+      return { state, decision: { type: 'end' } };
     }
 
-    const issues: string[] = [];
+    const enriched = await this.enrichPrompt(KB_CRITIC_PROMPT, state, {
+      includeSoul: true,
+      includeAwareness: true,
+      includeMemory: false,
+      includeTools: false,
+      includeStrategicPlan: false,
+      includeTacticalPlan: false,
+      includeKnowledgebasePlan: true,
+    });
 
-    // Validate required fields
-    if (draftPage.schemaversion !== 1) {
-      issues.push('schemaversion must be 1');
+    const llmResponse = await this.chat(
+      state,
+      enriched,
+      { format: 'json' }
+    );
+
+    if (!llmResponse) {
+      return { state, decision: { type: 'end' } };
     }
 
-    if (!draftPage.slug || typeof draftPage.slug !== 'string' || draftPage.slug.trim().length === 0) {
-      issues.push('slug is required and must be a non-empty string');
-    } else {
-      // Validate slug format (kebab-case)
-      const slugPattern = /^[a-z0-9]+(-[a-z0-9]+)*$/;
-      if (!slugPattern.test(draftPage.slug)) {
-        issues.push('slug must be lowercase kebab-case');
-      }
-    }
-
-    if (!draftPage.title || typeof draftPage.title !== 'string' || draftPage.title.trim().length === 0) {
-      issues.push('title is required and must be a non-empty string');
-    }
-
-    if (!Array.isArray(draftPage.tags)) {
-      issues.push('tags must be an array');
-    }
-
-    if (typeof draftPage.order !== 'number' || !Number.isFinite(draftPage.order)) {
-      issues.push('order must be a finite number');
-    }
-
-    if (!Array.isArray(draftPage.sections) || draftPage.sections.length === 0) {
-      issues.push('sections must be a non-empty array');
-    } else {
-      // Validate each section
-      for (let i = 0; i < draftPage.sections.length; i++) {
-        const section = draftPage.sections[i];
-        if (!section.section_id || typeof section.section_id !== 'string') {
-          issues.push(`sections[${i}].section_id is required`);
-        }
-        if (!section.title || typeof section.title !== 'string') {
-          issues.push(`sections[${i}].title is required`);
-        }
-        if (!section.content || typeof section.content !== 'string') {
-          issues.push(`sections[${i}].content is required`);
-        }
-        if (typeof section.order !== 'number') {
-          issues.push(`sections[${i}].order must be a number`);
-        }
-      }
-    }
-
-    // Check for refinement loop
-    const iterations = ((state.metadata as any).knowledgeCriticIterations as number) || 0;
-    const maxIterations = 2;
-
-    if (issues.length > 0 && iterations < maxIterations) {
-      console.log(`[KnowledgeCriticNode] Found ${issues.length} issues, requesting refinement`);
-      (state.metadata as any).knowledgeCriticIssues = issues;
-      (state.metadata as any).knowledgeCriticIterations = iterations + 1;
-      // Go back to executor for refinement
-      return { state, next: 'knowledge_executor' };
-    }
-
-    // If still issues after max iterations, try to fix what we can
-    if (issues.length > 0) {
-      console.log(`[KnowledgeCriticNode] Max iterations reached, proceeding with fixes`);
-    }
-
-    // Build final page with defaults for missing optional fields
-    const finalPage: KnowledgeFinalPage = {
-      schemaversion: 1,
-      slug: String(draftPage.slug || 'untitled').toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, ''),
-      title: String(draftPage.title || 'Untitled'),
-      tags: Array.isArray(draftPage.tags) ? draftPage.tags.map(String).filter(Boolean) : [],
-      order: typeof draftPage.order === 'number' && Number.isFinite(draftPage.order) ? draftPage.order : 10,
-      locked: draftPage.locked === true,
-      author: typeof draftPage.author === 'string' ? draftPage.author : undefined,
-      created_at: typeof draftPage.created_at === 'string' ? draftPage.created_at : new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      sections: this.normalizeSections(draftPage.sections),
-      related_slugs: Array.isArray(draftPage.related_slugs) ? draftPage.related_slugs.map(String).filter(Boolean) : [],
+    const data = llmResponse as {
+      decision: 'approve' | 'revise';
+      reason: string;
+      suggestedFix?: string;
+      emit_chat_message?: string;
     };
 
-    // Clean up undefined fields
-    if (finalPage.author === undefined) {
-      delete (finalPage as any).author;
-    }
-    if (finalPage.related_slugs && finalPage.related_slugs.length === 0) {
-      delete (finalPage as any).related_slugs;
-    }
+    state.metadata.kbCriticVerdict = {
+      status: data.decision,
+      reason: data.reason || (data.decision === 'approve' ? 'Draft meets standards' : 'Needs rework'),
+      at: Date.now(),
+    };
 
-    // Set the final page for KnowledgeWriterNode
-    (state.metadata as any).knowledgeFinalPage = finalPage;
-
-    console.log(`[KnowledgeCriticNode] Validated and finalized page: ${finalPage.title} (${finalPage.sections.length} sections)`);
-
-    return { state, next: 'continue' };
-  }
-
-  private normalizeSections(sections: KnowledgePageSection[] | undefined): KnowledgePageSection[] {
-    if (!Array.isArray(sections)) {
-      return [{
-        section_id: 'content',
-        title: 'Content',
-        content: 'No content available.',
-        order: 1,
-      }];
+    if (data.emit_chat_message?.trim()) {
+      this.wsChatMessage(state, data.emit_chat_message, 'assistant', 'progress');
     }
 
-    return sections.map((s, i) => ({
-      section_id: String(s.section_id || `section_${i + 1}`),
-      title: String(s.title || `Section ${i + 1}`),
-      content: String(s.content || ''),
-      order: typeof s.order === 'number' ? s.order : (i + 1) * 10,
-    }));
+    if (data.decision === 'approve') {
+      state.metadata.kbStatus = 'reviewed';
+      return { state, decision: { type: 'next' } };
+    }
+
+    // Revise
+    if (data.suggestedFix?.trim()) {
+      state.metadata.kbCriticVerdict.reason = data.suggestedFix;
+    }
+
+    return { state, decision: { type: 'revise' } };
   }
 }
