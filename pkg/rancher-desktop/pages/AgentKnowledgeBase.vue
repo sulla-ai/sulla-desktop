@@ -241,11 +241,12 @@
 </template>
 <script setup lang="ts">
 import AgentHeader from './agent/AgentHeader.vue';
-import { Article } from '../agent/database/models/Article';
+import { articlesRegistry } from '../agent/database/registry/ArticlesRegistry';
 import { computed, onMounted, ref, watch } from 'vue';
 import DOMPurify from 'dompurify';
 import { marked } from 'marked';
 import './assets/AgentKnowledgeBase.css';
+import type { ArticleListItem, ArticleWithContent } from '../agent/database/registry/ArticlesRegistry';
 
 const THEME_STORAGE_KEY = 'agentTheme';
 const isDark = ref(false);
@@ -255,9 +256,9 @@ const splashUrl = new URL('./assets/splash.png', import.meta.url).toString();
 const splash2Url = new URL('./assets/splash2.png', import.meta.url).toString();
 
 const loadingPages = ref(false);
-const pages = ref<any[]>([]);
+const pages = ref<ArticleListItem[]>([]);
 const activeSlug = ref<string | null>(null);
-const activePage = ref<any>(null);
+const activePage = ref<ArticleWithContent | null>(null);
 const loadingPage = ref(false);
 const articleContentEl = ref<HTMLElement | null>(null);
 
@@ -365,17 +366,7 @@ const prevPage = computed<any | null>(() => {
   return idx > 0 ? sortedPagesByDate.value[idx - 1] : null;
 });
 
-const nav = computed(() => {
-  const grouped = new Map<string, any[]>();
-
-  filteredPages.value.forEach(p => {
-    const tag = p.tags?.[0] || p.section || p.category || 'Uncategorized';
-    if (!grouped.has(tag)) grouped.set(tag, []);
-    grouped.get(tag)!.push(p);
-  });
-
-  return Array.from(grouped.entries()).map(([tag, pages]) => ({ tag, pages }));
-});
+const nav = ref<{ tag: string; pages: ArticleListItem[] }[]>([]);
 
 const selectPage = async (slug: string) => {
   const id = String(slug || '').trim();
@@ -385,26 +376,13 @@ const selectPage = async (slug: string) => {
   loadingPage.value = true;
 
   try {
-    const articles = await Article.search('', 10, { slug: id });
-    if (!articles.length) {
+    const article = await articlesRegistry.getBySlug(id);
+    if (!article) {
       activePage.value = null;
       return;
     }
 
-    const a = articles[0].attributes;
-    activePage.value = {
-      slug: a.slug,
-      title: a.title,
-      tags: a.tags,
-      document: a.document,
-      section: a.section,
-      category: a.category,
-      order: a.order,
-      author: a.author,
-      related_slugs: a.related_slugs,
-      created_at: a.created_at,
-      updated_at: a.updated_at,
-    };
+    activePage.value = article;
   } catch (err) {
     console.error('Failed to load article:', err);
     activePage.value = null;
@@ -421,24 +399,20 @@ onMounted(async () => {
 
   loadingPages.value = true;
   try {
-    const articles = await Article.search('', 100);
-    pages.value = articles.map(a => ({
-      slug: a.attributes.slug,
-      title: a.attributes.title,
-      tags: a.attributes.tags,
-      order: a.attributes.order,
-      updated_at: a.attributes.updated_at,
-      section: a.attributes.section,
-      category: a.attributes.category,
-    }));
+    // Load nav structure from registry
+    nav.value = await articlesRegistry.getNavStructure();
+    
+    // Also load pages for other functionality
+    const result = await articlesRegistry.search({ limit: 100 });
+    pages.value = result.items;
   } catch (err) {
     console.error('Failed to load articles:', err);
   } finally {
     loadingPages.value = false;
   }
 
-  if (!activeSlug.value && pages.value.length > 0) {
-    await selectPage(pages.value[0].slug);
+  if (!activeSlug.value && nav.value.length > 0 && nav.value[0].pages.length > 0) {
+    await selectPage(nav.value[0].pages[0].slug);
   }
 });
 

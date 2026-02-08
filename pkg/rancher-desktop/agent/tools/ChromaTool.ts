@@ -1,36 +1,31 @@
 import type { ThreadState, ToolResult } from '../types';
 import { BaseTool } from './BaseTool';
 import type { ToolContext } from './BaseTool';
-import { chromaClient } from '../database/ChromaClient'; // adjust path if needed
+import { articlesRegistry } from '../database/registry/ArticlesRegistry';
 
 export class ChromaTool extends BaseTool {
   override readonly name = 'chroma';
   override readonly aliases = ['knowledgebase', 'memory', 'storage'];
 
   override getPlanningInstructions(): string {
-    return `["chroma", "listCollections"] - Chroma vector DB (memories, knowledgebase, storage)
+    return `["chroma", "search", "query"] - Knowledgebase articles via ArticlesRegistry
 
 Examples:
-["chroma", "listCollections"]
-["chroma", "getOrCreateCollection", "new_collection"]
-["chroma", "add", "knowledge", "--documents", "Best CRM is HubSpot", "--metadata", "{\"source\":\"marketing\",\"priority\":10}"]
-["chroma", "query", "knowledge", "best crm software", "8"]
-["chroma", "get", "knowledge", "--ids", "doc_123_0", "doc_123_1"]
-["chroma", "update", "knowledge", "--ids", "doc_123_0", "--documents", "Updated text here"]
-["chroma", "delete", "knowledge", "--ids", "doc_123_0"]
-["chroma", "count", "knowledge"]
-["chroma", "deleteCollection", "tmp_collection"]
+["chroma", "search", "docker basics", 5]
+["chroma", "search", "ollama", 3, "docker"]
+["chroma", "list", 10]                // top 10 by order
+["chroma", "find", "memory-and-dreaming"]
+["chroma", "categories"]             // get all categories
+["chroma", "tags"]                   // get all tags
+["chroma", "nav"]                    // get navigation structure
 
 Subcommands:
-- listCollections
-- getOrCreateCollection <name>
-- add <collection> --documents "text1" "text2" [--ids "id1" "id2"] [--metadata "{...}"]
-- query <collection> <queryText> [nResults=5]
-- get <collection> --ids "id1" "id2"
-- update <collection> --ids "id1" "id2" [--documents "..."] [--metadata "{...}"]
-- delete <collection> [--ids "..."] [--where "{...}"]
-- count <collection> [--where "{...}"]
-- deleteCollection <name>
+- search <query> [limit=5] [tag?] → semantic search, optional tag filter
+- list [limit=10]                 → ordered by 'order' field
+- find <slug>                     → returns full article (metadata + content)
+- categories                      → get all article categories
+- tags                            → get all article tags
+- nav                             → get navigation structure
 `.trim();
   }
 
@@ -49,95 +44,70 @@ Subcommands:
 
     try {
       switch (subcommand) {
-        case 'listCollections': {
-          const collections = await chromaClient.listCollections();
-          return { toolName: this.name, success: true, result: collections.map(c => c.name) };
+        case 'search': {
+          const query = rest[0];
+          const limit = rest[1] ? parseInt(rest[1], 10) : 5;
+          const tagFilter = rest[2];
+
+          const searchOptions: any = { query, limit };
+          if (tagFilter) {
+            searchOptions.tags = [tagFilter];
+          }
+
+          const results = await articlesRegistry.search(searchOptions);
+
+          return {
+            toolName: this.name,
+            success: true,
+            result: {
+              items: results.items,
+              total: results.total,
+              hasMore: results.hasMore
+            }
+          };
         }
 
-        case 'getOrCreateCollection': {
-          const name = rest[0];
-          if (!name) throw new Error('Missing collection name');
-          await chromaClient.getOrCreateCollection(name);
-          return { toolName: this.name, success: true, result: { name } };
+        case 'list': {
+          const limit = rest[0] ? parseInt(rest[0], 10) : 10;
+          const results = await articlesRegistry.search({ limit, sortBy: 'order', sortOrder: 'asc' });
+          return {
+            toolName: this.name,
+            success: true,
+            result: {
+              items: results.items,
+              total: results.total,
+              hasMore: results.hasMore
+            }
+          };
         }
 
-        case 'add': {
-          const params = this.argsToObject(rest);
-          const name = params.name || rest[0]; // fallback if name not flagged
-          const { documents, ids, metadata, metadatas } = params;
+        case 'find': {
+          const slug = rest[0];
+          if (!slug) throw new Error('Missing slug');
+          
+          const article = await articlesRegistry.getBySlug(slug);
+          if (!article) return { toolName: this.name, success: false, result: null };
 
-          if (!name || !documents?.length) throw new Error('Missing name or documents');
-
-          const finalMetadatas = metadatas ?? (metadata ? Array(documents.length).fill(metadata) : undefined);
-
-          const result = await chromaClient.addDocuments(name, documents, finalMetadatas, ids);
-          return { toolName: this.name, success: true, result };
+          return {
+            toolName: this.name,
+            success: true,
+            result: article
+          };
         }
 
-        case 'query': {
-          const name = rest[0];
-          const queryText = rest[1];
-          const nResults = rest[2] ? parseInt(rest[2], 10) : 5;
-
-          if (!name || !queryText) throw new Error('Missing name or query text');
-
-          const result = await chromaClient.queryDocuments(name, [queryText], nResults);
-          return { toolName: this.name, success: true, result };
+        case 'categories': {
+          const categories = await articlesRegistry.getCategories();
+          return { toolName: this.name, success: true, result: categories };
         }
 
-        case 'get': {
-          const params = this.argsToObject(rest);
-          const name = params.name || rest[0];
-          const ids = params.ids;
-
-          if (!name || !ids?.length) throw new Error('Missing name or ids');
-
-          const result = await chromaClient.getDocuments(name, ids);
-          return { toolName: this.name, success: true, result };
+        case 'tags': {
+          const tags = await articlesRegistry.getTags();
+          return { toolName: this.name, success: true, result: tags };
         }
 
-        case 'update': {
-          const params = this.argsToObject(rest);
-          const name = params.name || rest[0];
-          const ids = params.ids;
-          const documents = params.documents;
-          const metadatas = params.metadatas ?? (params.metadata ? Array(ids?.length || 0).fill(params.metadata) : undefined);
-
-          if (!name || !ids?.length) throw new Error('Missing name or ids');
-
-          const result = await chromaClient.updateDocuments(name, ids, documents, metadatas);
-          return { toolName: this.name, success: true, result };
-        }
-
-        case 'delete': {
-          const params = this.argsToObject(rest);
-          const name = params.name || rest[0];
-          const ids = params.ids;
-          const where = params.where;
-
-          if (!name) throw new Error('Missing collection name');
-
-          const result = await chromaClient.deleteDocuments(name, ids, where);
-          return {toolName: this.name, success: true, result };
-        }
-
-        case 'count': {
-          const params = this.argsToObject(rest);
-          const name = params.name || rest[0];
-          const where = params.where;
-
-          if (!name) throw new Error('Missing collection name');
-
-          const count = await chromaClient.countDocuments(name, where);
-          return { toolName: this.name, success: true, result: { name, count } };
-        }
-
-        case 'deleteCollection': {
-          const name = rest[0];
-          if (!name) throw new Error('Missing collection name');
-
-          await chromaClient.deleteCollection(name);
-          return { toolName: this.name, success: true, result: { deleted: name } };
+        case 'nav': {
+          const navStructure = await articlesRegistry.getNavStructure();
+          return { toolName: this.name, success: true, result: navStructure };
         }
 
         default:

@@ -314,11 +314,13 @@ export default defineComponent({
         heartbeatModel?: string;
       };
     }) => {
+      console.log('[LM Settings] Frontend received settings-read event:', settings);
+      console.log('[LM Settings] Settings experimental object:', settings?.experimental);
       if (settings.experimental?.sullaModel) {
         this.activeModel = settings.experimental.sullaModel;
         this.pendingModel = settings.experimental.sullaModel;
       }
-      if (settings.experimental?.soulPrompt !== undefined) {
+      if (settings.experimental?.soulPrompt !== undefined && settings.experimental?.soulPrompt !== '') {
         this.soulPrompt = settings.experimental.soulPrompt;
       }
       if (settings.experimental?.botName !== undefined) {

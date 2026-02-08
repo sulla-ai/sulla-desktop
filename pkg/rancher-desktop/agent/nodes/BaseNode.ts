@@ -5,7 +5,7 @@ import { getCurrentMode, getLocalService, getService } from '../languagemodels';
 import { parseJson } from '../services/JsonParseService';
 import { getWebSocketClientService } from '../services/WebSocketClientService';
 import { getToolRegistry } from '../tools';
-import { getAgentConfig } from '../services/ConfigService';
+import { getAgentConfig, onConfigChange } from '../services/ConfigService';
 import { AgentAwareness } from '../database/models/AgentAwareness';
 import { BaseLanguageModel, ChatMessage, NormalizedResponse } from '../languagemodels/BaseLanguageModel';
 import { abortIfSignalReceived, throwIfAborted } from '../services/AbortService';
@@ -90,6 +90,12 @@ export abstract class BaseNode {
     constructor(id: string, name: string) {
         this.id = id;
         this.name = name;
+
+        // Subscribe to config changes for all nodes
+        onConfigChange((newConfig) => {
+            console.log(`[BaseNode:${this.name}] Configuration changed, node will use updated config on next execution`);
+            // Nodes get fresh config on-demand, so no cache clearing needed
+        });
     }
 
     abstract execute(state: ThreadState): Promise<NodeResult<BaseThreadState>>;

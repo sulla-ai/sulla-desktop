@@ -118,7 +118,7 @@ Subcommands:
           });
 
           await article.save();
-          return { toolName: this.name, success: true, result: { slug: article.slug, created: true } };
+          return { toolName: this.name, success: true, result: { slug: article.attributes.slug, created: true } };
         }
 
         case 'update': {

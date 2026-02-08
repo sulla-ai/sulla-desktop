@@ -1,12 +1,8 @@
 import { getWebSocketClientService, type WebSocketMessage } from './WebSocketClientService';
-import { runHierarchicalGraph } from './GraphExecutionService';
-import { getSensory } from '../SensoryInput';
 import { getSchedulerService } from './SchedulerService';
 import type { CalendarEventData } from './CalendarClient';
 import { AbortService } from './AbortService';
 import { GraphRegistry, nextThreadId, nextMessageId } from './GraphRegistry';
-import type { AgentResponse } from '../types';
-import type { Ref } from 'vue';
 
 const BACKEND_CHANNEL_ID = 'dreaming-protocol';
 const CALENDAR_CHANNEL_ID = 'calendar_event';

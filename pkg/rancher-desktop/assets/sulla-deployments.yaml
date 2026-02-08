@@ -92,6 +92,8 @@ spec:
           value: "8000"
         - name: ANONYMIZED_TELEMETRY
           value: "FALSE"
+        - name: PERSIST_DIRECTORY   # explicit (optional but clearer)
+          value: "/chroma/chroma"
         volumeMounts:
         - mountPath: /chroma/chroma
           name: chroma-data
@@ -102,6 +104,12 @@ spec:
           requests:
             memory: "256Mi"
             cpu: "100m"
+        readinessProbe:            # added — prevents pod ready before Chroma boots
+          httpGet:
+            path: /api/v2/heartbeat
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 5
       volumes:
       - name: chroma-data
         hostPath:

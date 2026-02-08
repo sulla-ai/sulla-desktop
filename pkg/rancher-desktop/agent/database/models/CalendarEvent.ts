@@ -84,7 +84,7 @@ export class CalendarEvent extends BaseModel<CalendarEventAttributes> {
 
     const whereClause = conditions.length > 0 ? conditions.join(' AND ') : '1=1';
     
-    return this.where(whereClause, params.length > 0 ? params : undefined);
+    return this.where(whereClause, params.length > 0 ? params : []);
   }
 
   // Instance methods

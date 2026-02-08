@@ -4,7 +4,7 @@
 
 import type { OverlordThreadState, NodeResult } from './Graph';
 import { BaseNode,JSON_ONLY_RESPONSE_INSTRUCTIONS, TOOLS_RESPONSE_JSON } from './BaseNode';
-import { getAgentConfig } from '../services/ConfigService';
+import { getAgentConfig, onConfigChange } from '../services/ConfigService';
 import { heartbeatPrompt } from '../prompts/heartbeat';
 
 const OVERLORD_DECISION_PROMPT = `
@@ -65,6 +65,12 @@ ${TOOLS_RESPONSE_JSON}
 export class OverLordPlannerNode extends BaseNode {
   constructor() {
     super('overlord_planner', 'OverLord Planner');
+
+    // Subscribe to config changes for planning-specific updates
+    onConfigChange((newConfig) => {
+      console.log('[OverLordPlannerNode] Configuration changed, planner will use updated config on next execution');
+      // Planner gets fresh config on-demand, so no cache clearing needed
+    });
   }
 
   async execute(state: OverlordThreadState): Promise<NodeResult<OverlordThreadState>> {

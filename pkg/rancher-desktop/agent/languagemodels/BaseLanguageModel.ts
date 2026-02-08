@@ -48,6 +48,7 @@ export interface LLMConfig {
   remoteProvider?: string;
   remoteModel?: string;
   remoteApiKey?: string;
+  remoteBaseUrl?: string;
   remoteRetryCount?: number;
   remoteTimeoutSeconds?: number;
   // Backend heartbeat model selection

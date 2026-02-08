@@ -7,30 +7,68 @@
  * - getLocalModel() / getRemoteModel()
  * - getHeartbeatLLM() — respects heartbeatModel → modelMode fallback
  *
- * Call updateConfigs(config) when settings change.
+ * Pulls configuration from ConfigService on demand.
  * All services lazy-init / reconfigure on demand.
  */
 
 import { BaseLanguageModel, type LLMConfig, type RemoteProviderConfig } from './BaseLanguageModel';
 import { OllamaService, getOllamaService } from './OllamaService';
 import { createRemoteModelService } from './RemoteService';
+import { getAgentConfig, onConfigChange } from '../services/ConfigService';
 
 class LLMRegistryImpl {
   private services = new Map<string, BaseLanguageModel>();
   private configs = new Map<string, LLMConfig>();
   private currentConfig: LLMConfig | null = null;
 
+  constructor() {
+    // Subscribe to config changes to clear caches when settings change
+    onConfigChange((newConfig) => {
+      console.log('[LLMRegistry] Configuration changed, clearing service caches...');
+      console.log('[LLMRegistry] New config mode:', newConfig.modelMode, 'provider:', newConfig.remoteProvider);
+      this.clearCaches();
+    });
+  }
+
+  private clearCaches(): void {
+    this.services.clear();
+    this.configs.clear();
+    this.currentConfig = null;
+    console.log('[LLMRegistry] Service and config caches cleared');
+  }
+
   /**
-   * Update global config — source of truth for all services
+   * Pull latest configuration from ConfigService
    */
-  async updateConfigs(config: LLMConfig): Promise<void> {
+  private pullConfig(): LLMConfig {
+    const agentConfig = getAgentConfig();
+    const config: LLMConfig = {
+      mode: agentConfig.modelMode,
+      localModel: agentConfig.ollamaModel,
+      ollamaBase: agentConfig.ollamaBase,
+      localTimeoutSeconds: agentConfig.localTimeoutSeconds,
+      localRetryCount: agentConfig.localRetryCount,
+      remoteProvider: agentConfig.remoteProvider,
+      remoteModel: agentConfig.remoteModel,
+      remoteApiKey: agentConfig.remoteApiKey,
+      remoteBaseUrl: agentConfig.remoteBaseUrl,
+      remoteRetryCount: agentConfig.remoteRetryCount,
+      remoteTimeoutSeconds: agentConfig.remoteTimeoutSeconds,
+      heartbeatModel: agentConfig.heartbeatModel as 'default' | 'local' | 'remote',
+    };
+
     this.currentConfig = { ...config };
     this.configs.set('global', { ...config });
 
-    // Pre-warm local (shared)
-    await this.getLocalService();
+    console.log(`[LLMRegistry] Config pulled → mode=${config.mode}, local=${config.localModel}, remote=${config.remoteModel || 'n/a'}`);
+    return config;
+  }
 
-    console.log(`[LLMRegistry] Config updated → mode=${config.mode}, local=${config.localModel}, remote=${config.remoteModel || 'n/a'}`);
+  /**
+   * Refresh configuration from ConfigService
+   */
+  refreshConfig(): void {
+    this.pullConfig();
   }
 
   /**
@@ -51,7 +89,7 @@ class LLMRegistryImpl {
     const key = 'local';
     let svc = this.services.get(key);
 
-    const cfg = this.currentConfig || this.getDefaultConfig();
+    const cfg = this.currentConfig || this.pullConfig();
     const desiredModel = overrideModel || cfg.localModel;
 
     if (!svc || svc.getModel() !== desiredModel) {
@@ -71,7 +109,7 @@ class LLMRegistryImpl {
     const key = 'remote';
     let svc = this.services.get(key);
 
-    const cfg = this.currentConfig || this.getDefaultConfig();
+    const cfg = this.currentConfig || this.pullConfig();
     const desiredModel = overrideModel || cfg.remoteModel;
 
     if (!svc || svc.getModel() !== desiredModel) {
@@ -104,7 +142,7 @@ class LLMRegistryImpl {
    * Uses heartbeatModel → falls back to modelMode
    */
   getHeartbeatLLM(): BaseLanguageModel {
-    const cfg = this.currentConfig || this.getDefaultConfig();
+    const cfg = this.currentConfig || this.pullConfig();
     const hb = (cfg.heartbeatModel || 'default') as 'default' | 'local' | 'remote';
 
     if (hb === 'local')    return this.getLocalService();
@@ -113,11 +151,11 @@ class LLMRegistryImpl {
   }
 
   getLocalModel(): string {
-    return (this.currentConfig || this.getDefaultConfig()).localModel;
+    return (this.currentConfig || this.pullConfig()).localModel;
   }
 
   getRemoteModel(): string {
-    return (this.currentConfig || this.getDefaultConfig()).remoteModel || 'unknown';
+    return (this.currentConfig || this.pullConfig()).remoteModel || 'unknown';
   }
 
   private isLikelyLocalModel(name: string): boolean {
@@ -157,18 +195,19 @@ class LLMRegistryImpl {
   }
 
   getCurrentModel(): string {
-    if (this.currentConfig?.mode === 'remote') {
+    const cfg = this.currentConfig || this.pullConfig();
+    if (cfg.mode === 'remote') {
       return this.getRemoteModel();
     }
-    return this.currentConfig?.localModel || this.getDefaultConfig().localModel;
+    return cfg.localModel || this.getDefaultConfig().localModel;
   }
 
   getCurrentMode(): 'local' | 'remote' {
-    return this.currentConfig?.mode || 'local';
+    return (this.currentConfig || this.pullConfig()).mode || 'local';
   }
 
   getCurrentConfig(): any {
-    return this.currentConfig || this.getDefaultConfig();
+    return this.currentConfig || this.pullConfig();
   }
 
   /**

@@ -5,131 +5,6 @@
       <AgentHeader :is-dark="isDark" :toggle-theme="toggleTheme" />
 
       <div class="flex w-full flex-col">
-        <div class="overflow-hidden bg-slate-900 dark:-mt-19 dark:-mb-32 dark:pt-19 dark:pb-32">
-          <div class="py-16 sm:px-2 lg:relative lg:px-0 lg:py-20">
-            <div
-              class="mx-auto grid max-w-2xl grid-cols-1 items-center gap-x-8 gap-y-16 px-4 lg:max-w-8xl lg:grid-cols-2 lg:px-8 xl:gap-x-16 xl:px-12">
-              <div class="relative z-10 md:text-center lg:text-left">
-                <img alt="" width="530" height="530" decoding="async" data-nimg="1"
-                  class="absolute right-full bottom-full -mr-72 -mb-56 opacity-50" style="color:transparent"
-                  :src="splashUrl">
-                <div class="relative">
-                  <p
-                    class="inline bg-linear-to-r from-indigo-200 via-sky-400 to-indigo-200 bg-clip-text font-display text-5xl tracking-tight text-transparent">
-                    Create KnowledgeBase Page.</p>
-                  <p class="mt-3 text-2xl tracking-tight text-slate-400">
-                    Add new memories and knowledge to Sulla's collection.
-                  </p>
-                  <div class="mt-8 flex gap-4 md:justify-center lg:justify-start">
-                    <router-link
-                      to="/KnowledgeBase"
-                      class="text-sm font-semibold"
-                      :class="['rounded-full bg-slate-600 py-2 px-4 text-sm font-semibold text-white hover:bg-slate-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-500/50 active:bg-slate-800']"
-                    >
-                      Back to KnowledgeBase
-                    </router-link>
-                    <a
-                      class="rounded-full bg-slate-800 py-2 px-4 text-sm font-medium text-white hover:bg-slate-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/50 active:text-slate-400"
-                      href="https://github.com/sulla-ai/sulla-desktop"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      View on GitHub
-                    </a>
-                  </div>
-                </div>
-              </div>
-              <div class="relative lg:static xl:pl-10">
-                <div
-                  class="absolute inset-x-[-50vw] -top-32 -bottom-48 mask-[linear-gradient(transparent,white,white)] lg:-top-32 lg:right-0 lg:-bottom-32 lg:left-[calc(50%+14rem)] lg:mask-none dark:mask-[linear-gradient(transparent,white,transparent)] lg:dark:mask-[linear-gradient(white,white,transparent)]">
-                  <svg aria-hidden="true" viewBox="0 0 668 1069" width="668" height="1069" fill="none"
-                    class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 lg:left-0 lg:translate-x-0 lg:translate-y-[-60%]">
-                    <defs>
-                      <clipPath id="clip">
-                        <path fill="#fff" transform="rotate(-180 334 534.5)" d="M0 0h668v1069H0z" />
-                      </clipPath>
-                    </defs>
-                    <g opacity="0.45" clip-path="url(#clip)" stroke-width="3.5">
-                      <!-- Vertical lines (dendrites/axons) with more density -->
-                      <path opacity="0.35"
-                        d="M80 50v969 M140 50v969 M200 50v969 M260 50v969 M320 50v969 M380 50v969 M440 50v969 M500 50v969 M560 50v969 M620 50v969"
-                        stroke="#334155" />
-
-                      <!-- More organic curved connections + branches -->
-                      <path stroke="#0EA5E9" stroke-opacity="0.6" d="
-                        M100 150 Q180 220 120 320 Q80 380 160 450
-                        M200 180 L280 250 Q340 300 260 420 L320 480
-                        M400 120 Q480 200 420 340 Q380 420 460 500
-                        M520 180 Q580 260 540 380 Q600 440 520 520
-                        M300 600 Q380 680 320 780 Q280 840 360 920
-                        M180 700 L260 780 Q320 850 240 950
-                        M500 650 Q560 720 500 820 Q460 880 540 980
-                      " />
-
-                      <!-- Nodes: more, varied sizes, glowing highlights -->
-                      <circle cx="120" cy="180" r="12" fill="#0EA5E9" fill-opacity="0.5" stroke="#0EA5E9" />
-                      <circle cx="280" cy="320" r="14" fill="#1E293B" stroke="#334155" />
-                      <circle cx="420" cy="450" r="10" fill="#0EA5E9" fill-opacity="0.55" stroke="#0EA5E9" />
-                      <circle cx="180" cy="520" r="11" fill="#1E293B" stroke="#334155" />
-                      <circle cx="340" cy="680" r="15" fill="#0EA5E9" fill-opacity="0.6" stroke="#0EA5E9" />
-                      <circle cx="500" cy="750" r="13" fill="#1E293B" stroke="#334155" />
-                      <circle cx="260" cy="820" r="9" fill="#0EA5E9" fill-opacity="0.5" stroke="#0EA5E9" />
-                      <circle cx="380" cy="900" r="12" fill="#1E293B" stroke="#334155" />
-                      <circle cx="540" cy="950" r="14" fill="#0EA5E9" fill-opacity="0.65" stroke="#0EA5E9" />
-
-                      <!-- Extra subtle connections for depth -->
-                      <path stroke="#334155" stroke-opacity="0.4" d="
-                        M140 300 Q220 380 180 480
-                        M360 400 L440 480 Q500 540 420 620
-                        M220 550 Q300 620 240 720
-                        M480 700 Q560 780 500 880
-                      " />
-                    </g>
-                  </svg>
-                </div>
-                <div class="relative">
-                  <img alt="" width="530" height="530" decoding="async" data-nimg="1" class="absolute -top-64 -right-64"
-                    style="color:transparent" :src="splashUrl">
-                  <img alt="" width="567" height="567" decoding="async" data-nimg="1"
-                    class="absolute -right-44 -bottom-40" style="color:transparent" :src="splash2Url">
-                  <div
-                    class="absolute inset-0 rounded-2xl bg-linear-to-tr from-sky-300 via-sky-300/70 to-blue-300 opacity-10 blur-lg">
-                  </div>
-                  <div
-                    class="absolute inset-0 rounded-2xl bg-linear-to-tr from-sky-300 via-sky-300/70 to-blue-300 opacity-10">
-                  </div>
-                  <div class="relative rounded-2xl bg-[#0A101F]/80 ring-1 ring-white/10 backdrop-blur-sm">
-                    <div
-                      class="absolute -top-px right-11 left-20 h-px bg-linear-to-r from-sky-300/0 via-sky-300/70 to-sky-300/0">
-                    </div>
-                    <div
-                      class="absolute right-20 -bottom-px left-11 h-px bg-linear-to-r from-blue-400/0 via-blue-400 to-blue-400/0">
-                    </div>
-                    <div class="pt-4 pl-4">
-                      <svg aria-hidden="true" viewBox="0 0 42 10" fill="none" class="h-2.5 w-auto stroke-slate-500/30">
-                        <circle cx="5" cy="5" r="4.5"></circle>
-                        <circle cx="21" cy="5" r="4.5"></circle>
-                        <circle cx="37" cy="5" r="4.5"></circle>
-                      </svg>
-                      <div class="mt-4 flex space-x-2 text-xs">
-                        <div class="flex h-6 rounded-full bg-linear-to-r from-sky-400/30 via-sky-400 to-sky-400/30 p-px font-medium text-sky-300">
-                          <div class="flex items-center rounded-full px-2.5 bg-slate-800">new-knowledge.md</div>
-                        </div>
-                        <div class="flex h-6 rounded-full text-slate-500">
-                          <div class="flex items-center rounded-full px-2.5">draft.md</div>
-                        </div>
-                      </div>
-                      <div class="mt-6 flex items-start px-1 text-sm">
-                        <div aria-hidden="true" class="border-r border-slate-300/5 pr-4 font-mono text-slate-600 select-none">01<br>02<br>03<br>04<br>05<br>06<br>07<br></div>
-                        <pre class="prism-code language-javascript flex overflow-x-auto pb-6"><code class="px-4"><div class="token-line"><span class="token comment">// Creating new knowledge...</span></div><div class="token-line"><span class="token keyword module">export</span><span class="token plain"> </span><span class="token keyword module">default</span><span class="token plain"> </span><span class="token punctuation">{</span><span class="token plain"></span></div><div class="token-line"><span class="token plain">  </span><span class="token literal-property property">title</span><span class="token operator">:</span><span class="token plain"> </span><span class="token string">'New Memory'</span><span class="token punctuation">,</span><span class="token plain"></span></div><div class="token-line"><span class="token plain">  </span><span class="token literal-property property">category</span><span class="token operator">:</span><span class="token plain"> </span><span class="token string">'knowledge'</span><span class="token punctuation">,</span><span class="token plain"></span></div><div class="token-line"><span class="token plain">  </span><span class="token literal-property property">content</span><span class="token operator">:</span><span class="token plain"> </span><span class="token string">'Loading editor...'</span><span class="token punctuation">,</span><span class="token plain"></span></div><div class="token-line"><span class="token plain">  </span><span class="token literal-property property">tags</span><span class="token operator">:</span><span class="token plain"> </span><span class="token punctuation">[</span><span class="token string">'sulla'</span><span class="token punctuation">,</span><span class="token plain"> </span><span class="token string">'memory'</span><span class="token punctuation">]</span><span class="token plain"></span></div><div class="token-line"><span class="token plain">  </span><span class="token punctuation">}</span><span class="token punctuation">;</span><span class="token plain"></span></div></code></pre>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
         <div class="relative mx-auto flex w-full max-w-8xl flex-auto justify-center sm:px-2 lg:px-8 xl:px-12">
           <div class="hidden lg:relative lg:block lg:flex-none">
             <div class="absolute inset-y-0 right-0 w-[50vw] bg-slate-50 dark:hidden"></div>
@@ -145,10 +20,21 @@
                         <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Title</label>
                         <input
                           v-model="pageTitle"
+                          @input="updateSlug"
                           type="text"
                           placeholder="Enter page title..."
                           class="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 dark:border-slate-600 dark:bg-slate-800 dark:text-white"
                         />
+                      </div>
+                      <div>
+                        <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Slug</label>
+                        <input
+                          v-model="pageSlug"
+                          type="text"
+                          placeholder="page-url-slug"
+                          class="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 dark:border-slate-600 dark:bg-slate-800 dark:text-white"
+                        />
+                        <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">URL-friendly identifier for the page</p>
                       </div>
                       <div>
                         <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Category</label>
@@ -276,6 +162,10 @@ import AgentHeader from './agent/AgentHeader.vue';
 import { computed, onMounted, ref } from 'vue';
 import DOMPurify from 'dompurify';
 import { marked } from 'marked';
+import { Article } from '../agent/database/models/Article';
+import { useRouter } from 'vue-router';
+
+const router = useRouter();
 
 import './assets/AgentKnowledgeBase.css';
 
@@ -290,10 +180,32 @@ const pageTitle = ref('');
 const pageCategory = ref('Memory');
 const pageTags = ref('');
 const pageContent = ref('');
+const pageSlug = ref('');
 
 // Editor state
 const editorEl = ref<HTMLElement | null>(null);
 const showPreview = ref(false);
+
+// Generate slug from title
+const generateSlug = (title: string): string => {
+  if (!title || !title.trim()) {
+    return '';
+  }
+  
+  return title
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '-') // Replace spaces with hyphens
+    .replace(/[^a-z0-9-]/g, '') // Remove special characters except hyphens
+    .slice(0, 50); // Limit length for better usability
+};
+
+// Update slug when title changes
+const updateSlug = () => {
+  if (pageTitle.value) {
+    pageSlug.value = generateSlug(pageTitle.value);
+  }
+};
 
 // Editor toolbar configuration
 const editorTools = ref([
@@ -364,24 +276,83 @@ const createPage = async () => {
     alert('Please enter some content');
     return;
   }
+
+  // Auto-generate slug if empty
+  if (!pageSlug.value.trim()) {
+    pageSlug.value = generateSlug(pageTitle.value);
+  }
+
+  // Validate slug format
+  const slugRegex = /^[a-z0-9-]+$/;
+  if (!slugRegex.test(pageSlug.value)) {
+    alert('Slug can only contain lowercase letters, numbers, and hyphens');
+    return;
+  }
+
+  // Final check that slug exists after generation
+  if (!pageSlug.value.trim()) {
+    alert('Could not generate slug from title. Please enter a slug manually.');
+    return;
+  }
   
   try {
-    // Here you would typically save to your backend/service
-    console.log('Creating page:', {
+    // Check if slug already exists
+    const existingArticle = await Article.find(pageSlug.value);
+    if (existingArticle) {
+      alert(`A page with slug "${pageSlug.value}" already exists. Please choose a different slug.`);
+      return;
+    }
+
+    // Create article using Article model
+    const article = await Article.create({
+      section: 'knowledgebase',
+      category: pageCategory.value.toLowerCase(),
+      slug: pageSlug.value,
       title: pageTitle.value,
-      category: pageCategory.value,
       tags: pageTags.value.split(',').map(tag => tag.trim()).filter(tag => tag),
-      content: pageContent.value
+      document: pageContent.value,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
     });
     
     // Show success message
     alert('Page created successfully!');
     
     // Navigate back to KnowledgeBase
-    window.location.href = '/KnowledgeBase';
+    router.push('/KnowledgeBase');
+    pageTitle.value = '';
+    pageSlug.value = '';
+    pageContent.value = '';
+    pageTags.value = '';
+    pageCategory.value = 'Memory';
+    if (editorEl.value) editorEl.value.innerHTML = '';
+    
   } catch (error) {
     console.error('Failed to create page:', error);
-    alert('Failed to create page. Please try again.');
+    
+    // Provide more specific error messages
+    let errorMessage = 'Unknown error occurred';
+    if (error instanceof Error) {
+      if (error.message.includes('Missing required field')) {
+        const fieldName = error.message.split("'")[1] || 'unknown';
+        errorMessage = `Missing required field: ${fieldName}`;
+      } else if (error.message.includes('slug')) {
+        errorMessage = 'Invalid slug: ' + error.message;
+      } else if (error.message.includes('Knowledge Base requires embeddings')) {
+        // This is our embedding configuration error - show it as-is since it's already user-friendly
+        errorMessage = error.message;
+      } else if (error.message.includes('OpenAI embeddings require an API key')) {
+        errorMessage = error.message;
+      } else if (error.message.includes('xAI/Grok embeddings require an API key')) {
+        errorMessage = error.message;
+      } else if (error.message.includes('Unsupported embedding provider')) {
+        errorMessage = error.message;
+      } else {
+        errorMessage = error.message;
+      }
+    }
+    
+    alert(`Failed to create page: ${errorMessage}`);
   }
 };
 
@@ -444,5 +415,49 @@ onMounted(() => {
 .dark .prose [contenteditable] code {
   background-color: #334155;
   color: #f1f5f9;
+}
+
+/* Dark mode scrollbars */
+.dark ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.dark ::-webkit-scrollbar-track {
+  background: #1e293b;
+  border-radius: 4px;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: #475569;
+  border-radius: 4px;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}
+
+.dark ::-webkit-scrollbar-corner {
+  background: #1e293b;
+}
+
+/* Dark mode scrollbars for specific elements */
+.dark [contenteditable]::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.dark [contenteditable]::-webkit-scrollbar-track {
+  background: #334155;
+  border-radius: 3px;
+}
+
+.dark [contenteditable]::-webkit-scrollbar-thumb {
+  background: #64748b;
+  border-radius: 3px;
+}
+
+.dark [contenteditable]::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
 }
 </style>

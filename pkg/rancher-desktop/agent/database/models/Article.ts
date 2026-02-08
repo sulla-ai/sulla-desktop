@@ -3,10 +3,10 @@
 import { ChromaBaseModel } from '../ChromaBaseModel';
 
 export class Article extends ChromaBaseModel {
-  protected collectionName = 'knowledgebase_articles';
-  protected idField = 'slug';
+  protected readonly collectionName = 'knowledgebase_articles';
+  protected readonly idField = 'slug';
 
-  protected fillable = [
+  protected readonly fillable = [
     'section',
     'category',
     'schemaversion',
@@ -22,7 +22,7 @@ export class Article extends ChromaBaseModel {
     'updated_at',
   ];
 
-  protected required = [
+  protected readonly required = [
     'schemaversion',
     'slug',
     'title',
@@ -31,7 +31,7 @@ export class Article extends ChromaBaseModel {
     'updated_at',
   ];
 
-  protected defaults = {
+  protected readonly defaults = {
     schemaversion: 1,
     tags: [],
     order: '100',

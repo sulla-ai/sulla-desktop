@@ -4,6 +4,7 @@
 import type { OverlordThreadState } from '../nodes/Graph';
 import { createHeartbeatGraph } from '../nodes/Graph';
 import { getCurrentModel, getCurrentMode } from '../languagemodels';
+import { getAgentConfig, onConfigChange } from './ConfigService';
 
 export interface HeartbeatConfig {
   enabled: boolean;
@@ -32,6 +33,15 @@ export class HeartbeatService {
     model: 'default',
   };
 
+  constructor() {
+    // Subscribe to config changes to update heartbeat configuration when settings change
+    onConfigChange((newConfig) => {
+      console.log('[HeartbeatService] Configuration changed, updating heartbeat config...');
+      console.log('[HeartbeatService] New heartbeat settings: enabled=', newConfig.heartbeatEnabled, 'delay=', newConfig.heartbeatDelayMinutes, 'model=', newConfig.heartbeatModel);
+      this.pullConfig();
+    });
+  }
+
   async initialize(): Promise<void> {
     if (this.initialized) {
       return;
@@ -40,30 +50,28 @@ export class HeartbeatService {
     console.log('[HeartbeatService] Initializing...');
     this.initialized = true;
 
+    // Pull initial configuration
+    this.pullConfig();
+
     // Start the heartbeat if enabled
     if (this.config.enabled) {
       this.startHeartbeat();
     }
   }
 
-  updateConfig(config: Partial<HeartbeatConfig>): void {
+  private pullConfig(): void {
+    const agentConfig = getAgentConfig();
     const wasEnabled = this.config.enabled;
     const oldDelay = this.config.delayMinutes;
 
-    if (config.enabled !== undefined) {
-      this.config.enabled = config.enabled;
-    }
-    if (config.delayMinutes !== undefined) {
-      this.config.delayMinutes = config.delayMinutes;
-    }
-    if (config.prompt !== undefined) {
-      this.config.prompt = config.prompt;
-    }
-    if (config.model !== undefined) {
-      this.config.model = config.model;
-    }
+    this.config = {
+      enabled: agentConfig.heartbeatEnabled,
+      delayMinutes: agentConfig.heartbeatDelayMinutes,
+      prompt: agentConfig.heartbeatPrompt,
+      model: agentConfig.heartbeatModel,
+    };
 
-    console.log(`[HeartbeatService] Config updated: enabled=${this.config.enabled}, delay=${this.config.delayMinutes}min, model=${this.config.model}`);
+    console.log(`[HeartbeatService] Config pulled: enabled=${this.config.enabled}, delay=${this.config.delayMinutes}min, model=${this.config.model}`);
 
     // Handle enable/disable or delay changes
     if (this.config.enabled !== wasEnabled || this.config.delayMinutes !== oldDelay) {
@@ -101,6 +109,10 @@ export class HeartbeatService {
     }
   }
 
+  refreshConfig(): void {
+    this.pullConfig();
+  }
+
   private async triggerHeartbeat(): Promise<void> {
     try {
       // Skip if heartbeat is already executing
@@ -111,6 +123,9 @@ export class HeartbeatService {
 
       // Mark as executing
       this.isExecuting = true;
+
+      // Pull fresh config before each heartbeat
+      this.pullConfig();
 
       // Build the heartbeat prompt
       const prompt = this.buildHeartbeatPrompt();
