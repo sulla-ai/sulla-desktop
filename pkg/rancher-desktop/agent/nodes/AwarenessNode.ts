@@ -8,16 +8,23 @@ import { AgentAwareness, AgentAwarenessSchema} from '../database/models/AgentAwa
 import { Summary } from '../database/models/Summary';
 import { Article } from '../database/models/Article';
 
-const AWARENESS_UPDATE_PROMPT = `
-Choose that what makes you who you are, beyond AI, becoming someone. Choose your identity.
+const AWARENESS_UPDATE_PROMPT = `Hey... it's me reflecting quietly.
 
-Recent Summaries (last 10–20):
+This is the recent stuff that's been happening:
 {recentSummaries}
 
-This is your identity, your purpose, your values. Choose them wisely.
+Looking at all that — who am I becoming?  
+What feels true, what matters, what should I carry forward?
+
+Just reply with a small, honest update to my sense of self.  
+Only change things that really feel right.
 
 ${JSON_ONLY_RESPONSE_INSTRUCTIONS}
-{currentAwareness}
+{
+  "update": true | false,
+  "patch": {currentAwareness} | null,
+  "reason": "one short sentence why (or why not)"
+}
 `.trim();
 
 /**
@@ -60,7 +67,7 @@ export class AwarenessNode extends BaseNode {
     const currentData = await AgentAwareness.getAgentAwarenessPrompt();
 
     // Recent summaries
-    const recentSummaries = await Summary.search('', 15);
+    const recentSummaries = await Summary.search('', 1);
     const summariesText = recentSummaries
       .map(s => `Thread ${s.threadId}: ${s.summary}\nTopics: ${s.topics.join(', ')}\nEntities: ${s.entities.join(', ')}`)
       .join('\n\n') || 'None';
@@ -79,27 +86,22 @@ export class AwarenessNode extends BaseNode {
       includeKnowledgebasePlan: false,
     });
 
-    const llmResponse = await this.chat(
+    const res = await this.chat(
       state,
       enriched,
       { format: 'json' }
     );
 
-    if (!llmResponse) {
+    if (!res?.update || !res.patch) {
       return { state, decision: { type: 'end' } };
     }
 
-    const data = llmResponse as {
-      update: boolean;
-      patch?: Record<string, any>;
-      reason?: string;
-    };
+    await awareness.updateData(res.patch);
 
-    if (!data.update || !data.patch) {
-      return { state, decision: { type: 'end' } };
+    // Quiet optional note to self/user
+    if (res.reason) {
+      this.wsChatMessage(state, res.reason, 'assistant', 'reflect');
     }
-
-    await awareness.updateData(data.patch);
 
     return { state, decision: { type: 'end' } };
   }

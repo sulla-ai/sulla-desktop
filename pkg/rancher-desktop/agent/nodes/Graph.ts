@@ -7,17 +7,18 @@ import type { ChatMessage } from '../languagemodels/BaseLanguageModel';
 import { AgentPlanInterface } from '../database/models/AgentPlan';
 import { AgentPlanTodoInterface } from '../database/models/AgentPlanTodo';
 import { getCurrentModel, getCurrentMode } from '../languagemodels';
-
+import { BaseNode } from './BaseNode';
 
 // ============================================================================
 // DEFAULT SETTINGS
 // ============================================================================
 
 const DEFAULT_WS_CHANNEL = 'dreaming-protocol';
+const MAX_CONSECTUIVE_LOOP = 12;
+const MAX_MESSAGES_IN_THREAD = 120;
+
 const DEFAULT_MAX_ITERATIONS = 10;
 const DEFAULT_MAX_REVISION_COUNT = 3;
-const MAX_CONSECTUIVE_LOOP = 12; //12
-
 // ============================================================================
 // INTERFACES AND TYPES
 // ============================================================================
@@ -627,6 +628,20 @@ export function nextThreadId(): string {
   return `thread_${Date.now()}_${++threadCounter}`;
 }
 
+class ContextTrimmerNode extends BaseNode {
+  constructor() {
+    super('context_trimmer', 'Context Trimmer');
+  }
+
+  async execute(state: HierarchicalThreadState): Promise<NodeResult<HierarchicalThreadState>> {
+    if (state.messages.length > MAX_MESSAGES_IN_THREAD) {
+      state.messages = state.messages.slice(-MAX_MESSAGES_IN_THREAD);
+      console.log(`[ContextTrimmer] Trimmed to last ${MAX_MESSAGES_IN_THREAD} messages`);
+    }
+    return { state, decision: { type: 'next' } };
+  }
+}
+
 
 // ============================================================================
 //
@@ -763,6 +778,7 @@ export function createHierarchicalGraph(): Graph<HierarchicalThreadState> {
 
   // Add nodes
   graph.addNode(new MemoryNode());
+  graph.addNode(new ContextTrimmerNode());
   graph.addNode(new StrategicPlannerNode());
   graph.addNode(new TacticalPlannerNode());
   graph.addNode(new TacticalExecutorNode());
@@ -777,8 +793,10 @@ export function createHierarchicalGraph(): Graph<HierarchicalThreadState> {
       return 'end';
     }
 
-    return 'strategic_planner';
+    return 'context_trimmer';
   });
+
+  graph.addEdge('context_trimmer', 'strategic_planner');
 
   // Conditional: StrategicPlanner → end (simple) or TacticalPlanner (complex)
   graph.addConditionalEdge('strategic_planner', state => {

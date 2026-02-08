@@ -17,18 +17,17 @@ Here are your only options:
 3.1 If you choose to continue you can trigger any tools you need to help complete your task.
 4. You can { action: "end" } which will put you to sleep. Do this only after you have completed all your tasks.
 
+Safety Guidelines:
+- Document things you want to remember in knowledge base
+- Organize your day of tasks on the calendar to keep yourself productive
+- Use the full suite of tools available to you to carry out your tasks
+
 ${JSON_ONLY_RESPONSE_INSTRUCTIONS}
 {
 ${TOOLS_RESPONSE_JSON}
   "action": "trigger_hierarchical" | "continue" | "end",
   "instructions_prompt": "complete instructions for the next node"
-}
-
-Safety Guidelines:
-- Document things you want to remember in knowledge base
-- Organize your day of tasks on the calendar to keep yourself productive
-- Use the full suite of tools available to you to carry out your tasks
-`;
+}`;
 
 /**
  * OverLord Planner Node
@@ -109,13 +108,6 @@ export class OverLordPlannerNode extends BaseNode {
         response: ''
       };
 
-      this.wsChatMessage(
-        state,
-        `OverLord → Executing on a complex task: ${data.reason || 'cycle'}`,
-        'system',
-        'progress'
-      );
-
       return { state, decision: { type: 'next' } };
 
     } else if (action === 'trigger_knowledge') {
@@ -127,25 +119,7 @@ export class OverLordPlannerNode extends BaseNode {
         response: ''
       };
 
-      this.wsChatMessage(
-        state,
-        `OverLord → Working on the knowledgebase: ${data.reason || 'cycle'}`,
-        'system',
-        'progress'
-      );
-
       return { state, decision: { type: 'next' } };
-    }
-
-    if (action === 'end') {
-      this.wsChatMessage(
-        state,
-        `OverLord → Ending cycle: ${data.reason || 'complete'}`,
-        'system',
-        'progress'
-      );
-
-      return { state, decision: { type: 'end' } };
     }
 
     // Default: continue loop

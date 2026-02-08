@@ -245,10 +245,10 @@ export abstract class BaseNode {
         // Remove all system prompts
         messages = messages.filter(m => m.role !== 'system');
 
+        //console.log(`[${this.name}:BaseNode] Chat messages:`, messages);
+
         // Append new system prompt
         messages.push({ role: 'system', content: systemPrompt.trim() });
-
-        console.log(`[${this.name}:BaseNode] Chat messages:`, messages);
 
         // Check for abort before making LLM calls
         throwIfAborted(state, 'Chat operation aborted');

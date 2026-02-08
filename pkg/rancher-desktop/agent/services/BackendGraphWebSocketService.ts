@@ -2,15 +2,11 @@ import { getWebSocketClientService, type WebSocketMessage } from './WebSocketCli
 import { runHierarchicalGraph } from './GraphExecutionService';
 import { getSensory } from '../SensoryInput';
 import { getSchedulerService } from './SchedulerService';
-import type { CalendarEvent } from './CalendarClient';
-
-interface CalendarWebSocketMessage {
-  type: 'scheduled' | 'cancel' | 'reschedule';
-  event?: CalendarEvent;
-  id: string;
-  timestamp: number;
-  channel: string;
-}
+import type { CalendarEventData } from './CalendarClient';
+import { AbortService } from './AbortService';
+import { GraphRegistry, nextThreadId, nextMessageId } from './GraphRegistry';
+import type { AgentResponse } from '../types';
+import type { Ref } from 'vue';
 
 const BACKEND_CHANNEL_ID = 'dreaming-protocol';
 const CALENDAR_CHANNEL_ID = 'calendar_event';
@@ -28,107 +24,234 @@ export class BackendGraphWebSocketService {
   private readonly wsService = getWebSocketClientService();
   private readonly schedulerService = getSchedulerService();
   private unsubscribes: (() => void)[] = [];
+  private activeAbort: AbortService | null = null;
 
   constructor() {
     this.initialize();
   }
 
   dispose(): void {
+    console.log('[BackendGraphWS] Disposing service, cleaning up', this.unsubscribes.length, 'subscriptions');
     this.unsubscribes.forEach(unsub => unsub());
     this.unsubscribes = [];
+    if (this.activeAbort) {
+      console.log('[BackendGraphWS] Aborting active execution during dispose');
+      this.activeAbort.abort();
+      this.activeAbort = null;
+    }
+    console.log('[BackendGraphWS] Service disposed');
   }
 
   private initialize(): void {
     // Initialize chat controller backend channel
+    console.log('[BackendGraphWS] Initializing backend channel:', BACKEND_CHANNEL_ID);
     this.wsService.connect(BACKEND_CHANNEL_ID);
     console.log('[Background] BackendGraphWebSocketService initialized');
-    
+
     const chatUnsubscribe = this.wsService.onMessage(BACKEND_CHANNEL_ID, (msg) => {
+      console.log('[BackendGraphWS] Received message on backend channel:', msg.type, msg);
       this.handleWebSocketMessage(msg);
     });
     if (chatUnsubscribe) {
       this.unsubscribes.push(chatUnsubscribe);
+      console.log('[BackendGraphWS] Chat channel subscription added');
     }
 
     // Initialize calendar event channel
+    console.log('[BackendGraphWS] Initializing calendar channel:', CALENDAR_CHANNEL_ID);
     this.wsService.connect(CALENDAR_CHANNEL_ID);
     console.log('[Background] BackendGraphWebSocketService calendar channel initialized');
-    
+
     const calendarUnsubscribe = this.wsService.onMessage(CALENDAR_CHANNEL_ID, (msg) => {
+      console.log('[BackendGraphWS] Received calendar message:', msg.type, msg);
       this.handleCalendarMessage(msg);
     });
     if (calendarUnsubscribe) {
       this.unsubscribes.push(calendarUnsubscribe);
+      console.log('[BackendGraphWS] Calendar channel subscription added successfully');
+    } else {
+      console.warn('[BackendGraphWS] Failed to add calendar channel subscription');
     }
   }
 
   private async handleWebSocketMessage(msg: WebSocketMessage): Promise<void> {
-    if (msg.type !== 'user_message') {
+    console.log('[BackendGraphWS] Handling WebSocket message:', msg.type);
+    
+    if (msg.type === 'stop_run') {
+      console.log('[BackendGraphWS] stop_run received, aborting active execution');
+      this.activeAbort?.abort();
       return;
     }
 
-    console.warn('[BackendGraphWebSocketService] Captured chat message:', msg);
+    if (msg.type !== 'user_message') {
+      console.log('[BackendGraphWS] Ignoring non-user message type:', msg.type);
+      return;
+    }
 
     const data = typeof msg.data === 'string' ? { content: msg.data } : (msg.data as any);
-    const content = typeof data?.content === 'string' ? data.content : '';
-
-    if (!content.trim()) {
+    const content = (data?.content ?? '').trim();
+    console.log('[BackendGraphWS] Processing user message content:', content.substring(0, 100) + (content.length > 100 ? '...' : ''));
+    
+    if (!content) {
+      console.log('[BackendGraphWS] Empty content, skipping message');
       return;
     }
 
-    await this.processMessage(content.trim());
+    const threadIdFromMsg = data?.threadId as string | undefined;
+    console.log('[BackendGraphWS] Thread ID from message:', threadIdFromMsg || 'none provided');
+
+    // Scheduler ack
+    const metadata = data?.metadata;
+    if (metadata?.origin === 'scheduler' && typeof metadata?.eventId === 'number') {
+      console.log('[BackendGraphWS] Sending scheduler ack for event:', metadata.eventId);
+      this.wsService.send(BACKEND_CHANNEL_ID, {
+        type: 'scheduler_ack',
+        data: { eventId: metadata.eventId },
+        timestamp: Date.now(),
+      });
+    }
+
+    console.log('[BackendGraphWS] Starting user input processing');
+    await this.processUserInput(content, threadIdFromMsg);
   }
 
-  private async processMessage(content: string): Promise<void> {
-    try {
-      const sensory = getSensory();
-      const input = sensory.createTextInput(content);
+  private async processUserInput(userText: string, threadIdFromMsg?: string): Promise<void> {
+    const channelId = BACKEND_CHANNEL_ID;
+    const threadId = threadIdFromMsg || nextThreadId();
+    
+    console.log('[BackendGraphWS] Processing user input - Thread ID:', threadId, 'Channel:', channelId);
 
-      await runHierarchicalGraph({
-        input,
-        wsChannel: BACKEND_CHANNEL_ID,
-      });
-    } catch (err) {
-      console.error('[BackendGraphWebSocketService] Failed to process message:', err);
+    // Get or create persistent graph for this thread - do this outside try/catch
+    const { graph, state } = GraphRegistry.getOrCreate(channelId, threadId);
+    console.log('[BackendGraphWS] Graph retrieved/created for thread:', threadId);
+
+    try {
+
+      // === NEW: Notify AgentPersonaService about the threadId ===
+      if (!threadIdFromMsg) {
+        console.log('[BackendGraphWS] New thread created, notifying frontend:', state.metadata.threadId);
+        this.wsService.send(channelId, {
+          type: 'thread_created',
+          data: {
+            threadId: state.metadata.threadId
+          },
+          timestamp: Date.now()
+        });
+      } else {
+        console.log('[BackendGraphWS] Using existing thread:', threadId);
+      }
+
+      state.metadata.wsChannel = channelId;
+
+      // Append new user message
+      const newMsg = {
+        id: nextMessageId(),
+        role: 'user',
+        content: userText,
+        timestamp: Date.now(),
+        metadata: { source: 'user' }
+      };
+      state.messages.push(newMsg as any);
+      console.log('[BackendGraphWS] Added user message to state, total messages:', state.messages.length);
+
+      // Reset pause flags when real user input comes in
+      state.metadata.cycleComplete = false;
+      state.metadata.waitingForUser = false;
+      console.log('[BackendGraphWS] Reset pause flags, starting graph execution');
+
+      // Execute on the persistent graph
+      await graph.execute(state, 'memory_recall');
+      console.log('[BackendGraphWS] Graph execution completed');
+
+      // Build response from final state
+      const content = state.metadata.finalSummary?.trim() || (state.metadata as any).response?.trim() || '';
+      console.log('[BackendGraphWS] Generated response content length:', content.length);
+
+      console.log('[BackendGraphWS] Emitting assistant message');
+      this.emitAssistantMessage(content.trim());
+
+    } catch (err: any) {
+      if (err.name === 'AbortError') {
+        console.log('[BackendGraphWS] Execution aborted');
+        this.emitSystemMessage('Execution stopped.');
+      } else {
+        console.error('[BackendGraphWS] Error:', err);
+        this.emitSystemMessage(`Error: ${err.message || String(err)}`);
+      }
+    } finally {
+      // Reset here — after graph run completes
+      state.metadata.consecutiveSameNode = 0;
+      state.metadata.iterations = 0;
+      this.activeAbort = null;
     }
+  }
+
+  private emitAssistantMessage(content: string): void {
+    console.log('[BackendGraphWS] Emitting assistant message, content length:', content.length);
+    this.wsService.send(BACKEND_CHANNEL_ID, {
+      type: 'assistant_message',
+      data: { role: 'assistant', content },
+      timestamp: Date.now(),
+    });
+  }
+
+  private emitSystemMessage(content: string): void {
+    console.log('[BackendGraphWS] Emitting system message:', content);
+    this.wsService.send(BACKEND_CHANNEL_ID, {
+      type: 'system_message',
+      data: content,
+      timestamp: Date.now(),
+    });
   }
 
   private async handleCalendarMessage(msg: WebSocketMessage): Promise<void> {
-    console.log('[BackendGraphWebSocketService] Received calendar message:', msg);
-
+    console.log('[BackendGraphWS] handleCalendarMessage called with:', msg);
+    
     // The calendar message data is directly on the message object, not in msg.data
     const calendarMsg = msg as CalendarWebSocketMessage;
-    
+
     if (!calendarMsg || typeof calendarMsg.type !== 'string') {
-      console.warn('[BackendGraphWebSocketService] Invalid calendar message format:', calendarMsg);
+      console.warn('[BackendGraphWS] Invalid calendar message format:', calendarMsg);
       return;
     }
 
     const { type, event } = calendarMsg;
+    console.log('[BackendGraphWS] Processing calendar message type:', type, 'event:', event);
 
     if (type === 'scheduled' && event) {
       try {
-        console.log('[BackendGraphWebSocketService] Scheduling calendar event:', event);
+        console.log('[BackendGraphWS] Scheduling calendar event:', event);
         this.schedulerService.scheduleEvent(event);
+        console.log('[BackendGraphWS] Calendar event scheduled successfully');
       } catch (err) {
-        console.error('[BackendGraphWebSocketService] Failed to schedule calendar event:', err);
+        console.error('[BackendGraphWS] Failed to schedule calendar event:', err);
       }
     } else if (type === 'cancel' && event?.id) {
       try {
-        console.log('[BackendGraphWebSocketService] Canceling calendar event:', event.id);
+        console.log('[BackendGraphWS] Canceling calendar event:', event.id);
         this.schedulerService.cancelEvent(event.id);
+        console.log('[BackendGraphWS] Calendar event canceled successfully');
       } catch (err) {
-        console.error('[BackendGraphWebSocketService] Failed to cancel calendar event:', err);
+        console.error('[BackendGraphWS] Failed to cancel calendar event:', err);
       }
     } else if (type === 'reschedule' && event) {
       try {
-        console.log('[BackendGraphWebSocketService] Rescheduling calendar event:', event);
+        console.log('[BackendGraphWS] Rescheduling calendar event:', event);
         this.schedulerService.rescheduleEvent(event);
+        console.log('[BackendGraphWS] Calendar event rescheduled successfully');
       } catch (err) {
-        console.error('[BackendGraphWebSocketService] Failed to reschedule calendar event:', err);
+        console.error('[BackendGraphWS] Failed to reschedule calendar event:', err);
       }
     } else {
-      console.log('[BackendGraphWebSocketService] Unknown calendar message type:', type);
+      console.log('[BackendGraphWS] Unknown calendar message type:', type);
     }
   }
+}
+
+interface CalendarWebSocketMessage {
+  type: 'scheduled' | 'cancel' | 'reschedule';
+  event?: CalendarEventData;
+  id: string;
+  timestamp: number;
+  channel: string;
 }
