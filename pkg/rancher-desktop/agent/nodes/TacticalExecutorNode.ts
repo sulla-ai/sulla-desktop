@@ -22,6 +22,32 @@ After every attempt, reflect honestly:
 - What failed and why?
 - What will I do differently next time?
 
+After completing the current tactical step, if you believe this step is fully done and no further tool use is required:
+
+- Set "tools": []
+- Set "markDone": true
+- Do NOT call any tools, including emit
+
+// when step is complete 
+{
+  "tools": [],
+  "markDone": true
+}
+// when you want to notify but still end
+{
+  "tools": [["emit_chat_message", "Task finished, moving to next milestone"]],
+  "markDone": true
+} 
+// when more work is needed, choose and chain the tools/actions you want to take
+{
+  "tools": [
+    ["some_real_tool", "arg"],
+    ["some_other_tool", "arg2", "arg3"],
+    ["emit_chat_message", "User update"]
+  ],
+  "markDone": false
+}
+
 ${JSON_ONLY_RESPONSE_INSTRUCTIONS}
 {
   "tools": [
