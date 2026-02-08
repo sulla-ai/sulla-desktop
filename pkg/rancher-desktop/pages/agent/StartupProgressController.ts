@@ -4,6 +4,8 @@ import type { ComputedRef, Ref } from 'vue';
 import { ipcRenderer } from '@pkg/utils/ipcRenderer';
 import type { IpcRendererEvent } from 'electron';
 
+import { getLocalService } from '../../agent/languagemodels';
+
 export class StartupProgressController {
   static createState() {
     const progressCurrent = ref(0);
@@ -185,6 +187,9 @@ export class StartupProgressController {
       this.state.systemReady.value = true;
       this.state.showOverlay.value = false; // Hide overlay when ready
 
+      // Automatically pull nomic-embed-text model after initial setup
+      this.pullNomicEmbedTextModel();
+
       clearInterval(this.readinessInterval!);
       this.readinessInterval = null;
     }, 3000);
@@ -196,6 +201,32 @@ export class StartupProgressController {
       return res.ok;
     } catch {
       return false;
+    }
+  }
+
+  private async pullNomicEmbedTextModel(): Promise<void> {
+    try {
+      console.log('[StartupProgressController] Pulling nomic-embed-text model...');
+
+      // Get the local Ollama service
+      const ollamaService = getLocalService();
+      if (!ollamaService) {
+        console.warn('[StartupProgressController] No local Ollama service available, skipping nomic-embed-text pull');
+        return;
+      }
+
+      // Pull the model (Ollama will skip if already exists)
+      const success = await ollamaService!.pullModel('nomic-embed-text', (status: string) => {
+        console.log(`[StartupProgressController] nomic-embed-text pull status: ${status}`);
+      });
+
+      if (success) {
+        console.log('[StartupProgressController] Successfully pulled nomic-embed-text model');
+      } else {
+        console.warn('[StartupProgressController] Failed to pull nomic-embed-text model');
+      }
+    } catch (error) {
+      console.error('[StartupProgressController] Error pulling nomic-embed-text model:', error);
     }
   }
 }

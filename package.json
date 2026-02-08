@@ -57,7 +57,8 @@
     "@docker/extension-api-client-types": "0.4.2",
     "@hbilal_9/vue3-chat-scroll": "^0.0.4",
     "@kubernetes/client-node": "1.4.0",
-    "@langchain/core": "^1.1.17",
+    "@langchain/community": "^1.1.12",
+    "@langchain/core": "^1.1.19",
     "@langchain/ollama": "^1.2.1",
     "@langchain/openai": "^1.2.5",
     "@napi-rs/xattr": "^1.0.3",
@@ -119,21 +120,26 @@
     "yaml": "2.8.2"
   },
   "devDependencies": {
+    "@babel/core": "^7.29.0",
     "@babel/eslint-parser": "7.28.6",
-    "@babel/plugin-proposal-class-properties": "7.18.6",
+    "@babel/plugin-proposal-class-properties": "^7.18.6",
     "@babel/plugin-proposal-nullish-coalescing-operator": "7.18.6",
     "@babel/plugin-proposal-optional-chaining": "7.21.0",
     "@babel/plugin-proposal-private-methods": "7.18.6",
     "@babel/plugin-proposal-private-property-in-object": "7.21.11",
+    "@babel/preset-env": "^7.29.0",
     "@electron/asar": "4.0.1",
     "@electron/fuses": "^2.0.0",
     "@electron/notarize": "3.1.1",
     "@eslint/compat": "2.0.1",
     "@playwright/test": "1.57.0",
     "@tailwindcss/postcss": "^4.1.18",
+    "@types/babel__core": "^7",
+    "@types/babel__preset-env": "^7",
     "@types/cross-spawn": "6.0.6",
     "@types/dompurify": "3.2.0",
     "@types/ejs": "3.1.5",
+    "@types/express": "^5.0.6",
     "@types/jest": "30.0.0",
     "@types/lodash": "4.17.23",
     "@types/mustache": "4.2.6",
@@ -218,5 +224,17 @@
   "browserslist": [
     "node 22",
     "electron >= 35"
-  ]
+  ],
+  "peerDependencies": {
+    "@babel/core": "*",
+    "@browserbasehq/stagehand": "*",
+    "@ibm-cloud/watsonx-ai": "*",
+    "@schedule-x/date-picker": "*",
+    "@types/express": "*",
+    "core-js": "*",
+    "ibm-cloud-sdk-core": "*",
+    "openai": "*",
+    "postcss": "*",
+    "vue-eslint-parser": "*"
+  }
 }

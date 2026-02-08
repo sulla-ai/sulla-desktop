@@ -1,8 +1,9 @@
-// ChromaClient.ts — Singleton with configurable embeddings (OpenAI or xAI/Grok only)
-// No dummy fallback, no Ollama/Xenova — just real providers
+// ChromaClient.ts — Singleton with configurable embeddings (OpenAI, xAI/Grok, or Ollama)
+// Supports local Ollama embeddings and remote OpenAI-compatible APIs
 
 import { ChromaClient as BaseChromaClient, Metadata, Where, EmbeddingFunction } from 'chromadb';
 import { OpenAIEmbeddings } from '@langchain/openai';
+import { OllamaEmbeddings } from '@langchain/ollama';
 
 // Import your config service
 import { getAgentConfig, getModelMode, getRemoteConfig, onConfigChange } from '../services/ConfigService';
@@ -24,17 +25,29 @@ class OpenAIEmbeddingAdapter implements EmbeddingFunction {
   }
 }
 
+// Adapter to bridge LangChain OllamaEmbeddings with ChromaDB EmbeddingFunction
+class OllamaEmbeddingAdapter implements EmbeddingFunction {
+  private embeddings: OllamaEmbeddings;
+
+  constructor(embeddings: OllamaEmbeddings) {
+    this.embeddings = embeddings;
+  }
+
+  async generate(texts: string[]): Promise<number[][]> {
+    return await this.embeddings.embedDocuments(texts);
+  }
+
+  async generateForQueries(texts: string[]): Promise<number[][]> {
+    return await Promise.all(texts.map(text => this.embeddings.embedQuery(text)));
+  }
+}
+
 const CHROMA_BASE = 'http://127.0.0.1:30115';
 
 // Provider-specific embedding models (only for OpenAI-compatible APIs)
 const EMBEDDING_MODELS = {
   openai: 'text-embedding-3-small',
-  grok: 'grok-embed-v1',
-  xai: 'grok-embed-v1', // xAI uses same embedding model as Grok
 } as const;
-
-// Providers that support OpenAI-compatible embedding APIs
-const EMBEDDING_SUPPORTED_PROVIDERS = new Set(['openai', 'grok', 'xai']);
 
 class ChromaDB {
   private client: BaseChromaClient;
@@ -51,7 +64,6 @@ class ChromaDB {
     // Subscribe to config changes to re-initialize embeddings when settings change
     onConfigChange((newConfig) => {
       console.log('[ChromaClient] Configuration changed, re-initializing embeddings...');
-      console.log('[ChromaClient] New config:', newConfig);
       this.initializeEmbeddings();
     });
   }
@@ -68,51 +80,34 @@ class ChromaDB {
       baseUrl: agentConfig.remoteBaseUrl
     };
 
-    if (mode !== 'remote' || !remote.provider) {
-      console.warn('[ChromaClient] Not in remote mode or no provider — embeddings disabled (ID ops only)');
-      console.warn('[ChromaClient] mode:', mode, 'provider:', remote?.provider);
-      this.embeddingFunction = undefined;
-      return;
-    }
-
-    const provider = remote.provider.toLowerCase();
-    console.log('[ChromaClient] Using provider:', provider);
-
-    // Check if this provider supports embeddings
-    if (!EMBEDDING_SUPPORTED_PROVIDERS.has(provider)) {
-      console.warn(`[ChromaClient] Provider '${provider}' does not support OpenAI-compatible embeddings — embeddings disabled (ID ops only)`);
-      this.embeddingFunction = undefined;
-      return;
-    }
-
-    if (provider === 'openai') {
+    // Check if we should use OpenAI embeddings (remote mode with OpenAI provider)
+    if (mode === 'remote' && remote.provider?.toLowerCase() === 'openai') {
       console.log('[ChromaClient] Setting up OpenAI embeddings...');
       const apiKey = remote.apiKey || process.env.OPENAI_API_KEY;
-      const embeddingModel = EMBEDDING_MODELS.openai;
       
-      this.embeddingFunction = new OpenAIEmbeddingAdapter(new OpenAIEmbeddings({
-        model: embeddingModel,
-        openAIApiKey: apiKey!
-      }));
-      console.log('[ChromaClient] OpenAI embeddings configured successfully');
-    } else if (provider === 'grok' || provider === 'xai') {
-      console.log('[ChromaClient] Setting up xAI/Grok embeddings...');
-      const apiKey = remote.apiKey || process.env.XAI_API_KEY;
-      const embeddingModel = EMBEDDING_MODELS[provider as keyof typeof EMBEDDING_MODELS];
-      
-      this.embeddingFunction = new OpenAIEmbeddingAdapter(new OpenAIEmbeddings({
-        model: embeddingModel,
-        openAIApiKey: apiKey!,
-        configuration: {
-          baseURL: remote.baseUrl || 'https://api.x.ai/v1'
-        }
-      }));
-      console.log('[ChromaClient] xAI embeddings configured successfully');
-    } else {
-      console.warn(`[ChromaClient] Unsupported provider '${provider}' — embeddings disabled`);
-      console.warn('[ChromaClient] Supported providers: openai, grok, xai');
-      this.embeddingFunction = undefined;
+      if (apiKey) {
+        const embeddingModel = EMBEDDING_MODELS.openai;
+        
+        this.embeddingFunction = new OpenAIEmbeddingAdapter(new OpenAIEmbeddings({
+          model: embeddingModel,
+          openAIApiKey: apiKey
+        }));
+        console.log('[ChromaClient] OpenAI embeddings configured successfully');
+        return;
+      } else {
+        console.warn('[ChromaClient] OpenAI provider configured but no API key available — falling back to Ollama embeddings');
+      }
     }
+
+    // Default to Ollama embeddings for all other cases
+    const ollamaBase = agentConfig.ollamaBase;
+    const embeddingModel = 'nomic-embed-text'; // Fixed embedding model for Ollama
+    
+    this.embeddingFunction = new OllamaEmbeddingAdapter(new OllamaEmbeddings({
+      baseUrl: ollamaBase,
+      model: embeddingModel
+    }));
+    console.log('[ChromaClient] Ollama embeddings configured successfully');
     
     console.log('[ChromaClient] Initialization complete. Embeddings function:', !!this.embeddingFunction);
   }
@@ -242,7 +237,14 @@ class ChromaDB {
   async getDocuments(collectionName: string, ids: string[], where?: Where) {
     try {
       const collection = await this.getOrCreateCollection(collectionName);
-      return await collection.get({ ids, where });
+      
+      // When ids is empty, use where filter to get all matching documents
+      // When ids is provided, use ids filter (where is ignored by ChromaDB in this case)
+      const query = ids.length === 0 
+        ? { where }
+        : { ids, where };
+        
+      return await collection.get(query);
     } catch (err) {
       console.error(`Get ${collectionName} failed:`, err);
       throw err;

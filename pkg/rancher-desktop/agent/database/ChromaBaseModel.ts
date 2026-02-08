@@ -62,12 +62,6 @@ export abstract class ChromaBaseModel {
       return;
     }
 
-    // Check if embeddings are properly configured
-    const embeddingCheck = this.validateEmbeddingConfiguration();
-    if (!embeddingCheck.valid) {
-      throw new Error(embeddingCheck.errorMessage);
-    }
-
     // Safe metadata (flatten arrays/objects, stringify numbers)
     const safeMetadata = { ...this.attributes };
     delete safeMetadata.document;
@@ -157,54 +151,5 @@ export abstract class ChromaBaseModel {
 
   get attributesSnapshot(): Readonly<Record<string, any>> {
     return { ...this.attributes };
-  }
-
-  private validateEmbeddingConfiguration(): { valid: boolean; errorMessage?: string } {
-    const mode = getModelMode();
-    const remote = getRemoteConfig();
-
-    // Check if mode is set to remote
-    if (mode !== 'remote') {
-      return {
-        valid: false,
-        errorMessage: `Knowledge Base requires embeddings to be configured. Current mode: "${mode}". Please set mode to "remote" in your AI settings.`
-      };
-    }
-
-    // Check if provider is configured
-    if (!remote?.provider) {
-      return {
-        valid: false,
-        errorMessage: `Knowledge Base requires a remote embedding provider. Please configure a provider (OpenAI or xAI/Grok) in your AI settings.`
-      };
-    }
-
-    const provider = remote.provider.toLowerCase();
-
-    // Provider-specific validation
-    if (provider === 'openai') {
-      const apiKey = remote.apiKey || process.env.OPENAI_API_KEY;
-      if (!apiKey) {
-        return {
-          valid: false,
-          errorMessage: `OpenAI embeddings require an API key. Please add your OpenAI API key in your AI settings or set OPENAI_API_KEY environment variable.`
-        };
-      }
-    } else if (provider === 'grok' || provider === 'xai') {
-      const apiKey = remote.apiKey || process.env.XAI_API_KEY;
-      if (!apiKey) {
-        return {
-          valid: false,
-          errorMessage: `xAI/Grok embeddings require an API key. Please add your xAI API key in your AI settings or set XAI_API_KEY environment variable.`
-        };
-      }
-    } else {
-      return {
-        valid: false,
-        errorMessage: `Unsupported embedding provider: "${remote.provider}". Please use "openai" or "xai"/"grok" in your AI settings.`
-      };
-    }
-
-    return { valid: true };
   }
 }

@@ -338,15 +338,6 @@ const createPage = async () => {
         errorMessage = `Missing required field: ${fieldName}`;
       } else if (error.message.includes('slug')) {
         errorMessage = 'Invalid slug: ' + error.message;
-      } else if (error.message.includes('Knowledge Base requires embeddings')) {
-        // This is our embedding configuration error - show it as-is since it's already user-friendly
-        errorMessage = error.message;
-      } else if (error.message.includes('OpenAI embeddings require an API key')) {
-        errorMessage = error.message;
-      } else if (error.message.includes('xAI/Grok embeddings require an API key')) {
-        errorMessage = error.message;
-      } else if (error.message.includes('Unsupported embedding provider')) {
-        errorMessage = error.message;
       } else {
         errorMessage = error.message;
       }

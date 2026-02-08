@@ -146,8 +146,11 @@ export abstract class BaseLanguageModel {
   }
 
   /**
-   * Main chat method — all services use this
+   * Pull a model from the service (only available for local services like Ollama)
    */
+  pullModel(modelName: string, onProgress?: (status: string) => void): Promise<boolean> {
+    return Promise.resolve(false);
+  }
   async chat(
     messages: ChatMessage[],
     options: {

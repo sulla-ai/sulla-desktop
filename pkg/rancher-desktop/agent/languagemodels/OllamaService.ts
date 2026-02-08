@@ -78,30 +78,6 @@ export class OllamaService extends BaseLanguageModel {
     return this.availableModels;
   }
 
-  /**
-   * Pull a model from library if not present.
-   * @param modelName e.g. "llama3.2:3b", "qwen2.5:7b"
-   * @param onProgress Optional progress callback
-   * @returns Success
-   */
-  public async pullModel(modelName: string, onProgress?: (status: string) => void): Promise<boolean> {
-    try {
-      const res = await fetch(`${this.baseUrl}/api/pull`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: modelName, stream: false }),
-        signal: AbortSignal.timeout(600_000), // 10 min
-      });
-
-      if (res.ok) {
-        await this.refreshModels();
-        return true;
-      }
-      return false;
-    } catch {
-      return false;
-    }
-  }
 
   /**
    * Core request to Ollama /api/chat (non-streaming).
@@ -162,6 +138,67 @@ export class OllamaService extends BaseLanguageModel {
    */
   public async generate(prompt: string, options?: { signal?: AbortSignal }): Promise<NormalizedResponse | null> {
     return this.chat([{ role: 'user', content: prompt }], options);
+  }
+
+  /**
+   * Pull a model from Ollama
+   */
+  public async pullModel(modelName: string, onProgress?: (status: string) => void): Promise<boolean> {
+    try {
+      const response = await fetch(`${this.baseUrl}/api/pull`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ name: modelName }),
+      });
+
+      if (!response.ok) {
+        console.error(`[OllamaService] Pull failed: ${response.status} ${response.statusText}`);
+        return false;
+      }
+
+      // Ollama pull returns a stream of JSON lines with status updates
+      const reader = response.body?.getReader();
+      if (!reader) {
+        console.error('[OllamaService] No response body for pull');
+        return false;
+      }
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || ''; // Keep incomplete line
+
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          try {
+            const data = JSON.parse(line);
+            const status = data.status || data.message || 'unknown';
+            onProgress?.(status);
+
+            // Check if pull completed
+            if (status.includes('complete') || status.includes('success') || data.status === 'complete') {
+              return true;
+            }
+          } catch (e) {
+            console.warn('[OllamaService] Failed to parse pull status:', line, e);
+          }
+        }
+      }
+
+      // If we reach here, assume success if no error
+      return true;
+    } catch (error) {
+      console.error('[OllamaService] Error pulling model:', error);
+      return false;
+    }
   }
 }
 
