@@ -50,12 +50,16 @@ export class FrontendGraphWebSocketService {
 
   private async handleWebSocketMessage(msg: WebSocketMessage): Promise<void> {
     if (msg.type === 'stop_run') {
+      console.log('[FrontendGraphWebSocketService] Received stop_run message');
       if (this.activeAbort && !this.activeAbort.signal.aborted) {
         try {
+          console.log('[FrontendGraphWebSocketService] Calling abort on active AbortService');
           this.activeAbort.abort();
         } catch {
           // ignore
         }
+      } else {
+        console.log('[FrontendGraphWebSocketService] No active abort or already aborted');
       }
       return;
     }

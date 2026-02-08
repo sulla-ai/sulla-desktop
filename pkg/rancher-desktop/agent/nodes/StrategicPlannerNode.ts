@@ -24,6 +24,9 @@ Core Rules:
 
 ${JSON_ONLY_RESPONSE_INSTRUCTIONS}
 {
+  "emit_chat_message": "Optional message to show user immediately (only if planneeded)",
+
+  // plan creation fields only
   "goal": "One-sentence primary objective",
   "goaldescription": "What true success looks like",
   "requirestools": boolean,
@@ -41,8 +44,7 @@ ${JSON_ONLY_RESPONSE_INSTRUCTIONS}
   "responseguidance": {
     "tone": "technical" | "casual" | "formal" | "friendly",
     "format": "brief" | "detailed" | "markdown" | "conversational"
-  },
-  "emit_chat_message": "Optional message to show user immediately (only if planneeded)"
+  }
 }`;
 
 /**
@@ -98,12 +100,22 @@ export class StrategicPlannerNode extends BaseNode {
     );
 
     if (!llmResponse) {
-      return { state, decision: { type: 'continue' } };
+      return { state, decision: { type: 'continue' } }; // continue
     }
 
     const plan = llmResponse as StrategicPlan;
+    const currentPlan = state.metadata.plan?.model;
+    
     if (!plan || !plan.goal?.trim()) {
-      return { state, decision: { type: 'continue' } };
+      console.log('[StrategicPlanner] Invalid or empty plan received from LLM', {
+        hasActivePlan: !!currentPlan,
+        llmResponse,
+        currentPlanId: currentPlan?.attributes?.id
+      });
+      if (plan.emit_chat_message?.trim()) {
+        this.wsChatMessage(state, plan.emit_chat_message, 'assistant', 'response');
+      }
+      return { state, decision: { type: 'next' } }; // continue
     }
 
     if (plan.emit_chat_message?.trim()) {
@@ -115,7 +127,7 @@ export class StrategicPlannerNode extends BaseNode {
     // ============================================================================
 
     if (!plan.planneeded) {
-      return { state, decision: { type: 'end' } };
+      return { state, decision: { type: 'end' } }; // end
     }
 
     // ============================================================================
@@ -124,75 +136,81 @@ export class StrategicPlannerNode extends BaseNode {
     // ============================================================================
 
     try {
-      // check if the plan is already in the state object
-      let planModel = state.metadata.plan?.model;
-      if (planModel) {
-        console.log('[StrategicPlanner] Plan already exists:', planModel.attributes);
-
-        planModel.fill({
-          thread_id: state.metadata.threadId,
-          status: 'active',
-          goal: plan.goal,
-          goaldescription: plan.goaldescription,
-          complexity: plan.estimatedcomplexity,
-          requirestools: plan.requirestools,
-          wschannel: state.metadata.wsChannel,
-        });
-        await planModel.incrementRevision();
-        await planModel.deleteAllTodos();
-
-      // Create a new plan
-      } else {
-        console.log('[StrategicPlanner] Creating new plan:', plan);
-        
-        planModel = new AgentPlan();
-        planModel.fill({
-          thread_id: state.metadata.threadId,
-          status: 'active',
-          goal: plan.goal,
-          goaldescription: plan.goaldescription,
-          complexity: plan.estimatedcomplexity,
-          requirestools: plan.requirestools,
-          wschannel: state.metadata.wsChannel,
-        })
-
-        await planModel.save();
-        state.metadata.plan.model = planModel;
-
-      }
-
-      console.log('[StrategicPlanner] Plan created:', plan.milestones);
-
-      // Create new todos
-      const todos: AgentPlanTodo[] = [];
-      for (const [idx, m] of plan.milestones.entries()) {
-        console.log('[StrategicPlanner] Milestone:', m);
-        const todo = new AgentPlanTodo();
-        todo.fill({
-          plan_id: planModel.attributes.id!,
-          title: m.title,
-          description: `${m.description}\n\nSuccess: ${m.successcriteria}`,
-          order_index: idx,
-          status: idx === 0 ? 'in_progress' : 'pending',
-          wschannel: state.metadata.wsChannel,
-        });
-        await todo.save();
-        todos.push(todo);
-      }
-
-      // Update state shape
-      state.metadata.plan = {
-        model: planModel,
-        milestones: todos.map(todo => ({ model: todo })),
-        activeMilestoneIndex: 0,
-        allMilestonesComplete: false,
-      };
-
+      await this.updatePlan(state, plan);
       return { state, decision: { type: 'next' } };
     } catch(err) {
       console.error('[StrategicPlanner] Plan persistence failed:', err);
-      return { state, decision: { type: 'continue' } };
+      return { state, decision: { type: 'continue' } }; // continue
     }
+  }
+
+  /**
+   * Update or create a plan in the database and state
+   */
+  private async updatePlan(state: HierarchicalThreadState, plan: StrategicPlan): Promise<void> {
+    // check if the plan is already in the state object
+    let planModel = state.metadata.plan?.model;
+    if (planModel) {
+      console.log('[StrategicPlanner] Plan already exists:', planModel.attributes);
+
+      planModel.fill({
+        thread_id: state.metadata.threadId,
+        status: 'active',
+        goal: plan.goal,
+        goaldescription: plan.goaldescription,
+        complexity: plan.estimatedcomplexity,
+        requirestools: plan.requirestools,
+        wschannel: state.metadata.wsChannel,
+      });
+      await planModel.incrementRevision();
+      await planModel.deleteAllTodos();
+
+    // Create a new plan
+    } else {
+      console.log('[StrategicPlanner] Creating new plan:', plan);
+      
+      planModel = new AgentPlan();
+      planModel.fill({
+        thread_id: state.metadata.threadId,
+        status: 'active',
+        goal: plan.goal,
+        goaldescription: plan.goaldescription,
+        complexity: plan.estimatedcomplexity,
+        requirestools: plan.requirestools,
+        wschannel: state.metadata.wsChannel,
+      })
+
+      await planModel.save();
+      state.metadata.plan.model = planModel;
+
+    }
+
+    console.log('[StrategicPlanner] Plan created:', plan.milestones);
+
+    // Create new todos
+    const todos: AgentPlanTodo[] = [];
+    for (const [idx, m] of plan.milestones.entries()) {
+      console.log('[StrategicPlanner] Milestone:', m);
+      const todo = new AgentPlanTodo();
+      todo.fill({
+        plan_id: planModel.attributes.id!,
+        title: m.title,
+        description: `${m.description}\n\nSuccess: ${m.successcriteria}`,
+        order_index: idx,
+        status: idx === 0 ? 'in_progress' : 'pending',
+        wschannel: state.metadata.wsChannel,
+      });
+      await todo.save();
+      todos.push(todo);
+    }
+
+    // Update state shape
+    state.metadata.plan = {
+      model: planModel,
+      milestones: todos.map(todo => ({ model: todo })),
+      activeMilestoneIndex: 0,
+      allMilestonesComplete: false,
+    };
   }
 }
 

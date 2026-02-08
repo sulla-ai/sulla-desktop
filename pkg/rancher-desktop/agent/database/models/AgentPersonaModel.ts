@@ -153,11 +153,12 @@ export class AgentPersonaService {
   }
 
   emitStopSignal(agentId: string): boolean {
+    console.log('[AgentPersonaModel] Emitting stop signal for agent:', agentId);
     const sent = this.wsService.send(agentId, {
       type: 'stop_run',
       timestamp: Date.now(),
     });
-
+    console.log('[AgentPersonaModel] Stop signal sent successfully:', sent);
     if (!sent) {
       console.warn(`[AgentPersonaService] Failed to send stop signal on ${agentId}`);
     }
@@ -306,6 +307,24 @@ export class AgentPersonaService {
           }
         }
         
+        // Handle todo deletion
+        if (phase === 'todo_deleted') {
+          const todoId = data?.todoId ? Number(data.todoId) : null;
+          if (todoId) {
+            this.deleteTodo(todoId);
+            console.log('[AgentPersonaModel] Todo deleted from UI:', todoId);
+          }
+        }
+        
+        // Handle plan deletion
+        if (phase === 'plan_deleted') {
+          const planId = data?.planId ? Number(data.planId) : null;
+          if (planId) {
+            this.resetPlan(planId, null);
+            console.log('[AgentPersonaModel] Plan deleted from UI:', planId);
+          }
+        }
+        
         if (phase === 'todo_status') {
           const todoId = data?.todoId ? Number(data.todoId) : null;
           const stepId = data?.stepId ? String(data.stepId) : null;
@@ -417,8 +436,9 @@ export class AgentPersonaService {
       case 'transfer_data': {
         const data = (msg.data && typeof msg.data === 'object') ? (msg.data as any) : null;
         if (data === 'graph_execution_complete' || data?.content === 'graph_execution_complete') {
-          console.log('[AgentPersonaModel] Graph execution complete, setting graphRunning = false');
+          console.log('[AgentPersonaModel] Graph execution complete, setting graphRunning = false and loading = false');
           this.graphRunning.value = false;
+          this.registry.setLoading(agentId, false);
         }
         return;
       }

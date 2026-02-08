@@ -75,10 +75,11 @@ export async function runHierarchicalGraph(params: {
 
   // Resume existing thread if threadId provided and state exists
   if (params.threadId) {
-    const saved = loadThreadState(params.threadId);
+    const saved = await loadThreadState(params.threadId);
     if (saved) {
+      // For new user messages, reset to start node instead of resuming from last node
+      // This ensures each new message starts the graph from the beginning
       state = saved;
-      console.log(`[GraphExec] Resuming thread ${params.threadId} at ${state.metadata.currentNodeId}`);
     } else {
       state = buildInitialState(params.input, params.wsChannel, params.threadId);
     }
@@ -99,7 +100,7 @@ export async function runHierarchicalGraph(params: {
   state.messages.push(newUserMsg as any);
 
   // Reset iteration counters only on new thread
-  if (!params.threadId || !loadThreadState(params.threadId)) {
+  if (!params.threadId || !await loadThreadState(params.threadId)) {
     state.metadata.iterations = 0;
     state.metadata.consecutiveSameNode = 0;
   }

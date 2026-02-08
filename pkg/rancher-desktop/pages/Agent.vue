@@ -244,7 +244,7 @@
                           class="my-2 h-6 max-h-[400px] min-w-0 flex-1 resize-none bg-transparent text-[#0d0d0d] text-base leading-6 outline-none placeholder:text-[#9a9a9a] dark:text-white dark:placeholder:text-neutral-500"
                           :class="isComposerMultiline ? 'basis-full order-2' : 'order-2'"
                           @input="updateComposerLayout"
-                          @keydown.enter.exact.prevent="sendOrStop"
+                          @keydown.enter.exact.prevent="send"
                         />
 
                         <div
@@ -332,23 +332,45 @@
                           </div>
 
                           <div class="flex items-center gap-2">
+                            <!-- Send button - always visible when there's content -->
                             <button
+                              v-if="query.trim()"
                               type="button"
                               class="mb-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#0d0d0d] text-white disabled:opacity-60 disabled:cursor-not-allowed hover:cursor-pointer dark:bg-white dark:text-[#0d0d0d]"
-                              :aria-label="(loading || graphRunning) ? 'Stop' : (query.trim() ? 'Send' : 'Voice')"
-                              :disabled="showOverlay || (!loading && !graphRunning && false)"
-                              @click="handlePrimaryAction"
+                              aria-label="Send"
+                              :disabled="showOverlay"
+                              @click="send"
                             >
-                              <svg v-if="loading || graphRunning" width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-                                <rect x="7" y="7" width="10" height="10" rx="2" fill="currentColor" />
-                              </svg>
-                              <svg v-else-if="query.trim()" width="18" height="18" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                              <svg width="18" height="18" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
                                 <path d="M7.14645 2.14645C7.34171 1.95118 7.65829 1.95118 7.85355 2.14645L11.8536 6.14645C12.0488 6.34171 12.0488 6.65829 11.8536 6.85355C11.6583 7.04882 11.3417 7.04882 11.1464 6.85355L8 3.70711L8 12.5C8 12.7761 7.77614 13 7.5 13C7.22386 13 7 12.7761 7 12.5L7 3.70711L3.85355 6.85355C3.65829 7.04882 3.34171 7.04882 3.14645 6.85355C2.95118 6.65829 2.95118 6.34171 3.14645 6.14645L7.14645 2.14645Z" fill="currentColor" fill-rule="evenodd" clip-rule="evenodd" />
                               </svg>
-                              <svg v-else xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            </button>
+
+                            <!-- Stop button - only visible when chat interface exists and graph is running -->
+                            <button
+                              v-if="hasMessages && graphRunning"
+                              type="button"
+                              class="mb-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-red-600 text-white disabled:opacity-60 disabled:cursor-not-allowed hover:cursor-pointer dark:bg-red-500 dark:text-white"
+                              aria-label="Stop"
+                              :disabled="showOverlay"
+                              @click="stop"
+                            >
+                              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                                <rect x="7" y="7" width="10" height="10" rx="2" fill="currentColor" />
+                              </svg>
+                            </button>
+
+                            <!-- Voice button - shown when no content and not running -->
+                            <button
+                              v-if="!query.trim() && !graphRunning"
+                              type="button"
+                              class="mb-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#0d0d0d] text-white disabled:opacity-60 disabled:cursor-not-allowed hover:cursor-pointer dark:bg-white dark:text-[#0d0d0d]"
+                              aria-label="Voice"
+                              :disabled="showOverlay"
+                              @click="handlePrimaryAction"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                                 <path d="M12 19v3" />
-                                <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                                <rect x="9" y="2" width="6" height="13" rx="3" />
                               </svg>
                             </button>
                           </div>
@@ -392,7 +414,7 @@
                       class="my-2 h-6 max-h-[400px] min-w-0 flex-1 resize-none bg-transparent text-[#0d0d0d] text-base leading-6 outline-none placeholder:text-[#9a9a9a] dark:text-white dark:placeholder:text-neutral-500"
                       :class="isComposerMultiline ? 'basis-full order-2' : 'order-2'"
                       @input="updateComposerLayout"
-                      @keydown.enter.exact.prevent="sendOrStop"
+                      @keydown.enter.exact.prevent="send"
                     />
 
                     <div
@@ -480,20 +502,44 @@
                       </div>
 
                       <div class="flex items-center gap-2">
+                        <!-- Send button - always visible when there's content -->
                         <button
+                          v-if="query.trim()"
                           type="button"
                           class="mb-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#0d0d0d] text-white disabled:opacity-60 disabled:cursor-not-allowed hover:cursor-pointer dark:bg-white dark:text-[#0d0d0d]"
-                          :aria-label="(loading || graphRunning) ? 'Stop' : (query.trim() ? 'Send' : 'Voice')"
-                          :disabled="showOverlay || (!loading && !graphRunning && false)"
-                          @click="handlePrimaryAction"
+                          aria-label="Send"
+                          :disabled="showOverlay"
+                          @click="send"
                         >
-                          <svg v-if="loading || graphRunning" width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-                            <rect x="7" y="7" width="10" height="10" rx="2" fill="currentColor" />
-                          </svg>
-                          <svg v-else-if="query.trim()" width="18" height="18" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                          <svg width="18" height="18" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
                             <path d="M7.14645 2.14645C7.34171 1.95118 7.65829 1.95118 7.85355 2.14645L11.8536 6.14645C12.0488 6.34171 12.0488 6.65829 11.8536 6.85355C11.6583 7.04882 11.3417 7.04882 11.1464 6.85355L8 3.70711L8 12.5C8 12.7761 7.77614 13 7.5 13C7.22386 13 7 12.7761 7 12.5L7 3.70711L3.85355 6.85355C3.65829 7.04882 3.34171 7.04882 3.14645 6.85355C2.95118 6.65829 2.95118 6.34171 3.14645 6.14645L7.14645 2.14645Z" fill="currentColor" fill-rule="evenodd" clip-rule="evenodd" />
                           </svg>
-                          <svg v-else xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        </button>
+
+                        <!-- Stop button - only visible when chat interface exists and graph is running -->
+                        <button
+                          v-if="hasMessages && graphRunning"
+                          type="button"
+                          class="mb-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-red-600 text-white disabled:opacity-60 disabled:cursor-not-allowed hover:cursor-pointer dark:bg-red-500 dark:text-white"
+                          aria-label="Stop"
+                          :disabled="showOverlay"
+                          @click="stop"
+                        >
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                            <rect x="7" y="7" width="10" height="10" rx="2" fill="currentColor" />
+                          </svg>
+                        </button>
+
+                        <!-- Voice button - shown when no content and not running -->
+                        <button
+                          v-if="!query.trim() && !graphRunning"
+                          type="button"
+                          class="mb-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#0d0d0d] text-white disabled:opacity-60 disabled:cursor-not-allowed hover:cursor-pointer dark:bg-white dark:text-[#0d0d0d]"
+                          aria-label="Voice"
+                          :disabled="showOverlay"
+                          @click="handlePrimaryAction"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                             <path d="M12 19v3" />
                             <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
                             <rect x="9" y="2" width="6" height="13" rx="3" />
@@ -850,25 +896,19 @@ onUnmounted(() => {
   frontendGraphController.dispose();
 });
 
-const sendOrStop = () => {
-  if (loading.value) {
-    chatController.stop();
-    return;
-  }
+const send = () => {
   chatController.send();
 };
 
+const stop = () => {
+  chatController.stop();
+};
+
 const handlePrimaryAction = () => {
-  if (isRunning.value) {
-    sendOrStop();
-    return;
-  }
-
   if (query.value.trim()) {
-    sendOrStop();
+    send();
     return;
   }
-
   // Voice mode is a UI affordance for now; actual voice wiring can be added later.
 };
 

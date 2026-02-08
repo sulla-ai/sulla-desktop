@@ -35,9 +35,11 @@ export class AbortService {
    */
   abort(): void {
     if (this.controller.signal.aborted) {
+      console.log('[AbortService] Abort already called, ignoring');
       return;
     }
 
+    console.log('[AbortService] Abort called - stopping execution');
     try {
       this.controller.abort();
     } catch {
@@ -54,5 +56,40 @@ export class AbortService {
         // ignore
       }
     }
+  }
+}
+
+/**
+ * Portable function to check if abort signal was received.
+ * Can be called from anywhere in the codebase.
+ * 
+ * @param signal AbortSignal to check (optional, defaults to checking if any signal is aborted)
+ * @returns true if abort was triggered, false otherwise
+ */
+export function abortIfSignalReceived(signal?: AbortSignal): boolean {
+  // If no signal provided, check if we can detect any abort
+  if (!signal) {
+    return false;
+  }
+  
+  if (signal.aborted) {
+    console.log('[AbortService] Abort signal received - operation should stop');
+    return true;
+  }
+  
+  return false;
+}
+
+/**
+ * Portable function to check abort signal and throw AbortError if triggered.
+ * Use this to immediately stop execution when abort is detected.
+ * 
+ * @param signal AbortSignal to check
+ * @param message Optional error message
+ * @throws AbortError if signal was aborted
+ */
+export function throwIfAborted(signal?: AbortSignal, message?: string): void {
+  if (signal?.aborted) {
+    throw new DOMException(message || 'Operation aborted', 'AbortError');
   }
 }

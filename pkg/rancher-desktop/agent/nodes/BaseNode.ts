@@ -8,6 +8,7 @@ import { getToolRegistry } from '../tools';
 import { getAgentConfig } from '../services/ConfigService';
 import { AgentAwareness } from '../database/models/AgentAwareness';
 import { BaseLanguageModel, ChatMessage, NormalizedResponse } from '../languagemodels/BaseLanguageModel';
+import { abortIfSignalReceived, throwIfAborted } from '../services/AbortService';
 
 // ============================================================================
 // DEFAULT SETTINGS
@@ -250,6 +251,10 @@ export abstract class BaseNode {
         console.log('[BaseNode] Chat messages:', messages);
         console.log('[BaseNode] state.metadata.llmModel:', state.metadata.llmModel);
         console.log('[BaseNode] state.metadata.llmLocal:', context);
+        
+        // Check for abort before making LLM calls
+        throwIfAborted(options.signal, 'Chat operation aborted');
+        
         try {
             // Primary attempt
             let reply: NormalizedResponse | null = await this.llm.chat(messages, {
@@ -311,6 +316,14 @@ export abstract class BaseNode {
         return parseJson(raw);
     }
  
+    /**
+     * Helper method to respond gracefully when abort is detected
+     */
+    protected async handleAbort(state: BaseThreadState, message?: string): Promise<void> {
+        const abortMessage = message || "OK, I'm stopping everything. What do you need me to do?";
+        this.wsChatMessage(state, abortMessage, 'assistant', 'progress');
+    }
+
     /**
      * Build a context block showing strategic plan progress
      */
@@ -659,12 +672,18 @@ export abstract class BaseNode {
     ): Promise<Array<{ toolName: string; success: boolean; result?: unknown; error?: string }>> {
         if (!tools?.length) return [];
 
+        // Check for abort before processing tools
+        throwIfAborted((state as any).metadata?.abortSignal, 'Tool execution aborted');
+
         const registry = getToolRegistry(); // assume global registration
         const results: Array<{ toolName: string; success: boolean; result?: unknown; error?: string }> = [];
 
         const normalized = this.normalizeToolCalls(tools);
 
         for (const { toolName, args } of normalized) {
+            // Check for abort before each tool execution
+            throwIfAborted((state as any).metadata?.abortSignal, `Tool execution aborted before ${toolName}`);
+            
             // Generate unique tool run ID for this execution
             const toolRunId = `${toolName}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 

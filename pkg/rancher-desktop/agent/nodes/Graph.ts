@@ -1,6 +1,7 @@
 // Graph - LangGraph-style workflow orchestrator
 
 import type { AbortService } from '../services/AbortService';
+import { throwIfAborted } from '../services/AbortService';
 import { getWebSocketClientService } from '../services/WebSocketClientService';
 import type { ChatMessage } from '../languagemodels/BaseLanguageModel';
 import { AgentPlanInterface } from '../database/models/AgentPlan';
@@ -320,6 +321,7 @@ export class Graph<TState = HierarchicalThreadState> {
 
   /**
    * Execute the graph from entry point until end or max iterations.
+   * 
    * @param initialState - Starting state (TState)
    * @param maxIterations - Safety limit (default 1M)
    * @param options - Optional abort controller
@@ -342,55 +344,65 @@ export class Graph<TState = HierarchicalThreadState> {
     (state as any).metadata.consecutiveSameNode ??= 0;
 
     const abort = options?.abort;
-    const throwIfAborted = () => {
-      if (abort?.signal.aborted) throw Object.assign(new Error('Aborted'), { name: 'AbortError' });
-    };
 
-    while ((state as any).metadata.iterations < maxIterations) {
-      (state as any).metadata.iterations++;
-      throwIfAborted();
+    try {
+      while ((state as any).metadata.iterations < maxIterations) {
+        (state as any).metadata.iterations++;
+        
+        throwIfAborted(abort?.signal, 'Graph execution aborted');
 
-      const node = this.nodes.get((state as any).metadata.currentNodeId);
-      if (!node) throw new Error(`Node missing: ${(state as any).metadata.currentNodeId}`);
+        const node = this.nodes.get((state as any).metadata.currentNodeId);
+        if (!node) throw new Error(`Node missing: ${(state as any).metadata.currentNodeId}`);
 
-      console.log(`[Graph] → ${node.name} (${(state as any).metadata.currentNodeId})`);
-      const result: NodeResult<TState> = await node.execute(state);
+        console.log(`[Graph] → ${node.name} (${(state as any).metadata.currentNodeId})`);
+        const result: NodeResult<TState> = await node.execute(state);
 
-      state = result.state;
+        state = result.state;
 
-      const nextId = this.resolveNext((state as any).metadata.currentNodeId, result.decision, state);
-      console.log(`[Graph] ${result.decision.type} → ${nextId}`);
+        const nextId = this.resolveNext((state as any).metadata.currentNodeId, result.decision, state);
+        console.log(`[Graph] ${result.decision.type} → ${nextId}`);
 
-      if (nextId === (state as any).metadata.currentNodeId) {
-        (state as any).metadata.consecutiveSameNode++;
-        if ((state as any).metadata.consecutiveSameNode >= MAX_CONSECTUIVE_LOOP) {
-          console.warn(`Max consecutive loop — forcing end`);
+        if (nextId === (state as any).metadata.currentNodeId) {
+          (state as any).metadata.consecutiveSameNode++;
+          if ((state as any).metadata.consecutiveSameNode >= MAX_CONSECTUIVE_LOOP) {
+            console.warn(`Max consecutive loop — forcing end`);
+            break;
+          }
+        } else {
+          (state as any).metadata.consecutiveSameNode = 0;
+        }
+
+        if (nextId === 'end' || (this.endPoints.has((state as any).metadata.currentNodeId) && result.decision.type === 'end')) {
+          console.log(`[Graph] Complete after ${(state as any).metadata.iterations} iterations`);
           break;
         }
+
+        (state as any).metadata.currentNodeId = nextId;
+      }
+    } catch (error: any) {
+      console.log('[Graph] Execution stopped:', error);
+      // Don't re-throw AbortError, just log and continue to send completion signal
+      if (error?.name === 'AbortError') {
+        console.log('[Graph] Graph execution aborted by user');
       } else {
-        (state as any).metadata.consecutiveSameNode = 0;
+        // Re-throw non-abort errors
+        throw error;
       }
-
-      if (nextId === 'end' || (this.endPoints.has((state as any).metadata.currentNodeId) && result.decision.type === 'end')) {
-        console.log(`[Graph] Complete after ${(state as any).metadata.iterations} iterations`);
-
-        const ws = getWebSocketClientService();
-        const connId = (state as any).metadata.wsChannel || 'chat-controller-backend';
-        ws.send(connId, {
-          type: 'transfer_data',
-          data: { role: 'system', content: 'graph_execution_complete' },
-        });
-
-        break;
-      }
-
-      (state as any).metadata.currentNodeId = nextId;
     }
 
     if ((state as any).metadata.iterations >= maxIterations) {
       console.warn('Max iterations hit');
       (state as any).metadata.maxIterationsReached = true;
     }
+
+    // Always send completion signal, whether completed naturally or aborted
+    console.log('[Graph] Sending graph_execution_complete signal');
+    const ws = getWebSocketClientService();
+    const connId = (state as any).metadata.wsChannel || 'chat-controller-backend';
+    ws.send(connId, {
+      type: 'transfer_data',
+      data: { role: 'system', content: 'graph_execution_complete' },
+    });
 
     return state;
   }
@@ -815,9 +827,12 @@ export function createHierarchicalGraph(): Graph<HierarchicalThreadState> {
     return 'summary';
   });
 
+  // allow looping over again
+  graph.addEdge('summary', 'strategic_planner');
+
   // Set entry and end points
   graph.setEntryPoint('memory_recall');
-  graph.setEndPoints('strategic_critic');
+  graph.setEndPoints('summary');
 
   return graph;
 }

@@ -117,6 +117,46 @@ export class StrategicCriticNode extends BaseNode {
       plan.model.setStatus('completed');
       await plan.model.save();
 
+      // Delete all milestones and then the plan from database
+      console.log('StrategicCritic: Plan approved, deleting milestones and plan');
+      
+      if (plan.milestones && plan.milestones.length > 0) {
+        for (const milestone of plan.milestones) {
+          if (milestone.model) {
+            try {
+              await milestone.model.delete();
+              console.log('StrategicCritic: Deleted milestone:', (milestone.model as any).attributes.id);
+            } catch (err) {
+              console.error('StrategicCritic: Failed to delete milestone:', err);
+            }
+          }
+        }
+      }
+      
+      // Delete the plan itself
+      try {
+        await plan.model.delete();
+        console.log('StrategicCritic: Deleted plan:', plan.model.attributes.id);
+      } catch (err) {
+        console.error('StrategicCritic: Failed to delete plan:', err);
+      }
+
+      // Reset entire plan state to allow for new planning cycles
+      state.metadata.plan = {
+        model: undefined,
+        milestones: [],
+        activeMilestoneIndex: 0,
+        allMilestonesComplete: false,
+      };
+      
+      // Clear tactical steps as well
+      state.metadata.currentSteps = [];
+      state.metadata.activeStepIndex = 0;
+      
+      // Clear critic verdicts
+      state.metadata.strategicCriticVerdict = undefined;
+      state.metadata.tacticalCriticVerdict = undefined;
+
       return { state, decision: { type: 'end' } };
     }
 

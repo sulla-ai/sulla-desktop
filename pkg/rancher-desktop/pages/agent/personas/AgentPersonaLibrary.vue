@@ -10,7 +10,7 @@
         :is="getPersonaComponent(agent.templateId)"
         :agent-id="agent.agentId"
         :agent-name="agent.agentName"
-        :status="agent.status"
+        :status="getAgentStatus(agent.agentId)"
         :tokens-per-second="agent.tokensPerSecond"
         :temperature="agent.temperature"
       />
@@ -31,6 +31,12 @@ import { getAgentPersonaRegistry } from '@pkg/agent';
 const registry = getAgentPersonaRegistry();
 
 const visibleAgents = computed(() => registry.state.agents.filter(a => a.isRunning));
+
+function getAgentStatus(agentId: string): 'online' | 'idle' | 'busy' | 'offline' {
+  const personaService = registry.getOrCreatePersonaService(agentId);
+  // Return 'busy' when graph is running, otherwise use the agent's base status
+  return personaService.graphRunning.value ? 'busy' : (registry.state.agents.find(a => a.agentId === agentId)?.status || 'offline');
+}
 
 function getPersonaComponent(templateId: PersonaTemplateId) {
   switch (templateId) {

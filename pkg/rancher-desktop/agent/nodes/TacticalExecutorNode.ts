@@ -143,9 +143,9 @@ export class TacticalExecutorNode extends BaseNode {
     if (data.markDone === true) {
       step.done = true;
       if (currentTodo) {
-        console.log('TacticalExecutor: Marking milestone todo done', currentTodo);
         currentTodo.markStatus('done');
         await currentTodo.save();
+        console.log('TacticalExecutor: Marked milestone todo done', currentTodo);
       }
 
       // Advance step or finish milestone

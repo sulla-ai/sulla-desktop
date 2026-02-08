@@ -80,9 +80,9 @@ export class TacticalCriticNode extends BaseNode {
     }
 
     const milestoneIdx = plan.activeMilestoneIndex;
-    const todo = plan.milestones[milestoneIdx]?.model as AgentPlanTodo | undefined;
-    if (!todo) {
-      console.log('TacticalCritic: No todo found', todo);
+    const milestone = plan.milestones[milestoneIdx]?.model as AgentPlanTodo | undefined;
+    if (!milestone) {
+      console.log('TacticalCritic: No milestone found', milestone);
       return { state, decision: { type: 'next' } };
     }
 
@@ -136,9 +136,9 @@ export class TacticalCriticNode extends BaseNode {
     }
 
     if (decision === 'approve') {
-      console.log('TacticalCritic: Approving', todo, state.metadata.currentSteps);
-      todo.markStatus('done');
-      await todo.save();
+      console.log('TacticalCritic: Approving', milestone, state.metadata.currentSteps);
+      milestone.markStatus('done');
+      await milestone.save();
 
       // Check if all steps are completed and clear tactical state
       const steps = state.metadata.currentSteps;
@@ -154,9 +154,9 @@ export class TacticalCriticNode extends BaseNode {
       return { state, decision: { type: 'next' } };
     }
 
-    // Revise: block todo, emit feedback
-    todo.markStatus('blocked');
-    await todo.save();
+    // Revise: block milestone, emit feedback
+    milestone.markStatus('blocked');
+    await milestone.save();
 
     if (data.suggestedFix?.trim()) {
       state.metadata.tacticalCriticVerdict.reason = data.suggestedFix;
