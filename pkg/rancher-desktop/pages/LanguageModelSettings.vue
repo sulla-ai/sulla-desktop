@@ -314,8 +314,6 @@ export default defineComponent({
         heartbeatModel?: string;
       };
     }) => {
-      console.log('[LM Settings] Frontend received settings-read event:', settings);
-      console.log('[LM Settings] Settings experimental object:', settings?.experimental);
       if (settings.experimental?.sullaModel) {
         this.activeModel = settings.experimental.sullaModel;
         this.pendingModel = settings.experimental.sullaModel;

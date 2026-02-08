@@ -72,8 +72,6 @@ export function getAgentConfig(): AgentConfig {
   // Always try to get fresh config if window settings become available
   // This handles the case where services initialize before window.__SULLA_CONFIG__ is populated
   if (typeof window !== 'undefined' && window.__SULLA_CONFIG__ && !cachedConfig) {
-    console.log('[ConfigService] Window config became available, loading fresh config...');
-    console.log('[ConfigService] window.__SULLA_CONFIG__:', window.__SULLA_CONFIG__);
     // Force a fresh load since window config just became available
   }
 
@@ -81,27 +79,17 @@ export function getAgentConfig(): AgentConfig {
     // Quick check: if window config became available after we cached defaults, refresh
     if (typeof window !== 'undefined' && window.__SULLA_CONFIG__ && 
         cachedConfig.modelMode === 'local' && cachedConfig.remoteApiKey === '') {
-      console.log('[ConfigService] Detected window config available but cached defaults, refreshing...');
-      console.log('[ConfigService] window.__SULLA_CONFIG__:', window.__SULLA_CONFIG__);
       cachedConfig = null;
     } else {
       return cachedConfig;
     }
   }
 
-  console.log('[ConfigService] Loading fresh config...');
-
   // Try to read from global settings if available
   try {
     // Check if we're in a context where settings are available
-    console.log('[ConfigService] Checking window.__SULLA_CONFIG__...');
-    console.log('[ConfigService] typeof window:', typeof window);
-    console.log('[ConfigService] window exists:', typeof window !== 'undefined');
-    console.log('[ConfigService] window.__SULLA_CONFIG__ exists:', !!(window as any).__SULLA_CONFIG__);
-    
     if (typeof window !== 'undefined' && window.__SULLA_CONFIG__) {
       const config = window.__SULLA_CONFIG__;
-      console.log('[ConfigService] Found window config:', config);
 
       cachedConfig = {
         ollamaModel:      config.sullaModel || DEFAULT_MODEL,
@@ -124,22 +112,17 @@ export function getAgentConfig(): AgentConfig {
         heartbeatModel: config.heartbeatModel || 'default',
       };
 
-      console.log('[ConfigService] Loaded from window config:', cachedConfig);
       return cachedConfig;
     }
-
-    console.log('[ConfigService] Window config not available, trying main process...');
 
     // If we're in the main process, we should have direct access to cfg
     // But if not, try IPC as fallback
     if (typeof window === 'undefined') {
-      console.log('[ConfigService] In main process, trying direct settings access...');
       try {
         // Try to access cfg directly if we're in main process context
         const mainModule = require('@pkg/config/settingsImpl');
         if (mainModule && typeof mainModule.getSettings === 'function') {
           const settings = mainModule.getSettings();
-          console.log('[ConfigService] Main process settings:', settings);
           if (settings && settings.experimental) {
             const config = settings.experimental;
             cachedConfig = {
@@ -163,7 +146,6 @@ export function getAgentConfig(): AgentConfig {
               heartbeatModel: config.heartbeatModel || 'default',
             };
 
-            console.log('[ConfigService] Loaded from main process settings:', cachedConfig);
             return cachedConfig;
           }
         }
@@ -171,10 +153,8 @@ export function getAgentConfig(): AgentConfig {
         console.warn('[ConfigService] Failed to access settings directly:', err);
       }
     }
-
-    console.log('[ConfigService] No settings found, using defaults...');
-  } catch (err) {
-    console.warn('[ConfigService] Error loading config:', err);
+  } catch {
+    // Settings not available
   }
 
   // Return defaults
@@ -199,7 +179,6 @@ export function getAgentConfig(): AgentConfig {
     heartbeatModel: 'default',
   };
 
-  console.log('[ConfigService] Using defaults:', cachedConfig);
   return cachedConfig;
 }
 

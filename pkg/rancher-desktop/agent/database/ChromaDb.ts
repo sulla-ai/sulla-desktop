@@ -58,9 +58,7 @@ class ChromaDB {
 
   private initializeEmbeddings(): void {
     // Get full config to ensure we have all settings
-    console.log('[ChromaClient] Getting agent configuration...');
     const agentConfig = getAgentConfig();
-    console.log('[ChromaClient] Full agent config:', agentConfig);
     
     const mode = agentConfig.modelMode;
     const remote = {
@@ -69,15 +67,6 @@ class ChromaDB {
       apiKey: agentConfig.remoteApiKey,
       baseUrl: agentConfig.remoteBaseUrl
     };
-    
-    console.log('[ChromaClient] Configuration debug:');
-    console.log('  - mode:', mode);
-    console.log('  - remote config:', remote);
-    console.log('  - remote.provider:', remote?.provider);
-    console.log('  - remote.model:', remote?.model);
-    console.log('  - remote.apiKey exists:', !!remote?.apiKey);
-    console.log('  - remote.apiKey length:', remote?.apiKey?.length || 0);
-    console.log('  - remote.baseUrl:', remote?.baseUrl);
 
     if (mode !== 'remote' || !remote.provider) {
       console.warn('[ChromaClient] Not in remote mode or no provider — embeddings disabled (ID ops only)');
@@ -99,9 +88,7 @@ class ChromaDB {
     if (provider === 'openai') {
       console.log('[ChromaClient] Setting up OpenAI embeddings...');
       const apiKey = remote.apiKey || process.env.OPENAI_API_KEY;
-      console.log('[ChromaClient] OpenAI API key source:', remote.apiKey ? 'remote config' : 'environment');
       const embeddingModel = EMBEDDING_MODELS.openai;
-      console.log('[ChromaClient] OpenAI embedding model:', embeddingModel);
       
       this.embeddingFunction = new OpenAIEmbeddingAdapter(new OpenAIEmbeddings({
         model: embeddingModel,
@@ -111,10 +98,7 @@ class ChromaDB {
     } else if (provider === 'grok' || provider === 'xai') {
       console.log('[ChromaClient] Setting up xAI/Grok embeddings...');
       const apiKey = remote.apiKey || process.env.XAI_API_KEY;
-      console.log('[ChromaClient] xAI API key source:', remote.apiKey ? 'remote config' : 'environment');
-      console.log('[ChromaClient] xAI chat model:', remote.model || 'grok-4-1-fast-reasoning');
       const embeddingModel = EMBEDDING_MODELS[provider as keyof typeof EMBEDDING_MODELS];
-      console.log('[ChromaClient] xAI embedding model:', embeddingModel);
       
       this.embeddingFunction = new OpenAIEmbeddingAdapter(new OpenAIEmbeddings({
         model: embeddingModel,
