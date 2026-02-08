@@ -267,8 +267,6 @@ export class AgentPersonaService {
         : JSON.stringify(msg.data).substring(0, 50))
       : 'undefined';
 
-    console.log('[AgentPersonaModel] WebSocket message received:', msg.type, 'for agent:', agentId, 'data:', dataPreview);
-    
     switch (msg.type) {
       case 'chat_message':
       case 'assistant_message':
@@ -277,7 +275,6 @@ export class AgentPersonaService {
         this.graphRunning.value = true;
         // Store message locally - persona is source of truth
         if (msg.type === 'user_message') {
-          console.log('[AgentPersonaModel] Skipping user_message (already stored locally)');
           return;
         }
 
@@ -289,14 +286,12 @@ export class AgentPersonaService {
             content: msg.data,
           };
           this.messages.push(message);
-          console.log('[AgentPersonaModel] Message stored (string data). Total messages:', this.messages.length, 'Message:', message);
           return;
         }
 
         const data = (msg.data && typeof msg.data === 'object') ? (msg.data as any) : null;
         const content = data?.content !== undefined ? String(data.content) : '';
         if (!content.trim()) {
-          console.log('[AgentPersonaModel] Skipping message - empty content');
           return;
         }
 
@@ -312,7 +307,6 @@ export class AgentPersonaService {
           content,
         };
         this.messages.push(message);
-        console.log('[AgentPersonaModel] Message stored (object data). Total messages:', this.messages.length, 'Message:', message);
         // Turn off loading when assistant responds
         if (role === 'assistant') {
           this.registry.setLoading(agentId, false);
@@ -326,15 +320,12 @@ export class AgentPersonaService {
         const data = (msg.data && typeof msg.data === 'object') ? (msg.data as any) : null;
         const phase = data?.phase;
         
-        console.log('[AgentPersonaModel] Progress/plan event:', phase, 'for agent:', agentId, 'type:', msg.type);
-        
         // Handle plan-related progress events
         if (phase === 'plan_created' || phase === 'plan_revised' || phase === 'strategic_plan_created') {
           const planId = data?.planId ? Number(data.planId) : null;
           const goal = typeof data?.goal === 'string' ? data.goal : null;
           if (planId) {
             this.resetPlan(planId, goal);
-            console.log('[AgentPersonaModel] Plan reset. planId:', planId, 'goal:', goal?.substring(0, 50), 'todos count:', this.planState.todos.size);
           }
         }
         
@@ -354,7 +345,6 @@ export class AgentPersonaService {
           const todoId = data?.todoId ? Number(data.todoId) : null;
           if (todoId) {
             this.deleteTodo(todoId);
-            console.log('[AgentPersonaModel] Todo deleted from UI:', todoId);
           }
         }
         
@@ -363,7 +353,6 @@ export class AgentPersonaService {
           const planId = data?.planId ? Number(data.planId) : null;
           if (planId) {
             this.resetPlan(planId, null);
-            console.log('[AgentPersonaModel] Plan deleted from UI:', planId);
           }
         }
         
@@ -373,10 +362,6 @@ export class AgentPersonaService {
           const status = typeof data?.status === 'string' ? data.status as TodoStatus : undefined;
           if (todoId && status) {
             this.updateTodoStatus(todoId, status);
-          }
-          // Log step status updates for debugging
-          if (stepId) {
-            console.log('[AgentPersonaModel] Step status update:', stepId, status);
           }
         }
 
@@ -408,7 +393,6 @@ export class AgentPersonaService {
             };
             this.messages.push(message);
             this.toolRunIdToMessageId.set(toolRunId, messageId);
-            console.log('[AgentPersonaModel] Tool call message created:', toolName, 'messageId:', messageId);
           }
         }
 
@@ -427,7 +411,6 @@ export class AgentPersonaService {
                 message.toolCard.status = success ? 'success' : 'failed';
                 message.toolCard.error = error;
                 message.toolCard.result = result;
-                console.log('[AgentPersonaModel] Tool result updated:', message.toolCard.toolName, 'status:', message.toolCard.status);
               }
               // Clean up the mapping
               this.toolRunIdToMessageId.delete(toolRunId);
@@ -490,7 +473,6 @@ export class AgentPersonaService {
 
         if (threadId && typeof threadId === 'string') {
           this.setThreadId(threadId);
-          console.log(`[AgentPersonaModel] Thread ID received and stored: ${threadId}`);
         }
         return;
       }
@@ -504,18 +486,6 @@ export class AgentPersonaService {
         const nodeId = data.nodeId;
 
         if (typeof tokens_used === 'number') {
-          console.log(`[AgentPersonaModel] 🎯 TOKEN INFO RECEIVED:`, {
-            type: 'token_info',
-            tokens_used,
-            prompt_tokens,
-            completion_tokens,
-            time_spent,
-            threadId,
-            nodeId,
-            current_total_before: this.state.totalTokensUsed,
-            current_total_after: this.state.totalTokensUsed + tokens_used
-          });
-          
           // Handle token information from completed LLM response
           this.handleTokenInfo(tokens_used, prompt_tokens, completion_tokens, time_spent, threadId, nodeId);
         }
@@ -537,21 +507,6 @@ export class AgentPersonaService {
     threadId?: string,
     nodeId?: string
   ): void {
-    console.log(`[AgentPersonaModel] 📊 TOKEN INFO PROCESSING:`, {
-      tokens_used,
-      prompt_tokens,
-      completion_tokens,
-      time_spent,
-      threadId,
-      nodeId,
-      state_before: {
-        totalTokensUsed: this.state.totalTokensUsed,
-        totalPromptTokens: this.state.totalPromptTokens,
-        totalCompletionTokens: this.state.totalCompletionTokens,
-        responseCount: this.state.responseCount
-      }
-    });
-    
     // XAI Grok pricing
     const costPerMillionInputTokens = 0.50; // $0.50 per 1M input tokens
     const costPerMillionOutputTokens = 1.50; // $1.50 per 1M output tokens

@@ -248,10 +248,8 @@ export abstract class BaseNode {
         // Append new system prompt
         messages.push({ role: 'system', content: systemPrompt.trim() });
 
-        console.log('[BaseNode] Chat messages:', messages);
-        console.log('[BaseNode] state.metadata.llmModel:', state.metadata.llmModel);
-        console.log('[BaseNode] state.metadata.llmLocal:', context);
-        
+        console.log(`[${this.name}:BaseNode] Chat messages:`, messages);
+
         // Check for abort before making LLM calls
         throwIfAborted(state, 'Chat operation aborted');
         
@@ -276,7 +274,7 @@ export abstract class BaseNode {
         } catch (err) {
             if ((err as any)?.name === 'AbortError') throw err;
 
-            console.warn(`[BaseNode:${this.name}] Primary LLM failed:`, err instanceof Error ? err.message : String(err));
+            console.warn(`[${this.name}:BaseNode] Primary LLM failed:`, err instanceof Error ? err.message : String(err));
 
             // Fallback only if primary was remote
             if (getCurrentMode() !== 'local') {
@@ -294,7 +292,7 @@ export abstract class BaseNode {
                         }
                     }
                 } catch (fallbackErr) {
-                    console.error(`[BaseNode:${this.name}] Ollama fallback failed:`, fallbackErr);
+                    console.error(`[${this.name}:BaseNode] Ollama fallback failed:`, fallbackErr);
                 }
             }
 

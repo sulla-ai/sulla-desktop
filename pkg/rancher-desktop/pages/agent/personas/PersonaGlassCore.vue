@@ -70,7 +70,6 @@ const props = defineProps<{
 
 const agentName = computed(() => props.agentName || props.agentId);
 const totalTokens = computed(() => {
-  console.log('[PersonaGlassCore] totalTokens computed, value:', props.totalTokens);
   return props.totalTokens ?? 0;
 });
 const temperature = computed(() => props.temperature ?? 0);

@@ -782,7 +782,6 @@ onMounted(() => {
   // Detect when user starts scrolling
   const startUserScroll = () => {
     isUserScrolling = true;
-    console.log('[Auto-Scroll] User scroll detected');
   };
 
   // Detect when user stops scrolling
@@ -790,7 +789,6 @@ onMounted(() => {
     if (scrollTimeout) clearTimeout(scrollTimeout);
     scrollTimeout = setTimeout(() => {
       isUserScrolling = false;
-      console.log('[Auto-Scroll] User scroll ended');
     }, 150);
   };
 
@@ -816,7 +814,6 @@ onMounted(() => {
     }
   }, { passive: true });
 
-  console.log('[Auto-Scroll] User scroll detection attached');
 });
 
 // Auto-scroll to bottom when messages change (only if enabled)
@@ -824,7 +821,6 @@ watch(() => messages.value.length, async () => {
   await nextTick();
   const container = chatScrollContainer.value;
   if (!container) {
-    console.warn('[Auto-Scroll] Container not found');
     return;
   }
   

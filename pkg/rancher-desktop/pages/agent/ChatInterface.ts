@@ -51,29 +51,24 @@ export class ChatInterface {
   readonly activePlanId = computed(() => {
     const personaService = this.registry.getActivePersonaService();
     const planId = personaService?.planState.planId ?? null;
-    console.log('[ChatInterface] Computing activePlanId:', planId, 'Agent:', personaService?.state.agentId);
     return planId;
   });
   
   readonly activePlanGoal = computed(() => {
     const personaService = this.registry.getActivePersonaService();
     const goal = personaService?.planState.goal ?? null;
-    console.log('[ChatInterface] Computing activePlanGoal:', goal?.substring(0, 50), 'Agent:', personaService?.state.agentId);
     return goal;
   });
 
   readonly activePlanTodos = computed<SidebarTodo[]>(() => {
     const personaService = this.registry.getActivePersonaService();
     if (!personaService) {
-      console.log('[ChatInterface] Computing activePlanTodos: no persona service');
       return [];
     }
 
     const order = personaService.planState.todoOrder;
     const todos = personaService.planState.todos;
     
-    console.log('[ChatInterface] Computing activePlanTodos. Order:', order.length, 'Todos map size:', todos.size, 'Agent:', personaService.state.agentId);
-
     const result = order
       .map((id: number) => {
         const todo = todos.get(id);
@@ -90,7 +85,6 @@ export class ChatInterface {
       })
       .filter((x: SidebarTodo | null): x is SidebarTodo => !!x);
     
-    console.log('[ChatInterface] activePlanTodos result:', result.map(t => ({ key: t.key, title: t.title.substring(0, 30), status: t.status })));
     return result;
   });
 
@@ -98,11 +92,9 @@ export class ChatInterface {
   readonly messages = computed<ChatMessage[]>(() => {
     const personaService = this.registry.getActivePersonaService();
     if (!personaService) {
-      console.log('[ChatInterface] No active persona service, returning empty messages');
       return [];
     }
     const msgs = personaService.messages;
-    console.log('[ChatInterface] Computing messages from persona. Count:', msgs.length, 'Agent:', personaService.state.agentId);
     return msgs;
   });
 
@@ -110,10 +102,8 @@ export class ChatInterface {
   readonly graphRunning = computed(() => {
     const personaService = this.registry.getActivePersonaService();
     if (!personaService) {
-      console.log('[ChatInterface] No active persona service, returning false for graphRunning');
       return false;
     }
-    console.log('[ChatInterface] graphRunning value:', personaService.graphRunning.value);
     return personaService.graphRunning.value;
   });
 
