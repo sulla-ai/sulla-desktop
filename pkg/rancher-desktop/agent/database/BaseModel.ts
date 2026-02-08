@@ -154,8 +154,8 @@ export abstract class BaseModel<T extends ModelAttributes = ModelAttributes> {
         values
       );
 
-      if (result.rows[0]) {
-        this.attributes = result.rows[0];
+      if (result[0]) {
+        this.attributes = result[0];
         this.exists = true;
         this.original = { ...this.attributes };
       }
@@ -173,7 +173,7 @@ export abstract class BaseModel<T extends ModelAttributes = ModelAttributes> {
     );
 
     this.exists = false;
-    return (result.rowCount ?? 0) > 0;
+    return (result.length ?? 0) > 0;
   }
 
   // ────────────────────────────────────────────────

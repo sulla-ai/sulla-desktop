@@ -1,6 +1,6 @@
 // PostgresClient.ts — upgraded to pg.Pool + proper shutdown
 
-import { Pool, PoolClient } from 'pg';
+import { Pool, PoolClient, QueryResult, QueryResultRow } from 'pg';
 
 const POSTGRES_URL = 'postgresql://sulla:sulla_dev_password@127.0.0.1:30116/sulla';
 
@@ -46,6 +46,16 @@ export class PostgresClient {
       if (!ok) throw new Error('Postgres pool not ready');
     }
     return this.pool!.connect();
+  }
+
+  async queryWithResult<T extends QueryResultRow = any>(text: string, params: any[] = []): Promise<QueryResult<T>> {
+    const client = await this.getClient();
+    try {
+      const res = await client.query(text, params);
+      return res;
+    } finally {
+      client.release();
+    }
   }
 
   async query<T = any>(text: string, params: any[] = []): Promise<T[]> {

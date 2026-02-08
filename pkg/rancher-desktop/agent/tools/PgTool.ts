@@ -78,7 +78,7 @@ Subcommands:
           const params = rest.slice(1);
           if (!sql) throw new Error('Missing SQL');
 
-          const res = await postgresClient.query(sql, params);
+          const res = await postgresClient.queryWithResult(sql, params);
           return {
             toolName: this.name,
             success: true,
