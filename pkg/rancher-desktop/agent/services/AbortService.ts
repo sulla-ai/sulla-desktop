@@ -84,11 +84,21 @@ export function abortIfSignalReceived(signal?: AbortSignal): boolean {
  * Portable function to check abort signal and throw AbortError if triggered.
  * Use this to immediately stop execution when abort is detected.
  * 
- * @param signal AbortSignal to check
+ * @param stateOrSignal State object (with metadata.__abort) or AbortSignal to check
  * @param message Optional error message
  * @throws AbortError if signal was aborted
  */
-export function throwIfAborted(signal?: AbortSignal, message?: string): void {
+export function throwIfAborted(stateOrSignal?: any | AbortSignal, message?: string): void {
+  let signal: AbortSignal | undefined;
+  
+  // If it's a state object, extract the abort signal
+  if (stateOrSignal && typeof stateOrSignal === 'object' && stateOrSignal.metadata) {
+    signal = stateOrSignal.metadata?.__abort?.signal;
+  } else {
+    // Assume it's already an AbortSignal
+    signal = stateOrSignal;
+  }
+  
   if (signal?.aborted) {
     throw new DOMException(message || 'Operation aborted', 'AbortError');
   }

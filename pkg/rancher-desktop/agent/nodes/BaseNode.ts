@@ -253,7 +253,7 @@ export abstract class BaseNode {
         console.log('[BaseNode] state.metadata.llmLocal:', context);
         
         // Check for abort before making LLM calls
-        throwIfAborted(options.signal, 'Chat operation aborted');
+        throwIfAborted(state, 'Chat operation aborted');
         
         try {
             // Primary attempt
@@ -261,7 +261,7 @@ export abstract class BaseNode {
                 model: state.metadata.llmModel,
                 maxTokens: options.maxTokens,
                 format: options.format,
-                signal: options.signal,
+                signal: (state as any).metadata?.__abort?.signal,
             });
 
             if (!reply) throw new Error('No response from primary LLM');
@@ -673,7 +673,7 @@ export abstract class BaseNode {
         if (!tools?.length) return [];
 
         // Check for abort before processing tools
-        throwIfAborted((state as any).metadata?.abortSignal, 'Tool execution aborted');
+        throwIfAborted(state, 'Tool execution aborted');
 
         const registry = getToolRegistry(); // assume global registration
         const results: Array<{ toolName: string; success: boolean; result?: unknown; error?: string }> = [];
@@ -682,7 +682,7 @@ export abstract class BaseNode {
 
         for (const { toolName, args } of normalized) {
             // Check for abort before each tool execution
-            throwIfAborted((state as any).metadata?.abortSignal, `Tool execution aborted before ${toolName}`);
+            throwIfAborted(state, `Tool execution aborted before ${toolName}`);
             
             // Generate unique tool run ID for this execution
             const toolRunId = `${toolName}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;

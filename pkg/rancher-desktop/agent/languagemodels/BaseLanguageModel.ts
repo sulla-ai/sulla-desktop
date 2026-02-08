@@ -169,6 +169,10 @@ export abstract class BaseLanguageModel {
         model: effectiveModel,
       });
 
+      if (!rawResponse) {
+        return null;
+      }
+
       const normalized = this.normalizeResponse(rawResponse);
 
       // Override time_spent with real wall-clock time

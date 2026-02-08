@@ -343,13 +343,11 @@ export class Graph<TState = HierarchicalThreadState> {
     (state as any).metadata.iterations ??= 0;
     (state as any).metadata.consecutiveSameNode ??= 0;
 
-    const abort = options?.abort;
-
     try {
       while ((state as any).metadata.iterations < maxIterations) {
         (state as any).metadata.iterations++;
         
-        throwIfAborted(abort?.signal, 'Graph execution aborted');
+        throwIfAborted(state, 'Graph execution aborted');
 
         const node = this.nodes.get((state as any).metadata.currentNodeId);
         if (!node) throw new Error(`Node missing: ${(state as any).metadata.currentNodeId}`);
@@ -596,11 +594,11 @@ export function createInitialThreadState<T extends BaseThreadState>(
 let messageCounter = 0;
 let threadCounter = 0;
 
-function nextMessageId(): string {
+export function nextMessageId(): string {
   return `msg_${Date.now()}_${++messageCounter}`;
 }
 
-function nextThreadId(): string {
+export function nextThreadId(): string {
   return `thread_${Date.now()}_${++threadCounter}`;
 }
 
