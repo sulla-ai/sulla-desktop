@@ -99,7 +99,7 @@ export class CalendarClient {
   }
 
   async createEvent(input: CalendarEventInput): Promise<CalendarEvent> {
-    const res = await postgresClient.query(`
+    const res = await postgresClient.queryWithResult(`
       INSERT INTO calendar_events (title, start_time, end_time, description, location, people, calendar_id, all_day)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
       RETURNING *
@@ -153,7 +153,7 @@ export class CalendarClient {
     fields.push(`updated_at = (NOW() AT TIME ZONE 'UTC')`);
     values.push(id);
 
-    const res = await postgresClient.query(`
+    const res = await postgresClient.queryWithResult(`
       UPDATE calendar_events
       SET ${fields.join(', ')}
       WHERE id = $${idx}
@@ -171,7 +171,7 @@ export class CalendarClient {
     const event = await this.getEvent(id);
     if (!event) return false;
 
-    const res = await postgresClient.query('DELETE FROM calendar_events WHERE id = $1', [id]);
+    const res = await postgresClient.queryWithResult('DELETE FROM calendar_events WHERE id = $1', [id]);
     const deleted = (res.rowCount ?? 0) > 0;
     if (deleted) this.notifyEventChange(event, 'deleted');
     return deleted;
