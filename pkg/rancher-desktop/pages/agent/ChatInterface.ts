@@ -95,7 +95,8 @@ export class ChatInterface {
       return [];
     }
     const msgs = personaService.messages;
-    return msgs;
+    // Return a copy to ensure reactivity when the array is mutated
+    return [...msgs];
   });
 
   // Graph running state from active agent's persona service
