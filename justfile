@@ -197,7 +197,7 @@ check-ws:
 logs image:
     LIMA_HOME=~/Library/Application\ Support/rancher-desktop/lima \
     resources/darwin/lima/bin/limactl shell 0 -- \
-    sudo k3s kubectl logs -n sulla deployment/n8n
+    sudo k3s kubectl logs -n sulla deployment/n8n -f
 
 describe image:
     LIMA_HOME=~/Library/Application\ Support/rancher-desktop/lima \
@@ -214,9 +214,9 @@ stop-k8s:
     limactl stop 0 
 
 chat-ping:
-    curl -X POST http://localhost:3000/chat/health
+    curl http://localhost:3000/health
     
-chat-complete:
-    curl -X POST http://localhost:3000/chat/completions \
+chat:
+    curl -X POST http://localhost:3000/v1/chat/completions \
     -H "Content-Type: application/json" \
     -d '{"model": "sulla", "messages": [{"role": "user", "content": "Test message"}]}'

@@ -76,6 +76,9 @@ export interface GraphEdge<TState> {
 export interface BaseThreadState {
   messages: ChatMessage[];
 
+  // for simple node
+  prompt?: string;
+
   metadata: {
     threadId: string;
     wsChannel: string;
@@ -110,6 +113,7 @@ export interface BaseThreadState {
     };
 
     finalSummary: string;
+    totalSummary?: string;
     finalState: 'failed'  | 'running' | 'completed';
 
     // parent graph return
@@ -593,6 +597,7 @@ export function createInitialThreadState<T extends BaseThreadState>(
         response: ''
       },
       finalSummary: '',
+      totalSummary: '',
       finalState: 'running',
       returnTo: null
     };
@@ -1003,6 +1008,33 @@ export function createHeartbeatGraph(): Graph<OverlordThreadState> {
 
   graph.setEntryPoint('memory_recall');
   graph.setEndPoints('overlord_planner');
+
+  return graph;
+}
+
+
+
+/**
+ * Create a specialized graph for heartbeat-triggered OverLord planning
+ * This graph handles autonomous strategic oversight during idle periods
+ */
+export function createSimpleGraph(): Graph<BaseThreadState> {
+  const {
+    MemoryNode,
+    SimpleNode
+  } = require('.');
+
+  // Create lightweight heartbeat graph with only core nodes
+  const graph = new Graph<BaseThreadState>();
+
+  graph.addNode(new MemoryNode());           // id: 'memory_recall'
+  graph.addNode(new SimpleNode());  // id: 'simple'
+
+  // Entry point
+  graph.addEdge('memory_recall', 'simple');
+
+  graph.setEntryPoint('memory_recall');
+  graph.setEndPoints('simple');
 
   return graph;
 }

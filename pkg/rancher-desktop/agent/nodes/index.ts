@@ -13,3 +13,4 @@ export { KnowledgeExecutorNode } from './KnowledgeExecutorNode';
 export { KnowledgeCriticNode } from './KnowledgeCriticNode';
 export { KnowledgeWriterNode } from './KnowledgeWriterNode';
 export { SummaryNode } from './SummaryNode';
+export { SimpleNode } from './SimpleNode';

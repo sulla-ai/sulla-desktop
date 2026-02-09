@@ -45,11 +45,7 @@
       <div class="px-4 pb-4 space-y-2">
         <div class="flex items-center gap-2">
           <div class="w-1.5 h-1.5 rounded-full animate-ping" style="background-color: var(--persona-primary);"></div>
-          <span class="text-xs" style="color: color-mix(in oklab, var(--persona-primary) 80%, transparent);">dendrite_firing</span>
-        </div>
-        <div class="flex items-center gap-2">
-          <div class="w-1.5 h-1.5 rounded-full" style="background-color: color-mix(in oklab, var(--persona-primary) 35%, transparent);"></div>
-          <span class="text-xs text-slate-400">total: {{ totalTokens }}</span>
+          <span class="text-xs" style="color: color-mix(in oklab, var(--persona-primary) 80%, transparent);">total: {{ totalTokens }}</span>
         </div>
         <div class="flex items-center gap-2">
           <div class="w-1.5 h-1.5 rounded-full" style="background-color: color-mix(in oklab, var(--persona-primary) 35%, transparent);"></div>

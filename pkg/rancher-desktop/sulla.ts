@@ -75,7 +75,7 @@ export async function onMainProxyLoad(ipcMainProxy: any) {
 
     // Handle agent configuration updates from renderer process
     ipcMainProxy.on('agent-config-updated', (event: any, agentConfig: any) => {
-        console.log('[Background] Agent configuration updated from renderer:', agentConfig);
+        console.log('[Background] Agent configuration updated from renderer');
         // Update the agent services with new configuration
         try {
             const { updateAgentConfigFull } = require('@pkg/agent/services/ConfigService');

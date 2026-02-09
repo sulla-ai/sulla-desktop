@@ -2255,45 +2255,63 @@ export default class LimaBackend extends events.EventEmitter implements VMBacken
   }
 
   private async pullOllamaModelWithProgress(): Promise<void> {
-    const MODEL = (this.cfg as Record<string, unknown>)?.experimental &&
-      ((this.cfg as Record<string, unknown>).experimental as Record<string, unknown>)?.sullaModel
-      ? String(((this.cfg as Record<string, unknown>).experimental as Record<string, unknown>).sullaModel)
-      : 'tinyllama:latest';
+    try {
+      const MODEL = (this.cfg as Record<string, unknown>)?.experimental &&
+        ((this.cfg as Record<string, unknown>).experimental as Record<string, unknown>)?.sullaModel
+        ? String(((this.cfg as Record<string, unknown>).experimental as Record<string, unknown>).sullaModel)
+        : 'tinyllama:latest';
 
-    console.log(`Starting Ollama model pull: ${MODEL}`);
+      console.log(`Starting Ollama model pull: ${MODEL}`);
 
-    const proc = this.spawn({ root: true }, 'k3s', 'kubectl', 'exec', '-n', 'sulla', 'deploy/ollama', '--', 'ollama', 'pull', MODEL);
+      // Check if model is already downloaded
+      try {
+        const listOutput = await this.execCommand({ capture: true, root: true }, 'k3s', 'kubectl', 'exec', '-n', 'sulla', 'deploy/ollama', '--', 'ollama', 'list');
+        if (listOutput.includes(MODEL)) {
+          console.log(`Ollama model ${MODEL} is already downloaded, skipping pull`);
+          return;
+        }
+      } catch (error) {
+        console.warn(`Failed to check if model ${MODEL} is already downloaded:`, error);
+        // Continue with pull if check fails
+      }
 
-    return new Promise((resolve, reject) => {
-      let output = '';
-      proc.stdout?.on('data', (chunk: Buffer | string) => {
-        const text = Buffer.isBuffer(chunk) ? chunk.toString('utf8') : chunk;
-        const lines = text.split('\n');
-        lines.forEach((line: string) => {
-          const trimmed = line.trim();
+      const proc = this.spawn({ root: true }, 'k3s', 'kubectl', 'exec', '-n', 'sulla', 'deploy/ollama', '--', 'ollama', 'pull', MODEL);
+
+      return new Promise((resolve, reject) => {
+        let output = '';
+        proc.stdout?.on('data', (chunk: Buffer | string) => {
+          const text = Buffer.isBuffer(chunk) ? chunk.toString('utf8') : chunk;
+          const lines = text.split('\n');
+          lines.forEach((line: string) => {
+            const trimmed = line.trim();
+            if (trimmed) {
+              console.log(`[Ollama Pull] ${trimmed}`);
+              output += trimmed + '\n';
+            }
+          });
+        });
+        proc.stderr?.on('data', (chunk: Buffer | string) => {
+          const text = Buffer.isBuffer(chunk) ? chunk.toString('utf8') : chunk;
+          const trimmed = text.trim();
           if (trimmed) {
-            console.log(`[Ollama Pull] ${trimmed}`);
-            output += trimmed + '\n';
+            console.error(`[Ollama Pull Error] ${trimmed}`);
           }
         });
+        proc.on('close', (code) => {
+          if (code === 0) {
+            console.log(`Ollama model ${MODEL} pulled successfully`);
+            resolve();
+          } else {
+            reject(new Error(`Model pull failed with code ${code}. Output: ${output}`));
+          }
+        });
+        proc.on('error', reject);
       });
-      proc.stderr?.on('data', (chunk: Buffer | string) => {
-        const text = Buffer.isBuffer(chunk) ? chunk.toString('utf8') : chunk;
-        const trimmed = text.trim();
-        if (trimmed) {
-          console.error(`[Ollama Pull Error] ${trimmed}`);
-        }
-      });
-      proc.on('close', (code) => {
-        if (code === 0) {
-          console.log(`Ollama model ${MODEL} pulled successfully`);
-          resolve();
-        } else {
-          reject(new Error(`Model pull failed with code ${code}. Output: ${output}`));
-        }
-      });
-      proc.on('error', reject);
-    });
+    } catch (error) {
+      console.error('[Ollama Pull] Failed to spawn process:', error);
+      // Graceful fail: resolve the promise without throwing
+      return Promise.resolve();
+    }
   }
 
   private async logK8sDiagnostics(message: string): Promise<void> {

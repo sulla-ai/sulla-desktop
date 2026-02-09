@@ -120,7 +120,7 @@ export function openMain() {
   const { width, height } = screen.getPrimaryDisplay().workAreaSize;
 
   const defaultWidth = Math.min(Math.trunc(width * 0.8), 1280);
-  const defaultHeight = Math.min(Math.trunc(height * 0.8), 720);
+  const defaultHeight = Math.min(Math.trunc(height * 0.8), 900); // 720 (692)
 
   console.log('[openMain] Creating window with name: main-agent, url:', mainUrl);
   const window = createWindow(

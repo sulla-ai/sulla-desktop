@@ -160,6 +160,9 @@ export class AgentPersonaService {
       return false;
     }
 
+    // Ensure WebSocket connection for this agent
+    this.startListening([agentId]);
+
     // Store message locally - persona is source of truth
     this.messages.push({ id: `${Date.now()}_user`, channelId: agentId, role: 'user', content });
     this.registry.setLoading(agentId, true);
