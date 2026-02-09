@@ -181,11 +181,11 @@
 
               <nav class="text-base lg:text-sm">
                 <div class="mb-3">
-                  <h2 class="font-display font-medium text-slate-900 dark:text-white">Goals & plan</h2>
+                  <h2 class="font-display font-medium text-slate-900 dark:text-white"></h2>
                   <div v-if="activePlanGoal" class="mt-2 text-sm text-slate-500 dark:text-slate-400">
                     {{ activePlanGoal }}
                   </div>
-                  <div v-else class="mt-2 text-sm text-slate-500 dark:text-slate-400">No active plan.</div>
+                  <div v-else class="mt-2 text-sm text-slate-500 dark:text-slate-400"></div>
                 </div>
 
                 <ul role="list" class="mt-2 space-y-2 border-l-2 border-slate-100 lg:mt-4 lg:space-y-4 lg:border-slate-200 dark:border-slate-800">

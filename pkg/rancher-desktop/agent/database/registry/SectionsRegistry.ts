@@ -111,7 +111,11 @@ export class SectionsRegistry {
   }
 
   async getCategoriesBySection(sectionId: string): Promise<Category[]> {
-    return Category.getBySection(sectionId);
+    const categories = await Category.getBySection(sectionId);
+    categories.forEach(cat => {
+      console.log(`[SectionsRegistry] Category: ${cat.attributes.name} (ID: ${cat.attributes.id}, section_id: ${cat.attributes.section_id})`);
+    });
+    return categories;
   }
 
   async getOrphanedCategories(): Promise<Category[]> {
@@ -151,11 +155,21 @@ export class SectionsRegistry {
   // Combined views
   async getSectionsWithCategories(): Promise<SectionWithCategories[]> {
     const sections = await this.getAllSections();
+    sections.forEach((section, index) => {
+      console.log(`[SectionsRegistry] Section ${index}:`, {
+        id: section.attributes.id,
+        name: section.attributes.name,
+        attributes: section.attributes
+      });
+    });
+
     const result: SectionWithCategories[] = [];
 
     for (const section of sections) {
       const id = section.attributes.id;
-      if (!id) continue;
+      if (!id) {
+        continue;
+      }
 
       const categories = await this.getCategoriesBySection(id);
       result.push({
