@@ -62,10 +62,6 @@ start:
 up: 
     NODE_NO_WARNINGS=1 just build start
 
-# Tail the development server logs
-logs:
-    LIMA_HOME=~/Library/Application\ Support/rancher-desktop/lima limactl shell 0 -- sudo k3s kubectl logs -n sulla deploy/ws-server --tail=50
-
 # Stop the development server gracefully
 stop:
     #!/usr/bin/env bash
@@ -124,7 +120,7 @@ pg-forward:
     @echo "Press Ctrl+C to stop"
     LIMA_HOME=~/Library/Application\ Support/rancher-desktop/lima \
     resources/darwin/lima/bin/limactl shell 0 -- \
-    sudo k3s kubectl port-forward -n sulla svc/postgres 5432:5432 --address=0.0.0.0
+    sudo k3s kubectl port-forward -n sulla svc/postgres 30116:30116 --address=0.0.0.0
 
 pg-connect:
     @echo "Starting port-forward in background (auto-stops on exit)..."
@@ -132,11 +128,11 @@ pg-connect:
      just pg-forward & \
         sleep 3 && \
         echo "Connecting to psql..." && \
-        PGPASSWORD=sulla_dev_password psql -h localhost -p 5432 -U sulla -d sulla
+        PGPASSWORD=sulla_dev_password psql -h localhost -p 30116 -U sulla -d sulla
 
 pg-conn:
      echo "Connecting to psql..." && \
-     PGPASSWORD=sulla_dev_password psql -h localhost -p 5432 -U sulla -d sulla
+     PGPASSWORD=sulla_dev_password psql -h localhost -p 30116 -U sulla -d sulla
 
 # Port-forward Redis to localhost:6379 for external access
 redis:
@@ -198,15 +194,15 @@ check-ws:
     LIMA_HOME=~/Library/Application\ Support/rancher-desktop/lima \
     limactl shell 0 sudo nerdctl --address /var/run/docker/containerd/containerd.sock ps | grep rd-ws-server
 
-logs-ollama:
+logs image:
     LIMA_HOME=~/Library/Application\ Support/rancher-desktop/lima \
     resources/darwin/lima/bin/limactl shell 0 -- \
-    sudo k3s kubectl logs -n sulla deploy/ollama
+    sudo k3s kubectl logs -n sulla deployment/n8n
 
-describe-ollama:
+describe image:
     LIMA_HOME=~/Library/Application\ Support/rancher-desktop/lima \
     resources/darwin/lima/bin/limactl shell 0 -- \
-    sudo k3s kubectl describe pod -n sulla ollama-5cb7b8dfc6-9mnwb
+    sudo k3s kubectl describe pod -n sulla {{image}}
 
 pull-ollama:
     LIMA_HOME=~/Library/Application\ Support/rancher-desktop/lima \

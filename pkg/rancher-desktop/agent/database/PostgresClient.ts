@@ -2,7 +2,7 @@
 
 import { Pool, PoolClient, QueryResult, QueryResultRow } from 'pg';
 
-const POSTGRES_URL = 'postgresql://sulla:sulla_dev_password@127.0.0.1:5432/sulla';
+const POSTGRES_URL = 'postgresql://sulla:sulla_dev_password@127.0.0.1:30116/sulla';
 
 export class PostgresClient {
   private pool: Pool | null = null;

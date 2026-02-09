@@ -6,8 +6,8 @@ import { postgresClient, PostgresClient } from '@pkg/agent/database/PostgresClie
 import { migrationsRegistry } from './migrations';
 import { seedersRegistry } from './seeders';
 
-const MIGRATIONS_TABLE = 'migrations';
-const SEEDERS_TABLE   = 'seeders';
+const MIGRATIONS_TABLE = 'sulla_migrations';
+const SEEDERS_TABLE   = 'sulla_seeders';
 
 interface TrackedItem {
   id: number;

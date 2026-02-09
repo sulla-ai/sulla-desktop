@@ -300,3 +300,84 @@ spec:
     targetPort: 8080
     nodePort: 30118
   type: NodePort
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: n8n
+  namespace: sulla
+  labels:
+    app: n8n
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: n8n
+  template:
+    metadata:
+      labels:
+        app: n8n
+    spec:
+      automountServiceAccountToken: false
+      containers:
+      - name: n8n
+        image: n8nio/n8n:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 5678
+        env:
+        - name: N8N_HOST
+          value: "localhost"
+        - name: N8N_PORT
+          value: "5678"
+        - name: N8N_PROTOCOL
+          value: "http"
+        - name: WEBHOOK_URL
+          value: "http://localhost:30119/"           # adjust if you use ingress later
+        - name: EXECUTIONS_MODE
+          value: "regular" # queue mode is for worker pods
+        - name: QUEUE_BULL_REDIS_HOST
+          value: "redis"
+        - name: QUEUE_BULL_REDIS_PORT
+          value: "6379"
+        - name: DB_TYPE
+          value: "postgresdb"
+        - name: DB_POSTGRESDB_HOST
+          value: "postgres"
+        - name: DB_POSTGRESDB_PORT
+          value: "5432"
+        - name: DB_POSTGRESDB_DATABASE
+          value: "sulla"
+        - name: DB_POSTGRESDB_USER
+          value: "sulla"
+        - name: DB_POSTGRESDB_PASSWORD
+          value: "sulla_dev_password"
+        - name: N8N_ENCRYPTION_KEY
+          value: "changeMeToA32CharRandomString1234"   # ← must be ≥32 chars, use real secret in prod
+        - name: N8N_BASIC_AUTH_ACTIVE
+          value: "true"
+        - name: N8N_BASIC_AUTH_USER
+          value: "admin"
+        - name: N8N_BASIC_AUTH_PASSWORD
+          value: "n8n_dev_password"                    # ← change this
+        resources:
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: n8n
+  namespace: sulla
+spec:
+  selector:
+    app: n8n
+  ports:
+  - port: 5678
+    targetPort: 5678
+    nodePort: 30119
+  type: NodePort

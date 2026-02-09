@@ -21,6 +21,12 @@ export class Category extends BaseModel<CategoryAttributes> {
     'order',
   ];
 
+  constructor(attributes: Partial<CategoryAttributes> = {}) {
+    super();
+    this.attributes = { ...attributes };
+    this.original = { ...attributes };
+  }
+
   // Generate a unique ID for the category
   static generateId(): string {
     return `category_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
