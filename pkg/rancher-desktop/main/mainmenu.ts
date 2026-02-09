@@ -226,7 +226,7 @@ function getHelpMenu(isMac: boolean): MenuItem {
     {
       label: '&Discuss',
       click() {
-        shell.openExternal('https://github.com/sulla-ai/desktop/discussions');
+        shell.openExternal('https://www.skool.com/book-more-appointments-8103');
       },
     },
   ];

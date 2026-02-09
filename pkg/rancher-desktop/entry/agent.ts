@@ -14,6 +14,7 @@ import AgentKnowledgeBase from '../pages/AgentKnowledgeBase.vue';
 import AgentKnowledgeBaseCreate from '../pages/AgentKnowledgeBaseCreate.vue';
 import AgentIntegrations from '../pages/AgentIntegrations.vue';
 import AgentIntegrationDetail from '../pages/AgentIntegrationDetail.vue';
+import AgentKnowledgeBaseSections from '../pages/AgentKnowledgeBaseSections.vue';
 
 const router = createRouter({
   history: createWebHashHistory(),
@@ -23,6 +24,7 @@ const router = createRouter({
     { path: '/Calendar', component: AgentCalendar, name: 'AgentCalendar' },
     { path: '/KnowledgeBase', component: AgentKnowledgeBase, name: 'AgentKnowledgeBase' },
     { path: '/KnowledgeBase/Create', component: AgentKnowledgeBaseCreate, name: 'AgentKnowledgeBaseCreate' },
+    { path: '/KnowledgeBase/Sections', component: AgentKnowledgeBaseSections, name: 'AgentKnowledgeBaseSections' },
     { path: '/Integrations', component: AgentIntegrations, name: 'AgentIntegrations' },
     { path: '/Integrations/:id', component: AgentIntegrationDetail, name: 'AgentIntegrationDetail' },
   ],

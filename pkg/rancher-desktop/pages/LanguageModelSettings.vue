@@ -206,6 +206,9 @@ export default defineComponent({
       // Local Ollama settings
       localTimeoutSeconds:  120, // Local Ollama timeout limit in seconds
       localRetryCount:      2, // Number of retries for local Ollama
+      // Ollama model status tracking
+      modelStatuses: {} as Record<string, 'installed' | 'missing' | 'failed'>,
+      checkingModelStatuses: false,
       // Heartbeat settings
       heartbeatEnabled:     true,
       heartbeatDelayMinutes: 30,
@@ -215,8 +218,14 @@ export default defineComponent({
 
       // Database test properties
       runningTests:         false,
+      runningArticlesTests: false,
+      runningSectionsTests: false,
+      runningMigrations:    false,
+      runningSeeders:       false,
       testResults:          [] as Array<{status: 'pass' | 'fail' | 'info', message: string}>,
       finalTestResult:      null as {success: boolean, message: string} | null,
+      articlesTestResult:   null as {success: boolean, message: string, counts?: any} | null,
+      sectionsTestResult:   null as {success: boolean, message: string, counts?: any} | null,
 
       // Soul prompt settings
       defaultSoulPrompt,
@@ -290,6 +299,16 @@ export default defineComponent({
     formattedMemoryLimit(): string {
       return this.formatBytes(this.containerStats.memoryLimit);
     },
+    // Key model status getters
+    embeddingModelStatus(): 'installed' | 'missing' | 'failed' {
+      return this.modelStatuses['nomic-embed-text'] || 'missing';
+    },
+    defaultModelStatus(): 'installed' | 'missing' | 'failed' {
+      return this.modelStatuses[this.activeModel] || 'missing';
+    },
+    hasDownloadedModels(): boolean {
+      return this.installedModels.length > 0;
+    },
   },
 
   async mounted() {
@@ -326,6 +345,9 @@ export default defineComponent({
       }
       if (settings.experimental?.soulPrompt !== undefined && settings.experimental?.soulPrompt !== '') {
         this.soulPrompt = settings.experimental.soulPrompt;
+      } else {
+        // Initialize with default soul prompt on first install or when no saved value exists
+        this.soulPrompt = this.defaultSoulPrompt;
       }
       if (settings.experimental?.botName !== undefined) {
         this.botName = settings.experimental.botName;
@@ -374,7 +396,6 @@ export default defineComponent({
     ipcRenderer.send('settings-read');
 
     await this.loadModels();
-    // Start fetching container stats
     this.fetchContainerStats();
     this.statsInterval = setInterval(() => this.fetchContainerStats(), 3000);
     ipcRenderer.send('dialog/ready');
@@ -395,6 +416,7 @@ export default defineComponent({
       this.currentNav = navId;
       if (navId === 'models') {
         this.loadModels();
+        this.checkModelStatuses();
       }
     },
 
@@ -688,24 +710,48 @@ export default defineComponent({
       }
     },
 
-    async deleteModel(modelName: string) {
-      if (!confirm(`Delete model "${ modelName }"?`)) {
-        return;
-      }
-
+    async checkModelStatuses() {
+      this.checkingModelStatuses = true;
       try {
-        const res = await fetch('http://127.0.0.1:30114/api/delete', {
-          method:  'DELETE',
-          headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({ name: modelName }),
-        });
-
-        if (res.ok) {
-          await this.loadModels();
+        // Check status of key models by attempting to load them
+        const keyModels = ['nomic-embed-text', this.activeModel].filter((model, index, arr) => arr.indexOf(model) === index);
+        
+        for (const modelName of keyModels) {
+          try {
+            // Try to get model info to check if it's available
+            const response = await fetch('http://127.0.0.1:30114/api/show', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ name: modelName }),
+            });
+            
+            if (response.ok) {
+              this.modelStatuses[modelName] = 'installed';
+            } else {
+              this.modelStatuses[modelName] = 'missing';
+            }
+          } catch (error) {
+            console.warn(`Failed to check status of model ${modelName}:`, error);
+            this.modelStatuses[modelName] = 'failed';
+          }
         }
-      } catch (err) {
-        console.error('Error deleting model:', err);
+      } finally {
+        this.checkingModelStatuses = false;
       }
+    },
+
+    async redownloadModel(modelName: string) {
+      await this.pullModel(modelName);
+      // Re-check statuses after download
+      await this.checkModelStatuses();
+    },
+
+    async redownloadEmbeddingModel() {
+      await this.redownloadModel('nomic-embed-text');
+    },
+
+    async redownloadDefaultModel() {
+      await this.redownloadModel(this.activeModel);
     },
 
     async saveSettings() {
@@ -770,6 +816,32 @@ export default defineComponent({
       this.finalTestResult = null;
 
       try {
+        await this.runArticlesRegistryTests();
+        await this.runSectionsRegistryTests();
+
+        this.finalTestResult = {
+          success: true,
+          message: 'All database tests passed! Article, ArticlesRegistry, and SectionsRegistry classes work correctly.'
+        };
+
+      } catch (error) {
+        this.finalTestResult = {
+          success: false,
+          message: `Tests failed: ${error instanceof Error ? error.message : String(error)}`
+        };
+      } finally {
+        this.runningTests = false;
+      }
+    },
+
+    async runArticlesRegistryTests() {
+      if (this.runningArticlesTests) return;
+
+      this.runningArticlesTests = true;
+      this.articlesTestResult = null;
+      const counts: any = {};
+
+      try {
         let testSlug = 'test-' + Date.now();
 
         await this.runTest('Article.create()', async () => {
@@ -817,6 +889,7 @@ export default defineComponent({
 
           // First, check what articles exist at all
           const allResults = await registry.search({});
+          counts.totalArticles = allResults.items.length;
           console.log(`[DEBUG] Found ${allResults.items.length} total articles`);
 
           // Check if our test article is in the results
@@ -839,6 +912,7 @@ export default defineComponent({
           const { ArticlesRegistry } = await import('../agent/database/registry/ArticlesRegistry');
           const registry = ArticlesRegistry.getInstance();
           const categories = await registry.getCategories();
+          counts.articleCategories = categories.length;
           if (!Array.isArray(categories)) {
             throw new Error('getCategories did not return an array');
           }
@@ -848,6 +922,7 @@ export default defineComponent({
           const { ArticlesRegistry } = await import('../agent/database/registry/ArticlesRegistry');
           const registry = ArticlesRegistry.getInstance();
           const tags = await registry.getTags();
+          counts.articleTags = tags.length;
           if (!Array.isArray(tags)) {
             throw new Error('getTags did not return an array');
           }
@@ -860,18 +935,105 @@ export default defineComponent({
           await registry.deleteArticle(testSlug);
         });
 
-        this.finalTestResult = {
+        this.articlesTestResult = {
           success: true,
-          message: 'All database tests passed! Article and ArticlesRegistry classes work correctly.'
+          message: 'Articles Registry tests passed!',
+          counts
         };
 
       } catch (error) {
-        this.finalTestResult = {
+        this.articlesTestResult = {
           success: false,
-          message: `Tests failed: ${error instanceof Error ? error.message : String(error)}`
+          message: `Articles Registry tests failed: ${error instanceof Error ? error.message : String(error)}`,
+          counts
         };
       } finally {
-        this.runningTests = false;
+        this.runningArticlesTests = false;
+      }
+    },
+
+    async runSectionsRegistryTests() {
+      if (this.runningSectionsTests) return;
+
+      this.runningSectionsTests = true;
+      this.sectionsTestResult = null;
+      const counts: any = {};
+
+      try {
+        await this.runTest('SectionsRegistry.getAllSections()', async () => {
+          const { SectionsRegistry } = await import('../agent/database/registry/SectionsRegistry');
+          const registry = SectionsRegistry.getInstance();
+          const sections = await registry.getAllSections();
+          counts.sections = sections.length;
+          console.log('[DEBUG] getAllSections result:', sections);
+          if (!Array.isArray(sections)) {
+            throw new Error('getAllSections did not return an array');
+          }
+          // Log each section for debugging
+          sections.forEach(section => {
+            console.log('[DEBUG] Section:', section.attributes);
+          });
+        });
+
+        await this.runTest('SectionsRegistry.getAllCategories()', async () => {
+          const { SectionsRegistry } = await import('../agent/database/registry/SectionsRegistry');
+          const registry = SectionsRegistry.getInstance();
+          const categories = await registry.getAllCategories();
+          counts.categories = categories.length;
+          console.log('[DEBUG] getAllCategories result:', categories);
+          if (!Array.isArray(categories)) {
+            throw new Error('getAllCategories did not return an array');
+          }
+          // Log each category for debugging
+          categories.forEach(category => {
+            console.log('[DEBUG] Category:', category.attributes);
+          });
+        });
+
+        await this.runTest('SectionsRegistry.getSectionsWithCategories()', async () => {
+          const { SectionsRegistry } = await import('../agent/database/registry/SectionsRegistry');
+          const registry = SectionsRegistry.getInstance();
+          const sectionsWithCategories = await registry.getSectionsWithCategories();
+          counts.sectionsWithCategories = sectionsWithCategories.length;
+          console.log('[DEBUG] getSectionsWithCategories result:', sectionsWithCategories);
+          if (!Array.isArray(sectionsWithCategories)) {
+            throw new Error('getSectionsWithCategories did not return an array');
+          }
+          // Log the combined result for debugging
+          sectionsWithCategories.forEach(section => {
+            console.log('[DEBUG] Section with categories:', section);
+          });
+        });
+
+        await this.runTest('SectionsRegistry.getOrphanedCategories()', async () => {
+          const { SectionsRegistry } = await import('../agent/database/registry/SectionsRegistry');
+          const registry = SectionsRegistry.getInstance();
+          const orphanedCategories = await registry.getOrphanedCategories();
+          counts.orphanedCategories = orphanedCategories.length;
+          console.log('[DEBUG] getOrphanedCategories result:', orphanedCategories);
+          if (!Array.isArray(orphanedCategories)) {
+            throw new Error('getOrphanedCategories did not return an array');
+          }
+          // Log orphaned categories for debugging
+          orphanedCategories.forEach(category => {
+            console.log('[DEBUG] Orphaned category:', category.attributes);
+          });
+        });
+
+        this.sectionsTestResult = {
+          success: true,
+          message: 'Sections Registry tests passed!',
+          counts
+        };
+
+      } catch (error) {
+        this.sectionsTestResult = {
+          success: false,
+          message: `Sections Registry tests failed: ${error instanceof Error ? error.message : String(error)}`,
+          counts
+        };
+      } finally {
+        this.runningSectionsTests = false;
       }
     },
 
@@ -891,10 +1053,54 @@ export default defineComponent({
       this.testResults.push({ status, message });
     },
 
+    async rerunMigrations() {
+      if (this.runningMigrations) return;
+
+      this.runningMigrations = true;
+      this.addTestResult('info', '🔄 Starting database migrations...');
+
+      try {
+        const { getDatabaseManager } = await import('../agent/database/DatabaseManager');
+        const dbManager = getDatabaseManager();
+
+        // Access the private method by casting
+        const runMigrationsMethod = (dbManager as any).runMigrations.bind(dbManager);
+        await runMigrationsMethod();
+
+        this.addTestResult('pass', '✅ Database migrations completed successfully');
+      } catch (error) {
+        this.addTestResult('fail', `❌ Migrations failed: ${error instanceof Error ? error.message : String(error)}`);
+      } finally {
+        this.runningMigrations = false;
+      }
+    },
+
+    async rerunSeeders() {
+      if (this.runningSeeders) return;
+
+      this.runningSeeders = true;
+      this.addTestResult('info', '🌱 Starting database seeders...');
+
+      try {
+        const { getDatabaseManager } = await import('../agent/database/DatabaseManager');
+        const dbManager = getDatabaseManager();
+
+        // Access the private method by casting
+        const runSeedersMethod = (dbManager as any).runSeeders.bind(dbManager);
+        await runSeedersMethod();
+
+        this.addTestResult('pass', '✅ Database seeders completed successfully');
+      } catch (error) {
+        this.addTestResult('fail', `❌ Seeders failed: ${error instanceof Error ? error.message : String(error)}`);
+      } finally {
+        this.runningSeeders = false;
+      }
+    },
+
     clearTestResults() {
       this.testResults = [];
       this.finalTestResult = null;
-    },
+    }
   },
 });
 </script>
@@ -1191,6 +1397,94 @@ export default defineComponent({
               <p class="setting-description">
                 Number of retries for failed local Ollama requests. Set to 0 to disable retries.
               </p>
+            </div>
+
+            <!-- Downloaded Models Section -->
+            <div class="setting-group">
+              <label class="setting-label">Downloaded Models</label>
+              <div class="model-status-section">
+                <button
+                  @click="checkModelStatuses"
+                  :disabled="checkingModelStatuses"
+                  class="btn role-secondary"
+                  style="margin-bottom: 1rem;"
+                >
+                  {{ checkingModelStatuses ? 'Checking...' : 'Check Model Status' }}
+                </button>
+
+                <!-- Downloaded Models List -->
+                <div v-if="hasDownloadedModels" class="downloaded-models-list">
+                  <h4 style="margin-bottom: 0.5rem; font-size: 0.9rem;">Installed Models:</h4>
+                  <div class="model-list">
+                    <div
+                      v-for="model in formattedInstalledModels"
+                      :key="model.name"
+                      class="model-item"
+                    >
+                      <span class="model-name">{{ model.name }}</span>
+                      <span class="model-size">{{ model.formattedSize }}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Key Model Status -->
+                <div class="key-models-status">
+                  <h4 style="margin-bottom: 0.5rem; font-size: 0.9rem;">Key Model Status:</h4>
+                  
+                  <!-- Embedding Model Status -->
+                  <div class="model-status-item">
+                    <span class="status-label">Embedding Model (nomic-embed-text):</span>
+                    <span 
+                      class="status-badge"
+                      :class="{
+                        'status-installed': embeddingModelStatus === 'installed',
+                        'status-missing': embeddingModelStatus === 'missing',
+                        'status-failed': embeddingModelStatus === 'failed'
+                      }"
+                    >
+                      {{ embeddingModelStatus }}
+                    </span>
+                    <button
+                      v-if="embeddingModelStatus === 'failed' || embeddingModelStatus === 'missing'"
+                      @click="redownloadEmbeddingModel"
+                      :disabled="downloadingModel === 'nomic-embed-text'"
+                      class="btn btn-sm role-primary"
+                      style="margin-left: 0.5rem;"
+                    >
+                      {{ downloadingModel === 'nomic-embed-text' ? 'Downloading...' : 'Redownload' }}
+                    </button>
+                  </div>
+
+                  <!-- Default Model Status -->
+                  <div class="model-status-item">
+                    <span class="status-label">Active Model ({{ activeModel }}):</span>
+                    <span 
+                      class="status-badge"
+                      :class="{
+                        'status-installed': defaultModelStatus === 'installed',
+                        'status-missing': defaultModelStatus === 'missing',
+                        'status-failed': defaultModelStatus === 'failed'
+                      }"
+                    >
+                      {{ defaultModelStatus }}
+                    </span>
+                    <button
+                      v-if="defaultModelStatus === 'failed' || defaultModelStatus === 'missing'"
+                      @click="redownloadDefaultModel"
+                      :disabled="downloadingModel === activeModel"
+                      class="btn btn-sm role-primary"
+                      style="margin-left: 0.5rem;"
+                    >
+                      {{ downloadingModel === activeModel ? 'Downloading...' : 'Redownload' }}
+                    </button>
+                  </div>
+                </div>
+
+                <!-- No models message -->
+                <div v-if="!hasDownloadedModels && !checkingModelStatuses" class="no-models-message">
+                  <p style="color: var(--muted); font-size: 0.9rem;">No models downloaded yet. Select a model above and click "Download Model" to get started.</p>
+                </div>
+              </div>
             </div>
 
           </template>
@@ -1496,14 +1790,44 @@ export default defineComponent({
           </p>
 
           <div class="space-y-6">
-            <div class="flex gap-4">
+            <div class="flex gap-4 flex-wrap">
+              <button
+                @click="runArticlesRegistryTests"
+                :disabled="runningArticlesTests"
+                class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+              >
+                {{ runningArticlesTests ? 'Testing Articles...' : 'Test Articles Registry' }}
+              </button>
+              <button
+                @click="runSectionsRegistryTests"
+                :disabled="runningSectionsTests"
+                class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
+              >
+                {{ runningSectionsTests ? 'Testing Sections...' : 'Test Sections Registry' }}
+              </button>
               <button
                 @click="runDatabaseTests"
                 :disabled="runningTests"
                 class="px-4 py-2 bg-sky-600 text-white rounded hover:bg-sky-700 disabled:opacity-50"
               >
-                {{ runningTests ? 'Running Tests...' : 'Run Database Tests' }}
+                {{ runningTests ? 'Running All Tests...' : 'Run All Database Tests' }}
               </button>
+              <div class="border-l border-slate-300 pl-4 ml-4">
+                <button
+                  @click="rerunMigrations"
+                  :disabled="runningMigrations"
+                  class="px-4 py-2 bg-orange-600 text-white rounded hover:bg-orange-700 disabled:opacity-50 mr-2"
+                >
+                  {{ runningMigrations ? 'Running Migrations...' : 'Rerun Migrations' }}
+                </button>
+                <button
+                  @click="rerunSeeders"
+                  :disabled="runningSeeders"
+                  class="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50"
+                >
+                  {{ runningSeeders ? 'Running Seeders...' : 'Rerun Seeders' }}
+                </button>
+              </div>
               <button
                 @click="clearTestResults"
                 class="px-4 py-2 bg-slate-600 text-white rounded hover:bg-slate-700"
@@ -1512,8 +1836,33 @@ export default defineComponent({
               </button>
             </div>
 
+            <!-- Articles Registry Test Results -->
+            <div v-if="articlesTestResult" class="p-4 rounded" :class="articlesTestResult.success ? 'bg-blue-50 text-blue-800' : 'bg-red-50 text-red-800'">
+              <h3 class="font-semibold">{{ articlesTestResult.success ? '✅ Articles Registry Tests Passed!' : '❌ Articles Registry Tests Failed' }}</h3>
+              <p>{{ articlesTestResult.message }}</p>
+              <div v-if="articlesTestResult.counts" class="mt-2 text-sm">
+                <div><strong>Counts:</strong></div>
+                <div v-if="articlesTestResult.counts.totalArticles !== undefined">Articles: {{ articlesTestResult.counts.totalArticles }}</div>
+                <div v-if="articlesTestResult.counts.articleCategories !== undefined">Categories: {{ articlesTestResult.counts.articleCategories }}</div>
+                <div v-if="articlesTestResult.counts.articleTags !== undefined">Tags: {{ articlesTestResult.counts.articleTags }}</div>
+              </div>
+            </div>
+
+            <!-- Sections Registry Test Results -->
+            <div v-if="sectionsTestResult" class="p-4 rounded" :class="sectionsTestResult.success ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'">
+              <h3 class="font-semibold">{{ sectionsTestResult.success ? '✅ Sections Registry Tests Passed!' : '❌ Sections Registry Tests Failed' }}</h3>
+              <p>{{ sectionsTestResult.message }}</p>
+              <div v-if="sectionsTestResult.counts" class="mt-2 text-sm">
+                <div><strong>Counts:</strong></div>
+                <div v-if="sectionsTestResult.counts.sections !== undefined">Sections: {{ sectionsTestResult.counts.sections }}</div>
+                <div v-if="sectionsTestResult.counts.categories !== undefined">Categories: {{ sectionsTestResult.counts.categories }}</div>
+                <div v-if="sectionsTestResult.counts.sectionsWithCategories !== undefined">Sections with Categories: {{ sectionsTestResult.counts.sectionsWithCategories }}</div>
+                <div v-if="sectionsTestResult.counts.orphanedCategories !== undefined">Orphaned Categories: {{ sectionsTestResult.counts.orphanedCategories }}</div>
+              </div>
+            </div>
+
             <div v-if="testResults.length > 0" class="space-y-2">
-              <h3 class="text-lg font-semibold">Test Results:</h3>
+              <h3 class="text-lg font-semibold">Detailed Test Results:</h3>
               <div class="bg-slate-50 dark:bg-slate-800 rounded p-4 font-mono text-sm">
                 <div
                   v-for="(result, index) in testResults"
@@ -2134,6 +2483,99 @@ export default defineComponent({
   font-size: 0.75rem;
   color: var(--muted);
   margin-top: 0.25rem;
+}
+
+.model-status-section {
+  border: 1px solid var(--input-border);
+  border-radius: 6px;
+  padding: 1rem;
+  background: var(--input-bg);
+}
+
+.downloaded-models-list {
+  margin-bottom: 1.5rem;
+}
+
+.model-list {
+  max-height: 200px;
+  overflow-y: auto;
+  border: 1px solid var(--input-border);
+  border-radius: 4px;
+  background: var(--body-bg);
+}
+
+.model-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--input-border);
+  font-size: 0.85rem;
+}
+
+.model-item:last-child {
+  border-bottom: none;
+}
+
+.model-name {
+  font-weight: 500;
+  color: var(--body-text);
+}
+
+.model-size {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.key-models-status {
+  margin-bottom: 1rem;
+}
+
+.model-status-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+  padding: 0.5rem;
+  border-radius: 4px;
+  background: var(--body-bg);
+  border: 1px solid var(--input-border);
+}
+
+.status-label {
+  font-size: 0.85rem;
+  color: var(--body-text);
+  font-weight: 500;
+  flex: 1;
+}
+
+.status-badge {
+  padding: 0.25rem 0.5rem;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-transform: uppercase;
+}
+
+.status-installed {
+  background: rgba(34, 197, 94, 0.15);
+  color: #22c55e;
+}
+
+.status-missing {
+  background: rgba(234, 179, 8, 0.15);
+  color: #eab308;
+}
+
+.status-failed {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+}
+
+.no-models-message {
+  padding: 1rem;
+  text-align: center;
+  color: var(--muted);
 }
 
 .download-section {

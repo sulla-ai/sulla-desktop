@@ -47,6 +47,8 @@ async function initialize(): Promise<void> {
       updated_at: typeof meta.updated_at === 'string' ? meta.updated_at : now,
       document: fmMatch[2] || '', // The content body after frontmatter
     });
+
+    articles.push(article);
   }
 
   if (articles.length === 0) {
@@ -55,12 +57,8 @@ async function initialize(): Promise<void> {
   }
 
   for (const article of articles) {
-    try {
-      await article.save();
-      console.log(`[KB] Upserted: ${article.attributes.slug}`);
-    } catch (err) {
-      console.error(`[KB] Failed to save ${article.attributes.slug}:`, err);
-    }
+    await article.save();
+    console.log(`[KB] Upserted: ${article.attributes.slug}`);
   }
 
   console.log(`[KB] Seeded ${articles.length} articles`);

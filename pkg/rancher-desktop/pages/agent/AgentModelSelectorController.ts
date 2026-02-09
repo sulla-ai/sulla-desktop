@@ -183,7 +183,14 @@ export class AgentModelSelectorController {
       }
 
       const data = await res.json();
-      this.installedLocalModels.value = (data.models || []).map((m: { name: string }) => m.name);
+      const models = (data.models || []).map((m: { name: string }) => m.name);
+      
+      // Ensure Qwen3-ASR-0.6B is always available as an option
+      if (!models.includes('Qwen3-ASR-0.6B')) {
+        models.push('Qwen3-ASR-0.6B');
+      }
+      
+      this.installedLocalModels.value = models;
     } catch {
       this.installedLocalModels.value = [];
     } finally {

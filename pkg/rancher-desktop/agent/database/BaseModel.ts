@@ -9,6 +9,11 @@ interface ModelAttributes {
   [key: string]: any;
 }
 
+/**
+ * Abstract base class for database models providing common CRUD operations.
+ * Subclasses must define tableName, primaryKey, and fillable/guarded fields.
+ * Handles attribute filling, saving, querying, and basic validation. 
+ */
 export abstract class BaseModel<T extends ModelAttributes = ModelAttributes> {
   protected abstract tableName: string;
   protected abstract primaryKey: string; // usually 'id'
@@ -19,9 +24,20 @@ export abstract class BaseModel<T extends ModelAttributes = ModelAttributes> {
   protected original: Partial<T> = {};
   protected exists = false;
 
-  constructor(attributes: Partial<T> = {}) {
-  }
+  /**
+   * Creates a new model instance with optional initial attributes.
+   * 
+   * @param attributes - Initial attributes to set on the model. 
+   */
+  constructor() {}
 
+  /**
+   * Fills the model with attributes using mass assignment rules.
+   * Only fillable fields are allowed; guarded fields are protected.
+   * 
+   * @param attributes - Attributes to fill.
+   * @throws Error if no fillable fields are defined and guarded is set to '*
+   */
   public fill(attributes: Partial<T>) {
     // Get fillable from the instance prototype to handle minification
     const instance = this as any;
@@ -39,19 +55,24 @@ export abstract class BaseModel<T extends ModelAttributes = ModelAttributes> {
     }
   }
 
-  // Public method to update attributes
+  /**
+   * Updates the model's attributes using mass assignment rules.
+  @param attributes - Attributes to update.
+   */
   public updateAttributes(attributes: Partial<T>): void {
     this.fill(attributes);
   }
 
-  // ────────────────────────────────────────────────
-  // Static query builders
-  // ────────────────────────────────────────────────
-
+  /**
+   * Finds a model instance by its primary key.
+   * 
+   * @param id - The primary key value (string or number).
+   * @returns Promise resolving to the model instance or null if not found.
+   */
   static async find<T extends BaseModel>(this: new (...args: any[]) => T, id: string | number): Promise<T | null> {
     const model = new this();
     const result = await postgresClient.queryOne(
-      `SELECT * FROM ${model.tableName} WHERE ${model.primaryKey} = $1 LIMIT 1`,
+      `SELECT * FROM ${model.tableName} WHERE "${model.primaryKey}" = $1 LIMIT 1`,
       [id]
     );
 
@@ -63,10 +84,15 @@ export abstract class BaseModel<T extends ModelAttributes = ModelAttributes> {
     return instance;
   }
 
+  /**
+   * Retrieves all model instances from the database.
+   * 
+   * @returns Promise resolving to an array of model instances.
+   */
   static async all<T extends BaseModel>(this: new (...args: any[]) => T): Promise<T[]> {
     const model = new (this as any)();
     const rows = await postgresClient.queryAll(
-      `SELECT * FROM ${model.tableName} ORDER BY ${model.primaryKey} ASC`
+      `SELECT * FROM ${model.tableName} ORDER BY "${model.primaryKey}" ASC`
     );
 
     return rows.map(row => {
@@ -77,6 +103,13 @@ export abstract class BaseModel<T extends ModelAttributes = ModelAttributes> {
     });
   }
 
+  /**
+   * Queries model instances based on conditions.
+   * 
+   * @param conditions - Either an object of key-value pairs for equality checks or a raw SQL string.
+   * @param value - Optional value for raw SQL conditions.
+   * @returns Promise resolving to an array of model instances.
+   */
   static async where<T extends BaseModel>(
     this: new (...args: any[]) => T,
     conditions: WhereClause | string,
@@ -92,7 +125,7 @@ export abstract class BaseModel<T extends ModelAttributes = ModelAttributes> {
     } else {
       const clauses = Object.entries(conditions).map(([k], i) => {
         params.push(conditions[k]);
-        return `${k} = $${i + 1}`;
+        return `"${k}" = $${i + 1}`;
       });
       query += ` WHERE ${clauses.join(' AND ')}`;
     }
@@ -107,6 +140,12 @@ export abstract class BaseModel<T extends ModelAttributes = ModelAttributes> {
     });
   }
 
+  /**
+   * Creates and saves a new model instance with the given attributes.
+   * 
+   * @param attributes - Attributes for the new instance.
+   * @returns Promise resolving to the saved model instance.
+   */
   static async create<T extends BaseModel>(
     this: new () => T,
     attributes: Partial<ModelAttributes>
@@ -116,10 +155,13 @@ export abstract class BaseModel<T extends ModelAttributes = ModelAttributes> {
     return model.save();
   }
 
-  // ────────────────────────────────────────────────
-  // Instance methods
-  // ────────────────────────────────────────────────
-
+  /**
+   * Saves the model instance to the database (insert or update).
+   * Automatically handles created_at/updated_at timestamps.
+   * 
+   * @returns Promise resolving to the saved instance.
+   * delete instance method:
+   */
   async save(): Promise<this> {
     // Ensure fillable is properly initialized from instance
     const instanceFillable = this.fillable || [];
@@ -133,12 +175,12 @@ export abstract class BaseModel<T extends ModelAttributes = ModelAttributes> {
 
       if (changes.length === 0) return this;
 
-      const sets = changes.map(([k], i) => `${k} = $${i + 1}`).join(', ');
+      const sets = changes.map(([k], i) => `"${k}" = $${i + 1}`).join(', ');
       const values = changes.map(([, v]) => v);
       values.push(this.attributes[this.primaryKey]);
 
       await postgresClient.query(
-        `UPDATE ${this.tableName} SET ${sets}, updated_at = CURRENT_TIMESTAMP WHERE ${this.primaryKey} = $${values.length}`,
+        `UPDATE ${this.tableName} SET ${sets}, "updated_at" = CURRENT_TIMESTAMP WHERE "${this.primaryKey}" = $${values.length}`,
         values
       );
     } else {
@@ -148,7 +190,7 @@ export abstract class BaseModel<T extends ModelAttributes = ModelAttributes> {
       const values = keys.map(k => this.attributes[k]);
 
       const result = await postgresClient.query(
-        `INSERT INTO ${this.tableName} (${keys.join(', ')}, created_at, updated_at) 
+        `INSERT INTO ${this.tableName} (${keys.map(k => `"${k}"`).join(', ')}, "created_at", "updated_at") 
          VALUES (${placeholders}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
          RETURNING *`,
         values
@@ -164,11 +206,16 @@ export abstract class BaseModel<T extends ModelAttributes = ModelAttributes> {
     return this;
   }
 
+  /**
+   * Deletes the model instance from the database.
+   * 
+   * @returns Promise resolving to true if deleted, false if not exists
+   */
   async delete(): Promise<boolean> {
     if (!this.exists) return false;
 
     const result = await postgresClient.query(
-      `DELETE FROM ${this.tableName} WHERE ${this.primaryKey} = $1`,
+      `DELETE FROM ${this.tableName} WHERE "${this.primaryKey}" = $1`,
       [this.attributes[this.primaryKey]]
     );
 
@@ -176,10 +223,11 @@ export abstract class BaseModel<T extends ModelAttributes = ModelAttributes> {
     return (result.length ?? 0) > 0;
   }
 
-  // ────────────────────────────────────────────────
-  // Getters / helpers
-  // ────────────────────────────────────────────────
-
+  /**
+   * Gets the primary key value of the instance.
+   * 
+   * @returns The primary key value.
+   */
   get id(): any {
     return this.attributes[this.primaryKey];
   }

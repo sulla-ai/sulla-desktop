@@ -206,7 +206,7 @@ logs-ollama:
 describe-ollama:
     LIMA_HOME=~/Library/Application\ Support/rancher-desktop/lima \
     resources/darwin/lima/bin/limactl shell 0 -- \
-    sudo k3s kubectl describe pod -n sulla ollama-78948bdfdc-bmmcr
+    sudo k3s kubectl describe pod -n sulla ollama-5cb7b8dfc6-9mnwb
 
 pull-ollama:
     LIMA_HOME=~/Library/Application\ Support/rancher-desktop/lima \

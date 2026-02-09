@@ -48,6 +48,7 @@ export interface PromptEnrichmentOptions {
   includeStrategicPlan?: boolean;
   includeTacticalPlan?: boolean;
   includeKnowledgebasePlan: boolean;
+  includeKnowledgeBaseSections?: boolean;
 }
 
 
@@ -177,10 +178,18 @@ export abstract class BaseNode {
             }
         }
 
-        if (options.includeKnowledgebasePlan) {
-            const planBlock = this.buildTacticalPlanContextBlock(state);
-            if (planBlock) {
-                parts.push(planBlock);
+        if (options.includeKnowledgeBaseSections) {
+            try {
+                const { SectionsRegistry } = await import('../database/registry/SectionsRegistry');
+                const registry = SectionsRegistry.getInstance();
+                const sections = await registry.getSectionsWithCategories();
+
+                if (sections.length > 0) {
+                    const sectionsTree = this.formatSectionsTree(sections);
+                    parts.push(`Knowledge Base Organization Structure:\n${sectionsTree}\n\nWhen creating articles, choose the most appropriate section and category from this structure. Only create new sections/categories if they provide significant organizational benefit.`);
+                }
+            } catch (error) {
+                console.warn('[BaseNode] Failed to load knowledge base sections:', error);
             }
         }
 
@@ -435,6 +444,45 @@ export abstract class BaseNode {
         }
 
         return parts.length > 0 ? parts.join('\n\n') : null;
+    }
+
+    /**
+     * Format sections and categories as a hierarchical tree view
+     */
+    protected formatSectionsTree(sections: any[]): string {
+        if (!sections || sections.length === 0) {
+            return 'No sections available.';
+        }
+
+        const lines: string[] = [];
+
+        for (const section of sections) {
+            // Add section with tree branch symbol
+            lines.push(`${lines.length === 0 ? '┌─' : '├─'} ${section.name}`);
+            lines.push(`│  ${section.description}`);
+
+            // Add categories under this section
+            if (section.categories && section.categories.length > 0) {
+                for (let i = 0; i < section.categories.length; i++) {
+                    const category = section.categories[i];
+                    const isLast = i === section.categories.length - 1;
+                    const prefix = isLast ? '│  └─' : '│  ├─';
+                    lines.push(`${prefix} ${category.name}`);
+                    if (category.description && category.description !== category.name) {
+                        lines.push(`│     ${category.description}`);
+                    }
+                }
+            } else {
+                lines.push('│  └─ No categories');
+            }
+
+            // Add spacing between sections
+            if (sections.indexOf(section) < sections.length - 1) {
+                lines.push('│');
+            }
+        }
+
+        return lines.join('\n');
     }
     
     /**

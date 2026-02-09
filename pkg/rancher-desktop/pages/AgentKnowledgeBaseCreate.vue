@@ -37,16 +37,29 @@
                         <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">URL-friendly identifier for the page</p>
                       </div>
                       <div>
+                        <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Section</label>
+                        <select
+                          v-model="pageSection"
+                          class="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 dark:border-slate-600 dark:bg-slate-800 dark:text-white"
+                        >
+                          <option value="knowledgebase">Knowledge Base</option>
+                          <option v-for="section in availableSections" :key="section.id" :value="section.id">
+                            {{ section.name }}
+                          </option>
+                        </select>
+                        <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">Choose the section for this article</p>
+                      </div>
+                      <div>
                         <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Category</label>
                         <select
                           v-model="pageCategory"
                           class="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 dark:border-slate-600 dark:bg-slate-800 dark:text-white"
                         >
-                          <option value="Memory">Memory</option>
-                          <option value="Knowledge">Knowledge</option>
-                          <option value="Procedure">Procedure</option>
-                          <option value="Reference">Reference</option>
+                          <option v-for="category in availableCategories" :key="category.id" :value="category.id">
+                            {{ category.name }}
+                          </option>
                         </select>
+                        <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">Choose the category within the selected section</p>
                       </div>
                       <div>
                         <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Tags</label>
@@ -159,7 +172,7 @@
 
 <script setup lang="ts">
 import AgentHeader from './agent/AgentHeader.vue';
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import DOMPurify from 'dompurify';
 import { marked } from 'marked';
 import { Article } from '../agent/database/models/Article';
@@ -177,10 +190,15 @@ const splash2Url = new URL('./assets/splash2.png', import.meta.url).toString();
 
 // Form data
 const pageTitle = ref('');
-const pageCategory = ref('Memory');
+const pageSection = ref('knowledgebase');
+const pageCategory = ref('');
 const pageTags = ref('');
 const pageContent = ref('');
 const pageSlug = ref('');
+
+// Available sections and categories from database
+const availableSections = ref<Array<{id: string, name: string, description: string}>>([]);
+const availableCategories = ref<Array<{id: string, name: string, description: string}>>([]);
 
 // Editor state
 const editorEl = ref<HTMLElement | null>(null);
@@ -277,6 +295,11 @@ const createPage = async () => {
     return;
   }
 
+  if (!pageCategory.value) {
+    alert('Please select a category');
+    return;
+  }
+
   // Auto-generate slug if empty
   if (!pageSlug.value.trim()) {
     pageSlug.value = generateSlug(pageTitle.value);
@@ -305,8 +328,8 @@ const createPage = async () => {
 
     // Create article using Article model
     const article = await Article.create({
-      section: 'knowledgebase',
-      category: pageCategory.value.toLowerCase(),
+      section: pageSection.value,
+      category: pageCategory.value,
       slug: pageSlug.value,
       title: pageTitle.value,
       tags: pageTags.value.split(',').map(tag => tag.trim()).filter(tag => tag),
@@ -324,7 +347,8 @@ const createPage = async () => {
     pageSlug.value = '';
     pageContent.value = '';
     pageTags.value = '';
-    pageCategory.value = 'Memory';
+    pageSection.value = 'knowledgebase';
+    pageCategory.value = '';
     if (editorEl.value) editorEl.value.innerHTML = '';
     
   } catch (error) {
@@ -352,13 +376,70 @@ const toggleTheme = () => {
   localStorage.setItem(THEME_STORAGE_KEY, isDark.value ? 'dark' : 'light');
 };
 
-onMounted(() => {
+// Load sections and categories from database
+const loadSectionsAndCategories = async () => {
+  try {
+    const { SectionsRegistry } = await import('../agent/database/registry/SectionsRegistry');
+    const registry = SectionsRegistry.getInstance();
+
+    // Load suggested sections and categories
+    availableSections.value = await registry.getSuggestedSections();
+    availableCategories.value = await registry.getSuggestedCategories();
+
+    // Set default category if available
+    if (availableCategories.value.length > 0 && !pageCategory.value) {
+      pageCategory.value = availableCategories.value[0].id;
+    }
+  } catch (error) {
+    console.error('Failed to load sections and categories:', error);
+    // Fallback to basic categories if database fails
+    availableCategories.value = [
+      { id: 'documentation', name: 'Documentation', description: 'General documentation' },
+      { id: 'tutorial', name: 'Tutorial', description: 'Step-by-step guides' },
+      { id: 'reference', name: 'Reference', description: 'API and technical references' },
+      { id: 'procedure', name: 'Procedure', description: 'Operational procedures' },
+      { id: 'troubleshooting', name: 'Troubleshooting', description: 'Problem-solving guides' }
+    ];
+    if (!pageCategory.value) {
+      pageCategory.value = 'documentation';
+    }
+  }
+};
+
+// Watch for section changes to update available categories
+watch(pageSection, async (newSection) => {
+  if (newSection && newSection !== 'knowledgebase') {
+    try {
+      const { SectionsRegistry } = await import('../agent/database/registry/SectionsRegistry');
+      const registry = SectionsRegistry.getInstance();
+
+      // Load categories for the selected section
+      const sectionCategories = await registry.getCategoriesForSection(newSection);
+      availableCategories.value = sectionCategories;
+
+      // Reset category selection if it's not in the new section
+      if (pageCategory.value && !sectionCategories.some(cat => cat.id === pageCategory.value)) {
+        pageCategory.value = sectionCategories.length > 0 ? sectionCategories[0].id : '';
+      }
+    } catch (error) {
+      console.error('Failed to load categories for section:', error);
+    }
+  } else {
+    // For knowledgebase section, show all categories
+    await loadSectionsAndCategories();
+  }
+});
+
+onMounted(async () => {
   try {
     const saved = localStorage.getItem(THEME_STORAGE_KEY);
     isDark.value = saved === 'dark';
   } catch {
     isDark.value = false;
   }
+
+  // Load sections and categories
+  await loadSectionsAndCategories();
 });
 </script>
 

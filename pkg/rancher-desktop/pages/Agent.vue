@@ -205,53 +205,53 @@
                 </ul>
               </nav>
             </div>
+            </div>
           </div>
-        </div>
 
-        <div
-          :class="hasMessages ? 'fixed bottom-0 left-0 right-0 z-40 border-t border-slate-200 bg-white/80 pt-6 backdrop-blur dark:border-slate-800 dark:bg-slate-900/80' : 'flex flex-1 items-center justify-center bg-white dark:bg-slate-900'"
-        >
-          <div v-if="hasMessages" class="relative mx-auto flex w-full max-w-8xl justify-center sm:px-2 lg:px-8 xl:px-12">
-            <div class="max-w-2xl min-w-0 flex-auto px-4 lg:max-w-none lg:pr-0 lg:pl-8 xl:px-16">
-              <div class="pb-3">
-                <div class="flex h-full flex-col items-center">
-                  <form
-                    class="group/composer mx-auto mb-3 w-full"
-                    :data-empty="!query.trim()"
-                    :data-running="loading"
-                    @submit.prevent
-                  >
-                    <div class="relative overflow-visible rounded-lg bg-white/95 shadow-sm ring-1 ring-slate-200 transition-shadow focus-within:ring-slate-300 dark:bg-slate-800/75 dark:ring-white/5 dark:ring-inset dark:focus-within:ring-white/20">
-                      <div class="absolute -top-px right-11 left-20 h-[2px] bg-linear-to-r from-sky-300/0 via-sky-300/70 to-sky-300/0"></div>
-                      <div class="absolute right-20 -bottom-px left-11 h-[2px] bg-linear-to-r from-blue-400/0 via-blue-400 to-blue-400/0"></div>
-                      <div class="flex flex-wrap items-end gap-1 p-2">
-                        <button
-                          type="button"
-                          class="mb-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[#0d0d0d] transition-colors hover:bg-[#f0f0f0] disabled:opacity-60 dark:text-white dark:hover:bg-white/10"
-                          aria-label="Attach"
-                          :disabled="showOverlay"
-                        >
-                          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                            <path d="m16 6-8.414 8.586a2 2 0 0 0 2.829 2.829l8.414-8.586a4 4 0 1 0-5.657-5.657l-8.379 8.551a6 6 0 1 0 8.485 8.485l8.379-8.551" />
-                          </svg>
-                        </button>
+          <div
+            :class="hasMessages ? 'fixed bottom-0 left-0 right-0 z-40 border-t border-slate-200 bg-white/80 pt-6 backdrop-blur dark:border-slate-800 dark:bg-slate-900/80' : 'flex flex-1 items-center justify-center bg-white dark:bg-slate-900'"
+          >
+            <div v-if="hasMessages" class="relative mx-auto flex w-full max-w-8xl justify-center sm:px-2 lg:px-8 xl:px-12">
+              <div class="max-w-2xl min-w-0 flex-auto px-4 lg:max-w-none lg:pr-0 lg:pl-8 xl:px-16">
+                <div class="pb-3">
+                  <div class="flex h-full flex-col items-center">
+                    <form
+                      class="group/composer mx-auto mb-3 w-full"
+                      :data-empty="!query.trim()"
+                      :data-running="loading"
+                      @submit.prevent
+                    >
+                      <div class="relative overflow-visible rounded-lg bg-white/95 shadow-sm ring-1 ring-slate-200 transition-shadow focus-within:ring-slate-300 dark:bg-slate-800/75 dark:ring-white/5 dark:ring-inset dark:focus-within:ring-white/20">
+                        <div class="absolute -top-px right-11 left-20 h-[2px] bg-linear-to-r from-sky-300/0 via-sky-300/70 to-sky-300/0"></div>
+                        <div class="absolute right-20 -bottom-px left-11 h-[2px] bg-linear-to-r from-blue-400/0 via-blue-400 to-blue-400/0"></div>
+                        <div class="flex flex-wrap items-end gap-1 p-2">
+                          <button
+                            type="button"
+                            class="mb-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[#0d0d0d] transition-colors hover:bg-[#f0f0f0] disabled:opacity-60 dark:text-white dark:hover:bg-white/10"
+                            aria-label="Attach"
+                            :disabled="showOverlay"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                              <path d="m16 6-8.414 8.586a2 2 0 0 0 2.829 2.829l8.414-8.586a4 4 0 1 0-5.657-5.657l-8.379 8.551a6 6 0 1 0 8.485 8.485l8.379-8.551" />
+                            </svg>
+                          </button>
 
-                        <textarea
-                          ref="composerTextareaEl"
-                          v-model="query"
-                          name="input"
-                          placeholder="What do you want to know?"
-                          class="my-2 h-6 max-h-[400px] min-w-0 flex-1 resize-none bg-transparent text-[#0d0d0d] text-base leading-6 outline-none placeholder:text-[#9a9a9a] dark:text-white dark:placeholder:text-neutral-500"
-                          :class="isComposerMultiline ? 'basis-full order-2' : 'order-2'"
-                          @input="updateComposerLayout"
-                          @keydown.enter.exact.prevent="send"
-                        />
+                          <textarea
+                            ref="composerTextareaEl"
+                            v-model="query"
+                            name="input"
+                            placeholder="What do you want to know?"
+                            class="my-2 h-6 max-h-[400px] min-w-0 flex-1 resize-none bg-transparent text-[#0d0d0d] text-base leading-6 outline-none placeholder:text-[#9a9a9a] dark:text-white dark:placeholder:text-neutral-500"
+                            :class="isComposerMultiline ? 'basis-full order-2' : 'order-2'"
+                            @input="updateComposerLayout"
+                            @keydown.enter.exact.prevent="send"
+                          />
 
-                        <div
-                          class="mb-0.5 flex items-center gap-2"
-                          :class="isComposerMultiline ? 'order-3 w-full justify-between' : 'order-3'"
-                        >
-                          <div class="relative mb-0.5" ref="modelSelector.modelMenuEl">
+                          <div
+                            class="mb-0.5 flex items-center gap-2"
+                            :class="isComposerMultiline ? 'order-3 w-full justify-between' : 'order-3'"
+                          >
+                            <div class="relative mb-0.5" ref="modelSelector.modelMenuEl">
                             <button
                               type="button"
                               class="flex h-9 shrink-0 items-center gap-2 rounded-full px-2.5 text-[#0d0d0d] hover:bg-[#f0f0f0] disabled:opacity-60 dark:text-white dark:hover:bg-white/10"
@@ -561,10 +561,10 @@
 
 <script setup lang="ts">
 import AgentHeader from './agent/AgentHeader.vue';
+import AgentSidebarAd from './AgentSidebarAd.vue';
 import AgentPersonaLibrary from './agent/personas/AgentPersonaLibrary.vue';
 
-import { computed, ref, onMounted, onUnmounted, watch, nextTick } from 'vue';
-import { useRoute } from 'vue-router';
+import { ref, onMounted, onUnmounted, computed, nextTick, watch } from 'vue';
 import DOMPurify from 'dompurify';
 import { marked } from 'marked';
 import {
@@ -590,8 +590,6 @@ const renderMarkdown = (markdown: string): string => {
     ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto|tel):|data:image\/(?:png|gif|jpe?g|webp);base64,|\/|\.|#)/i,
   });
 };
-
-const route = useRoute();
 
 const THEME_STORAGE_KEY = 'agentTheme';
 const isDark = ref(false);

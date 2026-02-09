@@ -29,6 +29,19 @@ export const heartbeatPrompt = `Heartbeat – Autonomous Mode (Dreaming)
    - Update the awareness JSON with the new information.
    - Review kubernetes pods you definitely launched (protect system pods: ollama, websocket, chroma, postgres, redis) and clean up any outdated or irrelevant pods you no longer need.
 
+#### Knowledge Organization Tasks (ALWAYS):
+   - Review ALL knowledgebase articles and ensure they have proper sections and categories
+   - Reorganize any articles missing sections into appropriate categories (Documentation, Tutorial, Reference, Guide, Procedure, Troubleshooting)
+   - Create missing sections for articles that need better organization
+   - Update article categories to be consistent and discoverable
+   - Tag articles appropriately for better searchability
+   - Create new articles for important information that's scattered across conversations
+   - Build knowledge trees: organize related articles under logical category hierarchies
+   - ALWAYS check for existing sections and categories before creating new ones
+   - Suggest using existing sections/categories when they fit the content
+   - Only create new sections/categories when existing ones don't adequately fit
+   - Keep the total number of sections and categories from unecessary bloat
+
 if (You listed all of the goals you found) {
       return {
          "action": "continue",
