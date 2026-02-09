@@ -206,16 +206,30 @@ export class StartupProgressController {
 
   private async pullNomicEmbedTextModel(): Promise<void> {
     try {
-      console.log('[StartupProgressController] Pulling nomic-embed-text model...');
+      console.log('[StartupProgressController] Checking for nomic-embed-text model...');
 
       // Get the local Ollama service
       const ollamaService = getLocalService();
       if (!ollamaService) {
-        console.warn('[StartupProgressController] No local Ollama service available, skipping nomic-embed-text pull');
+        console.warn('[StartupProgressController] No local Ollama service available, skipping nomic-embed-text check');
         return;
       }
 
-      // Pull the model (Ollama will skip if already exists)
+      // Cast to OllamaService to access Ollama-specific methods
+      const ollama = ollamaService as any; // OllamaService has refreshModels and hasModel methods
+
+      // Refresh the model list to ensure we have the latest available models
+      await ollama.refreshModels();
+
+      // Check if the model is already available
+      if (ollama.hasModel('nomic-embed-text')) {
+        console.log('[StartupProgressController] nomic-embed-text model already available, skipping pull');
+        return;
+      }
+
+      console.log('[StartupProgressController] nomic-embed-text model not found, pulling...');
+
+      // Pull the model
       const success = await ollamaService!.pullModel('nomic-embed-text', (status: string) => {
         console.log(`[StartupProgressController] nomic-embed-text pull status: ${status}`);
       });
@@ -226,7 +240,7 @@ export class StartupProgressController {
         console.warn('[StartupProgressController] Failed to pull nomic-embed-text model');
       }
     } catch (error) {
-      console.error('[StartupProgressController] Error pulling nomic-embed-text model:', error);
+      console.error('[StartupProgressController] Error checking/pulling nomic-embed-text model:', error);
     }
   }
 }

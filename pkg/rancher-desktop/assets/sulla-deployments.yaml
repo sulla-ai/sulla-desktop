@@ -323,6 +323,12 @@ spec:
       - name: n8n
         image: n8nio/n8n:latest
         imagePullPolicy: IfNotPresent
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: 5678
+          initialDelaySeconds: 30
+          periodSeconds: 10
         ports:
         - containerPort: 5678
         env:
