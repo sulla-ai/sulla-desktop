@@ -54,7 +54,6 @@ const sectionsData = [
 ];
 
 export async function initialize(): Promise<void> {
-  console.log('[KB Sections Seeder] === STARTING SEEDER ===');
   console.log('[KB Sections Seeder] Starting knowledge base sections seeding...');
 
   try {
@@ -62,42 +61,25 @@ export async function initialize(): Promise<void> {
     const registry = SectionsRegistry.getInstance();
 
     // Check if we've already successfully seeded by looking for a specific section
-    console.log('[KB Sections Seeder] Checking for existing sections...');
     const existingSections = await registry.getAllSections();
-    console.log(`[KB Sections Seeder] Found ${existingSections.length} existing sections`);
-    existingSections.forEach(section => {
-      console.log(`[KB Sections Seeder] Existing section: "${section.attributes.name}" (ID: ${section.attributes.id})`);
-    });
+    const welcomeSection = existingSections.find(s => s.attributes.name === 'Getting Started');
 
-    // Clean up all existing sections and categories before recreating
-    if (existingSections.length > 0) {
-      console.log(`[KB Sections Seeder] Cleaning up ${existingSections.length} existing sections and their categories...`);
-      for (const section of existingSections) {
-        if (section.attributes.id) {
-          console.log(`[KB Sections Seeder] Deleting section: ${section.attributes.name} (ID: ${section.attributes.id})`);
-          await registry.deleteSection(section.attributes.id);
-          console.log(`[KB Sections Seeder] Deleted section: ${section.attributes.name}`);
-        }
-      }
+    if (welcomeSection) {
+      console.log('[KB Sections Seeder] Knowledge base sections already seeded, skipping...');
+      return;
     }
 
     console.log('[KB Sections Seeder] Creating knowledge base sections and categories...');
 
     // Clean up any orphaned sections (sections without the expected structure)
     // This handles cases where previous seeding attempts created incomplete data
-    console.log('[KB Sections Seeder] Checking for orphaned sections...');
     const expectedSectionNames = sectionsData.map(s => s.name);
-    console.log('[KB Sections Seeder] Expected section names:', expectedSectionNames);
-    // Since we just deleted all sections, there shouldn't be any orphaned ones, but check anyway
-    const finalSectionsCheck = await registry.getAllSections();
-    const orphanedSections = finalSectionsCheck.filter(s => !expectedSectionNames.includes(s.attributes.name || ''));
-    console.log(`[KB Sections Seeder] Found ${orphanedSections.length} orphaned sections`);
+    const orphanedSections = existingSections.filter(s => !expectedSectionNames.includes(s.attributes.name || ''));
 
     if (orphanedSections.length > 0) {
       console.log(`[KB Sections Seeder] Cleaning up ${orphanedSections.length} orphaned sections`);
       for (const section of orphanedSections) {
         if (section.attributes.id) {
-          console.log(`[KB Sections Seeder] Deleting orphaned section: ${section.attributes.name} (ID: ${section.attributes.id})`);
           await registry.deleteSection(section.attributes.id);
           console.log(`[KB Sections Seeder] Deleted orphaned section: ${section.attributes.name}`);
         }
@@ -105,13 +87,11 @@ export async function initialize(): Promise<void> {
     }
 
     // Create each section and its categories
-    console.log(`[KB Sections Seeder] Processing ${sectionsData.length} sections...`);
     for (const sectionData of sectionsData) {
       console.log(`[KB Sections Seeder] Processing section: ${sectionData.name}`);
 
       // Check if section already exists
       const existingSection = existingSections.find(s => s.attributes.name === sectionData.name);
-      console.log(`[KB Sections Seeder] Section ${sectionData.name} exists: ${!!existingSection}`);
 
       let section;
       if (existingSection) {
@@ -119,7 +99,6 @@ export async function initialize(): Promise<void> {
         section = existingSection;
       } else {
         // Create new section
-        console.log(`[KB Sections Seeder] Creating new section: ${sectionData.name}`);
         section = await registry.createSection({
           name: sectionData.name,
           description: sectionData.description,
@@ -184,11 +163,6 @@ export async function initialize(): Promise<void> {
 
   } catch (error) {
     console.error('[KB Sections Seeder] Failed to seed knowledge base sections:', error);
-    console.error('[KB Sections Seeder] Error details:', {
-      message: error instanceof Error ? error.message : String(error),
-      stack: error instanceof Error ? error.stack : 'No stack trace',
-      name: error instanceof Error ? error.name : 'Unknown error type'
-    });
     throw error;
   }
 }
