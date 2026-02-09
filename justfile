@@ -212,3 +212,11 @@ pull-ollama:
 stop-k8s:
     LIMA_HOME=~/Library/Application\ Support/rancher-desktop/lima \
     limactl stop 0 
+
+chat-ping:
+    curl -X POST http://localhost:3000/chat/health
+    
+chat-complete:
+    curl -X POST http://localhost:3000/chat/completions \
+    -H "Content-Type: application/json" \
+    -d '{"model": "sulla", "messages": [{"role": "user", "content": "Test message"}]}'

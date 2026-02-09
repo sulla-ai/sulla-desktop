@@ -2,6 +2,9 @@
 import { IntegrationRegistry } from './IntegrationRegistry';
 import { getIntegrationService } from '../services/IntegrationService';
 import { SlackClient, slackClient } from './slack/SlackClient';
+import { getSchedulerService } from '@pkg/agent/services/SchedulerService';
+import { getHeartbeatService } from '@pkg/agent/services/HeartbeatService';
+import { getBackendGraphWebSocketService } from '@pkg/agent/services/BackendGraphWebSocketService';
 
 export const registry = new IntegrationRegistry();
 
@@ -45,9 +48,10 @@ export async function SullaIntegrations(): Promise<void> {
   console.log('[Integrations] Sulla integrations initialized');
 
   try {
+    
     const slack = await registry.get<SlackClient>('slack');
-      console.log('[Integrations] Slack client retrieved successfully');
-  } catch (error) {
-    console.error('[Integrations] Failed to initialize Slack client:', error);
+
+  } catch (ex: any) {
+    console.error('[Background] Failed to initialize cron services:', ex);
   }
 }

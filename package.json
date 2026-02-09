@@ -81,6 +81,7 @@
     "best-effort-json-parser": "^1.2.1",
     "chromadb": "^3.2.2",
     "cookie-universal": "2.2.2",
+    "cors": "^2.8.5",
     "cross-spawn": "7.0.6",
     "dayjs": "1.11.19",
     "dirty-json": "^0.9.2",

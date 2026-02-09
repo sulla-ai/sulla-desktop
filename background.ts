@@ -40,12 +40,7 @@ import { Snapshots } from '@pkg/main/snapshots/snapshots';
 import { Snapshot, SnapshotDialog } from '@pkg/main/snapshots/types';
 import { Tray } from '@pkg/main/tray';
 import setupUpdate from '@pkg/main/update';
-import { getSchedulerService } from '@pkg/agent/services/SchedulerService';
-import { getHeartbeatService } from '@pkg/agent/services/HeartbeatService';
-import { getIntegrationService } from '@pkg/agent/services/IntegrationService';
-import { postgresClient } from '@pkg/agent/database/PostgresClient';
-import { getBackendGraphWebSocketService } from '@pkg/agent/services/BackendGraphWebSocketService';
-import { SullaIntegrations } from '@pkg/agent/integrations';
+import { hookSullaEnd, instantiateSullaStart, sullaEnd, onMainProxyLoad, afterBackgroundLoaded } from '@pkg/sulla';
 import { spawnFile } from '@pkg/utils/childProcess';
 import getCommandLineArgs from '@pkg/utils/commandLine';
 import dockerDirManager from '@pkg/utils/dockerDirManager';
@@ -211,35 +206,12 @@ Electron.protocol.registerSchemesAsPrivileged([{ scheme: 'app' }, {
 
 ////////////////////////////////////////////////////////////////////////////////
 // SULLA DESKTOP - START
+// Commands to shut down database connections
 ////////////////////////////////////////////////////////////////////////////////
 
-import { app } from 'electron';
-const { getDatabaseManager } = require('@pkg/agent/database/DatabaseManager');
 
-app.on('will-quit', async () => {
-  try {
-    await getDatabaseManager().stop();
-    console.log('[Shutdown] Postgres closed');
-  } catch (err) {
-    const errorMessage = err instanceof Error ? err.message : String(err);
-    console.warn('[Shutdown] Postgres close failed:', errorMessage);
-  }
-});
+hookSullaEnd(Electron);
 
-Electron.app.on('before-quit', async () => {
-  try {
-    await getDatabaseManager().stop();
-  } catch {} // swallow any remaining errors
-});
-
-process.on('SIGTERM', async () => {
-  await postgresClient.end();
-  app.quit();
-});
-process.on('SIGINT', async () => {
-  await postgresClient.end();
-  app.quit();
-});
 
 ////////////////////////////////////////////////////////////////////////////////
 // SULLA DESKTOP - END
@@ -375,38 +347,28 @@ Electron.app.whenReady().then(async() => {
 
     await startBackend();
 
-    // Initialize background cron services
-    console.log('[Background] Initializing cron services...');
-    try {
-      const schedulerService = getSchedulerService();
-      await schedulerService.initialize();
-      console.log('[Background] SchedulerService initialized - calendar events will trigger in background');
-
-      const heartbeatService = getHeartbeatService();
-      await heartbeatService.initialize();
-      console.log('[Background] HeartbeatService initialized - periodic tasks will run in background');
-
-      const integrationService = getIntegrationService();
-      await integrationService.initialize();
-      console.log('[Background] IntegrationService initialized - integration tasks will run in background');
-
-      const backendGraphWebSocketService = getBackendGraphWebSocketService();
-      console.log('[Background] BackendGraphWebSocketService initialized - backend agent messages will be processed');
-
-      await SullaIntegrations();
 
 
-      process.on('unhandledRejection', (reason: any) => {
-        if (reason?.code === '57P01') {
-          console.warn('[Unhandled] Ignored Postgres admin termination');
-          return;
-        }
-        console.error('[Unhandled Rejection]', reason);
-      });
 
-    } catch (ex: any) {
-      console.error('[Background] Failed to initialize cron services:', ex);
-    }
+
+
+////////////////////////////////////////////////////////////////////////////////
+// SULLA DESKTOP - START
+// Commands to startup systems
+////////////////////////////////////////////////////////////////////////////////
+
+
+      await instantiateSullaStart();
+
+
+////////////////////////////////////////////////////////////////////////////////
+// SULLA DESKTOP - END
+////////////////////////////////////////////////////////////////////////////////
+
+
+
+
+
   } catch (ex: any) {
     console.error(`Error starting up: ${ ex }`, ex.stack);
     gone = true;
@@ -723,6 +685,20 @@ Electron.app.on('before-quit', async(event) => {
   httpCommandServer?.closeServer();
   httpCredentialHelperServer.closeServer();
 
+
+    ////////////////////////////////////////////////////////////////////////////////
+    // SULLA DESKTOP - START
+    // Commands to shut down database connections
+    ////////////////////////////////////////////////////////////////////////////////
+
+
+      await sullaEnd(event);
+
+
+    ////////////////////////////////////////////////////////////////////////////////
+    // SULLA DESKTOP - END
+    ////////////////////////////////////////////////////////////////////////////////
+
   try {
     await mainEvents.tryInvoke('extensions/shutdown');
     await k8smanager?.stop();
@@ -785,17 +761,26 @@ ipcMainProxy.on('settings-read', (event) => {
   event.returnValue = cfg;
 });
 
-// Handle agent configuration updates from renderer process
-ipcMainProxy.on('agent-config-updated', (event, agentConfig) => {
-  console.log('[Background] Agent configuration updated from renderer:', agentConfig);
-  // Update the agent services with new configuration
-  try {
-    const { updateAgentConfigFull } = require('@pkg/agent/services/ConfigService');
-    updateAgentConfigFull(agentConfig);
-  } catch (err) {
-    console.warn('[Background] Failed to update agent config from renderer:', err);
-  }
-});
+
+
+
+////////////////////////////////////////////////////////////////////////////////
+// SULLA DESKTOP
+////////////////////////////////////////////////////////////////////////////////
+
+
+
+await onMainProxyLoad(ipcMainProxy);
+
+
+
+
+
+////////////////////////////////////////////////////////////////////////////////
+// SULLA DESKTOP
+////////////////////////////////////////////////////////////////////////////////
+
+
 
 ipcMainProxy.on('images-namespaces-read', (event) => {
   if ([K8s.State.STARTED, K8s.State.DISABLED].includes(k8smanager.state)) {
@@ -1395,17 +1380,22 @@ function newK8sManager() {
       if (state === K8s.State.STOPPING) {
         Steve.getInstance().stop();
       } else {
-        // After all background services are initialized
-        const dbManager = getDatabaseManager();
-        await dbManager.initialize().catch((err: any) => {
-          // Make database initialization errors quieter during startup
-          if (err.message && err.message.includes('Postgres not connected')) {
-            console.debug('[Background] Database not ready yet (PostgreSQL not available)');
-          } else {
-            console.error('[Background] DatabaseManager failed to initialize:', err);
-          }
-        });
+        ////////////////////////////////////////////////////////////////////////////////
+        // SULLA DESKTOP start
+        ////////////////////////////////////////////////////////////////////////////////
+
+
+
+        await afterBackgroundLoaded();
+
+
+
+
+        ////////////////////////////////////////////////////////////////////////////////
+        // SULLA DESKTOP end
+        ////////////////////////////////////////////////////////////////////////////////
       }
+
       if (pendingRestartContext !== undefined && !backendIsBusy()) {
         // If we restart immediately the QEMU process in the VM doesn't always respond to a shutdown messages
         setTimeout(doFullRestart, 2_000, pendingRestartContext);
