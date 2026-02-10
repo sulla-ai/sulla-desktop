@@ -736,6 +736,7 @@ export default class LimaKubernetesBackend extends events.EventEmitter implement
     }
   }
 
+  async sullaStepCustomEnvironment(): Promise<void> {
     // Reset progress counter at the start
     this.progressTracker.numeric('Starting Sulla deployment', 0, 100);
 
