@@ -1186,6 +1186,11 @@ export default defineComponent({
       try {
         const n8nService = new N8nService();
 
+        // Print the configured password for debugging
+        const { getSettings } = await import('../config/settingsImpl');
+        const settings = getSettings();
+        console.log('Sulla Service Password:', settings.experimental.sullaServicePassword);
+
         // Test health check
         const healthy = await n8nService.healthCheck();
         if (!healthy) {

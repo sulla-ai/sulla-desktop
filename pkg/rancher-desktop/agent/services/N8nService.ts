@@ -2,6 +2,7 @@
 // Provides methods to manage workflows, executions, credentials, and other n8n resources
 
 import Logging from '@pkg/utils/logging';
+import { N8nUserApiKeyModel } from '../database/models/N8nUserApiKeyModel';
 
 const console = Logging.agent;
 
@@ -11,14 +12,27 @@ const console = Logging.agent;
  */
 export class N8nService {
   private baseUrl: string;
-  private username: string;
-  private password: string;
+  private apiKey: string;
 
   constructor() {
-    // Hardcoded values from sulla-deployments.yaml
-    this.baseUrl = 'http://localhost:5678';
-    this.username = 'admin';
-    this.password = 'n8n_dev_password';
+    // Initialize with empty defaults - call initialize() to set values
+    this.baseUrl = '';
+    this.apiKey = '';
+  }
+
+  /**
+   * Initialize the service with configuration values
+   */
+  async initialize(): Promise<void> {
+    // Load API key from database
+    const ApiModel = await N8nUserApiKeyModel.getOrCreateServiceAccount(undefined);
+    const serviceAccountKey = ApiModel.getApiKey();
+
+    if (!ApiModel?.attributes.apiKey) {
+      throw new Error('No API key found in database');
+    }
+    this.apiKey = serviceAccountKey;
+    this.baseUrl = 'http://localhost:30119';
   }
 
   /**
@@ -27,12 +41,9 @@ export class N8nService {
   private async request(endpoint: string, options: RequestInit = {}): Promise<any> {
     const url = `${this.baseUrl}${endpoint}`;
 
-    const authString = `${this.username}:${this.password}`;
-    const authBase64 = Buffer.from(authString).toString('base64');
-
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      'Authorization': `Basic ${authBase64}`,
+      'Authorization': `Bearer ${this.apiKey}`,
       ...options.headers as Record<string, string>
     };
 
@@ -65,6 +76,7 @@ export class N8nService {
    * Get all workflows
    */
   async getWorkflows(): Promise<any[]> {
+
     const result = await this.request('/rest/workflows');
     return result.data || result;
   }
@@ -241,7 +253,7 @@ export class N8nService {
    */
   async healthCheck(): Promise<boolean> {
     try {
-      await this.request('/rest/workflows', { method: 'GET' });
+      await this.request('/healthz', { method: 'GET' });
       return true;
     } catch (error) {
       console.error('[N8nService] Health check failed:', error);
@@ -251,6 +263,8 @@ export class N8nService {
 }
 
 // Export a factory function for creating configured instance
-export function createN8nService(): N8nService {
-  return new N8nService();
+export async function createN8nService(): Promise<N8nService> {
+  const service = new N8nService();
+  await service.initialize();
+  return service;
 }

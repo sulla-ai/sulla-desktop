@@ -177,6 +177,8 @@ export const defaultSettings = {
     sullaServicePassword: '',
     /** Generated N8N encryption key */
     sullaN8nEncryptionKey: '',
+    /** Service account user ID created during seeding */
+    sullaServiceAccountUserId: '',
     /** Subscribe to updates and newsletters */
     sullaSubscribeToUpdates: true,
     /** Flag indicating if the first-run Sulla networking setup is complete */

@@ -6,6 +6,7 @@ import { getBackendGraphWebSocketService } from '@pkg/agent/services/BackendGrap
 import { SullaIntegrations } from './agent/integrations';
 import { postgresClient } from '@pkg/agent/database/PostgresClient';
 import { getChatCompletionsServer } from '@pkg/main/chatCompletionsServer';
+import { createN8nService } from './agent/services/N8nService';
 
 import { app } from 'electron';
 const { getDatabaseManager } = require('@pkg/agent/database/DatabaseManager');
@@ -26,6 +27,27 @@ export async function instantiateSullaStart(): Promise<void> {
     console.log('[Integrations] Sulla integrations initialized');
 
     try {
+
+        const backendGraphWebSocketService = getBackendGraphWebSocketService();
+        console.log('[Background] BackendGraphWebSocketService initialized - backend agent messages will be processed');
+
+        // Initialize Sulla-specific IPC handlers
+        initSullaEvents();
+        
+        // PG connection issue
+        process.on('unhandledRejection', (reason: any) => {
+            if (reason?.code === '57P01') {
+                console.warn('[Unhandled] Ignored Postgres admin termination');
+                return;
+            }
+            console.error('[Unhandled Rejection]', reason);
+        });
+
+
+        await afterBackgroundLoaded();
+
+
+
         const schedulerService = getSchedulerService();
         await schedulerService.initialize();
         console.log('[Background] SchedulerService initialized - calendar events will trigger in background');
@@ -37,9 +59,6 @@ export async function instantiateSullaStart(): Promise<void> {
         const integrationService = getIntegrationService();
         await integrationService.initialize();
         console.log('[Background] IntegrationService initialized - integration tasks will run in background');
-
-        const backendGraphWebSocketService = getBackendGraphWebSocketService();
-        console.log('[Background] BackendGraphWebSocketService initialized - backend agent messages will be processed');
 
         // Start the chat completions API server
         console.log('[Background] Starting chat completions API server...');
@@ -54,17 +73,6 @@ export async function instantiateSullaStart(): Promise<void> {
 
         SullaIntegrations();
 
-        // Initialize Sulla-specific IPC handlers
-        initSullaEvents();
-        
-        // PG connection issue
-        process.on('unhandledRejection', (reason: any) => {
-            if (reason?.code === '57P01') {
-                console.warn('[Unhandled] Ignored Postgres admin termination');
-                return;
-            }
-            console.error('[Unhandled Rejection]', reason);
-        });
 
     } catch (ex: any) {
         console.error('[Background] Failed to initialize cron services:', ex);
@@ -96,7 +104,7 @@ export async function onMainProxyLoad(ipcMainProxy: any) {
  */
 export async function afterBackgroundLoaded() {
 
-    // After all background services are initialized
+    // Then initialize database manager
     const dbManager = getDatabaseManager();
     await dbManager.initialize().catch((err: any) => {
         // Make database initialization errors quieter during startup
@@ -106,6 +114,10 @@ export async function afterBackgroundLoaded() {
             console.error('[Background] DatabaseManager failed to initialize:', err);
         }
     });
+
+    // Then initialize N8nService
+    const n8nService = await createN8nService();
+    console.log('[Background] N8nService initialized');
 }
 
 /**

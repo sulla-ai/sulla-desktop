@@ -754,7 +754,7 @@ export default class LimaKubernetesBackend extends events.EventEmitter implement
 
     await this.progressTracker.action('Booting Virtual Container Environment...', 60, async () => {
       this.progressTracker.numeric('Booting Virtual Container Environment', 40, 100);
-      const containers = ['ws-server', 'redis', 'postgres', 'chroma', 'ollama'];
+      const containers = ['ws-server', 'redis', 'postgres', 'chroma', 'n8n', 'ollama'];
       
       // Track each container individually
       for (const container of containers) {

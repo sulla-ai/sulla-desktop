@@ -90,8 +90,11 @@ const generateEncryptionKey = () => {
 
 const handleNext = async () => {
   // Generate and set service password and encryption key
+  console.log('[FirstRunWelcome] Generating service password and encryption key...');
   settings.value.experimental.sullaServicePassword = generatePassword();
   settings.value.experimental.sullaN8nEncryptionKey = generateEncryptionKey();
+  console.log('[FirstRunWelcome] Generated password:', settings.value.experimental.sullaServicePassword);
+  console.log('[FirstRunWelcome] Generated encryption key:', settings.value.experimental.sullaN8nEncryptionKey);
 
   // Save the settings
   await commitChanges({
@@ -106,6 +109,7 @@ const handleNext = async () => {
       firstRunCredentialsNeeded: false,
     }
   });
+  console.log('[FirstRunWelcome] Settings committed successfully');
 
   // Check if ready to trigger custom environment
   if (settings.value.experimental.firstRunSullaNetworking &&
@@ -113,7 +117,15 @@ const handleNext = async () => {
       settings.value.experimental.sullaPassword &&
       settings.value.experimental.sullaServicePassword &&
       settings.value.experimental.sullaN8nEncryptionKey) {
+    console.log('[FirstRunWelcome] Triggering custom environment...');
     await ipcRenderer.invoke('start-sulla-custom-env');
+  } else {
+    console.log('[FirstRunWelcome] Not ready to trigger custom environment yet');
+    console.log('[FirstRunWelcome] firstRunSullaNetworking:', settings.value.experimental.firstRunSullaNetworking);
+    console.log('[FirstRunWelcome] sullaEmail:', settings.value.experimental.sullaEmail);
+    console.log('[FirstRunWelcome] sullaPassword:', settings.value.experimental.sullaPassword);
+    console.log('[FirstRunWelcome] sullaServicePassword:', settings.value.experimental.sullaServicePassword);
+    console.log('[FirstRunWelcome] sullaN8nEncryptionKey:', settings.value.experimental.sullaN8nEncryptionKey);
   }
 
   emit('next');

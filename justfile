@@ -16,13 +16,13 @@ clean:
     @echo "Clean complete."
 
 # Clean all caches and generated files for a fresh install (WIPES VM AND IMAGES)
+#rm -rf ~/.lima # This wipes the images too
 clean-hard:
     @echo "Cleaning up for fresh install (this will wipe VM and cached images)..."
     rm -rf node_modules
     rm -rf .yarn/cache
     rm -rf .yarn/install-state.gz
     rm -rf dist
-    rm -rf ~/.lima
     rm -rf ~/Library/Application\ Support/rancher-desktop
     rm -rf ~/Library/Application\ Support/sulla-desktop
     rm -rf ~/Library/Preferences/rancher-desktop
@@ -220,3 +220,12 @@ chat:
     curl -X POST http://localhost:3000/v1/chat/completions \
     -H "Content-Type: application/json" \
     -d '{"model": "sulla", "messages": [{"role": "user", "content": "Test message"}]}'
+
+limactl:
+    LIMA_HOME=~/Library/Application\ Support/rancher-desktop/lima \
+    limactl list
+
+
+kubectl:
+    LIMA_HOME=~/Library/Application\ Support/rancher-desktop/lima \
+    sudo k3s kubectl help

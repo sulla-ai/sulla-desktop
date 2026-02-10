@@ -49,7 +49,7 @@ import NERDCTL from '@pkg/assets/scripts/nerdctl';
 import NGINX_CONF from '@pkg/assets/scripts/nginx.conf';
 import * as settingsImpl from '@pkg/config/settingsImpl';
 import { ContainerEngine, MountType, VMType } from '@pkg/config/settings';
-import SULLA_DEPLOYMENTS from '@pkg/assets/sulla-deployments.yaml';
+import { readDeploymentProfiles } from '@pkg/main/deploymentProfiles';
 import { getServerCredentialsPath, ServerState } from '@pkg/main/credentialServer/httpCredentialHelperServer';
 import mainEvents from '@pkg/main/mainEvents';
 import { exec as sudo } from '@pkg/sudo-prompt';
@@ -2049,12 +2049,26 @@ export default class LimaBackend extends events.EventEmitter implements VMBacken
       }
     });
 
+    
+
 
     this.writeSetting({ application: { firstKubernetesIsInstalled: true } });
 
-    // Reload current settings to get the latest firstRunCredentialsNeeded value
-    this.cfg = settingsImpl.load({ defaults: {}, locked: {} });
-    settingsImpl.updateLockedFields({});
+    // Reload current settings with proper deployment profiles to get the latest firstRunCredentialsNeeded value
+    const deploymentProfiles = await readDeploymentProfiles();
+    this.cfg = settingsImpl.load(deploymentProfiles);
+    settingsImpl.updateLockedFields(deploymentProfiles.locked);
+
+    // Check if username and email from firstrun are saved, and ensure firstRunCredentialsNeeded is false
+    const sullaEmail = (this.cfg?.experimental as any)?.sullaEmail;
+    const sullaPassword = (this.cfg?.experimental as any)?.sullaPassword;
+    if (sullaEmail && sullaPassword) {
+      console.log('[LimaBackend] Found saved credentials from firstrun, ensuring firstRunCredentialsNeeded is false');
+      this.writeSetting({ application: { firstRunCredentialsNeeded: false } });
+      // Reload settings again to get the updated firstRunCredentialsNeeded value
+      this.cfg = settingsImpl.load(deploymentProfiles);
+      settingsImpl.updateLockedFields(deploymentProfiles.locked);
+    }
     
     // if we get here the user has entered their credentials and k8s has booted. we can install sulla.
     const firstRunCredentialsNeeded = (this.cfg?.application as any)?.firstRunCredentialsNeeded;
@@ -2160,232 +2174,6 @@ export default class LimaBackend extends events.EventEmitter implements VMBacken
       }
     } catch (err) {
       console.warn('[Sulla] Failed to configure Docker credentials:', err);
-    }
-  }
-
-  private tempSullaWorkdir?: string;
-
-  private async prepareSullaDeploymentFiles(): Promise<void> {
-    this.tempSullaWorkdir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'sulla-deploy-'));
-    const deploymentPath = path.join(this.tempSullaWorkdir, 'sulla-deployments.yaml');
-
-    const vmMemoryGB = this.cfg?.virtualMachine.memoryInGB || 4;
-    const vmCPUs = this.cfg?.virtualMachine.numberCPUs || 4;
-    const ollamaMemoryGB = Math.max(2, Math.floor(vmMemoryGB * 0.7));
-    const ollamaCPUs = Math.max(1, Math.floor(vmCPUs * 0.75));
-    console.log(`Configuring Ollama pod: ${ollamaMemoryGB}Gi memory, ${ollamaCPUs} CPUs (VM: ${vmMemoryGB}GB, ${vmCPUs} CPUs)`);
-
-    const deployments = (SULLA_DEPLOYMENTS as unknown[]).map((doc: unknown) => {
-      const deployment = doc as Record<string, unknown>;
-      if (deployment.kind === 'Deployment' && (deployment.metadata as Record<string, unknown>)?.name === 'ollama') {
-        const spec = deployment.spec as Record<string, unknown>;
-        const template = spec?.template as Record<string, unknown>;
-        const podSpec = template?.spec as Record<string, unknown>;
-        const containers = podSpec?.containers as Array<Record<string, unknown>>;
-        if (containers?.[0]) {
-          containers[0].resources = {
-            limits: { memory: `${ollamaMemoryGB}Gi`, cpu: `${ollamaCPUs * 1000}m` },
-            requests: { memory: `${Math.ceil(ollamaMemoryGB / 2)}Gi`, cpu: `${Math.ceil(ollamaCPUs * 500)}m` },
-          };
-        }
-      }
-      if (deployment.kind === 'Deployment' && (deployment.metadata as Record<string, unknown>)?.name === 'postgres') {
-        const spec = deployment.spec as Record<string, unknown>;
-        const template = spec?.template as Record<string, unknown>;
-        const podSpec = template?.spec as Record<string, unknown>;
-        const containers = podSpec?.containers as Array<Record<string, unknown>>;
-        if (containers?.[0]?.env) {
-          containers[0].env = (containers[0].env as Array<any>).map((envVar: any) => {
-            if (envVar.name === 'POSTGRES_PASSWORD' || envVar.name === 'DB_POSTGRESDB_PASSWORD') {
-              envVar.value = this.cfg?.experimental?.sullaServicePassword || 'sulla_dev_password';
-            }
-            return envVar;
-          });
-        }
-      }
-      if (deployment.kind === 'Deployment' && (deployment.metadata as Record<string, unknown>)?.name === 'n8n') {
-        const spec = deployment.spec as Record<string, unknown>;
-        const template = spec?.template as Record<string, unknown>;
-        const podSpec = template?.spec as Record<string, unknown>;
-        const containers = podSpec?.containers as Array<Record<string, unknown>>;
-        if (containers?.[0]?.env) {
-          containers[0].env = (containers[0].env as Array<any>).map((envVar: any) => {
-            if (envVar.name === 'N8N_ENCRYPTION_KEY') {
-              envVar.value = this.cfg?.experimental?.sullaN8nEncryptionKey || 'changeMeToA32CharRandomString1234';
-            }
-            if (envVar.name === 'N8N_BASIC_AUTH_PASSWORD') {
-              envVar.value = this.cfg?.experimental?.sullaServicePassword || 'n8n_dev_password';
-            }
-            return envVar;
-          });
-        }
-      }
-      return deployment;
-    });
-
-    const yamlContent = deployments.map(doc => yaml.stringify(doc, { defaultStringType: 'QUOTE_DOUBLE' })).join('---\n');
-    await fs.promises.writeFile(deploymentPath, yamlContent, 'utf-8');
-    await this.lima('copy', deploymentPath, `${ MACHINE_NAME }:/tmp/sulla-deployments.yaml`);
-  }
-
-  private async applySullaManifests(): Promise<void> {
-    for (let attempt = 1; attempt <= 3; attempt++) {
-      try {
-        await this.execCommand({ root: true }, 'k3s', 'kubectl', 'apply', '--server-side', '--force-conflicts', '-f', '/tmp/sulla-deployments.yaml');
-        console.log(`Sulla Desktop deployments applied successfully (attempt ${ attempt })`);
-        const status = await this.execCommand({ root: true, capture: true }, 'k3s', 'kubectl', 'get', 'pods,svc', '-n', 'sulla', '-o', 'wide');
-        console.log('Sulla pods/services:\n', status);
-        break;
-      } catch (err) {
-        console.warn(`Sulla deployment attempt ${ attempt } failed:`, err);
-        if (attempt === 3) {
-          await this.logK8sDiagnostics('Deployment apply failed');
-          throw err;
-        }
-        await new Promise(r => setTimeout(r, 5000));
-      }
-    }
-  }
-
-  private async waitForDeployment(name: string, timeoutSec: number = 600): Promise<void> {
-    return this.waitForCondition(async () => {
-      try {
-        const status = await this.execCommand({ capture: true, root: true }, 'k3s', 'kubectl', 'get', 'deployment', '-n', 'sulla', name, '-o', 'jsonpath={.status.availableReplicas}');
-        return parseInt(status.trim()) > 0;
-      } catch {
-        return false;
-      }
-    }, timeoutSec);
-  }
-
-  private async waitForPodCondition(label: string, conditionType: string, expectedStatus: string, timeoutSec: number = 180): Promise<void> {
-    return this.waitForCondition(async () => {
-      try {
-        const status = await this.execCommand(
-          { capture: true, root: true },
-          'k3s', 'kubectl', 'get', 'pod', '-n', 'sulla',
-          '-l', `app=${label}`,
-          '-o', `jsonpath={.items[0].status.conditions[?(@.type=="${conditionType}")].status}`
-        );
-        return status.trim() === expectedStatus;
-      } catch {
-        return false;
-      }
-    }, timeoutSec);
-  }
-
-  private async waitForCondition(check: () => Promise<boolean>, timeoutSec: number = 120, intervalMs: number = 2000): Promise<void> {
-    const start = Date.now();
-    while (Date.now() - start < timeoutSec * 1000) {
-      if (await check()) return;
-      await new Promise(r => setTimeout(r, intervalMs));
-    }
-    throw new Error(`Timeout waiting for condition after ${timeoutSec}s`);
-  }
-
-  protected async pullOllamaModelWithProgress(): Promise<void> {
-    try {
-      const MODEL = (this.cfg as Record<string, unknown>)?.experimental &&
-        ((this.cfg as Record<string, unknown>).experimental as Record<string, unknown>)?.sullaModel
-        ? String(((this.cfg as Record<string, unknown>).experimental as Record<string, unknown>).sullaModel)
-        : 'tinyllama:latest';
-
-      // Reset progress counter before starting download
-      this.progressTracker.numeric(`Starting Ollama model download: ${MODEL}`, 0, 100);
-
-      console.log(`Starting Ollama model pull: ${MODEL}`);
-
-      // Check if model is already downloaded
-      try {
-        const listOutput = await this.execCommand({ capture: true, root: true }, 'k3s', 'kubectl', 'exec', '-n', 'sulla', 'deploy/ollama', '--', 'ollama', 'list');
-        if (listOutput.includes(MODEL)) {
-          console.log(`Ollama model ${MODEL} is already downloaded, skipping pull`);
-          return;
-        }
-      } catch (error) {
-        console.warn(`Failed to check if model ${MODEL} is already downloaded:`, error);
-        // Continue with pull if check fails
-      }
-
-      const proc = this.spawn({ root: true }, 'k3s', 'kubectl', 'exec', '-n', 'sulla', 'deploy/ollama', '--', 'ollama', 'pull', MODEL);
-
-      return new Promise((resolve, reject) => {
-        let output = '';
-        // Initialize progress at 0
-        this.progressTracker.numeric(`Pulling Ollama model ${MODEL}`, 0, 100);
-        proc.stdout?.on('data', (chunk: Buffer | string) => {
-          const text = Buffer.isBuffer(chunk) ? chunk.toString('utf8') : chunk;
-          const lines = text.split('\n');
-          lines.forEach((line: string) => {
-            const trimmed = line.trim();
-            if (trimmed) {
-              console.log(`[Ollama Pull] ${trimmed}`);
-              output += trimmed + '\n';
-              // Parse for progress percentage
-              const progressMatch = trimmed.match(/(\d+)%/);
-              if (progressMatch) {
-                const progress = parseInt(progressMatch[1], 10);
-                this.progressTracker.numeric(`Pulling Ollama model ${MODEL}`, progress, 100);
-              }
-            }
-          });
-        });
-        proc.stderr?.on('data', (chunk: Buffer | string) => {
-          const text = Buffer.isBuffer(chunk) ? chunk.toString('utf8') : chunk;
-          const trimmed = text.trim();
-          if (trimmed) {
-            console.error(`[Ollama Pull Error] ${trimmed}`);
-          }
-        });
-        proc.on('close', (code) => {
-          if (code === 0) {
-            console.log(`Ollama model ${MODEL} pulled successfully`);
-            // Set to 100% on success
-            this.progressTracker.numeric(`Pulling Ollama model ${MODEL}`, 100, 100);
-            resolve();
-          } else {
-            reject(new Error(`Model pull failed with code ${code}. Output: ${output}`));
-          }
-        });
-        proc.on('error', reject);
-      });
-    } catch (error) {
-      console.error('[Ollama Pull] Failed to spawn process:', error);
-      // Graceful fail: resolve the promise without throwing
-      return Promise.resolve();
-    }
-  }
-
-  private async logK8sDiagnostics(message: string): Promise<void> {
-    console.error(message);
-    try {
-      const events = await this.execCommand({ capture: true, root: true }, 'k3s', 'kubectl', 'get', 'events', '-n', 'sulla', '--sort-by=.metadata.creationTimestamp');
-      console.log('Sulla namespace events:\n', events);
-
-      const podName = await this.execCommand({ capture: true, root: true }, 'k3s', 'kubectl', 'get', 'pod', '-n', 'sulla', '-l', 'app=ollama', '-o', 'name').then(n => n.trim());
-      if (podName) {
-        const describe = await this.execCommand({ capture: true, root: true }, 'k3s', 'kubectl', 'describe', 'pod', podName, '-n', 'sulla');
-        console.log('Ollama pod description:\n', describe);
-
-        const logs = await this.execCommand({ capture: true, root: true }, 'k3s', 'kubectl', 'logs', podName, '-n', 'sulla');
-        console.log('Ollama pod logs:\n', logs);
-      }
-    } catch (e) {
-      console.error('Failed to collect K8s diagnostics:', e);
-    }
-  }
-
-  private async logQuickDeploymentStatus(): Promise<void> {
-    try {
-      const depl = await this.execCommand({ capture: true, root: true },
-        'k3s', 'kubectl', 'get', 'deployment', '-n', 'sulla', 'ollama', '-o', 'wide');
-      console.log('Deployment status immediately after apply:\n', depl);
-
-      const rs = await this.execCommand({ capture: true, root: true },
-        'k3s', 'kubectl', 'get', 'rs', '-n', 'sulla', '-l', 'app=ollama', '-o', 'wide');
-      console.log('ReplicaSet status:\n', rs);
-    } catch (e) {
-      console.warn('Early status check failed:', e);
     }
   }
 

@@ -39,7 +39,7 @@ import { Snapshots } from '@pkg/main/snapshots/snapshots';
 import { Snapshot, SnapshotDialog } from '@pkg/main/snapshots/types';
 import { Tray } from '@pkg/main/tray';
 import setupUpdate from '@pkg/main/update';
-import { hookSullaEnd, instantiateSullaStart, sullaEnd, onMainProxyLoad, afterBackgroundLoaded } from '@pkg/sulla';
+import { hookSullaEnd, sullaEnd, onMainProxyLoad } from '@pkg/sulla';
 import { spawnFile } from '@pkg/utils/childProcess';
 import getCommandLineArgs from '@pkg/utils/commandLine';
 import dockerDirManager from '@pkg/utils/dockerDirManager';
@@ -1401,21 +1401,6 @@ function newK8sManager() {
 
       if (state === K8s.State.STOPPING) {
         Steve.getInstance().stop();
-      } else {
-        ////////////////////////////////////////////////////////////////////////////////
-        // SULLA DESKTOP start
-        ////////////////////////////////////////////////////////////////////////////////
-
-
-
-        await afterBackgroundLoaded();
-
-
-
-
-        ////////////////////////////////////////////////////////////////////////////////
-        // SULLA DESKTOP end
-        ////////////////////////////////////////////////////////////////////////////////
       }
 
       if (pendingRestartContext !== undefined && !backendIsBusy()) {

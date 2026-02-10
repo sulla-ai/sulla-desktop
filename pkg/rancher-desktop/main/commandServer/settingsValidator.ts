@@ -154,6 +154,7 @@ export default class SettingsValidator {
         sullaEmail: this.checkString,
         sullaServicePassword: this.checkString,
         sullaN8nEncryptionKey: this.checkString,
+        sullaServiceAccountUserId: this.checkString,
         sullaSubscribeToUpdates: this.checkBoolean,
         firstRunSullaNetworking: this.checkBoolean,
         virtualMachine:  {

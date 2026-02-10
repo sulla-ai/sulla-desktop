@@ -9,70 +9,167 @@ interface ModelAttributes {
   [key: string]: any;
 }
 
-/**
- * Abstract base class for database models providing common CRUD operations.
- * Subclasses must define tableName, primaryKey, and fillable/guarded fields.
- * Handles attribute filling, saving, querying, and basic validation. 
- */
 export abstract class BaseModel<T extends ModelAttributes = ModelAttributes> {
-  protected abstract tableName: string;
-  protected abstract primaryKey: string; // usually 'id'
-  protected fillable: string[] = [];     // fields allowed for mass assignment
-  protected guarded: string[] = ['*'];   // protect all except fillable
+  protected abstract readonly tableName: string;
+  protected readonly primaryKey: string = 'id';
+  protected readonly timestamps: boolean = true;
+  protected readonly fillable: string[] = [];
+  protected readonly guarded: string[] = ['*'];
+
+  /**
+   * Cast property definitions for automatic type conversion
+   * Supported types: json, array, timestamp, string, integer, float, boolean
+   */
+  protected readonly casts: Record<string, string> = {};
 
   public attributes: Partial<T> = {};
   protected original: Partial<T> = {};
-  protected exists = false;
+  protected exists: boolean = false;
 
-  /**
-   * Creates a new model instance with optional initial attributes.
-   * 
-   * @param attributes - Initial attributes to set on the model. 
-   */
-  constructor() {}
+  constructor() { }
 
-  /**
-   * Fills the model with attributes using mass assignment rules.
-   * Only fillable fields are allowed; guarded fields are protected.
-   * 
-   * @param attributes - Attributes to fill.
-   * @throws Error if no fillable fields are defined and guarded is set to '*
-   */
   public fill(attributes: Partial<T>) {
-    // Get fillable from the instance prototype to handle minification
-    const instance = this as any;
-    const instanceFillable = instance.fillable || [];
-    const instanceGuarded = instance.guarded || ['*'];
-    
-    if (instanceGuarded.includes('*') && instanceFillable.length === 0) {
+    const fillable = this.fillable || [];
+    const guarded = this.guarded || ['*'];
+
+    if (guarded.includes('*') && fillable.length === 0) {
       throw new Error('Model has no fillable fields defined');
     }
 
     for (const [key, value] of Object.entries(attributes)) {
-      if (instanceFillable.includes(key) || !instanceGuarded.includes('*')) {
-        (this.attributes as any)[key] = value;
+      if ((fillable.includes(key) || !guarded.includes('*')) && value !== null && value !== undefined) {
+        this.attributes[key as keyof T] = this.castFromDatabase(key, value);
       }
+    }
+
+    return this;
+  }
+
+  /**
+   * Cast a value for storage in the database (pack)
+   */
+  private castForDatabase(key: string, value: any): any {
+    if (value === null || value === undefined) return value;
+
+    const castType = this.casts[key];
+    if (!castType) return value;
+
+    switch (castType) {
+      case 'json':
+      case 'array':
+      case 'object':
+        return JSON.stringify(value);
+
+      case 'timestamp':
+      case 'datetime':
+        if (value instanceof Date) {
+          return value.toISOString();
+        }
+        return value;
+
+      case 'integer':
+      case 'int':
+        return parseInt(value, 10);
+
+      case 'float':
+      case 'decimal':
+      case 'double':
+        return parseFloat(value);
+
+      case 'boolean':
+      case 'bool':
+        return Boolean(value);
+
+      case 'string':
+      default:
+        return String(value);
     }
   }
 
   /**
-   * Updates the model's attributes using mass assignment rules.
-  @param attributes - Attributes to update.
+   * Cast a value from database storage (unpack)
    */
+  private castFromDatabase(key: string, value: any): any {
+    if (value === null || value === undefined) return value;
+
+    const castType = this.casts[key];
+    if (!castType) return value;
+
+    switch (castType) {
+      case 'json':
+      case 'object':
+        if (typeof value === 'string') {
+          try {
+            return JSON.parse(value);
+          } catch (err) {
+            console.warn(`Failed to parse JSON for field ${key}:`, value);
+            return value;
+          }
+        }
+        return value;
+
+      case 'array':
+        if (typeof value === 'string') {
+          try {
+            const parsed = JSON.parse(value);
+            return Array.isArray(parsed) ? parsed : value;
+          } catch (err) {
+            console.warn(`Failed to parse array for field ${key}:`, value);
+            return value;
+          }
+        }
+        return value;
+
+      case 'timestamp':
+      case 'datetime':
+        if (typeof value === 'string') {
+          const date = new Date(value);
+          return isNaN(date.getTime()) ? value : date;
+        }
+        return value;
+
+      case 'integer':
+      case 'int':
+        if (typeof value === 'string') {
+          const parsed = parseInt(value, 10);
+          return isNaN(parsed) ? value : parsed;
+        }
+        return value;
+
+      case 'float':
+      case 'decimal':
+      case 'double':
+        if (typeof value === 'string') {
+          const parsed = parseFloat(value);
+          return isNaN(parsed) ? value : parsed;
+        }
+        return value;
+
+      case 'boolean':
+      case 'bool':
+        if (typeof value === 'string') {
+          return value.toLowerCase() === 'true' || value === '1';
+        }
+        return Boolean(value);
+
+      case 'string':
+      default:
+        return String(value);
+    }
+  }
+
   public updateAttributes(attributes: Partial<T>): void {
     this.fill(attributes);
   }
 
-  /**
-   * Finds a model instance by its primary key.
-   * 
-   * @param id - The primary key value (string or number).
-   * @returns Promise resolving to the model instance or null if not found.
-   */
+  protected get tableRef(): string {
+    return `"${this.tableName}"`; // public schema - no prefix
+  }
+
   static async find<T extends BaseModel>(this: new (...args: any[]) => T, id: string | number): Promise<T | null> {
     const model = new this();
     const result = await postgresClient.queryOne(
-      `SELECT * FROM ${model.tableName} WHERE "${model.primaryKey}" = $1 LIMIT 1`,
+      `SELECT * FROM ${model.tableRef} WHERE "${model.primaryKey}" = $1 LIMIT 1`,
       [id]
     );
 
@@ -84,15 +181,10 @@ export abstract class BaseModel<T extends ModelAttributes = ModelAttributes> {
     return instance;
   }
 
-  /**
-   * Retrieves all model instances from the database.
-   * 
-   * @returns Promise resolving to an array of model instances.
-   */
   static async all<T extends BaseModel>(this: new (...args: any[]) => T): Promise<T[]> {
     const model = new (this as any)();
     const rows = await postgresClient.queryAll(
-      `SELECT * FROM ${model.tableName} ORDER BY "${model.primaryKey}" ASC`
+      `SELECT * FROM ${model.tableRef} ORDER BY "${model.primaryKey}" ASC`
     );
 
     return rows.map(row => {
@@ -103,20 +195,13 @@ export abstract class BaseModel<T extends ModelAttributes = ModelAttributes> {
     });
   }
 
-  /**
-   * Queries model instances based on conditions.
-   * 
-   * @param conditions - Either an object of key-value pairs for equality checks or a raw SQL string.
-   * @param value - Optional value for raw SQL conditions.
-   * @returns Promise resolving to an array of model instances.
-   */
   static async where<T extends BaseModel>(
     this: new (...args: any[]) => T,
     conditions: WhereClause | string,
     value?: any
   ): Promise<T[]> {
     const model = new (this as any)();
-    let query = `SELECT * FROM ${model.tableName}`;
+    let query = `SELECT * FROM ${model.tableRef}`;
     const params: any[] = [];
 
     if (typeof conditions === 'string') {
@@ -133,19 +218,20 @@ export abstract class BaseModel<T extends ModelAttributes = ModelAttributes> {
     const rows = await postgresClient.queryAll(query, params);
 
     return rows.map(row => {
-      const instance = new (this as any)(row);
+      // Apply casting to the loaded data
+      const castedRow: Partial<T> = {};
+      const tempInstance = new this(); // Create instance to access casting methods
+      for (const [key, value] of Object.entries(row)) {
+        castedRow[key as keyof T] = tempInstance.castFromDatabase(key, value);
+      }
+
+      const instance = new (this as any)(castedRow);
       instance.exists = true;
-      instance.original = { ...row };
+      instance.original = { ...castedRow };
       return instance;
     });
   }
 
-  /**
-   * Creates and saves a new model instance with the given attributes.
-   * 
-   * @param attributes - Attributes for the new instance.
-   * @returns Promise resolving to the saved model instance.
-   */
   static async create<T extends BaseModel>(
     this: new () => T,
     attributes: Partial<ModelAttributes>
@@ -155,49 +241,64 @@ export abstract class BaseModel<T extends ModelAttributes = ModelAttributes> {
     return model.save();
   }
 
-  /**
-   * Saves the model instance to the database (insert or update).
-   * Automatically handles created_at/updated_at timestamps.
-   * 
-   * @returns Promise resolving to the saved instance.
-   * delete instance method:
-   */
   async save(): Promise<this> {
-    // Ensure fillable is properly initialized from instance
-    const instanceFillable = this.fillable || [];
-    const instanceGuarded = this.guarded || ['*'];
-    
+    const fillable = this.fillable || [];
+    const guarded = this.guarded || ['*'];
+
+    // Never include primary key in INSERT if it's null/undefined/empty
+    if (!this.exists && (this.attributes[this.primaryKey] == null || this.attributes[this.primaryKey] === '')) {
+      delete this.attributes[this.primaryKey];
+    }
+
     if (this.exists) {
-      // Update
       const changes = Object.entries(this.attributes)
         .filter(([k, v]) => this.original[k] !== v)
-        .filter(([k]) => instanceFillable.includes(k) || !instanceGuarded.includes('*'));
+        .filter(([k]) => fillable.includes(k) || !guarded.includes('*'));
 
       if (changes.length === 0) return this;
 
       const sets = changes.map(([k], i) => `"${k}" = $${i + 1}`).join(', ');
-      const values = changes.map(([, v]) => v);
+      const values = changes.map(([k, v]) => this.castForDatabase(k, v));
       values.push(this.attributes[this.primaryKey]);
 
-      await postgresClient.query(
-        `UPDATE ${this.tableName} SET ${sets}, "updated_at" = CURRENT_TIMESTAMP WHERE "${this.primaryKey}" = $${values.length}`,
-        values
-      );
+      let updateQuery = `UPDATE ${this.tableRef} SET ${sets}`;
+      if (this.timestamps) {
+        updateQuery += `, "updated_at" = CURRENT_TIMESTAMP`;
+      }
+      updateQuery += ` WHERE "${this.primaryKey}" = $${values.length}`;
+
+      await postgresClient.query(updateQuery, values);
     } else {
-      // Insert
-      const keys = Object.keys(this.attributes).filter(k => instanceFillable.includes(k) || !instanceGuarded.includes('*'));
+      // Explicitly exclude primary key from INSERT keys/values
+      const entries = Object.entries(this.attributes)
+        .filter(([k, v]) =>
+          (fillable.includes(k) || !guarded.includes('*')) &&
+          v !== null && v !== undefined
+        );
+      console.log('INSERT entries', entries);
+      const keys = entries.map(([k]) => k);
       const placeholders = keys.map((_, i) => `$${i + 1}`).join(', ');
-      const values = keys.map(k => this.attributes[k]);
+      const values = entries.map(([k, v]) => this.castForDatabase(k, v));
 
-      const result = await postgresClient.query(
-        `INSERT INTO ${this.tableName} (${keys.map(k => `"${k}"`).join(', ')}, "created_at", "updated_at") 
-         VALUES (${placeholders}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-         RETURNING *`,
-        values
-      );
+      let insertQuery: string;
+      if (this.timestamps) {
+        insertQuery = `INSERT INTO ${this.tableRef} (${keys.map(k => `"${k}"`).join(', ')}${keys.length ? ', ' : ''}"created_at", "updated_at") 
+                      VALUES (${placeholders}${placeholders ? ', ' : ''}CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                      RETURNING *`;
+      } else {
+        insertQuery = `INSERT INTO ${this.tableRef} (${keys.map(k => `"${k}"`).join(', ')}) 
+                      VALUES (${placeholders})
+                      RETURNING *`;
+      }
 
-      if (result[0]) {
-        this.attributes = result[0];
+      const result = await postgresClient.query(insertQuery, values);
+
+      if (result?.[0]) {
+        const castedAttributes: Partial<T> = {};
+        for (const [key, value] of Object.entries(result[0])) {
+          castedAttributes[key as keyof T] = this.castFromDatabase(key, value);
+        }
+        this.attributes = castedAttributes;
         this.exists = true;
         this.original = { ...this.attributes };
       }
@@ -206,16 +307,11 @@ export abstract class BaseModel<T extends ModelAttributes = ModelAttributes> {
     return this;
   }
 
-  /**
-   * Deletes the model instance from the database.
-   * 
-   * @returns Promise resolving to true if deleted, false if not exists
-   */
   async delete(): Promise<boolean> {
     if (!this.exists) return false;
 
     const result = await postgresClient.query(
-      `DELETE FROM ${this.tableName} WHERE "${this.primaryKey}" = $1`,
+      `DELETE FROM ${this.tableRef} WHERE "${this.primaryKey}" = $1`,
       [this.attributes[this.primaryKey]]
     );
 
@@ -223,11 +319,6 @@ export abstract class BaseModel<T extends ModelAttributes = ModelAttributes> {
     return (result.length ?? 0) > 0;
   }
 
-  /**
-   * Gets the primary key value of the instance.
-   * 
-   * @returns The primary key value.
-   */
   get id(): any {
     return this.attributes[this.primaryKey];
   }

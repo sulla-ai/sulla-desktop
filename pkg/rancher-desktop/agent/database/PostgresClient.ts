@@ -23,12 +23,20 @@ export class PostgresClient {
     });
   }
 
+  /**
+   * Initializes the connection pool and sets the search_path to "$user", public
+   * @returns true if initialization was successful, false otherwise
+   */
   async initialize(): Promise<boolean> {
     if (this.connected) return true;
 
     try {
       const client = await this.pool!.connect();
       await client.query('SELECT 1');
+      
+      // Set search_path once on first connect (matches your psql behavior)
+      await client.query(`SET search_path TO "$user", public`);
+      
       client.release();
       this.connected = true;
       console.log('[PostgresClient] Pool connected and healthy');
