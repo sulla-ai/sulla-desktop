@@ -9,6 +9,7 @@ import { getChatCompletionsServer } from '@pkg/main/chatCompletionsServer';
 
 import { app } from 'electron';
 const { getDatabaseManager } = require('@pkg/agent/database/DatabaseManager');
+import { initSullaEvents } from '@pkg/main/sullaEvents';
 
 
 
@@ -53,6 +54,9 @@ export async function instantiateSullaStart(): Promise<void> {
 
         SullaIntegrations();
 
+        // Initialize Sulla-specific IPC handlers
+        initSullaEvents();
+        
         // PG connection issue
         process.on('unhandledRejection', (reason: any) => {
             if (reason?.code === '57P01') {

@@ -165,6 +165,11 @@ interface MainEventNames {
   'backend-locked-check'(): void;
 
   'dialog-info'(args: Record<string, string>): void;
+
+  /**
+   * Emitted when the Sulla first-run setup is complete.
+   */
+  'sulla-first-run-complete'(): void;
 }
 
 /**

@@ -97,6 +97,8 @@ export default class SettingsValidator {
         startInBackground:      this.checkBoolean,
         hideNotificationIcon:   this.checkBoolean,
         window:                 { quitOnClose: this.checkBoolean },
+        firstRunCredentialsNeeded: this.checkBoolean,
+        firstKubernetesIsInstalled: this.checkBoolean,
       },
       containerEngine: {
         allowedImages: {
@@ -147,6 +149,13 @@ export default class SettingsValidator {
         heartbeatDelayMinutes: this.checkNumber(1, 1440),
         heartbeatPrompt: this.checkString,
         heartbeatModel:  this.checkString,
+        sullaUsername: this.checkString,
+        sullaPassword: this.checkString,
+        sullaEmail: this.checkString,
+        sullaServicePassword: this.checkString,
+        sullaN8nEncryptionKey: this.checkString,
+        sullaSubscribeToUpdates: this.checkBoolean,
+        firstRunSullaNetworking: this.checkBoolean,
         virtualMachine:  {
           diskSize: this.checkLima(this.checkByteUnits),
           mount:    {

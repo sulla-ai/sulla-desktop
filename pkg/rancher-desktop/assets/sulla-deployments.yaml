@@ -365,7 +365,9 @@ spec:
         - name: N8N_BASIC_AUTH_USER
           value: "admin"
         - name: N8N_BASIC_AUTH_PASSWORD
-          value: "n8n_dev_password"                    # ← change this
+          value: "n8n_dev_password"                         # ← change this
+        - name: N8N_REST_API_ENABLED
+          value: "true"
         resources:
           limits:
             memory: "1Gi"

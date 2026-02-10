@@ -234,6 +234,10 @@ export function turnFirstRunOff() {
   _isFirstRun = false;
 }
 
+export function firstRunCredentialsNeeded() {
+  return getSettings().application.firstRunCredentialsNeeded;
+}
+
 function safeFileTest(path: string, conditions: number) {
   try {
     fs.accessSync(path, conditions);

@@ -30,13 +30,44 @@ export class StartupProgressController {
   private readonly OLLAMA_BASE = 'http://127.0.0.1:30114';
   private readinessInterval: ReturnType<typeof setInterval> | null = null;
   private k8sReady = false;
+  private readonly handleOllamaModelStatus = (event: IpcRendererEvent, payload: unknown) => {
+    console.log('[StartupProgressController] ollama-model-status:', payload);
+    // Safely narrow the payload
+    if (payload && typeof payload === 'object' && 'status' in payload) {
+      const typedPayload = payload as { status: string; model?: string };
+      this.state.modelDownloading.value =
+        typedPayload.status.includes('Downloading') ||
+        typedPayload.status.includes('pulling') ||
+        typedPayload.status.includes('Extracting');
 
-  constructor(private readonly state: ReturnType<typeof StartupProgressController.createState>) {}
+      this.state.modelName.value = typedPayload.model || this.state.modelName.value;
+      this.state.modelDownloadStatus.value = typedPayload.status;
+
+      // Show overlay if model is downloading
+      if (this.state.modelDownloading.value && this.state.progressMax.value <= 0) {
+        this.state.progressMax.value = 100;
+        this.state.progressCurrent.value = 0;
+        this.state.progressDescription.value = 'Downloading model...';
+      }
+
+      // Show overlay on any model status event
+      this.state.showOverlay.value = true;
+
+      if (typedPayload.status === 'success' || typedPayload.status.includes('complete')) {
+        this.state.modelDownloading.value = false;
+        this.state.modelDownloadStatus.value = 'Model ready';
+      }
+    }
+  };
+
+  constructor(public readonly state: ReturnType<typeof StartupProgressController.createState>) {}
 
   start(): void {
+    console.log('[StartupProgressController] start() called');
     // Initialize overlay state immediately so popup shows right away
     this.state.progressMax.value = 100;
     this.state.progressCurrent.value = 0;
+    console.log('[StartupProgressController] initial state: progressMax=', this.state.progressMax.value, 'progressCurrent=', this.state.progressCurrent.value);
     this.state.progressDescription.value = 'Initializing...';
     this.state.systemReady.value = false;
     
@@ -46,34 +77,7 @@ export class StartupProgressController {
     ipcRenderer.on('k8s-progress', this.handleProgress);
 
     // Use type assertion until you extend IpcRendererEvents
-    ipcRenderer.on('ollama-model-status' as any, (event: IpcRendererEvent, payload: unknown) => {
-      // Safely narrow the payload
-      if (payload && typeof payload === 'object' && 'status' in payload) {
-        const typedPayload = payload as { status: string; model?: string };
-        this.state.modelDownloading.value =
-          typedPayload.status.includes('Downloading') ||
-          typedPayload.status.includes('pulling') ||
-          typedPayload.status.includes('Extracting');
-
-        this.state.modelName.value = typedPayload.model || this.state.modelName.value;
-        this.state.modelDownloadStatus.value = typedPayload.status;
-
-        // Show overlay if model is downloading
-        if (this.state.modelDownloading.value && this.state.progressMax.value <= 0) {
-          this.state.progressMax.value = 100;
-          this.state.progressCurrent.value = 0;
-          this.state.progressDescription.value = 'Downloading model...';
-        }
-
-        // Show overlay on any model status event
-        this.state.showOverlay.value = true;
-
-        if (typedPayload.status === 'success' || typedPayload.status.includes('complete')) {
-          this.state.modelDownloading.value = false;
-          this.state.modelDownloadStatus.value = 'Model ready';
-        }
-      }
-    });
+    ipcRenderer.on('ollama-model-status' as any, this.handleOllamaModelStatus);
 
     this.startReadinessCheck();
   }
@@ -81,25 +85,7 @@ export class StartupProgressController {
   dispose(): void {
     ipcRenderer.removeListener('sulla-main-started' as any, this.handleMainStarted);
     ipcRenderer.removeListener('k8s-progress', this.handleProgress);
-
-    // Use the inline anonymous function pattern to match expected signature
-    ipcRenderer.removeListener('ollama-model-status' as any, (event: IpcRendererEvent, payload: unknown) => {
-      if (payload && typeof payload === 'object' && 'status' in payload) {
-        const typed = payload as { status: string; model?: string };
-        this.state.modelDownloading.value =
-          typed.status.includes('Downloading') ||
-          typed.status.includes('pulling') ||
-          typed.status.includes('Extracting');
-
-        this.state.modelName.value = typed.model || this.state.modelName.value;
-        this.state.modelDownloadStatus.value = typed.status;
-
-        if (typed.status === 'success' || typed.status.includes('complete')) {
-          this.state.modelDownloading.value = false;
-          this.state.modelDownloadStatus.value = 'Model ready';
-        }
-      }
-    });
+    ipcRenderer.removeListener('ollama-model-status' as any, this.handleOllamaModelStatus);
 
     if (this.readinessInterval) {
       clearInterval(this.readinessInterval);
@@ -127,13 +113,17 @@ export class StartupProgressController {
   };
 
   private readonly handleProgress = (_: unknown, progress: { current: number; max: number; description?: string }) => {
+    console.log('[StartupProgressController] handleProgress:', progress);
     // Show overlay on any progress event
     this.state.showOverlay.value = true;
     
     // If we got a real progress update, use those values instead of restart placeholder
-    if (progress.max !== 100 || progress.current !== 0) {
+    if (progress.max > 0) {
       this.state.progressCurrent.value = progress.current;
       this.state.progressMax.value = progress.max;
+    } else if (progress.max === -1) {
+      // Indeterminate progress, simulate by incrementing current
+      this.state.progressCurrent.value = Math.min(this.state.progressCurrent.value + 10, this.state.progressMax.value);
     }
     this.state.progressDescription.value = progress.description || this.state.progressDescription.value;
 
@@ -171,12 +161,6 @@ export class StartupProgressController {
     this.readinessInterval = setInterval(async () => {
       if (!this.k8sReady) return;
 
-      const ollamaUp = await this.checkOllamaConnectivity();
-      if (!ollamaUp) {
-        this.state.startupPhase.value = 'pods';
-        this.state.progressDescription.value = 'Waiting for Ollama pod...';
-        return;
-      }
 
       if (this.state.modelDownloading.value) {
         return; // model status already updating via event
@@ -187,21 +171,9 @@ export class StartupProgressController {
       this.state.systemReady.value = true;
       this.state.showOverlay.value = false; // Hide overlay when ready
 
-      // Automatically pull nomic-embed-text model after initial setup
-      this.pullNomicEmbedTextModel();
-
       clearInterval(this.readinessInterval!);
       this.readinessInterval = null;
     }, 3000);
-  }
-
-  private async checkOllamaConnectivity(): Promise<boolean> {
-    try {
-      const res = await fetch(`${this.OLLAMA_BASE}/api/tags`, { signal: AbortSignal.timeout(1500) });
-      return res.ok;
-    } catch {
-      return false;
-    }
   }
 
   private async pullNomicEmbedTextModel(): Promise<void> {

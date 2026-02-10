@@ -118,6 +118,11 @@ export interface KubernetesBackend extends EventEmitter<KubernetesBackendEvents>
   requiresRestartReasons(oldConfig: BackendSettings, newConfig: RecursivePartial<BackendSettings>, extras?: ExtraRequiresReasons): Promise<RestartReasons>;
 
   readonly k3sHelper: K3sHelper;
+
+  /**
+   * Sulla-specific: Step to customize the environment with user credentials.
+   */
+  sullaStepCustomEnvironment?(): Promise<void>;
 }
 
 export interface KubernetesBackendPortForwarder {

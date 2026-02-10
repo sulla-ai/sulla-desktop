@@ -90,6 +90,7 @@ export default defineComponent({
     border: none;
 
     legend {
+      font-weight:bold;
       font-size: 1rem;
       color: inherit;
       line-height: 1.5rem;

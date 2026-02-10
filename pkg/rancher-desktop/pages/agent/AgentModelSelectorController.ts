@@ -170,14 +170,85 @@ export class AgentModelSelectorController {
     this.showModelMenu.value = false;
   };
 
+  // Silent fetch that doesn't log network errors to console
+  private silentFetch(url: string, options: RequestInit = {}): Promise<Response | null> {
+    return new Promise((resolve) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open(options.method || 'GET', url);
+
+      // Set headers
+      if (options.headers) {
+        for (const [key, value] of Object.entries(options.headers)) {
+          xhr.setRequestHeader(key, value as string);
+        }
+      }
+
+      // Set timeout
+      if (options.signal) {
+        // For AbortSignal, we can't directly set timeout, but we can use a timer
+        const timeoutId = setTimeout(() => {
+          xhr.abort();
+          resolve(null);
+        }, 3000); // Default 3s timeout
+
+        xhr.onload = () => {
+          clearTimeout(timeoutId);
+          // Convert XMLHttpRequest to Response-like object
+          const response = {
+            ok: xhr.status >= 200 && xhr.status < 300,
+            status: xhr.status,
+            statusText: xhr.statusText,
+            text: () => Promise.resolve(xhr.responseText),
+            json: () => Promise.resolve(JSON.parse(xhr.responseText || '{}')),
+            body: null, // Not supported
+          };
+          resolve(response as any);
+        };
+
+        xhr.onerror = () => {
+          clearTimeout(timeoutId);
+          resolve(null);
+        };
+
+        xhr.ontimeout = () => {
+          clearTimeout(timeoutId);
+          resolve(null);
+        };
+      } else {
+        xhr.timeout = 3000; // Default timeout
+        xhr.onload = () => {
+          const response = {
+            ok: xhr.status >= 200 && xhr.status < 300,
+            status: xhr.status,
+            statusText: xhr.statusText,
+            text: () => Promise.resolve(xhr.responseText),
+            json: () => Promise.resolve(JSON.parse(xhr.responseText || '{}')),
+            body: null,
+          };
+          resolve(response as any);
+        };
+
+        xhr.onerror = () => resolve(null);
+        xhr.ontimeout = () => resolve(null);
+      }
+
+      // Send request
+      if (options.body) {
+        xhr.send(options.body as string);
+      } else {
+        xhr.send();
+      }
+    });
+  }
+
   private async refreshInstalledLocalModels(): Promise<void> {
     this.loadingLocalModels.value = true;
     try {
-      const res = await fetch('http://127.0.0.1:30114/api/tags', {
+      const res = await this.silentFetch('http://127.0.0.1:30114/api/tags', {
         signal: AbortSignal.timeout(3000),
       });
 
-      if (!res.ok) {
+      if (!res || !res.ok) {
         this.installedLocalModels.value = [];
         return;
       }

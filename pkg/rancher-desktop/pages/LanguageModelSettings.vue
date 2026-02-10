@@ -6,6 +6,7 @@ import { ipcRenderer } from '@pkg/utils/ipcRenderer';
 // Import soul prompt from TypeScript file
 import { soulPrompt } from '../agent/prompts/soul';
 import { heartbeatPrompt } from '../agent/prompts/heartbeat';
+import { N8nService } from '../agent/services/N8nService';
 
 // Nav items for the Language Model Settings sidebar
 const navItems = [
@@ -227,6 +228,10 @@ export default defineComponent({
       articlesTestResult:   null as {success: boolean, message: string, counts?: any} | null,
       sectionsTestResult:   null as {success: boolean, message: string, counts?: any} | null,
 
+      // N8n service test properties
+      runningN8nTest:       false,
+      n8nTestResult:        null as {success: boolean, message: string, data?: any} | null,
+
       // Soul prompt settings
       defaultSoulPrompt,
       soulPrompt: '',
@@ -412,6 +417,76 @@ export default defineComponent({
   },
 
   methods: {
+    // Silent fetch that doesn't log network errors to console
+    silentFetch(url: string, options: RequestInit = {}): Promise<Response | null> {
+      return new Promise((resolve) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open(options.method || 'GET', url);
+
+        // Set headers
+        if (options.headers) {
+          for (const [key, value] of Object.entries(options.headers)) {
+            xhr.setRequestHeader(key, value as string);
+          }
+        }
+
+        // Set timeout
+        if (options.signal) {
+          // For AbortSignal, we can't directly set timeout, but we can use a timer
+          const timeoutId = setTimeout(() => {
+            xhr.abort();
+            resolve(null);
+          }, 5000); // Default 5s timeout
+
+          xhr.onload = () => {
+            clearTimeout(timeoutId);
+            // Convert XMLHttpRequest to Response-like object
+            const response = {
+              ok: xhr.status >= 200 && xhr.status < 300,
+              status: xhr.status,
+              statusText: xhr.statusText,
+              text: () => Promise.resolve(xhr.responseText),
+              json: () => Promise.resolve(JSON.parse(xhr.responseText || '{}')),
+              body: null, // Not supported
+            };
+            resolve(response as any);
+          };
+
+          xhr.onerror = () => {
+            clearTimeout(timeoutId);
+            resolve(null);
+          };
+
+          xhr.ontimeout = () => {
+            clearTimeout(timeoutId);
+            resolve(null);
+          };
+        } else {
+          xhr.timeout = 5000; // Default timeout
+          xhr.onload = () => {
+            const response = {
+              ok: xhr.status >= 200 && xhr.status < 300,
+              status: xhr.status,
+              statusText: xhr.statusText,
+              text: () => Promise.resolve(xhr.responseText),
+              json: () => Promise.resolve(JSON.parse(xhr.responseText || '{}')),
+              body: null,
+            };
+            resolve(response as any);
+          };
+
+          xhr.onerror = () => resolve(null);
+          xhr.ontimeout = () => resolve(null);
+        }
+
+        // Send request
+        if (options.body) {
+          xhr.send(options.body as string);
+        } else {
+          xhr.send();
+        }
+      });
+    },
     navClicked(navId: string) {
       this.currentNav = navId;
       if (navId === 'models') {
@@ -424,8 +499,8 @@ export default defineComponent({
       try {
         // Query Ollama API for service status and running models
         const [tagsRes, psRes] = await Promise.all([
-          fetch('http://127.0.0.1:30114/api/tags', { signal: AbortSignal.timeout(3000) }).catch(() => null),
-          fetch('http://127.0.0.1:30114/api/ps', { signal: AbortSignal.timeout(3000) }).catch(() => null),
+          this.silentFetch('http://127.0.0.1:30114/api/tags', { signal: AbortSignal.timeout(3000) }),
+          this.silentFetch('http://127.0.0.1:30114/api/ps', { signal: AbortSignal.timeout(3000) }),
         ]);
 
         if (!tagsRes || !tagsRes.ok) {
@@ -491,11 +566,11 @@ export default defineComponent({
     async loadModels() {
       this.loadingModels = true;
       try {
-        const res = await fetch('http://127.0.0.1:30114/api/tags', {
+        const res = await this.silentFetch('http://127.0.0.1:30114/api/tags', {
           signal: AbortSignal.timeout(5000),
         });
 
-        if (res.ok) {
+        if (res && res.ok) {
           const data = await res.json();
 
           this.installedModels = data.models || [];
@@ -596,11 +671,11 @@ export default defineComponent({
 
       try {
         // Check if Ollama is running
-        const ollamaRes = await fetch('http://127.0.0.1:30114/api/tags', {
+        const ollamaRes = await this.silentFetch('http://127.0.0.1:30114/api/tags', {
           signal: AbortSignal.timeout(5000),
         });
 
-        if (!ollamaRes.ok) {
+        if (!ollamaRes || !ollamaRes.ok) {
           this.activationError = 'Cannot connect to Ollama. Make sure the service is running.';
 
           return;
@@ -719,13 +794,13 @@ export default defineComponent({
         for (const modelName of keyModels) {
           try {
             // Try to get model info to check if it's available
-            const response = await fetch('http://127.0.0.1:30114/api/show', {
+            const response = await this.silentFetch('http://127.0.0.1:30114/api/show', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ name: modelName }),
             });
             
-            if (response.ok) {
+            if (response && response.ok) {
               this.modelStatuses[modelName] = 'installed';
             } else {
               this.modelStatuses[modelName] = 'missing';
@@ -1100,6 +1175,38 @@ export default defineComponent({
     clearTestResults() {
       this.testResults = [];
       this.finalTestResult = null;
+    },
+
+    async runN8nServiceTest() {
+      if (this.runningN8nTest) return;
+
+      this.runningN8nTest = true;
+      this.n8nTestResult = null;
+
+      try {
+        const n8nService = new N8nService();
+
+        // Test health check
+        const healthy = await n8nService.healthCheck();
+        if (!healthy) {
+          throw new Error('N8n service is not accessible');
+        }
+
+        // Test getting workflows
+        const workflows = await n8nService.getWorkflows();
+        this.n8nTestResult = {
+          success: true,
+          message: 'N8n service is accessible and returned workflows.',
+          data: { workflowCount: workflows.length }
+        };
+      } catch (error) {
+        this.n8nTestResult = {
+          success: false,
+          message: `N8n service test failed: ${error instanceof Error ? error.message : String(error)}`
+        };
+      } finally {
+        this.runningN8nTest = false;
+      }
     }
   },
 });
@@ -1789,98 +1896,118 @@ export default defineComponent({
             Test ChromaDB functionality and verify that the Article and ArticlesRegistry classes work correctly.
           </p>
 
-          <div class="space-y-6">
-            <div class="flex gap-4 flex-wrap">
-              <button
-                @click="runArticlesRegistryTests"
-                :disabled="runningArticlesTests"
-                class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
-              >
-                {{ runningArticlesTests ? 'Testing Articles...' : 'Test Articles Registry' }}
-              </button>
-              <button
-                @click="runSectionsRegistryTests"
-                :disabled="runningSectionsTests"
-                class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
-              >
-                {{ runningSectionsTests ? 'Testing Sections...' : 'Test Sections Registry' }}
-              </button>
-              <button
-                @click="runDatabaseTests"
-                :disabled="runningTests"
-                class="px-4 py-2 bg-sky-600 text-white rounded hover:bg-sky-700 disabled:opacity-50"
-              >
-                {{ runningTests ? 'Running All Tests...' : 'Run All Database Tests' }}
-              </button>
-              <div class="border-l border-slate-300 pl-4 ml-4">
-                <button
-                  @click="rerunMigrations"
-                  :disabled="runningMigrations"
-                  class="px-4 py-2 bg-orange-600 text-white rounded hover:bg-orange-700 disabled:opacity-50 mr-2"
-                >
-                  {{ runningMigrations ? 'Running Migrations...' : 'Rerun Migrations' }}
-                </button>
-                <button
-                  @click="rerunSeeders"
-                  :disabled="runningSeeders"
-                  class="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50"
-                >
-                  {{ runningSeeders ? 'Running Seeders...' : 'Rerun Seeders' }}
-                </button>
-              </div>
-              <button
-                @click="clearTestResults"
-                class="px-4 py-2 bg-slate-600 text-white rounded hover:bg-slate-700"
-              >
-                Clear Results
-              </button>
-            </div>
-
-            <!-- Articles Registry Test Results -->
-            <div v-if="articlesTestResult" class="p-4 rounded" :class="articlesTestResult.success ? 'bg-blue-50 text-blue-800' : 'bg-red-50 text-red-800'">
-              <h3 class="font-semibold">{{ articlesTestResult.success ? '✅ Articles Registry Tests Passed!' : '❌ Articles Registry Tests Failed' }}</h3>
-              <p>{{ articlesTestResult.message }}</p>
-              <div v-if="articlesTestResult.counts" class="mt-2 text-sm">
-                <div><strong>Counts:</strong></div>
-                <div v-if="articlesTestResult.counts.totalArticles !== undefined">Articles: {{ articlesTestResult.counts.totalArticles }}</div>
-                <div v-if="articlesTestResult.counts.articleCategories !== undefined">Categories: {{ articlesTestResult.counts.articleCategories }}</div>
-                <div v-if="articlesTestResult.counts.articleTags !== undefined">Tags: {{ articlesTestResult.counts.articleTags }}</div>
-              </div>
-            </div>
-
-            <!-- Sections Registry Test Results -->
-            <div v-if="sectionsTestResult" class="p-4 rounded" :class="sectionsTestResult.success ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'">
-              <h3 class="font-semibold">{{ sectionsTestResult.success ? '✅ Sections Registry Tests Passed!' : '❌ Sections Registry Tests Failed' }}</h3>
-              <p>{{ sectionsTestResult.message }}</p>
-              <div v-if="sectionsTestResult.counts" class="mt-2 text-sm">
-                <div><strong>Counts:</strong></div>
-                <div v-if="sectionsTestResult.counts.sections !== undefined">Sections: {{ sectionsTestResult.counts.sections }}</div>
-                <div v-if="sectionsTestResult.counts.categories !== undefined">Categories: {{ sectionsTestResult.counts.categories }}</div>
-                <div v-if="sectionsTestResult.counts.sectionsWithCategories !== undefined">Sections with Categories: {{ sectionsTestResult.counts.sectionsWithCategories }}</div>
-                <div v-if="sectionsTestResult.counts.orphanedCategories !== undefined">Orphaned Categories: {{ sectionsTestResult.counts.orphanedCategories }}</div>
-              </div>
-            </div>
-
-            <div v-if="testResults.length > 0" class="space-y-2">
-              <h3 class="text-lg font-semibold">Detailed Test Results:</h3>
-              <div class="bg-slate-50 dark:bg-slate-800 rounded p-4 font-mono text-sm">
-                <div
-                  v-for="(result, index) in testResults"
-                  :key="index"
-                  :class="[
-                    'mb-2',
-                    result.status === 'pass' ? 'text-green-600' :
-                    result.status === 'fail' ? 'text-red-600' : 'text-blue-600'
-                  ]"
-                >
-                  {{ result.message }}
+          <div class="diagnostics-grid">
+            <div class="diagnostics-left">
+              <div class="space-y-6">
+                <div class="flex flex-col gap-4">
+                  <button
+                    @click="runArticlesRegistryTests"
+                    :disabled="runningArticlesTests"
+                    class="w-full px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    {{ runningArticlesTests ? 'Testing Articles...' : 'Test Articles Registry' }}
+                  </button>
+                  <button
+                    @click="runSectionsRegistryTests"
+                    :disabled="runningSectionsTests"
+                    class="w-full px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
+                  >
+                    {{ runningSectionsTests ? 'Testing Sections...' : 'Test Sections Registry' }}
+                  </button>
+                  <button
+                    @click="runDatabaseTests"
+                    :disabled="runningTests"
+                    class="w-full px-4 py-2 bg-sky-600 text-white rounded hover:bg-sky-700 disabled:opacity-50"
+                  >
+                    {{ runningTests ? 'Running All Tests...' : 'Run All Database Tests' }}
+                  </button>
+                  <button
+                    @click="rerunMigrations"
+                    :disabled="runningMigrations"
+                    class="w-full px-4 py-2 bg-orange-600 text-white rounded hover:bg-orange-700 disabled:opacity-50"
+                  >
+                    {{ runningMigrations ? 'Running Migrations...' : 'Rerun Migrations' }}
+                  </button>
+                  <button
+                    @click="rerunSeeders"
+                    :disabled="runningSeeders"
+                    class="w-full px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50"
+                  >
+                    {{ runningSeeders ? 'Running Seeders...' : 'Rerun Seeders' }}
+                  </button>
+                  <button
+                    @click="clearTestResults"
+                    class="w-full px-4 py-2 bg-slate-600 text-white rounded hover:bg-slate-700"
+                  >
+                    Clear Results
+                  </button>
+                  <button
+                    @click="runN8nServiceTest"
+                    :disabled="runningN8nTest"
+                    class="w-full px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-50"
+                  >
+                    {{ runningN8nTest ? 'Testing N8n Service...' : 'Test N8n Service' }}
+                  </button>
                 </div>
               </div>
             </div>
 
-            <div v-if="finalTestResult" class="p-4 rounded" :class="finalTestResult.success ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'">
-              <h3 class="font-semibold">{{ finalTestResult.success ? '✅ All Tests Passed!' : '❌ Tests Failed' }}</h3>
-              <p>{{ finalTestResult.message }}</p>
+            <div class="diagnostics-right">
+              <!-- Articles Registry Test Results -->
+              <div v-if="articlesTestResult" class="p-4 rounded" :class="articlesTestResult.success ? 'bg-blue-50 text-blue-800' : 'bg-red-50 text-red-800'">
+                <h3 class="font-semibold">{{ articlesTestResult.success ? '✅ Articles Registry Tests Passed!' : '❌ Articles Registry Tests Failed' }}</h3>
+                <p>{{ articlesTestResult.message }}</p>
+                <div v-if="articlesTestResult.counts" class="mt-2 text-sm">
+                  <div><strong>Counts:</strong></div>
+                  <div v-if="articlesTestResult.counts.totalArticles !== undefined">Articles: {{ articlesTestResult.counts.totalArticles }}</div>
+                  <div v-if="articlesTestResult.counts.articleCategories !== undefined">Categories: {{ articlesTestResult.counts.articleCategories }}</div>
+                  <div v-if="articlesTestResult.counts.articleTags !== undefined">Tags: {{ articlesTestResult.counts.articleTags }}</div>
+                </div>
+              </div>
+
+              <!-- Sections Registry Test Results -->
+              <div v-if="sectionsTestResult" class="p-4 rounded" :class="sectionsTestResult.success ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'">
+                <h3 class="font-semibold">{{ sectionsTestResult.success ? '✅ Sections Registry Tests Passed!' : '❌ Sections Registry Tests Failed' }}</h3>
+                <p>{{ sectionsTestResult.message }}</p>
+                <div v-if="sectionsTestResult.counts" class="mt-2 text-sm">
+                  <div><strong>Counts:</strong></div>
+                  <div v-if="sectionsTestResult.counts.sections !== undefined">Sections: {{ sectionsTestResult.counts.sections }}</div>
+                  <div v-if="sectionsTestResult.counts.categories !== undefined">Categories: {{ sectionsTestResult.counts.categories }}</div>
+                  <div v-if="sectionsTestResult.counts.sectionsWithCategories !== undefined">Sections with Categories: {{ sectionsTestResult.counts.sectionsWithCategories }}</div>
+                  <div v-if="sectionsTestResult.counts.orphanedCategories !== undefined">Orphaned Categories: {{ sectionsTestResult.counts.orphanedCategories }}</div>
+                </div>
+              </div>
+
+              <div v-if="testResults.length > 0" class="space-y-2">
+                <h3 class="text-lg font-semibold">Detailed Test Results:</h3>
+                <div class="bg-slate-50 dark:bg-slate-800 rounded p-4 font-mono text-sm">
+                  <div
+                    v-for="(result, index) in testResults"
+                    :key="index"
+                    :class="[
+                      'mb-2',
+                      result.status === 'pass' ? 'text-green-600' :
+                      result.status === 'fail' ? 'text-red-600' : 'text-blue-600'
+                    ]"
+                  >
+                    {{ result.message }}
+                  </div>
+                </div>
+              </div>
+
+              <div v-if="finalTestResult" class="p-4 rounded" :class="finalTestResult.success ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'">
+                <h3 class="font-semibold">{{ finalTestResult.success ? '✅ All Tests Passed!' : '❌ Tests Failed' }}</h3>
+                <p>{{ finalTestResult.message }}</p>
+              </div>
+
+              <div v-if="n8nTestResult" class="p-4 rounded" :class="n8nTestResult.success ? 'bg-indigo-50 text-indigo-800' : 'bg-red-50 text-red-800'">
+                <h3 class="font-semibold">{{ n8nTestResult.success ? '✅ N8n Service Test Passed!' : '❌ N8n Service Test Failed' }}</h3>
+                <p>{{ n8nTestResult.message }}</p>
+                <div v-if="n8nTestResult.data" class="mt-2 text-sm">
+                  <div><strong>Data:</strong></div>
+                  <pre>{{ JSON.stringify(n8nTestResult.data, null, 2) }}</pre>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -2838,4 +2965,23 @@ export default defineComponent({
     font-size: 0.75rem;
   }
 }
+
+// Diagnostics tab styles
+.diagnostics-grid {
+  display: grid;
+  grid-template-columns: 25% 1fr;
+  gap: 2rem;
+  align-items: start;
+}
+
+.diagnostics-left {
+  // Left column for buttons and options
+}
+
+.diagnostics-right {
+  // Right column for output and results
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
 </style>

@@ -129,19 +129,19 @@ export default class ProgressTracker {
    * Invoke this.notify with the highest-priority progress object.
    */
   protected update() {
-    if (this.numericProgress) {
-      this.notify(this.numericProgress);
+    let progress: BackendProgress = { current: 1, max: 1 };
 
-      return;
+    if (this.actionProgress.length > 0) {
+      const action = this.actionProgress.reduce((a, b) => a.priority > b.priority ? a : b);
+
+      progress = { ...action.progress };
+      if (this.numericProgress) {
+        progress.current = this.numericProgress.current;
+        progress.max = this.numericProgress.max;
+      }
+    } else if (this.numericProgress) {
+      progress = this.numericProgress;
     }
-    if (this.actionProgress.length < 1) {
-      // No action progress either; no active progress at all.
-      this.notify({ current: 1, max: 1 });
-
-      return;
-    }
-
-    const { progress } = this.actionProgress.reduce((a, b) => a.priority > b.priority ? a : b);
 
     this.notify(progress);
   }

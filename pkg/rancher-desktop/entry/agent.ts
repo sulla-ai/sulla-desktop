@@ -15,6 +15,7 @@ import AgentKnowledgeBaseCreate from '../pages/AgentKnowledgeBaseCreate.vue';
 import AgentIntegrations from '../pages/AgentIntegrations.vue';
 import AgentIntegrationDetail from '../pages/AgentIntegrationDetail.vue';
 import AgentKnowledgeBaseSections from '../pages/AgentKnowledgeBaseSections.vue';
+import FirstRun from '../pages/FirstRun.vue';
 
 const router = createRouter({
   history: createWebHashHistory(),
@@ -27,6 +28,7 @@ const router = createRouter({
     { path: '/KnowledgeBase/Sections', component: AgentKnowledgeBaseSections, name: 'AgentKnowledgeBaseSections' },
     { path: '/Integrations', component: AgentIntegrations, name: 'AgentIntegrations' },
     { path: '/Integrations/:id', component: AgentIntegrationDetail, name: 'AgentIntegrationDetail' },
+    { path: '/FirstRun', component: FirstRun, name: 'FirstRun' },
   ],
 });
 

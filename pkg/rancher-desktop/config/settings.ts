@@ -82,6 +82,8 @@ export const defaultSettings = {
     startInBackground:      false,
     hideNotificationIcon:   false,
     window:                 { quitOnClose: false },
+    firstRunCredentialsNeeded: true,
+    firstKubernetesIsInstalled: false,
   },
   containerEngine: {
     allowedImages: {
@@ -165,6 +167,20 @@ export const defaultSettings = {
     heartbeatPrompt: heartbeatPrompt,
     /** Heartbeat model: 'default' uses main settings, or specific model like 'local:tinyllama:latest' or 'remote:grok:grok-4-1-fast-reasoning' */
     heartbeatModel: 'default',
+    /** Sulla username for authentication */
+    sullaUsername: '',
+    /** Sulla password for authentication */
+    sullaPassword: '',
+    /** Sulla email for authentication */
+    sullaEmail: '',
+    /** Generated service password for PostgreSQL and N8N */
+    sullaServicePassword: '',
+    /** Generated N8N encryption key */
+    sullaN8nEncryptionKey: '',
+    /** Subscribe to updates and newsletters */
+    sullaSubscribeToUpdates: true,
+    /** Flag indicating if the first-run Sulla networking setup is complete */
+    firstRunSullaNetworking: false,
     virtualMachine:  {
       diskSize: '100GiB',
       mount:    {

@@ -1,343 +1,223 @@
 <template>
-  <div class="first-run-container">
-    <h2 data-test="k8s-settings-header">
-      Welcome to Sulla Desktop by Jonathon Byrdziak
-    </h2>
-    <p class="welcome-text">
-      Sulla Desktop provides a local AI assistant with Kubernetes-powered services
-      including local LLM models, persistent memory graph, and full integration with the client machine.
-    </p>
-    <rd-fieldset
-      v-if="hasSystemPreferences"
-      legend-text="Virtual Machine Resources"
-      legend-tooltip="Allocate CPU and memory for the AI services"
-    >
-      <system-preferences
-        :memory-in-g-b="settings.virtualMachine.memoryInGB"
-        :number-c-p-us="settings.virtualMachine.numberCPUs"
-        :avail-memory-in-g-b="availMemoryInGB"
-        :avail-num-c-p-us="availNumCPUs"
-        :reserved-memory-in-g-b="6"
-        :reserved-num-c-p-us="1"
-        :is-locked-memory="memoryLocked"
-        :is-locked-cpu="cpuLocked"
-        @update:memory="onMemoryChange"
-        @update:cpu="onCpuChange"
-      />
-    </rd-fieldset>
-    <rd-fieldset
-      legend-text="AI Model"
-      legend-tooltip="Select the LLM model to use. Models are filtered based on your allocated resources."
-    >
-      <select
-        v-model="selectedModel"
-        class="model-select"
-        @change="onModelChange"
-      >
-        <option
-          v-for="model in availableModels"
-          :key="model.name"
-          :value="model.name"
-          :disabled="!model.available"
-          :class="{ 'model-disabled': !model.available }"
-        >
-          {{ model.displayName }} ({{ model.size }}) {{ !model.available ? '- Requires more resources' : '' }}
-        </option>
-      </select>
-      <p class="model-description">
-        {{ selectedModelDescription }}
-      </p>
-    </rd-fieldset>
-    <rd-fieldset
-      v-if="pathManagementRelevant"
-      :legend-text="t('pathManagement.label')"
-      :legend-tooltip="t('pathManagement.tooltip', { }, true)"
-      :is-locked="pathManagementSelectorLocked"
-    >
-      <path-management-selector
-        :value="pathManagementStrategy"
-        :is-locked="pathManagementSelectorLocked"
-        :show-label="false"
-        @input="setPathManagementStrategy"
-      />
-    </rd-fieldset>
-    <div class="button-area">
-      <button
-        v-focus
-        data-test="accept-btn"
-        class="role-primary"
-        @click="close"
-      >
-        Get Started
-      </button>
+  <div class="h-screen overflow-hidden bg-white text-[#0d0d0d] dark:bg-slate-900 dark:text-neutral-50 font-sans" :class="{ dark: isDark }">
+    <div class="flex h-screen flex-col">
+
+      <SimpleHeader :is-dark="isDark" :toggle-theme="toggleTheme"/>
+
+      <!-- Main agent interface -->
+      <div ref="chatScrollContainer" id="chat-scroll-container" class="flex min-h-0 flex-1 overflow-y-auto">
+        <div class="flex min-h-0 min-w-0 flex-1 flex-col">
+          <div class="relative flex w-full max-w-8xl flex-1 justify-center sm:px-2 lg:px-8 xl:px-12">
+            <div class="hidden lg:relative lg:block lg:flex-none lg:w-72 xl:w-80 bg-slate-50 dark:bg-slate-800/30">
+              <div class="sticky top-[15px] pt-[15px] h-[calc(100vh-5rem-15px)] w-full overflow-x-hidden overflow-y-auto">
+
+                <div class="p-4">
+                  <h3 class="text-lg font-semibold text-gray-800 dark:text-gray-200 mb-4">Installation Steps</h3>
+                  <div class="space-y-3">
+                    <div v-for="(name, index) in stepNames" :key="index" class="p-4 rounded-lg border-2 transition-all" :class="index === currentStep ? 'bg-blue-50 dark:bg-blue-900/20' : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800'" :style="index === currentStep ? { borderColor: '#30a5e9' } : {}">
+                      <div class="flex items-center">
+                        <div class="w-10 h-10 rounded-full flex items-center justify-center mr-4 font-bold text-lg" :class="index === currentStep ? 'text-white' : 'bg-gray-300 dark:bg-gray-600 text-gray-800 dark:text-gray-200'" :style="index === currentStep ? { backgroundColor: '#30a5e9' } : {}">{{ index + 1 }}</div>
+                        <div class="flex-1">
+                          <div class="text-sm font-semibold" :class="index === currentStep ? '' : 'text-gray-700 dark:text-gray-300'" :style="index === currentStep ? { color: '#30a5e9' } : {}">{{ name }}</div>
+                          <div class="text-xs mt-1" :class="index === currentStep ? '' : 'text-gray-500 dark:text-gray-400'" :style="index === currentStep ? { color: '#7d8f99' } : {}">
+                            {{ index === currentStep ? 'In Progress' : index < currentStep ? 'Completed' : 'Pending' }}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div v-if="currentStep > 0 && currentStep < 3 && (startupController.state.progressMax.value > 0 || startupController.state.progressMax.value === -1)" class="mt-6 p-4 bg-gray-100 dark:bg-gray-800 rounded-lg">
+                    <h4 class="text-sm font-semibold mb-2">Startup Progress</h4>
+                    <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5 mb-2">
+                      <div class="h-2.5 rounded-full" :style="{ width: `${progressPercent}%`, backgroundColor: '#30a5e9' }"></div>
+                    </div>
+                    <p class="text-xs text-gray-600 dark:text-gray-400">{{ startupController.state.progressDescription }}</p>
+
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+            <div class="max-w-2xl min-w-0 flex-auto px-4 py-16 lg:max-w-none lg:pr-0 lg:pl-8 xl:px-16">
+              <div ref="transcriptEl" id="chat-messages-list" class="pb-40">
+                <component :is="steps[currentStep]" @next="next" :startup-controller="startupController" />
+              </div>
+            </div>
+
+            <div class="hidden xl:sticky xl:top-0 xl:-mr-6 xl:block xl:max-h-[calc(100vh-12rem)] xl:flex-none xl:overflow-y-auto xl:pr-6">
+              <div class="w-72">
+
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </template>
 
-<script lang="ts">
-import os from 'os';
-
-import _ from 'lodash';
-import { defineComponent } from 'vue';
-import { mapGetters } from 'vuex';
-
-import PathManagementSelector from '@pkg/components/PathManagementSelector.vue';
-import SystemPreferences from '@pkg/components/SystemPreferences.vue';
-import RdFieldset from '@pkg/components/form/RdFieldset.vue';
-import { defaultSettings } from '@pkg/config/settings';
-import type { Settings } from '@pkg/config/settings';
-import { PathManagementStrategy } from '@pkg/integrations/pathManager';
+<script setup lang="ts">
+import { ref, provide, onMounted, computed } from 'vue';
 import { ipcRenderer } from '@pkg/utils/ipcRenderer';
-import { highestStableVersion, VersionEntry } from '@pkg/utils/kubeVersions';
+import { defaultSettings, Settings } from '@pkg/config/settings';
+
+import FirstRunResources from './FirstRunResources.vue';
+import FirstRunWelcome from './FirstRunWelcome.vue';
+import FirstRunRemoteModel from './FirstRunRemoteModel.vue';
+import FirstRunWaiting from './FirstRunWaiting.vue';
 import { RecursivePartial } from '@pkg/utils/typeUtils';
 
-// Ollama models sorted by resource requirements (smallest to largest)
-const OLLAMA_MODELS = [
-  {
-    name: 'tinyllama:latest', displayName: 'TinyLlama', size: '637MB', minMemoryGB: 2, minCPUs: 2, description: 'Compact 1.1B model, fast responses, good for basic tasks',
-  },
-  {
-    name: 'phi3:mini', displayName: 'Phi-3 Mini', size: '2.2GB', minMemoryGB: 4, minCPUs: 2, description: 'Microsoft\'s efficient 3.8B model, great reasoning capabilities',
-  },
-  {
-    name: 'gemma:2b', displayName: 'Gemma 2B', size: '1.7GB', minMemoryGB: 4, minCPUs: 2, description: 'Google\'s lightweight model, good general performance',
-  },
-  {
-    name: 'llama3.2:1b', displayName: 'Llama 3.2 1B', size: '1.3GB', minMemoryGB: 4, minCPUs: 2, description: 'Meta\'s smallest Llama 3.2, efficient and capable',
-  },
-  {
-    name: 'llama3.2:3b', displayName: 'Llama 3.2 3B', size: '2.0GB', minMemoryGB: 4, minCPUs: 2, description: 'Meta\'s compact Llama 3.2, balanced performance',
-  },
-  {
-    name: 'mistral:7b', displayName: 'Mistral 7B', size: '4.1GB', minMemoryGB: 5, minCPUs: 2, description: 'Excellent 7B model, strong coding and reasoning',
-  },
-  {
-    name: 'llama3.1:8b', displayName: 'Llama 3.1 8B', size: '4.7GB', minMemoryGB: 6, minCPUs: 2, description: 'Meta\'s latest 8B model, excellent all-around performance',
-  },
-  {
-    name: 'gemma:7b', displayName: 'Gemma 7B', size: '5.0GB', minMemoryGB: 6, minCPUs: 2, description: 'Google\'s larger model, improved capabilities',
-  },
-  {
-    name: 'codellama:7b', displayName: 'Code Llama 7B', size: '3.8GB', minMemoryGB: 5, minCPUs: 2, description: 'Specialized for code generation and understanding',
-  },
-  {
-    name: 'llama3.1:70b', displayName: 'Llama 3.1 70B', size: '40GB', minMemoryGB: 48, minCPUs: 8, description: 'Meta\'s flagship model, state-of-the-art performance',
-  },
-  {
-    name: 'mixtral:8x7b', displayName: 'Mixtral 8x7B', size: '26GB', minMemoryGB: 32, minCPUs: 8, description: 'Mixture of experts, excellent quality and speed',
-  },
-  {
-    name: 'deepseek-coder:33b', displayName: 'DeepSeek Coder 33B', size: '19GB', minMemoryGB: 24, minCPUs: 6, description: 'Advanced coding model, excellent for development',
-  },
-];
+import { StartupProgressController } from './agent/StartupProgressController';
 
-export default defineComponent({
-  name:       'first-run-dialog',
-  components: {
-    RdFieldset,
-    PathManagementSelector,
-    SystemPreferences,
-  },
-  layout: 'dialog',
-  data() {
-    return {
-      settings:                     defaultSettings,
-      pathManagementSelectorLocked: false,
-      memoryLocked:                 false,
-      cpuLocked:                    false,
-      selectedModel:                'tinyllama:latest',
-      kubernetesVersion:            '',
-    };
-  },
-  computed: {
-    ...mapGetters('applicationSettings', { pathManagementStrategy: 'pathManagementStrategy' }),
-    pathManagementRelevant(): boolean {
-      return os.platform() === 'linux' || os.platform() === 'darwin';
-    },
-    hasSystemPreferences(): boolean {
-      return !os.platform().startsWith('win');
-    },
-    availMemoryInGB(): number {
-      return Math.ceil(os.totalmem() / 2 ** 30);
-    },
-    availNumCPUs(): number {
-      return os.cpus().length;
-    },
-    allocatedMemoryGB(): number {
-      return this.settings.virtualMachine.memoryInGB;
-    },
-    allocatedCPUs(): number {
-      return this.settings.virtualMachine.numberCPUs;
-    },
-    // Ollama gets ~70% of VM memory and ~75% of CPUs (rest for K8s, other pods)
-    ollamaMemoryGB(): number {
-      return Math.floor(this.allocatedMemoryGB * 0.7);
-    },
-    ollamaCPUs(): number {
-      return Math.floor(this.allocatedCPUs * 0.75);
-    },
-    availableModels(): Array<{ name: string; displayName: string; size: string; available: boolean; description: string }> {
-      return OLLAMA_MODELS.map(model => ({
-        ...model,
-        // Filter based on what Ollama actually gets, not total VM resources
-        available: this.ollamaMemoryGB >= model.minMemoryGB && this.ollamaCPUs >= model.minCPUs,
-      }));
-    },
-    selectedModelDescription(): string {
-      const model = OLLAMA_MODELS.find(m => m.name === this.selectedModel);
+import SimpleHeader from './agent/SimpleHeader.vue';
 
-      return model?.description || '';
-    },
-  },
-  beforeMount() {
-    window.addEventListener('beforeunload', this.close);
-  },
-  mounted() {
-    ipcRenderer.on('settings-read', (event, settings) => {
-      this.$data.settings = settings;
-      // Load saved model selection if available
-      if (settings.experimental?.sullaModel) {
-        this.$data.selectedModel = settings.experimental.sullaModel;
-      }
-      this.autoSelectBestModel();
-    });
-    ipcRenderer.send('settings-read');
+const THEME_STORAGE_KEY = 'rd:theme';
 
-    // Get K8s versions and select the highest stable version
-    ipcRenderer.on('k8s-versions', (event, versions: VersionEntry[]) => {
-      const recommendedVersions = versions.filter((v: VersionEntry) => !!v.channels);
-      const bestVersion = highestStableVersion(recommendedVersions) ?? versions[0];
+const isDark = ref(false);
 
-      if (bestVersion) {
-        this.$data.kubernetesVersion = bestVersion.version;
-        console.log(`[FirstRun] Selected K8s version: ${bestVersion.version}`);
-      }
+const toggleTheme = () => {
+  isDark.value = !isDark.value;
+  localStorage.setItem(THEME_STORAGE_KEY, isDark.value ? 'dark' : 'light');
+  document.documentElement.classList.toggle('dark');
+};
 
-      // Send ready event after we have the K8s version
-      ipcRenderer.send('dialog/ready');
-    });
-    ipcRenderer.send('k8s-versions');
+const currentStep = ref(0);
+const stepNames = ['Resources', 'Account', 'Remote Model', 'Waiting'];
+const steps = [FirstRunResources, FirstRunWelcome, FirstRunRemoteModel, FirstRunWaiting];
 
-    if (this.pathManagementRelevant) {
-      this.setPathManagementStrategy(PathManagementStrategy.RcFiles);
-    }
+const settings = ref(defaultSettings);
 
-    ipcRenderer.invoke('get-locked-fields').then((lockedFields) => {
-      this.$data.pathManagementSelectorLocked = _.get(lockedFields, 'application.pathManagementStrategy');
-      this.$data.memoryLocked = _.get(lockedFields, 'virtualMachine.memoryInGB');
-      this.$data.cpuLocked = _.get(lockedFields, 'virtualMachine.numberCPUs');
-    });
-  },
-  beforeUnmount() {
-    window.removeEventListener('beforeunload', this.close);
-  },
-  methods: {
-    async commitChanges(settings: RecursivePartial<Settings>) {
-      try {
-        return await ipcRenderer.invoke('settings-write', settings);
-      } catch (ex) {
-        console.log(`invoke settings-write failed: `, ex);
-      }
-    },
-    close() {
-      this.commitChanges({
-        application:    { pathManagementStrategy: this.pathManagementStrategy },
-        virtualMachine: {
-          memoryInGB: this.settings.virtualMachine.memoryInGB,
-          numberCPUs: this.settings.virtualMachine.numberCPUs,
-        },
-        kubernetes:   {
-          enabled: true,
-          version: this.kubernetesVersion,
-        },
-        experimental: { sullaModel: this.selectedModel },
-      });
-      window.close();
-    },
-    setPathManagementStrategy(val: PathManagementStrategy) {
-      this.$store.dispatch('applicationSettings/setPathManagementStrategy', val);
-    },
-    onMemoryChange(value: number) {
-      this.settings.virtualMachine.memoryInGB = value;
-      this.autoSelectBestModel();
-    },
-    onCpuChange(value: number) {
-      this.settings.virtualMachine.numberCPUs = value;
-      this.autoSelectBestModel();
-    },
-    onModelChange() {
-      // Model selection is handled by v-model
-    },
-    autoSelectBestModel() {
-      // If current selection is no longer available, select the best available model
-      const currentModel = this.availableModels.find(m => m.name === this.selectedModel);
+const startupController = new StartupProgressController(StartupProgressController.createState());
 
-      if (!currentModel?.available) {
-        // Find the best (largest) available model
-        const available = this.availableModels.filter(m => m.available);
+// Prevent overlay in first-run view
+startupController.state.showOverlay.value = false;
 
-        if (available.length > 0) {
-          this.selectedModel = available[available.length - 1].name;
-        } else {
-          // Fallback to tinyllama if nothing is available
-          this.selectedModel = 'tinyllama:latest';
-        }
-      }
-    },
-  },
+// Listen to backend progress updates and forward to startupController
+ipcRenderer.on('k8s-progress', (event, progress) => {
+  if (progress && startupController.state) {
+    startupController.state.progressCurrent.value = progress.current || 0;
+    startupController.state.progressMax.value = progress.max || 100;
+    startupController.state.progressDescription.value = progress.description || '';
+  }
 });
+
+const progressPercent = computed(() => {
+  const percent = (startupController.state.progressCurrent.value / Math.max(startupController.state.progressMax.value, 1)) * 100;
+  console.log('[FirstRun] progressPercent computed:', percent, 'current:', startupController.state.progressCurrent.value, 'max:', startupController.state.progressMax.value);
+  return percent;
+});
+
+onMounted(() => {
+  const stored = localStorage.getItem(THEME_STORAGE_KEY);
+  if (stored === 'dark') {
+    isDark.value = true;
+    document.documentElement.classList.add('dark');
+  } else if (stored === 'light') {
+    isDark.value = false;
+  } else {
+    isDark.value = window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false;
+  }
+});
+
+provide('settings', settings);
+
+const next = async () => {
+  console.log('[FirstRun] next() called, currentStep before:', currentStep.value);
+  commitChanges({
+    kubernetes: { enabled: true },
+  });
+
+  currentStep.value += 1;
+  console.log('[FirstRun] currentStep after:', currentStep.value);
+  if (currentStep.value === 1) {
+    console.log('[FirstRun] starting controller');
+    startupController.start();
+    await ipcRenderer.invoke('start-backend' as any);
+  }
+};
+
+const commitChanges = async (settings: RecursivePartial<Settings>) => {
+  try {
+    return await ipcRenderer.invoke('settings-write' as any, settings);
+  } catch (ex) {
+    console.log('settings-write failed:', ex);
+  }
+};
+
+provide('commitChanges', commitChanges);
+
+// Expose for template
+defineExpose({ isDark, toggleTheme, stepNames, currentStep, steps, next });
 </script>
-
-<style lang="scss">
-  html {
-    height: initial;
-  }
-</style>
-
 <style lang="scss" scoped>
-  .button-area {
-    align-self: flex-end;
-    margin-top: 1.5rem;
-  }
+.button-area {
+  align-self: flex-end;
+  margin-top: 1.5rem;
+}
 
-  .welcome-text {
-    color: var(--body-text);
-    margin-bottom: 1rem;
-    line-height: 1.5;
-  }
+.welcome-text {
+  color: var(--body-text);
+  margin-bottom: 1rem;
+  line-height: 1.5;
+}
 
-  .first-run-container {
-    width: 30rem;
-  }
+.first-run-container {
+  width: 30rem;
+}
 
-  .model-select {
-    width: 100%;
+.model-select {
+  width: 100%;
+  padding: 0.5rem;
+  font-size: 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--input-bg);
+  color: var(--input-text);
+  margin-top: 0.5rem;
+
+  option {
     padding: 0.5rem;
-    font-size: 0.9rem;
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    background: var(--input-bg);
-    color: var(--input-text);
-    margin-top: 0.5rem;
-
-    option {
-      padding: 0.5rem;
-    }
-
-    option:disabled {
-      color: var(--disabled);
-      font-style: italic;
-    }
   }
 
-  .model-description {
-    margin-top: 0.5rem;
-    font-size: 0.85rem;
-    color: var(--muted);
+  option:disabled {
+    color: var(--disabled);
     font-style: italic;
   }
+}
 
-  .model-disabled {
-    color: var(--disabled);
-  }
+.model-description {
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+  font-style: italic;
+}
+
+.model-disabled {
+  color: var(--disabled);
+}
+</style>
+
+<style lang="scss">
+html {
+  height: initial;
+}
+
+:root {
+  --progress-bg: #ddd;
+  --scrollbar-thumb: #999;
+  --darker: #666;
+  --error: #dc3545;
+  --checkbox-tick-disabled: #999;
+}
+
+.dark {
+  --progress-bg: #333;
+  --scrollbar-thumb: #666;
+  --darker: #333;
+  --error: #dc3545;
+  --checkbox-tick-disabled: #666;
+}
 </style>

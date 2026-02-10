@@ -47,9 +47,9 @@ export default defineComponent({
 
 <style lang="scss" scoped>
   .rd-input-container {
-    display: flex;
     align-items: center;
     gap: 0.5rem;
+    max-width:6rem;
 
     .locked {
       color: var(--input-locked-text);

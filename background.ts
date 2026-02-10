@@ -32,7 +32,6 @@ import { DiagnosticsManager, DiagnosticsResultCollection } from '@pkg/main/diagn
 import { ExtensionErrorCode, isExtensionError } from '@pkg/main/extensions';
 import { ImageEventHandler } from '@pkg/main/imageEvents';
 import { getIpcMainProxy } from '@pkg/main/ipcMain';
-import { initSullaEvents } from '@pkg/main/sullaEvents';
 import mainEvents from '@pkg/main/mainEvents';
 import buildApplicationMenu from '@pkg/main/mainmenu';
 import setupNetworking from '@pkg/main/networking';
@@ -93,6 +92,7 @@ const diagnostics: DiagnosticsManager = new DiagnosticsManager();
 let cfg: settings.Settings;
 let firstRunDialogComplete = false;
 let gone = false; // when true indicates app is shutting down
+let backendStarted = false;
 let imageEventHandler: ImageEventHandler | null = null;
 let currentContainerEngine = settings.ContainerEngine.NONE;
 let currentImageProcessor: ImageProcessor | null = null;
@@ -219,6 +219,15 @@ hookSullaEnd(Electron);
 
 
 
+mainEvents.on('sulla-first-run-complete', () => {
+  const firstRunWindow = window.getWindow('first-run');
+  firstRunWindow?.setClosable(true);
+  firstRunWindow?.close();
+  window.openMain();
+});
+
+
+
 
 
 
@@ -253,9 +262,6 @@ Electron.app.whenReady().then(async() => {
     await checkPrerequisites();
 
     DashboardServer.getInstance().init();
-
-    // Initialize Sulla-specific IPC handlers
-    initSullaEvents();
 
     await setupNetworking();
 
@@ -347,27 +353,13 @@ Electron.app.whenReady().then(async() => {
 
     await startBackend();
 
+    if (!backendStarted) {
+      await startBackend();
+      backendStarted = true;
+    }
 
 
-
-
-
-////////////////////////////////////////////////////////////////////////////////
-// SULLA DESKTOP - START
-// Commands to startup systems
-////////////////////////////////////////////////////////////////////////////////
-
-
-      await instantiateSullaStart();
-
-
-////////////////////////////////////////////////////////////////////////////////
-// SULLA DESKTOP - END
-////////////////////////////////////////////////////////////////////////////////
-
-
-
-
+    writeSettings({ experimental: { firstRunSullaNetworking: true } });
 
   } catch (ex: any) {
     console.error(`Error starting up: ${ ex }`, ex.stack);
@@ -494,7 +486,7 @@ async function initUI() {
 }
 
 async function doFirstRunDialog() {
-  if (!noModalDialogs && settingsImpl.firstRunDialogNeeded()) {
+  if (!noModalDialogs && (settingsImpl.firstRunDialogNeeded() || settingsImpl.firstRunCredentialsNeeded())) {
     await window.openFirstRunDialog();
   }
   firstRunDialogComplete = true;
@@ -761,6 +753,15 @@ ipcMainProxy.on('settings-read', (event) => {
   event.returnValue = cfg;
 });
 
+ipcMainProxy.handle('settings-read' as any, () => cfg);
+
+ipcMainProxy.handle('start-backend' as any, () => {
+  if (!backendStarted) {
+    startBackend();
+    backendStarted = true;
+  }
+});
+
 
 
 
@@ -772,6 +773,27 @@ ipcMainProxy.on('settings-read', (event) => {
 
 await onMainProxyLoad(ipcMainProxy);
 
+ipcMainProxy.handle('start-sulla-custom-env' as any, async() => {
+  console.log('Starting Sulla custom environment...');
+  
+  // Reload current settings to get the latest firstRunCredentialsNeeded value
+  cfg = settingsImpl.load(deploymentProfiles);
+  settingsImpl.updateLockedFields(deploymentProfiles.locked);
+  
+  const firstRunCredentialsNeeded = (cfg.application as any)?.firstRunCredentialsNeeded;
+  const firstKubernetesIsInstalled = (cfg.application as any)?.firstRunCredentialsNeeded;
+  console.log('Current firstRunCredentialsNeeded:', firstRunCredentialsNeeded);
+  console.log('Current firstKubernetesIsInstalled:', firstKubernetesIsInstalled);
+
+  // Debug logging
+  await (globalThis as any).progressTracker?.action(`DEBUG: firstRunCredentialsNeeded=${firstRunCredentialsNeeded}, firstKubernetesIsInstalled=${firstKubernetesIsInstalled}`, 900, async () => {});
+
+  if (firstRunCredentialsNeeded === false && firstKubernetesIsInstalled === false && k8smanager.kubeBackend.sullaStepCustomEnvironment) {
+    await k8smanager.kubeBackend.sullaStepCustomEnvironment();
+  } else if (firstKubernetesIsInstalled === true) {
+    console.log('Sulla custom environment already installed, skipping.');
+  }
+});
 
 
 

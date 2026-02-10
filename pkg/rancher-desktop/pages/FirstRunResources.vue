@@ -1,0 +1,342 @@
+<template>
+  <div class="mx-auto p-6 dark:bg-gray-800">
+    <form @submit.prevent="handleNext">
+      <h2 class="text-2xl font-bold mb-4 text-gray-900 dark:text-gray-100">Specify AI Resources</h2>
+      <p class="mb-6 text-gray-600 dark:text-gray-400">Choose the resources allocated to your AI Agent and the local language model. Your agent and the model and all resources they manage will not be allowed to use more than the allocated resources.</p>
+
+      <div class="mt-10"></div>
+      <rd-fieldset
+        legend-text="Virtual Machine Resources"
+        legend-tooltip="Allocate CPU and memory for the AI services"
+        class="mb-6 mt-6"
+      >
+        <system-preferences
+          :memory-in-g-b="settings!.virtualMachine.memoryInGB"
+          :number-c-p-us="settings!.virtualMachine.numberCPUs"
+          :avail-memory-in-g-b="availMemoryInGB"
+          :avail-num-c-p-us="availNumCPUs"
+          :reserved-memory-in-g-b="6"
+          :reserved-num-c-p-us="1"
+          :is-locked-memory="false"
+          :is-locked-cpu="false"
+          @update:memory="onMemoryChange"
+          @update:cpu="onCpuChange"
+        />
+      </rd-fieldset>
+
+      <div class="mt-10"></div>
+
+      <rd-fieldset legend-text="AI Model"
+        legend-tooltip="Select the LLM model to use. Models are filtered based on your allocated resources."
+        class="mb-6 mt-6"
+      >
+        <select class="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 mb-2" v-model="settings!.experimental.sullaModel">
+          <option
+            v-for="model in availableModels"
+            :key="model.name"
+            :value="model.name"
+            :disabled="!model.available"
+            :class="{ 'model-disabled': !model.available }"
+          >
+            {{ model.displayName }} ({{ model.size }}) {{ !model.available ? '- Requires more resources' : '' }}
+          </option>
+        </select>
+        <p class="text-sm text-gray-500 dark:text-gray-400 italic">{{ selectedModelDescription }}</p>
+      </rd-fieldset>
+
+      <div class="mt-10"></div>
+
+      <div class="flex justify-end">
+        <button type="submit" class="px-6 py-2 text-white rounded-md transition-colors font-medium hover:opacity-90" :style="{ backgroundColor: '#30a5e9' }" :disabled="!settings!.experimental.sullaModel || settings!.virtualMachine.memoryInGB <= 4 || settings!.virtualMachine.numberCPUs <= 2">Next</button>
+      </div>
+    </form>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, computed, inject, onMounted } from 'vue';
+import { Ref } from 'vue';
+import os from 'os';
+import RdFieldset from '@pkg/components/form/RdFieldset.vue';
+import SystemPreferences from '@pkg/components/SystemPreferences.vue';
+import PathManagementSelector from '@pkg/components/PathManagementSelector.vue';
+import { defaultSettings, Settings } from '@pkg/config/settings';
+import { ipcRenderer } from 'electron';
+import { PathManagementStrategy } from '@pkg/integrations/pathManager';
+import { highestStableVersion, VersionEntry } from '@pkg/utils/kubeVersions';
+import { RecursivePartial } from '@pkg/utils/typeUtils';
+
+const settings = inject<Ref<Settings>>('settings')!;
+const commitChanges = inject<(settings: RecursivePartial<Settings>) => Promise<void>>('commitChanges')!;
+const emit = defineEmits<{
+  next: [];
+}>();
+
+// Set defaults
+settings.value.application.pathManagementStrategy = PathManagementStrategy.RcFiles;
+settings.value.kubernetes.enabled = true;
+
+onMounted(() => {
+  ipcRenderer.invoke('settings-read' as any).then((loadedSettings: Settings) => {
+    settings.value = loadedSettings;
+    // Ensure defaults are set after loading
+    settings.value.application.pathManagementStrategy = PathManagementStrategy.RcFiles;
+    settings.value.kubernetes.enabled = true;
+    // Set initial AI model to Qwen
+    settings.value.experimental.sullaModel = 'qwen2:0.5b';
+    // Initialize credentials if not set
+    settings.value.experimental.sullaUsername = settings.value.experimental.sullaUsername || '';
+    settings.value.experimental.sullaPassword = settings.value.experimental.sullaPassword || '';
+    settings.value.experimental.sullaServicePassword = settings.value.experimental.sullaServicePassword || '';
+    settings.value.experimental.sullaN8nEncryptionKey = settings.value.experimental.sullaN8nEncryptionKey || '';
+
+    // Save the initial settings
+    commitChanges({
+      application: { pathManagementStrategy: PathManagementStrategy.RcFiles },
+      kubernetes: { enabled: true },
+      experimental: {
+        sullaModel: 'qwen2:0.5b',
+        sullaUsername: '',
+        sullaPassword: '',
+        sullaServicePassword: '',
+        sullaN8nEncryptionKey: '',
+      },
+    });
+  });
+
+  ipcRenderer.send('k8s-versions');
+  ipcRenderer.on('k8s-versions', (event, versions: VersionEntry[]) => {
+    const recommendedVersions = versions.filter((v: VersionEntry) => !!v.channels);
+    const bestVersion = highestStableVersion(recommendedVersions) ?? versions[0];
+
+    if (bestVersion) {
+      settings.value.kubernetes.version = bestVersion.version;
+      // Save the kubernetes version
+      commitChanges({
+        kubernetes: { version: bestVersion.version },
+      });
+    }
+  });
+});
+
+// Ollama models sorted by resource requirements (smallest to largest)
+const OLLAMA_MODELS = [
+  {
+    name: 'qwen2:0.5b', displayName: 'Qwen2 0.5B', size: '377MB', minMemoryGB: 1, minCPUs: 1, description: 'Alibaba\'s compact Qwen2 model, very lightweight',
+  },
+  {
+    name: 'qwen2:1.5b', displayName: 'Qwen2 1.5B', size: '934MB', minMemoryGB: 2, minCPUs: 2, description: 'Alibaba\'s Qwen2 model, efficient for basic tasks',
+  },
+  {
+    name: 'phi3:mini', displayName: 'Phi-3 Mini', size: '2.2GB', minMemoryGB: 4, minCPUs: 2, description: 'Microsoft\'s efficient 3.8B model, great reasoning capabilities',
+  },
+  {
+    name: 'gemma:2b', displayName: 'Gemma 2B', size: '1.7GB', minMemoryGB: 4, minCPUs: 2, description: 'Google\'s lightweight model, good general performance',
+  },
+  {
+    name: 'llama3.2:1b', displayName: 'Llama 3.2 1B', size: '1.3GB', minMemoryGB: 4, minCPUs: 2, description: 'Meta\'s smallest Llama 3.2, efficient and capable',
+  },
+  {
+    name: 'llama3.2:3b', displayName: 'Llama 3.2 3B', size: '2.0GB', minMemoryGB: 4, minCPUs: 2, description: 'Meta\'s compact Llama 3.2, balanced performance',
+  },
+  {
+    name: 'mistral:7b', displayName: 'Mistral 7B', size: '4.1GB', minMemoryGB: 5, minCPUs: 2, description: 'Excellent 7B model, strong coding and reasoning',
+  },
+  {
+    name: 'qwen2:7b', displayName: 'Qwen2 7B', size: '4.4GB', minMemoryGB: 5, minCPUs: 2, description: 'Alibaba\'s Qwen2 7B model, strong performance',
+  },
+  {
+    name: 'llama3.1:8b', displayName: 'Llama 3.1 8B', size: '4.7GB', minMemoryGB: 6, minCPUs: 2, description: 'Meta\'s latest 8B model, excellent all-around performance',
+  },
+  {
+    name: 'gemma:7b', displayName: 'Gemma 7B', size: '5.0GB', minMemoryGB: 6, minCPUs: 2, description: 'Google\'s larger model, improved capabilities',
+  },
+  {
+    name: 'codellama:7b', displayName: 'Code Llama 7B', size: '3.8GB', minMemoryGB: 5, minCPUs: 2, description: 'Specialized for code generation and understanding',
+  },
+  {
+    name: 'llama3.1:70b', displayName: 'Llama 3.1 70B', size: '40GB', minMemoryGB: 48, minCPUs: 8, description: 'Meta\'s flagship model, state-of-the-art performance',
+  },
+  {
+    name: 'mixtral:8x7b', displayName: 'Mixtral 8x7B', size: '26GB', minMemoryGB: 32, minCPUs: 8, description: 'Mixture of experts, excellent quality and speed',
+  },
+  {
+    name: 'deepseek-coder:33b', displayName: 'DeepSeek Coder 33B', size: '19GB', minMemoryGB: 24, minCPUs: 6, description: 'Advanced coding model, excellent for development',
+  }
+];
+
+// Dynamic system resources
+const availMemoryInGB = computed(() => Math.ceil(os.totalmem() / 2 ** 30));
+const availNumCPUs = computed(() => os.cpus().length);
+const allocatedMemoryGB = computed(() => settings.value.virtualMachine.memoryInGB);
+const allocatedCPUs = computed(() => settings.value.virtualMachine.numberCPUs);
+
+// Ollama gets ~70% of VM memory and ~75% of CPUs (rest for K8s, other pods)
+const ollamaMemoryGB = computed(() => Math.floor(allocatedMemoryGB.value * 0.7));
+const ollamaCPUs = computed(() => Math.floor(allocatedCPUs.value * 0.75));
+
+const availableModels = computed(() =>
+  OLLAMA_MODELS.map(model => ({
+    ...model,
+    available: ollamaMemoryGB.value >= model.minMemoryGB && ollamaCPUs.value >= model.minCPUs,
+  }))
+);
+
+const selectedModelDescription = computed(() =>
+  availableModels.value.find(m => m.name === settings.value.experimental.sullaModel)?.description || ''
+);
+
+const isValid = computed(() => availableModels.value.some(m => m.available));
+
+const onMemoryChange = (value: number) => {
+  settings.value.virtualMachine.memoryInGB = value;
+  autoSelectBestModel();
+};
+
+const onCpuChange = (value: number) => {
+  settings.value.virtualMachine.numberCPUs = value;
+  autoSelectBestModel();
+};
+
+const autoSelectBestModel = () => {
+  // If current selection is no longer available, select the best available model
+  const currentModel = availableModels.value.find(m => m.name === settings.value.experimental.sullaModel);
+
+  if (!currentModel?.available) {
+    // Find the best (largest) available model
+    const available = availableModels.value.filter(m => m.available);
+
+    if (available.length > 0) {
+      settings.value.experimental.sullaModel = available[available.length - 1].name;
+    } else {
+      // Fallback to smallest model
+      settings.value.experimental.sullaModel = 'qwen2:0.5b';
+    }
+  }
+};
+
+const handleNext = async () => {
+  // Save the VM resources and model choice
+  await commitChanges({
+    virtualMachine: {
+      memoryInGB: settings.value.virtualMachine.memoryInGB,
+      numberCPUs: settings.value.virtualMachine.numberCPUs,
+    },
+    experimental: {
+      sullaModel: settings.value.experimental.sullaModel,
+    },
+  });
+
+  emit('next');
+};
+</script>
+
+<style lang="scss" scoped>
+.model-disabled {
+  color: var(--disabled);
+}
+
+.rd-fieldset {
+  width: 100%;
+}
+
+.rd-slider {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 2rem;
+  margin-bottom: 1rem;
+}
+
+.rd-slider-rail {
+  flex-grow: 1;
+}
+
+.labeled-input .vue-slider {
+  margin: 2em 1em;
+  flex: 1;
+}
+
+/* Basic vue-slider styles */
+.vue-slider {
+  position: relative;
+  width: 100%;
+  height: 6px;
+  background: #ddd;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.vue-slider :deep(.vue-slider-rail) {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background: #ddd;
+  border-radius: 3px;
+}
+
+.vue-slider :deep(.vue-slider-process) {
+  position: absolute;
+  height: 100%;
+  background: #007bff;
+  border-radius: 3px;
+  top: 0;
+  left: 0;
+}
+
+.vue-slider :deep(.vue-slider-mark) {
+  position: absolute;
+  top: -6px;
+  width: 2px;
+  height: 18px;
+  background: #999;
+}
+
+.vue-slider :deep(.vue-slider-mark-step) {
+  background: #ccc;
+  opacity: 0.5;
+}
+
+.vue-slider :deep(.vue-slider-dot) {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 20px;
+  height: 20px;
+  background: #fff;
+  border: 2px solid #007bff;
+  border-radius: 50%;
+  cursor: grab;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+.vue-slider :deep(.vue-slider-dot-handle) {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: #007bff;
+  cursor: grab;
+}
+
+.vue-slider :deep(.vue-slider-dot-handle:active) {
+  cursor: grabbing;
+}
+
+.slider-input, .slider-input:focus, .slider-input:hover {
+  max-width: 6rem;
+}
+
+.empty-content {
+  display: none;
+}
+
+/* Hover effects */
+button:hover {
+  cursor: pointer;
+}
+
+input:hover, select:hover {
+  border-color: #374151; /* darker gray border */
+  background-color: #f3f4f6; /* slightly darker background */
+}
+</style>

@@ -47,8 +47,9 @@ import LOGROTATE_LIMA_GUESTAGENT_SCRIPT from '@pkg/assets/scripts/logrotate-lima
 import LOGROTATE_OPENRESTY_SCRIPT from '@pkg/assets/scripts/logrotate-openresty';
 import NERDCTL from '@pkg/assets/scripts/nerdctl';
 import NGINX_CONF from '@pkg/assets/scripts/nginx.conf';
-import SULLA_DEPLOYMENTS from '@pkg/assets/sulla-deployments.yaml';
+import * as settingsImpl from '@pkg/config/settingsImpl';
 import { ContainerEngine, MountType, VMType } from '@pkg/config/settings';
+import SULLA_DEPLOYMENTS from '@pkg/assets/sulla-deployments.yaml';
 import { getServerCredentialsPath, ServerState } from '@pkg/main/credentialServer/httpCredentialHelperServer';
 import mainEvents from '@pkg/main/mainEvents';
 import { exec as sudo } from '@pkg/sudo-prompt';
@@ -1826,6 +1827,7 @@ export default class LimaBackend extends events.EventEmitter implements VMBacken
   }
 
   async start(config_: BackendSettings): Promise<void> {
+    this.cfg = config_;
 
     // Emit event when main process starts up (for detecting restarts)
     ipcMain.emit('sulla-main-started');
@@ -1840,11 +1842,14 @@ export default class LimaBackend extends events.EventEmitter implements VMBacken
     this.#containerEngineClient = undefined;
     await this.progressTracker.action('Starting Backend', 10, async() => {
       try {
+        this.progressTracker.numeric('Starting Backend', 0, 100);
         this.ensureArchitectureMatch();
         await Promise.all([
           this.progressTracker.action('Ensuring virtualization is supported', 50, this.ensureVirtualizationSupported()),
           this.progressTracker.action('Updating cluster configuration', 50, this.updateConfig(this.#adminAccess)),
         ]);
+
+        this.progressTracker.numeric('System configuration ready', 20, 100);
 
         if (this.currentAction !== Action.STARTING) {
           // User aborted before we finished
@@ -1870,11 +1875,15 @@ export default class LimaBackend extends events.EventEmitter implements VMBacken
         // Start the VM; if it's already running, this does nothing.
         await this.startVM();
 
+        this.progressTracker.numeric('Virtual machine started', 40, 100);
+
         // Clear the diagnostic about not having Kubernetes versions
         mainEvents.emit('diagnostics-event', { id: 'kube-versions-available', available: true });
 
         if (config.kubernetes.enabled) {
           [kubernetesVersion, isDowngrade] = await this.kubeBackend.download(config);
+
+          this.progressTracker.numeric('Kubernetes downloaded', 50, 100);
 
           if (kubernetesVersion === undefined) {
             if (isDowngrade) {
@@ -1923,6 +1932,8 @@ export default class LimaBackend extends events.EventEmitter implements VMBacken
           this.progressTracker.action('Configuring logrotate', 50, this.configureLogrotate()),
         ]);
 
+        this.progressTracker.numeric('Services configured', 60, 100);
+
         if (config.containerEngine.allowedImages.enabled) {
           await this.startService('rd-openresty');
         }
@@ -1960,6 +1971,8 @@ export default class LimaBackend extends events.EventEmitter implements VMBacken
 
         await Promise.all(tasks);
 
+        this.progressTracker.numeric('Components installed', 70, 100);
+
         if (this.currentAction !== Action.STARTING) {
           // User aborted
           return;
@@ -1991,8 +2004,10 @@ export default class LimaBackend extends events.EventEmitter implements VMBacken
 
         await Promise.all(actions);
 
+        this.progressTracker.numeric('Kubernetes starting', 75, 100);
+
         if (config.kubernetes.enabled) {
-          await this.progressTracker.action('Waiting for Kubernetes API ready (up to 10 min)', 100, async () => {
+          await this.progressTracker.action('Waiting for Kubernetes API ready (up to 10 min)', 76, async () => {
             const start = Date.now();
             const timeoutMs = 10 * 60 * 1000; // 10 minutes
 
@@ -2016,46 +2031,10 @@ export default class LimaBackend extends events.EventEmitter implements VMBacken
 
             throw new Error('Kubernetes API did not become ready after 10 minutes');
           });
-
-          // Now safe to deploy Sulla services
-          await this.progressTracker.action('Preparing Sulla deployment files', 30, async () => {
-            await this.prepareSullaDeploymentFiles();
-          });
-
-          await this.progressTracker.action('Applying Sulla manifests', 50, async () => {
-            await this.applySullaManifests();
-          });
-
-          await this.progressTracker.action('Booting Virtual Container Environment...', 60, async () => {
-            const containers = ['ws-server', 'redis', 'postgres', 'chroma', 'ollama'];
-            
-            // Track each container individually
-            for (const container of containers) {
-              await this.progressTracker.action(`Downloading and Starting ${container}`, 100, async () => {
-                await this.waitForDeployment(`${container}`, 600);
-              });
-            }
-          });
-
-          await this.progressTracker.action('Waiting for Ollama pod scheduling', 60, async () => {
-            await this.waitForPodCondition('ollama', 'Initialized', 'True', 300);
-          });
-
-          await this.progressTracker.action('Waiting for Ollama pod fully ready', 180, async () => {
-            await this.waitForPodCondition('ollama', 'Ready', 'True', 600);
-          });
-
-          await this.progressTracker.action('Running quick deployment diagnostics', 30, async () => {
-            await this.logQuickDeploymentStatus();
-          });
-
-          await this.progressTracker.action('Pulling & loading Ollama model', 300, async () => {
-            await this.pullOllamaModelWithProgress();
-          });
-        
         }
 
         await this.setState(config.kubernetes.enabled ? State.STARTED : State.DISABLED);
+
       } catch (err) {
         console.error('Error starting lima:', err);
         await this.setState(State.ERROR);
@@ -2069,6 +2048,25 @@ export default class LimaBackend extends events.EventEmitter implements VMBacken
         this.currentAction = Action.NONE;
       }
     });
+
+
+    this.writeSetting({ application: { firstKubernetesIsInstalled: true } });
+
+    // Reload current settings to get the latest firstRunCredentialsNeeded value
+    this.cfg = settingsImpl.load({ defaults: {}, locked: {} });
+    settingsImpl.updateLockedFields({});
+    
+    // if we get here the user has entered their credentials and k8s has booted. we can install sulla.
+    const firstRunCredentialsNeeded = (this.cfg?.application as any)?.firstRunCredentialsNeeded;
+    if (config.kubernetes.enabled) {
+      if (firstRunCredentialsNeeded === false && this.kubeBackend.sullaStepCustomEnvironment) {
+        this.progressTracker.numeric('starting sullaStepCustomEnvironment ', 80, 100);
+        await this.kubeBackend.sullaStepCustomEnvironment();
+      }
+    } else {
+      this.progressTracker.numeric('Basic conditions not met ', 80, 100);
+    }
+    
   }
 
   async waitForApiReady(timeoutSec = 120): Promise<void> {
@@ -2191,6 +2189,37 @@ export default class LimaBackend extends events.EventEmitter implements VMBacken
           };
         }
       }
+      if (deployment.kind === 'Deployment' && (deployment.metadata as Record<string, unknown>)?.name === 'postgres') {
+        const spec = deployment.spec as Record<string, unknown>;
+        const template = spec?.template as Record<string, unknown>;
+        const podSpec = template?.spec as Record<string, unknown>;
+        const containers = podSpec?.containers as Array<Record<string, unknown>>;
+        if (containers?.[0]?.env) {
+          containers[0].env = (containers[0].env as Array<any>).map((envVar: any) => {
+            if (envVar.name === 'POSTGRES_PASSWORD' || envVar.name === 'DB_POSTGRESDB_PASSWORD') {
+              envVar.value = this.cfg?.experimental?.sullaServicePassword || 'sulla_dev_password';
+            }
+            return envVar;
+          });
+        }
+      }
+      if (deployment.kind === 'Deployment' && (deployment.metadata as Record<string, unknown>)?.name === 'n8n') {
+        const spec = deployment.spec as Record<string, unknown>;
+        const template = spec?.template as Record<string, unknown>;
+        const podSpec = template?.spec as Record<string, unknown>;
+        const containers = podSpec?.containers as Array<Record<string, unknown>>;
+        if (containers?.[0]?.env) {
+          containers[0].env = (containers[0].env as Array<any>).map((envVar: any) => {
+            if (envVar.name === 'N8N_ENCRYPTION_KEY') {
+              envVar.value = this.cfg?.experimental?.sullaN8nEncryptionKey || 'changeMeToA32CharRandomString1234';
+            }
+            if (envVar.name === 'N8N_BASIC_AUTH_PASSWORD') {
+              envVar.value = this.cfg?.experimental?.sullaServicePassword || 'n8n_dev_password';
+            }
+            return envVar;
+          });
+        }
+      }
       return deployment;
     });
 
@@ -2254,12 +2283,15 @@ export default class LimaBackend extends events.EventEmitter implements VMBacken
     throw new Error(`Timeout waiting for condition after ${timeoutSec}s`);
   }
 
-  private async pullOllamaModelWithProgress(): Promise<void> {
+  protected async pullOllamaModelWithProgress(): Promise<void> {
     try {
       const MODEL = (this.cfg as Record<string, unknown>)?.experimental &&
         ((this.cfg as Record<string, unknown>).experimental as Record<string, unknown>)?.sullaModel
         ? String(((this.cfg as Record<string, unknown>).experimental as Record<string, unknown>).sullaModel)
         : 'tinyllama:latest';
+
+      // Reset progress counter before starting download
+      this.progressTracker.numeric(`Starting Ollama model download: ${MODEL}`, 0, 100);
 
       console.log(`Starting Ollama model pull: ${MODEL}`);
 
@@ -2279,6 +2311,8 @@ export default class LimaBackend extends events.EventEmitter implements VMBacken
 
       return new Promise((resolve, reject) => {
         let output = '';
+        // Initialize progress at 0
+        this.progressTracker.numeric(`Pulling Ollama model ${MODEL}`, 0, 100);
         proc.stdout?.on('data', (chunk: Buffer | string) => {
           const text = Buffer.isBuffer(chunk) ? chunk.toString('utf8') : chunk;
           const lines = text.split('\n');
@@ -2287,6 +2321,12 @@ export default class LimaBackend extends events.EventEmitter implements VMBacken
             if (trimmed) {
               console.log(`[Ollama Pull] ${trimmed}`);
               output += trimmed + '\n';
+              // Parse for progress percentage
+              const progressMatch = trimmed.match(/(\d+)%/);
+              if (progressMatch) {
+                const progress = parseInt(progressMatch[1], 10);
+                this.progressTracker.numeric(`Pulling Ollama model ${MODEL}`, progress, 100);
+              }
             }
           });
         });
@@ -2300,6 +2340,8 @@ export default class LimaBackend extends events.EventEmitter implements VMBacken
         proc.on('close', (code) => {
           if (code === 0) {
             console.log(`Ollama model ${MODEL} pulled successfully`);
+            // Set to 100% on success
+            this.progressTracker.numeric(`Pulling Ollama model ${MODEL}`, 100, 100);
             resolve();
           } else {
             reject(new Error(`Model pull failed with code ${code}. Output: ${output}`));

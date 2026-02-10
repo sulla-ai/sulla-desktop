@@ -96,10 +96,6 @@ function getNeuralNetworkMenu(): MenuItem {
         click:       openLanguageModelSettings,
       },
       {
-        label: 'Docker',
-        click: openDockerDashboard,
-      },
-      {
         label: 'Preferences…',
         click: openPreferences,
       },
@@ -121,6 +117,10 @@ function getNeuralNetworkMenu(): MenuItem {
         enabled: false,
       },
       { type: 'separator' },
+      {
+        label: 'Docker Dashboard',
+        click: openDockerDashboard,
+      },
       {
         label:   'Cluster Dashboard',
         click:   openDashboard,
