@@ -109,6 +109,15 @@ export class AgentPersonaRegistry {
     this.state.agents.forEach(agent => {
       this.getOrCreatePersonaService(agent.agentId);
     });
+
+    // Start listening for WebSocket messages for all running agents
+    this.state.agents.forEach(agent => {
+      if (agent.isRunning) {
+        const personaService = this.getOrCreatePersonaService(agent.agentId);
+        personaService.startListening([agent.agentId]);
+      }
+    });
+
   }
 
   private clearPersonaServiceCaches(): void {

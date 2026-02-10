@@ -1,4 +1,4 @@
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 
 import { getAgentPersonaRegistry, type ChatMessage as RegistryChatMessage } from '@pkg/agent';
 
@@ -89,15 +89,40 @@ export class ChatInterface {
   });
 
   // Messages from active agent's persona service
-  readonly messages = computed<ChatMessage[]>(() => {
+  readonly messages = ref<ChatMessage[]>([]);
+
+  constructor() {
+    console.log('[ChatInterface] Constructor called');
+
+    this.unsubscribeActiveAgent = this.registry.onActiveAgentChange((agent) => {
+      const newAgentId = agent?.agentId || this.frontendChannelId;
+      this.activeAgentId.value = newAgentId;
+      // Update messages when active agent changes
+      this.updateMessages();
+    });
+
+    // Watch for received messages from the current active persona service
+    watch(() => {
+      const personaService = this.registry.getActivePersonaService();
+      return personaService?.messages.length ?? 0;
+    }, (newLength, oldLength) => {
+      this.updateMessages();
+    });
+
+    // Initial messages update
+    this.updateMessages();
+  }
+
+  private updateMessages(): void {
     const personaService = this.registry.getActivePersonaService();
     if (!personaService) {
-      return [];
+      this.messages.value = [];
+      return;
     }
     const msgs = personaService.messages;
-    // Return a copy to ensure reactivity when the array is mutated
-    return [...msgs];
-  });
+    console.log('[ChatInterface] updateMessages: setting', msgs.length, 'messages');
+    this.messages.value = [...msgs];
+  }
 
   // Graph running state from active agent's persona service
   readonly graphRunning = computed(() => {
@@ -116,14 +141,6 @@ export class ChatInterface {
     // True if user has ever sent a message OR if current session has messages
     return this.hasSentMessage.value || this.messages.value.length > 0;
   });
-
-
-  constructor() {
-    this.unsubscribeActiveAgent = this.registry.onActiveAgentChange((agent) => {
-      const newAgentId = agent?.agentId || this.frontendChannelId;
-      this.activeAgentId.value = newAgentId;
-    });
-  }
 
   private subscribedThreadId: string | null = null;
 
@@ -163,6 +180,8 @@ export class ChatInterface {
     const personaService = this.registry.getActivePersonaService();
     if (personaService) {
       personaService.addUserMessage(this.activeAgentId.value, userText);
+      // Update UI immediately after sending
+      this.updateMessages();
     }
   }
 
