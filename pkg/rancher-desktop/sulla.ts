@@ -25,7 +25,6 @@ export async function initiateWindowContext(): Promise<void> {
         const fallbackPath = require('path').join(userDataPath, 'sulla-settings-fallback.json');
         SullaSettingsModel.setFallbackFilePath(fallbackPath);
         console.log('[WindowContext] Fallback path set to:', fallbackPath);
-        await SullaSettingsModel.earlyBootstrap();
     } catch (error) {
         console.error('[WindowContext] Failed to initialize settings:', error);
     }
@@ -107,8 +106,6 @@ export async function onMainProxyLoad(ipcMainProxy: any) {
     // Assume main process
     const fallbackPath = path.join(app.getPath('userData'), 'sulla-settings-fallback.json');
     SullaSettingsModel.setFallbackFilePath(fallbackPath);
-
-    await SullaSettingsModel.earlyBootstrap();
 
     // Cache it in settings on first request
     ipcMainProxy.handle('get-user-data-path', async () => {

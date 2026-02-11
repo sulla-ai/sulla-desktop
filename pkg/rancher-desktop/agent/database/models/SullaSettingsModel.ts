@@ -46,17 +46,64 @@ export class SullaSettingsModel extends BaseModel<SettingsAttributes> {
   // ──────────────────────────────────────────────
 
   private static isReady: boolean = false;
-  private static pending: Array<{ property: string; value: any }> = [];
   private static fallbackData: Map<string, any> = new Map();
 
-  private static async loadFallback(): Promise<void> {
+  // ──────────────────────────────────────────────
+  // Bootstrap: sync fallback → real backends
+  // Call once after PG + Redis are confirmed ready
+  // ──────────────────────────────────────────────
+
+  /**
+   * Full bootstrap: call when DBs are ready
+   * 
+   * @returns 
+   */
+  public static async bootstrap(): Promise<void> {
+    if (this.isReady) return; // run once
+
+    console.log('SullaSettingsModel: full bootstrap starting');
+
+    // PG → Redis
+    // now that the system is ready we can write to persistent storage
+    await this.initialize();
+    this.isReady = true;
+
+    // Read from installation lock file and sync to persistent storage
     try {
       const content = await fs.readFile(this.getFallbackFilePath(), 'utf8');
-      const parsed = JSON.parse(content) as Record<string, any>;
-      this.fallbackData = new Map(Object.entries(parsed));
-    } catch {
-      this.fallbackData.clear();
+      const data = JSON.parse(content) as Record<string, any>;
+      for (const [property, value] of Object.entries(data)) {
+        await this.setSetting(property, value);
+      }
+      console.log(`SullaSettingsModel: synced ${Object.keys(data).length} settings from lock file`);
+    } catch (err) {
+      console.log('SullaSettingsModel: no lock file to sync or error reading:', err);
     }
+
+    // do not delete the fallback file. it acts as our installation lock file
+
+    console.log('SullaSettingsModel: full bootstrap complete');
+  }
+
+  // ──────────────────────────────────────────────
+  // Sync PG → Redis on startup or after bootstrap
+  // ──────────────────────────────────────────────
+
+  /**
+   * Sync all settings from PostgreSQL to Redis
+   * @returns 
+   */
+  public static async initialize(): Promise<void> {
+    const all = await this.all();
+    if (all.length === 0) return;
+
+    const pipeline = redisClient.pipeline();
+    for (const setting of all) {
+      const property = setting.attributes.property as string;
+      const value = setting.attributes.value;
+      pipeline.hset('sulla_settings', property, JSON.stringify(value));
+    }
+    await pipeline.exec();
   }
 
   // ──────────────────────────────────────────────
@@ -113,7 +160,7 @@ export class SullaSettingsModel extends BaseModel<SettingsAttributes> {
       return;
     }
 
-    // Fallback: read-modify-write JSON file
+    // Fallback: update buffer and debounce save
     const filePath = this.getFallbackFilePath();
     let data: Record<string, any> = {};
     try {
@@ -122,8 +169,8 @@ export class SullaSettingsModel extends BaseModel<SettingsAttributes> {
     } catch {} // file missing → start empty
 
     data[property] = value;
-
-    await fs.writeFile(filePath, JSON.stringify(data, null, 2));
+    this.fallbackData = new Map(Object.entries(data));
+    await this.debouncedSaveFallback();
   }
 
   /**
@@ -147,87 +194,19 @@ export class SullaSettingsModel extends BaseModel<SettingsAttributes> {
   }
 
   // ──────────────────────────────────────────────
-  // Bootstrap: sync fallback → real backends
-  // Call once after PG + Redis are confirmed ready
-  // ──────────────────────────────────────────────
-
-  /**
-   * Early bootstrap: load fallback only (call very early in main process)
-   * 
-   * @returns 
-   */
-  public static async earlyBootstrap(): Promise<void> {
-    if (this.fallbackData.size > 0) return; // already loaded
-
-    console.log('[SullaSettings] Early bootstrap: loading fallback file');
-    console.log('[SullaSettings] Fallback path used:', this.getFallbackFilePath());
-    await this.loadFallback();
-    console.log(`[SullaSettings] Early load complete: ${this.fallbackData.size} keys`);
-  }
-
-  /**
-   * Full bootstrap: call when DBs are ready
-   * 
-   * @returns 
-   */
-  public static async bootstrap(): Promise<void> {
-    if (this.isReady) return;
-
-    console.log('SullaSettingsModel: full bootstrap starting');
-
-    // Already loaded early, but safe to reload if needed
-    await this.loadFallback();
-
-    // Flush pending
-    for (const item of this.pending) {
-      await this.setSetting(item.property, item.value);
-    }
-    this.pending = [];
-
-    // Sync lingering fallback
-    for (const [property, value] of this.fallbackData.entries()) {
-      await this.setSetting(property, value);
-    }
-    this.fallbackData.clear();
-
-    // do not delete the fallback file. it acts as our installation lock file
-
-    // PG → Redis
-    await this.initialize();
-
-    this.isReady = true;
-    console.log('SullaSettingsModel: full bootstrap complete');
-  }
-
-  // ──────────────────────────────────────────────
-  // Sync PG → Redis on startup or after bootstrap
-  // ──────────────────────────────────────────────
-
-  /**
-   * Sync all settings from PostgreSQL to Redis
-   * @returns 
-   */
-  public static async initialize(): Promise<void> {
-    const all = await this.all();
-    if (all.length === 0) return;
-
-    const pipeline = redisClient.pipeline();
-    for (const setting of all) {
-      const property = setting.attributes.property as string;
-      const value = setting.attributes.value;
-      pipeline.hset('sulla_settings', property, JSON.stringify(value));
-    }
-    await pipeline.exec();
-  }
-
-  // ──────────────────────────────────────────────
   // Utils
   // ──────────────────────────────────────────────
 
   public static async delete(property: string): Promise<void> {
     if (!this.isReady) {
-      this.fallbackData.delete(property);
-      this.pending = this.pending.filter(p => p.property !== property);
+      const filePath = this.getFallbackFilePath();
+      let data: Record<string, any> = {};
+      try {
+        const content = await fs.readFile(filePath, 'utf8');
+        data = JSON.parse(content);
+      } catch {} // file missing → do nothing
+      delete data[property];
+      this.fallbackData = new Map(Object.entries(data));
       await this.debouncedSaveFallback();
       return;
     }
