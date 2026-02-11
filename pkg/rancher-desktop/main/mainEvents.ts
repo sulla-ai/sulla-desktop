@@ -170,6 +170,11 @@ interface MainEventNames {
    * Emitted when the Sulla first-run setup is complete.
    */
   'sulla-first-run-complete'(): void;
+
+  /**
+   * Quit the application.
+   */
+  'app-quit'(): void;
 }
 
 /**

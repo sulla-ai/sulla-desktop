@@ -2,7 +2,7 @@
   <div class="h-screen overflow-hidden bg-white text-[#0d0d0d] dark:bg-slate-900 dark:text-neutral-50 font-sans" :class="{ dark: isDark }">
     <div class="flex h-screen flex-col">
 
-      <SimpleHeader :is-dark="isDark" :toggle-theme="toggleTheme"/>
+      <SimpleHeader :is-dark="isDark" :toggle-theme="toggleTheme" :on-stop="stopApp"/>
 
       <!-- Main agent interface -->
       <div ref="chatScrollContainer" id="chat-scroll-container" class="flex min-h-0 flex-1 overflow-y-auto">
@@ -91,6 +91,10 @@ const steps = [FirstRunResources, FirstRunWelcome, FirstRunRemoteModel, FirstRun
 const settings = ref(defaultSettings);
 
 const startupController = new StartupProgressController(StartupProgressController.createState());
+
+const stopApp = async () => {
+  await ipcRenderer.invoke('app-quit');
+};
 
 // Prevent overlay in first-run view
 startupController.state.showOverlay.value = false;

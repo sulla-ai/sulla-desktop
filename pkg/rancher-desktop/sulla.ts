@@ -1,4 +1,5 @@
 // registry.ts (or wherever you centralize registrations)
+import * as window from '@pkg/window';
 import { SullaSettingsModel } from '@pkg/agent/database/models/SullaSettingsModel';
 import { getIntegrationService } from './agent/services/IntegrationService';
 import { getSchedulerService } from '@pkg/agent/services/SchedulerService';
@@ -109,6 +110,17 @@ export async function onMainProxyLoad(ipcMainProxy: any) {
     // Cache it in settings on first request
     ipcMainProxy.handle('get-user-data-path', async () => {
         return app.getPath('userData');
+    });
+
+    // Handle app quit requests from the UI
+    ipcMainProxy.handle('app-quit', () => {
+        console.log('[Sulla] Quitting application...');
+        const firstRunWindow = window.getWindow('first-run');
+        if (firstRunWindow) {
+            firstRunWindow.setClosable(true);
+            firstRunWindow.close();
+        }
+        app.quit();
     });
 }
 

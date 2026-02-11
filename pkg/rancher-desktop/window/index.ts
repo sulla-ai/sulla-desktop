@@ -687,7 +687,7 @@ export async function openFirstRunDialog() {
       height:         defaultHeight,
       resizable:      !process.env.RD_MOCK_FOR_SCREENSHOTS, // remove window's shadows while taking screenshots
       icon:           path.join(paths.resources, 'icons', 'sulla-icon.svg'),
-      closable:       false,
+      closable:       true,
       webPreferences: {
         devTools:         !app.isPackaged,
         nodeIntegration:  true,

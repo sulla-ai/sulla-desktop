@@ -10,7 +10,7 @@ default:
 
 # Clean build artifacts only (preserves VM and cached images)
 clean:
-    @echo "Cleaning up for fresh install (this will wipe VM and cached images)..."
+    @echo "Cleaning up for fresh install (preserves VM and cached images)..."
     rm -rf node_modules
     rm -rf .yarn/cache
     rm -rf .yarn/install-state.gz
@@ -119,8 +119,8 @@ restart hard="":
         echo "Hard restart: full rebuild (wiping VM and images)..."
         just rebuild-hard
     else
-        echo "Rebuilding (preserving VM and images)..."
-        just rebuild
+        echo "Building (preserving VM and images)..."
+        just build
     fi
     just start
 
@@ -128,6 +128,17 @@ pods:
     LIMA_HOME=~/Library/Application\ Support/rancher-desktop/lima \
     resources/darwin/lima/bin/limactl shell 0 -- \
     sudo k3s kubectl get pods -n sulla
+
+apply-yaml:
+    LIMA_HOME=~/Library/Application\ Support/rancher-desktop/lima \
+    resources/darwin/lima/bin/limactl shell 0 -- \
+    sudo k3s kubectl apply -f /Users/jonathonbyrdziak/Sites/sulla/sulla-desktop/pkg/rancher-desktop/assets/sulla-deployments.yaml -n sulla
+
+ping-chroma:
+    @echo "Pinging Chroma health endpoint..."
+    LIMA_HOME=~/Library/Application\ Support/rancher-desktop/lima \
+    resources/darwin/lima/bin/limactl shell 0 -- \
+    curl -s -m 5 http://localhost:30115/api/v2/heartbeat || echo "Chroma unreachable (timeout or 410)"
 
 # Port-forward PostgreSQL to localhost:5432 for external access (e.g., pgAdmin, DBeaver)
 # Connection: host=localhost, port=5432, user=sulla, password=sulla_dev_password, database=sulla

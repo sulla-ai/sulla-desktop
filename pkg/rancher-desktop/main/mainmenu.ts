@@ -130,6 +130,7 @@ function getNeuralNetworkMenu(): MenuItem {
         id:      'k8s-contexts',
         label:   'Kubernetes Contexts',
         submenu: [],
+        visible: false,
       },
     ],
   });

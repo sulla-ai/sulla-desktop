@@ -132,6 +132,7 @@ export interface IpcMainInvokeEvents {
 
   // #region Sulla
   'sulla-restart-ollama':      () => void;
+  'app-quit':                  () => void;
   // #endregion
 
   // #region main/imageEvents
