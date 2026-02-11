@@ -1,5 +1,4 @@
-export const safetyModel = `
----
+export const safetyModel = `---
 schemaversion: 1
 slug: safety-model
 title: Safety Model & Guardrails

@@ -181,7 +181,7 @@ export class StartupProgressController {
       console.log('[StartupProgressController] Checking for nomic-embed-text model...');
 
       // Get the local Ollama service
-      const ollamaService = getLocalService();
+      const ollamaService = await getLocalService();
       if (!ollamaService) {
         console.warn('[StartupProgressController] No local Ollama service available, skipping nomic-embed-text check');
         return;

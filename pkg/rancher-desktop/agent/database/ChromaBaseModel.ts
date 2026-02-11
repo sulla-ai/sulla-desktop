@@ -1,6 +1,5 @@
 // src/database/ChromaBaseModel.ts
 import { chromaClient } from './ChromaDb';
-import { getModelMode, getRemoteConfig } from '../services/ConfigService';
 
 interface ChromaDocument {
   id: string;

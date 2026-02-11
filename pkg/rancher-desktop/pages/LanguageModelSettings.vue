@@ -7,6 +7,7 @@ import { ipcRenderer } from '@pkg/utils/ipcRenderer';
 import { soulPrompt } from '../agent/prompts/soul';
 import { heartbeatPrompt } from '../agent/prompts/heartbeat';
 import { N8nService } from '../agent/services/N8nService';
+import { SullaSettingsModel } from '../agent/database/models/SullaSettingsModel';
 
 // Nav items for the Language Model Settings sidebar
 const navItems = [
@@ -169,9 +170,6 @@ export default defineComponent({
   name: 'language-model-settings',
 
   data() {
-    const defaultSoulPrompt = soulPrompt;
-    const defaultHeartbeatPrompt = heartbeatPrompt;
-
     return {
       currentNav:       'overview' as string,
       navItems,
@@ -213,7 +211,6 @@ export default defineComponent({
       // Heartbeat settings
       heartbeatEnabled:     true,
       heartbeatDelayMinutes: 30,
-      defaultHeartbeatPrompt,
       heartbeatPrompt:      '',
       heartbeatModel:       'default' as string, // 'default' or specific model like 'local:tinyllama:latest' or 'remote:grok:grok-4-1-fast-reasoning'
 
@@ -233,7 +230,6 @@ export default defineComponent({
       n8nTestResult:        null as {success: boolean, message: string, data?: any} | null,
 
       // Soul prompt settings
-      defaultSoulPrompt,
       soulPrompt: '',
       botName: 'Sulla',
       primaryUserName: '',
@@ -251,8 +247,7 @@ export default defineComponent({
     },
     soulPromptEditor: {
       get(): string {
-        const override = String(this.soulPrompt || '');
-        return override.trim() ? override : String(this.defaultSoulPrompt || '');
+        return this.soulPrompt;
       },
       set(val: string) {
         this.soulPrompt = String(val || '');
@@ -260,8 +255,7 @@ export default defineComponent({
     },
     heartbeatPromptEditor: {
       get(): string {
-        const override = String(this.heartbeatPrompt || '');
-        return override.trim() ? override : String(this.defaultHeartbeatPrompt || '');
+        return this.heartbeatPrompt;
       },
       set(val: string) {
         this.heartbeatPrompt = String(val || '');
@@ -323,82 +317,26 @@ export default defineComponent({
       this.activationError = `Failed to save settings: ${error?.message || 'Unknown error'}`;
     });
 
-    // Load saved settings
-    ipcRenderer.on('settings-read', (_event: unknown, settings: {
-      experimental?: {
-        sullaModel?: string;
-        soulPrompt?: string;
-        botName?: string;
-        primaryUserName?: string;
-        modelMode?: 'local' | 'remote';
-        remoteProvider?: string;
-        remoteModel?: string;
-        remoteApiKey?: string;
-        remoteRetryCount?: number;
-        remoteTimeoutSeconds?: number;
-        localTimeoutSeconds?: number;
-        localRetryCount?: number;
-        heartbeatEnabled?: boolean;
-        heartbeatDelayMinutes?: number;
-        heartbeatPrompt?: string;
-        heartbeatModel?: string;
-      };
-    }) => {
-      if (settings.experimental?.sullaModel) {
-        this.activeModel = settings.experimental.sullaModel;
-        this.pendingModel = settings.experimental.sullaModel;
-      }
-      if (settings.experimental?.soulPrompt !== undefined && settings.experimental?.soulPrompt !== '') {
-        this.soulPrompt = settings.experimental.soulPrompt;
-      } else {
-        // Initialize with default soul prompt on first install or when no saved value exists
-        this.soulPrompt = this.defaultSoulPrompt;
-      }
-      if (settings.experimental?.botName !== undefined) {
-        this.botName = settings.experimental.botName;
-      }
-      if (settings.experimental?.primaryUserName !== undefined) {
-        this.primaryUserName = settings.experimental.primaryUserName;
-      }
-      if (settings.experimental?.modelMode) {
-        this.activeMode = settings.experimental.modelMode;
-        this.viewingTab = settings.experimental.modelMode;
-      }
-      if (settings.experimental?.remoteProvider) {
-        this.selectedProvider = settings.experimental.remoteProvider;
-      }
-      if (settings.experimental?.remoteModel) {
-        this.selectedRemoteModel = settings.experimental.remoteModel;
-      }
-      if (settings.experimental?.remoteApiKey) {
-        this.apiKey = settings.experimental.remoteApiKey;
-      }
-      if (settings.experimental?.remoteRetryCount !== undefined) {
-        this.remoteRetryCount = settings.experimental.remoteRetryCount;
-      }
-      if (settings.experimental?.remoteTimeoutSeconds !== undefined) {
-        this.remoteTimeoutSeconds = settings.experimental.remoteTimeoutSeconds;
-      }
-      if (settings.experimental?.localTimeoutSeconds !== undefined) {
-        this.localTimeoutSeconds = settings.experimental.localTimeoutSeconds;
-      }
-      if (settings.experimental?.localRetryCount !== undefined) {
-        this.localRetryCount = settings.experimental.localRetryCount;
-      }
-      if (settings.experimental?.heartbeatEnabled !== undefined) {
-        this.heartbeatEnabled = settings.experimental.heartbeatEnabled;
-      }
-      if (settings.experimental?.heartbeatDelayMinutes !== undefined) {
-        this.heartbeatDelayMinutes = settings.experimental.heartbeatDelayMinutes;
-      }
-      if (settings.experimental?.heartbeatPrompt !== undefined) {
-        this.heartbeatPrompt = settings.experimental.heartbeatPrompt;
-      }
-      if (settings.experimental?.heartbeatModel) {
-        this.heartbeatModel = settings.experimental.heartbeatModel;
-      }
-    });
-    ipcRenderer.send('settings-read');
+    // Load all settings from database
+    this.soulPrompt = await SullaSettingsModel.get('soulPrompt', soulPrompt);
+    this.heartbeatPrompt = await SullaSettingsModel.get('heartbeatPrompt', heartbeatPrompt);
+    this.heartbeatModel = await SullaSettingsModel.get('heartbeatModel', 'default');
+    this.heartbeatDelayMinutes = await SullaSettingsModel.get('heartbeatDelayMinutes', 30);
+    this.botName = await SullaSettingsModel.get('botName', 'Sulla');
+    this.primaryUserName = await SullaSettingsModel.get('primaryUserName', '');
+    this.activeMode = await SullaSettingsModel.get('modelMode', 'local');
+    this.viewingTab = this.activeMode;
+    this.selectedProvider = await SullaSettingsModel.get('remoteProvider', 'grok');
+    this.selectedRemoteModel = await SullaSettingsModel.get('remoteModel', 'grok-4-1-fast-reasoning');
+    this.apiKey = await SullaSettingsModel.get('remoteApiKey', '');
+    this.remoteRetryCount = await SullaSettingsModel.get('remoteRetryCount', 3);
+    this.remoteTimeoutSeconds = await SullaSettingsModel.get('remoteTimeoutSeconds', 60);
+    this.localTimeoutSeconds = await SullaSettingsModel.get('localTimeoutSeconds', 120);
+    this.localRetryCount = await SullaSettingsModel.get('localRetryCount', 2);
+    this.heartbeatEnabled = await SullaSettingsModel.get('heartbeatEnabled', true);
+    // Load model from database
+    this.activeModel = await SullaSettingsModel.get('sullaModel', 'tinyllama:latest');
+    this.pendingModel = this.activeModel;
 
     await this.loadModels();
     this.fetchContainerStats();
@@ -413,7 +351,6 @@ export default defineComponent({
     }
     // Clean up IPC listeners
     ipcRenderer.removeAllListeners('settings-write-error');
-    ipcRenderer.removeAllListeners('settings-read');
   },
 
   methods: {
@@ -646,9 +583,7 @@ export default defineComponent({
       // Save the pending model as the active model
       this.activeModel = this.pendingModel;
       try {
-        await ipcRenderer.invoke('settings-write', {
-          experimental: { sullaModel: this.pendingModel },
-        });
+        await SullaSettingsModel.set('sullaModel', this.pendingModel);
         console.log(`[LM Settings] Model activated: ${this.pendingModel}`);
       } catch (err) {
         console.error('Failed to save model setting:', err);
@@ -837,6 +772,9 @@ export default defineComponent({
       this.savingSettings = true;
       try {
         await this.writeExperimentalSettings();
+        // Save prompts to database
+        await SullaSettingsModel.set('soulPrompt', this.soulPrompt);
+        await SullaSettingsModel.set('heartbeatPrompt', this.heartbeatPrompt);
         console.log('[LM Settings] Settings saved');
       } catch (err) {
         console.error('Failed to save LM settings:', err);
@@ -848,30 +786,27 @@ export default defineComponent({
     async writeExperimentalSettings(extra: Record<string, unknown> = {}) {
 
       try {
-        // Validate and sanitize data before sending
-        const settingsData = {
-          experimental: {
-            ...extra,
-            sullaModel:            String(this.pendingModel || ''),
-            soulPrompt:            String(this.soulPrompt || ''),
-            botName:               String(this.botName || ''),
-            primaryUserName:       String(this.primaryUserName || ''),
-            remoteProvider:        String(this.selectedProvider || ''),
-            remoteModel:           String(this.selectedRemoteModel || ''),
-            remoteApiKey:          String(this.apiKey || ''),
-            remoteRetryCount:      Number(this.remoteRetryCount) || 3,
-            remoteTimeoutSeconds:  Number(this.remoteTimeoutSeconds) || 60,
-            localTimeoutSeconds:   Number(this.localTimeoutSeconds) || 120,
-            localRetryCount:       Number(this.localRetryCount) || 2,
-            heartbeatEnabled:      Boolean(this.heartbeatEnabled),
-            heartbeatDelayMinutes: Number(this.heartbeatDelayMinutes) || 30,
-            heartbeatPrompt:       String(this.heartbeatPrompt || ''),
-            heartbeatModel:        String(this.heartbeatModel || ''),
-          },
+        // Save all settings to database
+        const settingsToSave = {
+          botName: String(this.botName || ''),
+          primaryUserName: String(this.primaryUserName || ''),
+          remoteProvider: String(this.selectedProvider || ''),
+          remoteModel: String(this.selectedRemoteModel || ''),
+          remoteApiKey: String(this.apiKey || ''),
+          remoteRetryCount: Number(this.remoteRetryCount) || 3,
+          remoteTimeoutSeconds: Number(this.remoteTimeoutSeconds) || 60,
+          localTimeoutSeconds: Number(this.localTimeoutSeconds) || 120,
+          localRetryCount: Number(this.localRetryCount) || 2,
+          heartbeatEnabled: Boolean(this.heartbeatEnabled),
+          heartbeatDelayMinutes: Number(this.heartbeatDelayMinutes) || 30,
+          heartbeatPrompt: String(this.heartbeatPrompt || ''),
+          heartbeatModel: String(this.heartbeatModel || ''),
+          ...extra,
         };
-        
-        console.log('[LM Settings] Writing settings:', JSON.stringify(settingsData, null, 2));
-        await ipcRenderer.invoke('settings-write', settingsData);
+
+        for (const [key, value] of Object.entries(settingsToSave)) {
+          await SullaSettingsModel.set(key, value);
+        }
       } catch (err) {
         console.error('[LM Settings] Error in writeExperimentalSettings:', err);
         throw err;

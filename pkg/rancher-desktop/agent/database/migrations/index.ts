@@ -7,6 +7,7 @@ import { up as up_0006, down as down_0006 } from './0006_create_agent_plan_todos
 import { up as up_0008, down as down_0008 } from './0008_create_calendar_events_table';
 import { up as up_0009, down as down_0009 } from './0009_add_status_to_calendar_events';
 import { up as up_0010, down as down_0010 } from './0010_create_sections_and_categories_tables';
+import { up as up_0011, down as down_0011 } from './0011_create_settings_table';
 
 export const migrationsRegistry = [
   { name: '0001_create_migrations_and_seeders_table', up: up_0001, down: down_0001 },
@@ -17,4 +18,5 @@ export const migrationsRegistry = [
   { name: '0008_create_calendar_events_table', up: up_0008, down: down_0008 },
   { name: '0009_add_status_to_calendar_events', up: up_0009, down: down_0009 },
   { name: '0010_create_sections_and_categories_tables', up: up_0010, down: down_0010 },
+  { name: '0011_create_settings_table', up: up_0011, down: down_0011 },
 ] as const;

@@ -2,7 +2,7 @@ import { computed, ref } from 'vue';
 import type { ComputedRef, Ref } from 'vue';
 
 import { ipcRenderer } from '@pkg/utils/ipcRenderer';
-import { updateAgentConfigFull } from '@pkg/agent/services/ConfigService';
+import { SullaSettingsModel } from '@pkg/agent/database/models/SullaSettingsModel';
 
 type ModelOption =
   | { type: 'local'; value: string; label: string; isActive: boolean }
@@ -67,15 +67,12 @@ export class AgentModelSelectorController {
   }
 
   async start(): Promise<void> {
-    ipcRenderer.on('settings-read', this.handleSettingsRead);
     document.addEventListener('mousedown', this.handleDocumentClick);
 
-    ipcRenderer.send('settings-read');
     await this.refreshInstalledLocalModels();
   }
 
   dispose(): void {
-    ipcRenderer.removeListener('settings-read', this.handleSettingsRead);
     document.removeEventListener('mousedown', this.handleDocumentClick);
   }
 
@@ -107,7 +104,6 @@ export class AgentModelSelectorController {
     this.showModelMenu.value = !this.showModelMenu.value;
     if (this.showModelMenu.value) {
       await this.refreshInstalledLocalModels();
-      ipcRenderer.send('settings-read');
     }
   }
 
@@ -118,41 +114,21 @@ export class AgentModelSelectorController {
   async selectModel(option: ModelOption): Promise<void> {
     try {
       if (option.type === 'local') {
-        const patch = { modelMode: 'local' as const, sullaModel: option.value };
-
-        await ipcRenderer.invoke('settings-write', { experimental: patch });
-        updateAgentConfigFull(patch);
+          SullaSettingsModel.set('modelMode', 'local');
+          SullaSettingsModel.set('sullaModel', option.value);
       } else {
-        const patch = {
-          modelMode: 'remote' as const,
-          remoteProvider: option.provider,
-          remoteModel: option.value,
-        };
 
-        await ipcRenderer.invoke('settings-write', { experimental: patch });
-        updateAgentConfigFull({
-          modelMode: 'remote',
-          remoteProvider: option.provider,
-          remoteModel: option.value,
-          remoteApiKey: this.remoteApiKey.value,
-        });
+        // Save model mode, remote provider, remote model, and remote API key to new settings
+        SullaSettingsModel.set('modelMode', 'remote');
+        SullaSettingsModel.set('remoteProvider', option.provider);
+        SullaSettingsModel.set('remoteModel', option.value);
+        SullaSettingsModel.set('remoteApiKey', this.remoteApiKey.value);
+
       }
     } finally {
       this.showModelMenu.value = false;
     }
   }
-
-  private readonly handleSettingsRead = (_event: unknown, settings: {
-    experimental?: {
-      remoteProvider?: string;
-      remoteModel?: string;
-      remoteApiKey?: string;
-    };
-  }) => {
-    this.remoteProvider.value = settings.experimental?.remoteProvider || '';
-    this.remoteModel.value = settings.experimental?.remoteModel || '';
-    this.remoteApiKey.value = settings.experimental?.remoteApiKey || '';
-  };
 
   private readonly handleDocumentClick = (ev: MouseEvent) => {
     if (!this.showModelMenu.value) {

@@ -1,6 +1,9 @@
 /**
  * This is the entry point for the Agent window.
  */
+// hoping this is the absolute earliest we can run in the renderer context
+import { initiateWindowContext } from '@pkg/sulla';
+await initiateWindowContext();
 
 import { createApp } from 'vue';
 import { createRouter, createWebHashHistory } from 'vue-router';

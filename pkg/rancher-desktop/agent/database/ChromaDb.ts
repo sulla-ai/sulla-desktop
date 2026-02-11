@@ -6,7 +6,7 @@ import { OpenAIEmbeddings } from '@langchain/openai';
 import { OllamaEmbeddings } from '@langchain/ollama';
 
 // Import your config service
-import { getAgentConfig, getModelMode, getRemoteConfig, onConfigChange } from '../services/ConfigService';
+import { SullaSettingsModel } from './models/SullaSettingsModel';
 
 // Adapter to bridge LangChain OpenAIEmbeddings with ChromaDB EmbeddingFunction
 class OpenAIEmbeddingAdapter implements EmbeddingFunction {
@@ -58,26 +58,19 @@ class ChromaDB {
     
     this.client = new BaseChromaClient({ path: CHROMA_BASE });
     console.log('[ChromaClient] Base client created with path:', CHROMA_BASE);
-
-    this.initializeEmbeddings();
-
-    // Subscribe to config changes to re-initialize embeddings when settings change
-    onConfigChange((newConfig) => {
-      console.log('[ChromaClient] Configuration changed, re-initializing embeddings...');
-      this.initializeEmbeddings();
-    });
   }
 
-  private initializeEmbeddings(): void {
-    // Get full config to ensure we have all settings
-    const agentConfig = getAgentConfig();
+  public async initializeEmbeddings(): Promise<void> {
+    // Load settings directly
+    const mode = await SullaSettingsModel.get('modelMode', 'local');
+    const remoteProvider = await SullaSettingsModel.get('remoteProvider', 'grok');
+    const remoteModel = await SullaSettingsModel.get('remoteModel', 'grok-4-1-fast-reasoning');
+    const remoteApiKey = await SullaSettingsModel.get('remoteApiKey', '');
     
-    const mode = agentConfig.modelMode;
     const remote = {
-      provider: agentConfig.remoteProvider,
-      model: agentConfig.remoteModel,
-      apiKey: agentConfig.remoteApiKey,
-      baseUrl: agentConfig.remoteBaseUrl
+      provider: remoteProvider,
+      model: remoteModel,
+      apiKey: remoteApiKey,
     };
 
     // Check if we should use OpenAI embeddings (remote mode with OpenAI provider)
@@ -100,7 +93,7 @@ class ChromaDB {
     }
 
     // Default to Ollama embeddings for all other cases
-    const ollamaBase = agentConfig.ollamaBase;
+    const ollamaBase = 'http://127.0.0.1:30114';
     const embeddingModel = 'nomic-embed-text'; // Fixed embedding model for Ollama
     
     this.embeddingFunction = new OllamaEmbeddingAdapter(new OllamaEmbeddings({

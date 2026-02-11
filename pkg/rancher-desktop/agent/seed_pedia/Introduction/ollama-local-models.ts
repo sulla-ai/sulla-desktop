@@ -1,5 +1,4 @@
-export const ollamaLocalModels = `
----
+export const ollamaLocalModels = `---
 schemaversion: 1
 slug: ollama-local-models
 title: Ollama & Local Models

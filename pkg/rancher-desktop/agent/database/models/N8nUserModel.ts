@@ -1,7 +1,7 @@
 // src/models/N8nUserModel.ts
 
 import { BaseModel } from '../BaseModel';
-import { getSettings, save, merge } from '../../../config/settingsImpl';
+import { SullaSettingsModel } from './SullaSettingsModel';
 
 interface N8nUserAttributes {
   id: string;
@@ -52,23 +52,27 @@ export class N8nUserModel extends BaseModel<N8nUserAttributes> {
     mfaEnabled: 'boolean',
   };
 
-  /**
-   * 
-   * @returns 
-   */
   public static async getOrCreateServiceAccount(): Promise<N8nUserModel> {
-    const serviceAccountId = this.getServiceAccountUserId() || '';
+    const serviceAccountId = await this.getServiceAccountUserId() || '';
+    console.log('[N8NUserModel] serviceAccountId :' + serviceAccountId);
     let user;
 
-    // get the service account
     if (serviceAccountId) {
       user = await N8nUserModel.load(serviceAccountId);
     }
-    // create the service account
+
     if (!user) {
+      const serviceAccountEmail = this.getServiceAccountEmail();
+      console.log('[N8NUserModel] trying to load by email:', serviceAccountEmail);
+      const users = await N8nUserModel.where('email', serviceAccountEmail);
+      user = users.length > 0 ? users[0] : null;
+    }
+
+    if (!user) {
+      console.log('[N8NUserModel] creating new service account');
       user = new N8nUserModel();
       user.attributes.id = serviceAccountId;
-      user.attributes.email = N8nUserModel.getServiceAccountEmail();
+      user.attributes.email = await N8nUserModel.getServiceAccountEmail();
       user.attributes.firstName = 'Sulla';
       user.attributes.lastName = 'Desktop';
       user.attributes.personalizationAnswers = {};
@@ -79,20 +83,11 @@ export class N8nUserModel extends BaseModel<N8nUserAttributes> {
       user.attributes.mfaRecoveryCodes = '';
       user.attributes.lastActiveAt = new Date();
       user.attributes.roleSlug = 'global:owner';
-      await user.setPassword(N8nUserModel.getServiceAccountPassword());
+      await user.setPassword(await N8nUserModel.getServiceAccountPassword());
       await user.save();
 
-      // save the service account id using safe merge pattern
-      console.log('[N8nUserModel] Saving service account ID to settings:', user.attributes.id);
-      const currentSettings = getSettings();
-      const mergedSettings = merge(currentSettings, {
-        experimental: {
-          sullaServiceAccountUserId: user.attributes.id
-        }
-      });
-      console.log('[N8nUserModel] Merged settings:', mergedSettings.experimental);
-      save(mergedSettings);
-      console.log('[N8nUserModel] Settings saved, verifying:', getSettings().experimental.sullaServiceAccountUserId);
+      await SullaSettingsModel.set('serviceAccountUserId', user.attributes.id);
+      console.log('[N8nUserModel] Settings saved:', user.attributes.id);
     }
     return user;
   }
@@ -100,25 +95,23 @@ export class N8nUserModel extends BaseModel<N8nUserAttributes> {
   /**
    * Get the service account user ID from settings
    */
-  public static getServiceAccountUserId(): string | null {
-    const settings = getSettings();
-    return settings.experimental.sullaServiceAccountUserId || null;
+  public static async getServiceAccountUserId(): Promise<string | null> {
+    return await SullaSettingsModel.get('serviceAccountUserId', null);
   }
 
   /**
    * 
    * @returns 
    */
-  public static getServiceAccountEmail(): string {
-    // Get user registration details from settings
-    const settings = getSettings();
+  public static async getServiceAccountEmail(): Promise<string> {
+    // Get user registration details from SullaSettingsModel
+    const userEmail = await SullaSettingsModel.get('sullaEmail');
 
-    if (!settings.experimental.sullaEmail) {
-      console.log('[N8nUserSeeder] No user registration details found in settings, skipping...');
+    if (!userEmail) {
+      console.log('[N8nUserSeeder] No user email found in settings, skipping...');
       return 'info@sulladesktop.com';
     }
 
-    const userEmail = settings.experimental.sullaEmail;
     return userEmail || 'info@sulladesktop.com';
   }
 
@@ -126,17 +119,16 @@ export class N8nUserModel extends BaseModel<N8nUserAttributes> {
    * 
    * @returns 
    */
-  public static getServiceAccountPassword(): string {
-    // Get user registration details from settings
-    const settings = getSettings();
+  public static async getServiceAccountPassword(): Promise<string> {
+    // Get user registration details from SullaSettingsModel
+    const userPassword = await SullaSettingsModel.get('sullaPassword');
 
-    if (!settings.experimental.sullaEmail) {
-      console.log('[N8nUserSeeder] No user registration details found in settings, skipping...');
-      return 'info@sulladesktop.com';
+    if (!userPassword) {
+      console.log('[N8nUserSeeder] No user password found in settings, skipping...');
+      return 'n8n_dev_password';
     }
 
-    const sullaPassword = settings.experimental.sullaPassword;
-    return sullaPassword || 'n8n_dev_password';
+    return userPassword;
   }
 
   /**
@@ -159,7 +151,7 @@ export class N8nUserModel extends BaseModel<N8nUserAttributes> {
    * Override find to only allow finding the service account user
    */
   static async load<T extends BaseModel>(this: new (...args: any[]) => T, id: string | number): Promise<T | null> {
-    const serviceAccountId = N8nUserModel.getServiceAccountUserId();
+    const serviceAccountId = await N8nUserModel.getServiceAccountUserId();
     if (!serviceAccountId || id !== serviceAccountId) {
       console.warn('[N8nUserModel] Access denied: can only access service account user');
       return null;
@@ -176,7 +168,7 @@ export class N8nUserModel extends BaseModel<N8nUserAttributes> {
     conditions: any,
     value?: any
   ): Promise<T[]> {
-    const serviceAccountId = N8nUserModel.getServiceAccountUserId();
+    const serviceAccountId = await N8nUserModel.getServiceAccountUserId();
     if (!serviceAccountId) {
       console.warn('[N8nUserModel] No service account user ID configured');
       return [];

@@ -30,7 +30,7 @@
         legend-tooltip="Select the LLM model to use. Models are filtered based on your allocated resources."
         class="mb-6 mt-6"
       >
-        <select class="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 mb-2" v-model="settings!.experimental.sullaModel">
+        <select class="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 mb-2" v-model="sullaModel">
           <option
             v-for="model in availableModels"
             :key="model.name"
@@ -47,7 +47,7 @@
       <div class="mt-10"></div>
 
       <div class="flex justify-end">
-        <button type="submit" class="px-6 py-2 text-white rounded-md transition-colors font-medium hover:opacity-90" :style="{ backgroundColor: '#30a5e9' }" :disabled="!settings!.experimental.sullaModel || settings!.virtualMachine.memoryInGB <= 4 || settings!.virtualMachine.numberCPUs <= 2">Next</button>
+        <button type="submit" class="px-6 py-2 text-white rounded-md transition-colors font-medium hover:opacity-90" :style="{ backgroundColor: '#30a5e9' }" :disabled="!sullaModel || settings!.virtualMachine.memoryInGB <= 4 || settings!.virtualMachine.numberCPUs <= 2">Next</button>
       </div>
     </form>
   </div>
@@ -59,12 +59,12 @@ import { Ref } from 'vue';
 import os from 'os';
 import RdFieldset from '@pkg/components/form/RdFieldset.vue';
 import SystemPreferences from '@pkg/components/SystemPreferences.vue';
-import PathManagementSelector from '@pkg/components/PathManagementSelector.vue';
-import { defaultSettings, Settings } from '@pkg/config/settings';
+import { Settings } from '@pkg/config/settings';
 import { ipcRenderer } from 'electron';
 import { PathManagementStrategy } from '@pkg/integrations/pathManager';
 import { highestStableVersion, VersionEntry } from '@pkg/utils/kubeVersions';
 import { RecursivePartial } from '@pkg/utils/typeUtils';
+import { SullaSettingsModel } from '@pkg/agent/database/models/SullaSettingsModel';
 
 const settings = inject<Ref<Settings>>('settings')!;
 const commitChanges = inject<(settings: RecursivePartial<Settings>) => Promise<void>>('commitChanges')!;
@@ -72,37 +72,30 @@ const emit = defineEmits<{
   next: [];
 }>();
 
+// Reactive ref for sullaModel
+const sullaModel = ref<string>('');
+
 // Set defaults
 settings.value.application.pathManagementStrategy = PathManagementStrategy.RcFiles;
 settings.value.kubernetes.enabled = true;
 
-onMounted(() => {
+onMounted(async () => {
   ipcRenderer.invoke('settings-read' as any).then((loadedSettings: Settings) => {
     settings.value = loadedSettings;
     // Ensure defaults are set after loading
     settings.value.application.pathManagementStrategy = PathManagementStrategy.RcFiles;
     settings.value.kubernetes.enabled = true;
-    // Set initial AI model to Qwen
-    settings.value.experimental.sullaModel = 'qwen2:0.5b';
-    // Initialize credentials if not set
-    settings.value.experimental.sullaUsername = settings.value.experimental.sullaUsername || '';
-    settings.value.experimental.sullaPassword = settings.value.experimental.sullaPassword || '';
-    settings.value.experimental.sullaServicePassword = settings.value.experimental.sullaServicePassword || '';
-    settings.value.experimental.sullaN8nEncryptionKey = settings.value.experimental.sullaN8nEncryptionKey || '';
 
     // Save the initial settings
     commitChanges({
       application: { pathManagementStrategy: PathManagementStrategy.RcFiles },
       kubernetes: { enabled: true },
-      experimental: {
-        sullaModel: 'qwen2:0.5b',
-        sullaUsername: '',
-        sullaPassword: '',
-        sullaServicePassword: '',
-        sullaN8nEncryptionKey: '',
-      },
     });
   });
+
+  // Load sullaModel from SullaSettingsModel
+  const loadedModel = await SullaSettingsModel.get('sullaModel', 'qwen2:0.5b');
+  sullaModel.value = loadedModel;
 
   ipcRenderer.send('k8s-versions');
   ipcRenderer.on('k8s-versions', (event, versions: VersionEntry[]) => {
@@ -183,10 +176,8 @@ const availableModels = computed(() =>
 );
 
 const selectedModelDescription = computed(() =>
-  availableModels.value.find(m => m.name === settings.value.experimental.sullaModel)?.description || ''
+  availableModels.value.find(m => m.name === sullaModel.value)?.description || ''
 );
-
-const isValid = computed(() => availableModels.value.some(m => m.available));
 
 const onMemoryChange = (value: number) => {
   settings.value.virtualMachine.memoryInGB = value;
@@ -200,17 +191,17 @@ const onCpuChange = (value: number) => {
 
 const autoSelectBestModel = () => {
   // If current selection is no longer available, select the best available model
-  const currentModel = availableModels.value.find(m => m.name === settings.value.experimental.sullaModel);
+  const currentModel = availableModels.value.find(m => m.name === sullaModel.value);
 
   if (!currentModel?.available) {
     // Find the best (largest) available model
     const available = availableModels.value.filter(m => m.available);
 
     if (available.length > 0) {
-      settings.value.experimental.sullaModel = available[available.length - 1].name;
+      sullaModel.value = available[available.length - 1].name;
     } else {
       // Fallback to smallest model
-      settings.value.experimental.sullaModel = 'qwen2:0.5b';
+      sullaModel.value = 'qwen2:0.5b';
     }
   }
 };
@@ -222,10 +213,10 @@ const handleNext = async () => {
       memoryInGB: settings.value.virtualMachine.memoryInGB,
       numberCPUs: settings.value.virtualMachine.numberCPUs,
     },
-    experimental: {
-      sullaModel: settings.value.experimental.sullaModel,
-    },
   });
+
+  // Save sullaModel to SullaSettingsModel
+  await SullaSettingsModel.set('sullaModel', sullaModel.value);
 
   emit('next');
 };

@@ -4,7 +4,6 @@
 
 import type { BaseThreadState, NodeResult } from './Graph';
 import { BaseNode } from './BaseNode';
-import { getAgentConfig, onConfigChange } from '../services/ConfigService';
 
 const SIMPLE_PROMPT_FALLBACK = ``;
 
@@ -45,11 +44,7 @@ export class SimpleNode extends BaseNode {
   constructor() {
     super('simple', 'Simple');
 
-    // Subscribe to config changes for planning-specific updates
-    onConfigChange((newConfig) => {
-      console.log('[SimpleNode] Configuration changed, planner will use updated config on next execution');
-      // Planner gets fresh config on-demand, so no cache clearing needed
-    });
+    // Settings are loaded on-demand from database
   }
 
   async execute(state: BaseThreadState): Promise<NodeResult<BaseThreadState>> {

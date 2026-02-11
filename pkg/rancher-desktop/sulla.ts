@@ -1,4 +1,5 @@
 // registry.ts (or wherever you centralize registrations)
+import { SullaSettingsModel } from '@pkg/agent/database/models/SullaSettingsModel';
 import { getIntegrationService } from './agent/services/IntegrationService';
 import { getSchedulerService } from '@pkg/agent/services/SchedulerService';
 import { getHeartbeatService } from '@pkg/agent/services/HeartbeatService';
@@ -7,12 +8,28 @@ import { SullaIntegrations } from './agent/integrations';
 import { postgresClient } from '@pkg/agent/database/PostgresClient';
 import { getChatCompletionsServer } from '@pkg/main/chatCompletionsServer';
 import { createN8nService } from './agent/services/N8nService';
-
-import { app } from 'electron';
-const { getDatabaseManager } = require('@pkg/agent/database/DatabaseManager');
+import { chromaClient } from '@pkg/agent/database/ChromaDb';
+import { getDatabaseManager } from '@pkg/agent/database/DatabaseManager';
 import { initSullaEvents } from '@pkg/main/sullaEvents';
+import * as path from 'path';
+import { app } from 'electron';
 
+export async function initiateWindowContext(): Promise<void> {
+    // This function serves as the explicit initialization hook
+    console.log('[WindowContext] Sulla window context initialized');
 
+    // Get the user data path from main process
+    const { ipcRenderer } = require('electron');
+    try {
+        const userDataPath = await ipcRenderer.invoke('get-user-data-path');
+        const fallbackPath = require('path').join(userDataPath, 'sulla-settings-fallback.json');
+        SullaSettingsModel.setFallbackFilePath(fallbackPath);
+        console.log('[WindowContext] Fallback path set to:', fallbackPath);
+        await SullaSettingsModel.earlyBootstrap();
+    } catch (error) {
+        console.error('[WindowContext] Failed to initialize settings:', error);
+    }
+}
 
 /**
  * Initialize all Sulla integrations
@@ -27,6 +44,8 @@ export async function instantiateSullaStart(): Promise<void> {
     console.log('[Integrations] Sulla integrations initialized');
 
     try {
+
+        await chromaClient.initializeEmbeddings();
 
         const backendGraphWebSocketService = getBackendGraphWebSocketService();
         console.log('[Background] BackendGraphWebSocketService initialized - backend agent messages will be processed');
@@ -85,16 +104,15 @@ export async function instantiateSullaStart(): Promise<void> {
  */
 export async function onMainProxyLoad(ipcMainProxy: any) {
 
-    // Handle agent configuration updates from renderer process
-    ipcMainProxy.on('agent-config-updated', (event: any, agentConfig: any) => {
-        console.log('[Background] Agent configuration updated from renderer');
-        // Update the agent services with new configuration
-        try {
-            const { updateAgentConfigFull } = require('@pkg/agent/services/ConfigService');
-            updateAgentConfigFull(agentConfig);
-        } catch (err) {
-            console.warn('[Background] Failed to update agent config from renderer:', err);
-        }
+    // Assume main process
+    const fallbackPath = path.join(app.getPath('userData'), 'sulla-settings-fallback.json');
+    SullaSettingsModel.setFallbackFilePath(fallbackPath);
+
+    await SullaSettingsModel.earlyBootstrap();
+
+    // Cache it in settings on first request
+    ipcMainProxy.handle('get-user-data-path', async () => {
+        return app.getPath('userData');
     });
 }
 
@@ -115,9 +133,8 @@ export async function afterBackgroundLoaded() {
         }
     });
 
-    // Then initialize N8nService
+    // This initializes N8nService
     const n8nService = await createN8nService();
-    console.log('[Background] N8nService initialized');
 }
 
 /**
@@ -125,7 +142,14 @@ export async function afterBackgroundLoaded() {
  * 
  * @see sulla-desktop/background.ts
  */
-export function hookSullaEnd(Electron:any) {
+export function hookSullaEnd(Electron: any, mainEvents: any, window:any) {
+
+    mainEvents.on('sulla-first-run-complete', () => {
+        const firstRunWindow = window.getWindow('first-run');
+        firstRunWindow?.setClosable(true);
+        firstRunWindow?.close();
+        window.openMain();
+    });
 
     app.on('will-quit', async () => {
         try {

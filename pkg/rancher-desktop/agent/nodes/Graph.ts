@@ -6,7 +6,7 @@ import { getWebSocketClientService } from '../services/WebSocketClientService';
 import type { ChatMessage } from '../languagemodels/BaseLanguageModel';
 import { AgentPlanInterface } from '../database/models/AgentPlan';
 import { AgentPlanTodoInterface } from '../database/models/AgentPlanTodo';
-import { getCurrentModel, getCurrentMode } from '../languagemodels';
+import { SullaSettingsModel } from '../database/models/SullaSettingsModel';
 import { BaseNode } from './BaseNode';
 
 // ============================================================================
@@ -513,7 +513,7 @@ class SubgraphTriggerNode implements GraphNode<OverlordThreadState> {
     switch (subName) {
       case 'hierarchical':
         subGraph = createHierarchicalGraph();
-        subState = createInitialThreadState<HierarchicalThreadState>(
+        subState = await createInitialThreadState<HierarchicalThreadState>(
           prompt,
           {
             wsChannel: state.metadata.wsChannel,
@@ -525,7 +525,7 @@ class SubgraphTriggerNode implements GraphNode<OverlordThreadState> {
 
       case 'knowledge':
         subGraph = createKnowledgeGraph();
-        subState = createInitialThreadState<KnowledgeThreadState>(
+        subState = await createInitialThreadState<KnowledgeThreadState>(
           prompt,
           {
             wsChannel: state.metadata.wsChannel,
@@ -566,18 +566,23 @@ class SubgraphTriggerNode implements GraphNode<OverlordThreadState> {
  * @param metadata - Optional metadata for the message
  * @returns Fully initialized ThreadState
  */
-export function createInitialThreadState<T extends BaseThreadState>(
+export async function createInitialThreadState<T extends BaseThreadState>(
   prompt: string,
   overrides: Partial<T['metadata']> = {}
-): BaseThreadState {
+): Promise<T> {
 
   const now = Date.now();
   const msgId = nextMessageId();
+  
+  const mode = await SullaSettingsModel.get('modelMode', 'local');
+  const llmModel = mode === 'remote' ? await SullaSettingsModel.get('remoteModel', 'grok-4-1-fast-reasoning') : await SullaSettingsModel.get('sullaModel', 'tinyllama:latest');
+  const llmLocal = mode === 'local';
+  
   const baseMetadata: BaseThreadState['metadata'] = {
       threadId: overrides.threadId ?? nextThreadId(),
       wsChannel: overrides.wsChannel ?? DEFAULT_WS_CHANNEL,
-      llmModel: overrides.llmModel ?? getCurrentModel(),
-      llmLocal: overrides.llmLocal ?? getCurrentMode() === 'local',
+      llmModel,
+      llmLocal,
       cycleComplete: false,
       waitingForUser: false,
       options: overrides.options ?? { abort: undefined },

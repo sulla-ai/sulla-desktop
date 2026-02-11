@@ -118,7 +118,7 @@ export class BackendGraphWebSocketService {
     console.log('[BackendGraphWS] Processing user input - Thread ID:', threadId, 'Channel:', channelId);
 
     // Get or create persistent graph for this thread - do this outside try/catch
-    const { graph, state } = GraphRegistry.getOrCreate(channelId, threadId);
+    const { graph, state } = await GraphRegistry.getOrCreate(channelId, threadId);
     console.log('[BackendGraphWS] Graph retrieved/created for thread:', threadId);
 
     try {

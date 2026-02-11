@@ -5,7 +5,7 @@ import { getCurrentMode, getLocalService, getService } from '../languagemodels';
 import { parseJson } from '../services/JsonParseService';
 import { getWebSocketClientService } from '../services/WebSocketClientService';
 import { getToolRegistry } from '../tools';
-import { getAgentConfig, onConfigChange } from '../services/ConfigService';
+import { SullaSettingsModel } from '../database/models/SullaSettingsModel';
 import { AgentAwareness } from '../database/models/AgentAwareness';
 import { BaseLanguageModel, ChatMessage, NormalizedResponse } from '../languagemodels/BaseLanguageModel';
 import { abortIfSignalReceived, throwIfAborted } from '../services/AbortService';
@@ -56,17 +56,10 @@ export interface PromptEnrichmentOptions {
 // Supporting functions
 // ============================================================================
 
-function getSoulPrompt(): string {
-  let config;
-  try {
-    config = getAgentConfig();
-  } catch {
-    config = { soulPrompt: '', botName: 'Sulla', primaryUserName: '' };
-  }
-
-  const prompt = config.soulPrompt || '';
-  const botName = config.botName || 'Sulla';
-  const primaryUserName = config.primaryUserName || '';
+async function getSoulPrompt(): Promise<string> {
+  const prompt = await SullaSettingsModel.get('soulPrompt', '');
+  const botName = await SullaSettingsModel.get('botName', 'Sulla');
+  const primaryUserName = await SullaSettingsModel.get('primaryUserName', '');
 
   // Build prefix with bot name and optional user name
   const prefix = primaryUserName.trim()
@@ -92,11 +85,7 @@ export abstract class BaseNode {
         this.id = id;
         this.name = name;
 
-        // Subscribe to config changes for all nodes
-        onConfigChange((newConfig) => {
-            console.log(`[BaseNode:${this.name}] Configuration changed, node will use updated config on next execution`);
-            // Nodes get fresh config on-demand, so no cache clearing needed
-        });
+        // Settings are loaded on-demand from database
     }
 
     abstract execute(state: ThreadState): Promise<NodeResult<BaseThreadState>>;
@@ -117,7 +106,7 @@ export abstract class BaseNode {
         const parts: string[] = [];
 
         if (options.includeSoul) {
-            const soulPrompt = getSoulPrompt();
+            const soulPrompt = await getSoulPrompt();
             if (soulPrompt.trim()) {
                 parts.push(soulPrompt);
             }
@@ -252,7 +241,7 @@ export abstract class BaseNode {
     ): Promise<NormalizedResponse | null> {
         
         const context = state.metadata.llmLocal ? 'local' : 'remote';
-        this.llm = getService(context, state.metadata.llmModel);
+        this.llm = await getService(context, state.metadata.llmModel);
 
         // Prepare messages from state
         let messages = [...state.messages];
@@ -292,9 +281,10 @@ export abstract class BaseNode {
             console.warn(`[${this.name}:BaseNode] Primary LLM failed:`, err instanceof Error ? err.message : String(err));
 
             // Fallback only if primary was remote
-            if (getCurrentMode() !== 'local') {
+            const mode = await getCurrentMode();
+            if (mode !== 'local') {
                 try {
-                    const ollama = getLocalService();
+                    const ollama = await getLocalService();
                     if (ollama.isAvailable()) {
                         // Filter messages to only include ChatMessage-compatible roles
                         const chatMessages = messages.filter(msg =>
@@ -489,12 +479,13 @@ export abstract class BaseNode {
      * Pull a model from Ollama (only works for local mode)
      */
     protected async pullModel(modelName: string): Promise<boolean> {
-        if (getCurrentMode() !== 'local') {
+        const mode = await getCurrentMode();
+        if (mode !== 'local') {
             console.warn(`[Agent:${this.name}] Cannot pull model in remote mode`);
             return false;
         }
 
-        const ollama = getService('local', modelName) as any;
+        const ollama = (await getService('local', modelName)) as any;
         return ollama.pullModel?.(modelName) ?? false;
     }
 

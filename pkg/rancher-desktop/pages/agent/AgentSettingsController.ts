@@ -1,96 +1,15 @@
 import type { Ref } from 'vue';
-
-import { ipcRenderer } from '@pkg/utils/ipcRenderer';
 import { getAgentPersonaRegistry } from '@pkg/agent';
+import { SullaSettingsModel } from '@pkg/agent/database/models/SullaSettingsModel';
 
 export class AgentSettingsController {
   private readonly registry = getAgentPersonaRegistry();
-
-  private readonly handlePreferencesChanged = () => {
-    ipcRenderer.send('settings-read');
-  };
-
-  private readonly handleSettingsUpdate = () => {
-    ipcRenderer.send('settings-read');
-  };
-
-  private readonly handleSettingsRead = (_event: unknown, settings: {
-    experimental?: {
-      sullaModel?: string;
-      soulPrompt?: string;
-      botName?: string;
-      primaryUserName?: string;
-      modelMode?: 'local' | 'remote';
-      remoteProvider?: string;
-      remoteModel?: string;
-      remoteApiKey?: string;
-      remoteRetryCount?: number;
-      remoteTimeoutSeconds?: number;
-      heartbeatEnabled?: boolean;
-      heartbeatDelayMinutes?: number;
-      heartbeatPrompt?: string;
-      heartbeatModel?: string;
-    };
-  }) => {
-    const exp = settings.experimental;
-
-    if (exp) {
-      this.updateAgentConfigFull({
-        sullaModel:            exp.sullaModel,
-        soulPrompt:            exp.soulPrompt,
-        botName:               exp.botName,
-        primaryUserName:       exp.primaryUserName,
-        modelMode:             exp.modelMode,
-        remoteProvider:        exp.remoteProvider,
-        remoteModel:           exp.remoteModel,
-        remoteApiKey:          exp.remoteApiKey,
-        remoteRetryCount:      exp.remoteRetryCount,
-        remoteTimeoutSeconds:  exp.remoteTimeoutSeconds,
-        heartbeatEnabled:      exp.heartbeatEnabled,
-        heartbeatDelayMinutes: exp.heartbeatDelayMinutes,
-        heartbeatPrompt:       exp.heartbeatPrompt,
-        heartbeatModel:        exp.heartbeatModel,
-      });
-
-      
-      this.modelMode.value = exp.modelMode || 'local';
-
-      if (exp.modelMode === 'remote' && exp.remoteModel) {
-        this.modelName.value = exp.remoteModel;
-        console.log(`[Agent] Remote model configured: ${exp.remoteProvider}/${exp.remoteModel}`);
-      } else if (exp.sullaModel) {
-        this.modelName.value = exp.sullaModel;
-        console.log(`[Agent] Local model configured: ${exp.sullaModel}`);
-      } else {
-        this.modelName.value = 'tinyllama:latest';
-      }
-    } else {
-      this.modelName.value = 'tinyllama:latest';
-      this.modelMode.value = 'local';
-    }
-  };
 
   constructor(
     private readonly params: {
       modelName: Ref<string>;
       modelMode: Ref<'local' | 'remote'>;
     },
-    private readonly updateAgentConfigFull: (config: {
-      botName?: string;
-      primaryUserName?: string;
-      soulPrompt?: string;
-      sullaModel?: string;
-      modelMode?: 'local' | 'remote';
-      remoteProvider?: string;
-      remoteModel?: string;
-      remoteApiKey?: string;
-      remoteRetryCount?: number;
-      remoteTimeoutSeconds?: number;
-      heartbeatEnabled?: boolean;
-      heartbeatDelayMinutes?: number;
-      heartbeatPrompt?: string;
-      heartbeatModel?: string;
-    }) => void,
   ) {
     this.modelName = params.modelName;
     this.modelMode = params.modelMode;
@@ -99,16 +18,16 @@ export class AgentSettingsController {
   private modelName: Ref<string>;
   private modelMode: Ref<'local' | 'remote'>;
 
-  start(): void {
-    ipcRenderer.on('settings-read', this.handleSettingsRead);
-    ipcRenderer.on('preferences/changed', this.handlePreferencesChanged);
-    ipcRenderer.on('settings-update', this.handleSettingsUpdate);
-    ipcRenderer.send('settings-read');
-  }
+  async start(): Promise<void> {
+    // Fetch initial settings from SullaSettingsModel
+    this.modelMode.value = await SullaSettingsModel.get('modelMode', 'local');
 
-  dispose(): void {
-    ipcRenderer.removeListener('settings-read', this.handleSettingsRead);
-    ipcRenderer.removeListener('preferences/changed', this.handlePreferencesChanged);
-    ipcRenderer.removeListener('settings-update', this.handleSettingsUpdate);
+    if (this.modelMode.value === 'remote') {
+      this.modelName.value = await SullaSettingsModel.get('remoteModel', 'grok-4-1-fast-reasoning');
+      console.log(`[Agent] Remote model configured: ${await SullaSettingsModel.get('remoteProvider', 'grok')}/${this.modelName.value}`);
+    } else {
+      this.modelName.value = await SullaSettingsModel.get('sullaModel', 'tinyllama:latest');
+      console.log(`[Agent] Local model configured: ${this.modelName.value}`);
+    }
   }
 }

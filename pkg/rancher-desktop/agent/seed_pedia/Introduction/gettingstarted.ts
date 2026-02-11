@@ -1,5 +1,4 @@
-export const gettingStarted = `
----
+export const gettingStarted = `---
 schemaversion: 1
 slug: introduction-getting-started
 title: Getting Started

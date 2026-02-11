@@ -1,5 +1,4 @@
-export const memoryAndDreaming = `
----
+export const memoryAndDreaming = `---
 schemaversion: 1
 slug: memory-and-dreaming
 title: Memory & Dreaming

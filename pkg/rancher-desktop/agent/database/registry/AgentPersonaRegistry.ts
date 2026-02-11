@@ -1,8 +1,6 @@
-import { computed, reactive, onMounted, onUnmounted } from 'vue';
-
+import { computed, reactive } from 'vue';
 import type { PersonaEmotion, PersonaStatus, PersonaTemplateId } from '@pkg/agent';
 import { AgentPersonaService } from '@pkg/agent';
-import { getAgentConfig, onConfigChange } from '@pkg/agent/services/ConfigService';
 
 export type ChatMessage = {
   id: string;
@@ -98,13 +96,6 @@ export class AgentPersonaRegistry {
   });
 
   constructor() {
-    // Subscribe to config changes to clear persona service caches when settings change
-    onConfigChange((newConfig) => {
-      console.log('[AgentPersonaRegistry] Configuration changed, clearing persona service caches...');
-      console.log('[AgentPersonaRegistry] New config mode:', newConfig.modelMode, 'provider:', newConfig.remoteProvider);
-      this.clearPersonaServiceCaches();
-    });
-
     // Initialize persona services for each agent
     this.state.agents.forEach(agent => {
       this.getOrCreatePersonaService(agent.agentId);
@@ -118,18 +109,6 @@ export class AgentPersonaRegistry {
       }
     });
 
-  }
-
-  private clearPersonaServiceCaches(): void {
-    this.personaServices.clear();
-    console.log('[AgentPersonaRegistry] Persona service caches cleared');
-    
-    // Re-initialize services for active agents
-    this.state.agents.forEach(agent => {
-      if (agent.isRunning) {
-        this.getOrCreatePersonaService(agent.agentId);
-      }
-    });
   }
 
   // Get or create persona service for an agent

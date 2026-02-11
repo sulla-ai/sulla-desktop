@@ -7,74 +7,22 @@
  * - getLocalModel() / getRemoteModel()
  * - getHeartbeatLLM() — respects heartbeatModel → modelMode fallback
  *
- * Pulls configuration from ConfigService on demand.
+ * Pulls configuration from SullaSettingsModel on demand.
  * All services lazy-init / reconfigure on demand.
  */
 
-import { BaseLanguageModel, type LLMConfig, type RemoteProviderConfig } from './BaseLanguageModel';
-import { OllamaService, getOllamaService } from './OllamaService';
+import { BaseLanguageModel, type RemoteProviderConfig } from './BaseLanguageModel';
+import { getOllamaService } from './OllamaService';
 import { createRemoteModelService } from './RemoteService';
-import { getAgentConfig, onConfigChange } from '../services/ConfigService';
+import { SullaSettingsModel } from '../database/models/SullaSettingsModel';
 
 class LLMRegistryImpl {
   private services = new Map<string, BaseLanguageModel>();
-  private configs = new Map<string, LLMConfig>();
-  private currentConfig: LLMConfig | null = null;
-
-  constructor() {
-    // Subscribe to config changes to clear caches when settings change
-    onConfigChange((newConfig) => {
-      console.log('[LLMRegistry] Configuration changed, clearing service caches...');
-      console.log('[LLMRegistry] New config mode:', newConfig.modelMode, 'provider:', newConfig.remoteProvider);
-      this.clearCaches();
-    });
-  }
-
-  private clearCaches(): void {
-    this.services.clear();
-    this.configs.clear();
-    this.currentConfig = null;
-    console.log('[LLMRegistry] Service and config caches cleared');
-  }
-
-  /**
-   * Pull latest configuration from ConfigService
-   */
-  private pullConfig(): LLMConfig {
-    const agentConfig = getAgentConfig();
-    const config: LLMConfig = {
-      mode: agentConfig.modelMode,
-      localModel: agentConfig.ollamaModel,
-      ollamaBase: agentConfig.ollamaBase,
-      localTimeoutSeconds: agentConfig.localTimeoutSeconds,
-      localRetryCount: agentConfig.localRetryCount,
-      remoteProvider: agentConfig.remoteProvider,
-      remoteModel: agentConfig.remoteModel,
-      remoteApiKey: agentConfig.remoteApiKey,
-      remoteBaseUrl: agentConfig.remoteBaseUrl,
-      remoteRetryCount: agentConfig.remoteRetryCount,
-      remoteTimeoutSeconds: agentConfig.remoteTimeoutSeconds,
-      heartbeatModel: agentConfig.heartbeatModel as 'default' | 'local' | 'remote',
-    };
-
-    this.currentConfig = { ...config };
-    this.configs.set('global', { ...config });
-
-    console.log(`[LLMRegistry] Config pulled → mode=${config.mode}, local=${config.localModel}, remote=${config.remoteModel || 'n/a'}`);
-    return config;
-  }
-
-  /**
-   * Refresh configuration from ConfigService
-   */
-  refreshConfig(): void {
-    this.pullConfig();
-  }
 
   /**
    * Get service by mode or model name
    */
-  getService(specifier: 'local' | 'remote' | string): BaseLanguageModel {
+  async getService(specifier: 'local' | 'remote' | string): Promise<BaseLanguageModel> {
     if (specifier === 'local') return this.getLocalService();
     if (specifier === 'remote') return this.getRemoteService();
 
@@ -85,15 +33,14 @@ class LLMRegistryImpl {
     return this.getRemoteService(specifier);
   }
 
-  getLocalService(overrideModel?: string): BaseLanguageModel {
+  async getLocalService(overrideModel?: string): Promise<BaseLanguageModel> {
     const key = 'local';
     let svc = this.services.get(key);
 
-    const cfg = this.currentConfig || this.pullConfig();
-    const desiredModel = overrideModel || cfg.localModel;
+    const desiredModel = overrideModel || await SullaSettingsModel.get('sullaModel', 'tinyllama:latest');
 
     if (!svc || svc.getModel() !== desiredModel) {
-      svc = getOllamaService();
+      svc = await getOllamaService();
       if (overrideModel) {
         // Ollama singleton — can't change model easily, but we expose it
         console.warn('[LLMRegistry] Local model override requested — using global Ollama instance');
@@ -105,29 +52,33 @@ class LLMRegistryImpl {
     return svc;
   }
 
-  getRemoteService(overrideModel?: string): BaseLanguageModel {
+  async getRemoteService(overrideModel?: string): Promise<BaseLanguageModel> {
     const key = 'remote';
     let svc = this.services.get(key);
 
-    const cfg = this.currentConfig || this.pullConfig();
-    const desiredModel = overrideModel || cfg.remoteModel;
+    // Load settings directly
+    const remoteProvider = await SullaSettingsModel.get('remoteProvider', 'grok');
+    const remoteModel = overrideModel || await SullaSettingsModel.get('remoteModel', 'grok-4-1-fast-reasoning');
+    const remoteApiKey = await SullaSettingsModel.get('remoteApiKey', '');
+    const remoteTimeoutSeconds = await SullaSettingsModel.get('remoteTimeoutSeconds', 60);
+    const remoteRetryCount = await SullaSettingsModel.get('remoteRetryCount', 3);
 
-    if (!svc || svc.getModel() !== desiredModel) {
+    if (!svc || svc.getModel() !== remoteModel) {
       const remoteCfg: RemoteProviderConfig = {
-        id: cfg.remoteProvider || 'grok',
-        name: cfg.remoteProvider || 'Grok',
-        baseUrl: this.getProviderBaseUrl(cfg.remoteProvider),
-        apiKey: cfg.remoteApiKey || '',
-        model: desiredModel || 'unknown',
+        id: remoteProvider,
+        name: remoteProvider,
+        baseUrl: this.getProviderBaseUrl(remoteProvider),
+        apiKey: remoteApiKey,
+        model: remoteModel,
       };
 
       svc = createRemoteModelService(remoteCfg);
 
-      if (cfg.remoteRetryCount !== undefined) {
-        (svc as any).setRetryCount?.(cfg.remoteRetryCount);
+      if (remoteRetryCount !== undefined) {
+        (svc as any).setRetryCount?.(remoteRetryCount);
       }
-      if (cfg.remoteTimeoutSeconds !== undefined) {
-        (svc as any).setDefaultTimeoutMs?.(cfg.remoteTimeoutSeconds * 1000);
+      if (remoteTimeoutSeconds !== undefined) {
+        (svc as any).setDefaultTimeoutMs?.(remoteTimeoutSeconds * 1000);
       }
 
       this.services.set(key, svc);
@@ -141,21 +92,21 @@ class LLMRegistryImpl {
    * Backend/heartbeat-aware service
    * Uses heartbeatModel → falls back to modelMode
    */
-  getHeartbeatLLM(): BaseLanguageModel {
-    const cfg = this.currentConfig || this.pullConfig();
-    const hb = (cfg.heartbeatModel || 'default') as 'default' | 'local' | 'remote';
+  async getHeartbeatLLM(): Promise<BaseLanguageModel> {
+    const heartbeatModel = await SullaSettingsModel.get('heartbeatModel', 'default');
+    const mode = await SullaSettingsModel.get('modelMode', 'local');
 
-    if (hb === 'local')    return this.getLocalService();
-    if (hb === 'remote')   return this.getRemoteService();
-    return this.getService(cfg.mode); // default → modelMode
+    if (heartbeatModel === 'local')    return this.getLocalService();
+    if (heartbeatModel === 'remote')   return this.getRemoteService();
+    return this.getService(mode); // default → modelMode
   }
 
-  getLocalModel(): string {
-    return (this.currentConfig || this.pullConfig()).localModel;
+  getLocalModel(): Promise<string> {
+    return SullaSettingsModel.get('sullaModel', 'tinyllama:latest');
   }
 
-  getRemoteModel(): string {
-    return (this.currentConfig || this.pullConfig()).remoteModel || 'unknown';
+  getRemoteModel(): Promise<string> {
+    return SullaSettingsModel.get('remoteModel', 'grok-4-1-fast-reasoning');
   }
 
   private isLikelyLocalModel(name: string): boolean {
@@ -178,36 +129,26 @@ class LLMRegistryImpl {
     return map[id] || map.grok;
   }
 
-  private getDefaultConfig(): LLMConfig {
-    return {
-      mode: 'local',
-      localModel: 'llama3.2:1b',
-      ollamaBase: 'http://127.0.0.1:11434',
-      remoteProvider: 'grok',
-      remoteModel: 'grok-beta',
-      remoteApiKey: '',
-      localTimeoutSeconds: 120,
-      remoteTimeoutSeconds: 60,
-      remoteRetryCount: 0,
-      heartbeatModel: 'default',
-      // ... extend with other defaults
-    };
-  }
-
-  getCurrentModel(): string {
-    const cfg = this.currentConfig || this.pullConfig();
-    if (cfg.mode === 'remote') {
+  async getCurrentModel(): Promise<string> {
+    const mode = await SullaSettingsModel.get('modelMode', 'local');
+    if (mode === 'remote') {
       return this.getRemoteModel();
     }
-    return cfg.localModel || this.getDefaultConfig().localModel;
+    return this.getLocalModel();
   }
 
-  getCurrentMode(): 'local' | 'remote' {
-    return (this.currentConfig || this.pullConfig()).mode || 'local';
+  getCurrentMode(): Promise<'local' | 'remote'> {
+    return SullaSettingsModel.get('modelMode', 'local');
   }
 
-  getCurrentConfig(): any {
-    return this.currentConfig || this.pullConfig();
+  async getCurrentConfig(): Promise<any> {
+    return {
+      mode: await SullaSettingsModel.get('modelMode', 'local'),
+      localModel: await SullaSettingsModel.get('sullaModel', 'tinyllama:latest'),
+      remoteModel: await SullaSettingsModel.get('remoteModel', 'grok-4-1-fast-reasoning'),
+      remoteProvider: await SullaSettingsModel.get('remoteProvider', 'grok'),
+      remoteApiKey: await SullaSettingsModel.get('remoteApiKey', ''),
+    };
   }
 
   /**
@@ -217,7 +158,7 @@ class LLMRegistryImpl {
    * @param model Specific model name (optional override)
    * @returns Service instance
    */
-  getServiceForContext(context: 'local' | 'remote', model?: string): BaseLanguageModel {
+  async getServiceForContext(context: 'local' | 'remote', model?: string): Promise<BaseLanguageModel> {
     if (context === 'local') {
       return this.getLocalService(model);
     }
@@ -227,14 +168,14 @@ class LLMRegistryImpl {
 
 export const LLMRegistry = new LLMRegistryImpl();
 
-export const getLLMService     = (spec: 'local' | 'remote' | string) => LLMRegistry.getService(spec);
-export const getLocalService   = (model?: string) => LLMRegistry.getLocalService(model);
-export const getRemoteService  = (model?: string) => LLMRegistry.getRemoteService(model);
-export const getHeartbeatLLM   = () => LLMRegistry.getHeartbeatLLM();
-export const getLocalModel     = () => LLMRegistry.getLocalModel();
-export const getRemoteModel    = () => LLMRegistry.getRemoteModel();
-export const getService = (context: 'local' | 'remote', model?: string) =>
-  LLMRegistry.getServiceForContext(context, model);
-export const getCurrentModel = () => LLMRegistry.getCurrentModel();
-export const getCurrentMode = () => LLMRegistry.getCurrentMode();
-export const getCurrentConfig = () => LLMRegistry.getCurrentConfig();
+export const getLLMService     = async (spec: 'local' | 'remote' | string) => await LLMRegistry.getService(spec);
+export const getLocalService   = async (model?: string) => await LLMRegistry.getLocalService(model);
+export const getRemoteService  = async (model?: string) => await LLMRegistry.getRemoteService(model);
+export const getHeartbeatLLM   = async () => await LLMRegistry.getHeartbeatLLM();
+export const getLocalModel     = async () => await LLMRegistry.getLocalModel();
+export const getRemoteModel    = async () => await LLMRegistry.getRemoteModel();
+export const getService = async (context: 'local' | 'remote', model?: string) =>
+  await LLMRegistry.getServiceForContext(context, model);
+export const getCurrentModel = async () => await LLMRegistry.getCurrentModel();
+export const getCurrentMode = async () => await LLMRegistry.getCurrentMode();
+export const getCurrentConfig = async () => await LLMRegistry.getCurrentConfig();

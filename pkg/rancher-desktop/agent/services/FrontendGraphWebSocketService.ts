@@ -76,7 +76,7 @@ export class FrontendGraphWebSocketService {
     const threadId = threadIdFromMsg || nextThreadId();
     
     // Get or create persistent graph for this thread - do this outside try/catch
-    const { graph, state } = GraphRegistry.getOrCreate(channelId, threadId);
+    const { graph, state } = await GraphRegistry.getOrCreate(channelId, threadId) as { graph: any; state: HierarchicalThreadState };
 
     try {
 

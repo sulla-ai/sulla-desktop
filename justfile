@@ -204,6 +204,24 @@ describe image:
     resources/darwin/lima/bin/limactl shell 0 -- \
     sudo k3s kubectl describe pod -n sulla {{image}}
 
+describe-default image:
+    LIMA_HOME=~/Library/Application\ Support/rancher-desktop/lima \
+    resources/darwin/lima/bin/limactl shell 0 -- \
+    sudo k3s kubectl describe pod -n kube-system {{image}}
+
+monitor:
+    LIMA_HOME=~/Library/Application\ Support/rancher-desktop/lima \
+    resources/darwin/lima/bin/limactl shell 0 -- \
+    sudo k3s kubectl get pods -n kube-system -w
+
+nerd:
+    LIMA_HOME=~/Library/Application\ Support/rancher-desktop/lima \
+    limactl shell 0 -- bash ./wait-k8s-ready.sh
+
+k3s-health:
+    LIMA_HOME=~/Library/Application\ Support/rancher-desktop/lima \
+    limactl shell 0 -- curl -kfsS --unix-socket /run/k3s/server.sock https://localhost:6444/healthz
+
 pull-ollama:
     LIMA_HOME=~/Library/Application\ Support/rancher-desktop/lima \
     limactl shell 0 -- \
@@ -225,7 +243,65 @@ limactl:
     LIMA_HOME=~/Library/Application\ Support/rancher-desktop/lima \
     limactl list
 
+nodes:
+    LIMA_HOME=~/Library/Application\ Support/rancher-desktop/lima \
+    limactl shell 0 -- sudo k3s kubectl get nodes
 
 kubectl:
     LIMA_HOME=~/Library/Application\ Support/rancher-desktop/lima \
     sudo k3s kubectl help
+
+# Watch pod events in real time (shows scheduling, image pulls, crashes)
+watch-events:
+    LIMA_HOME=~/Library/Application\ Support/rancher-desktop/lima \
+    limactl shell 0 -- sudo k3s kubectl get events -A --watch
+
+
+
+
+
+
+
+# Quick check: is API server responding?
+k3s-ready:
+    LIMA_HOME=~/Library/Application\ Support/rancher-desktop/lima \
+    limactl shell 0 -- sudo k3s kubectl get --raw=/readyz || echo "API not ready"
+
+fix-flannel:
+    LIMA_HOME=~/Library/Application\ Support/rancher-desktop/lima \
+    limactl shell 0 -- sudo rm -rf /run/flannel /var/lib/cni/flannel
+    limactl shell 0 -- sudo /etc/init.d/k3s restart
+    echo "Watching k3s logs for flannel..."
+    limactl shell 0 -- sudo tail -f /var/log/k3s.log | grep -i flannel
+
+k3s-restart:
+    LIMA_HOME=~/Library/Application\ Support/rancher-desktop/lima \
+    limactl shell 0 -- sudo systemctl restart k3s
+
+flannel-logs:
+    limactl shell 0 -- sudo tail -f /var/log/k3s.log | grep -i flannel
+
+
+
+
+
+
+# Tail live k3s server logs inside Lima VM (most useful for startup hangs)
+k3s-logs:
+    LIMA_HOME=~/Library/Application\ Support/rancher-desktop/lima \
+    limactl shell 0 -- sudo tail -f /var/log/k3s.log | grep -i flannel
+
+# Tail k3s agent logs (if using agent mode, less common in single-node)
+k3s-agent-logs:
+    LIMA_HOME=~/Library/Application\ Support/rancher-desktop/lima \
+    limactl shell 0 -- sudo journalctl -u k3s-agent -f
+
+# Show last 100 lines of k3s logs + follow
+k3s-tail:
+    LIMA_HOME=~/Library/Application\ Support/rancher-desktop/lima \
+    limactl shell 0 -- sudo journalctl -u k3s -n 100 -f
+
+# Check if k3s process is even running inside VM
+k3s-status:
+    LIMA_HOME=~/Library/Application\ Support/rancher-desktop/lima \
+    limactl shell 0 -- sudo systemctl status k3s

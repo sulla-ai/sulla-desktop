@@ -81,9 +81,7 @@ export const defaultSettings = {
     autoStart:              false,
     startInBackground:      false,
     hideNotificationIcon:   false,
-    window:                 { quitOnClose: false },
-    firstRunCredentialsNeeded: true,
-    firstKubernetesIsInstalled: false,
+    window:                 { quitOnClose: false }
   },
   containerEngine: {
     allowedImages: {
@@ -138,8 +136,6 @@ export const defaultSettings = {
     containerEngine: { webAssembly: { enabled: false } },
     /** can only be enabled if containerEngine.webAssembly.enabled is true */
     kubernetes:      { options: { spinkube: false } },
-    /** Selected Ollama model for Sulla AI */
-    sullaModel:      'tinyllama:latest',
     /** Override for agent/prompts/soul.md (empty string uses default soul.md). */
     soulPrompt:      '',
     /** Bot name (default: Sulla) */

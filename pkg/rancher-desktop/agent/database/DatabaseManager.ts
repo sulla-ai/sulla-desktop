@@ -5,6 +5,7 @@
 import { postgresClient, PostgresClient } from '@pkg/agent/database/PostgresClient';
 import { migrationsRegistry } from './migrations';
 import { seedersRegistry } from './seeders';
+import { SullaSettingsModel } from './models/SullaSettingsModel';
 
 const MIGRATIONS_TABLE = 'sulla_migrations';
 const SEEDERS_TABLE   = 'sulla_seeders';
@@ -52,6 +53,9 @@ export class DatabaseManager {
         // One-time setup
         await this.runMigrations();
         await this.runSeeders();
+
+        // In your main app file or bootstrap
+        await SullaSettingsModel.bootstrap();
 
         this.initialized = true;
         console.log('[DB] Database fully initialized');

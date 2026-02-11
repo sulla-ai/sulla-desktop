@@ -61,6 +61,7 @@ import paths from '@pkg/utils/paths';
 import { executable } from '@pkg/utils/resources';
 import { jsonStringifyWithWhiteSpace } from '@pkg/utils/stringify';
 import { defined, RecursivePartial } from '@pkg/utils/typeUtils';
+import { SullaSettingsModel } from '@pkg/agent/database/models/SullaSettingsModel';
 import { openSudoPrompt } from '@pkg/window';
 
 /* eslint @typescript-eslint/switch-exhaustiveness-check: "error" */
@@ -2051,27 +2052,14 @@ export default class LimaBackend extends events.EventEmitter implements VMBacken
 
     
 
+    await SullaSettingsModel.set('firstKubernetesIsInstalled', true);
 
-    this.writeSetting({ application: { firstKubernetesIsInstalled: true } });
+    // Load firstRunCredentialsNeeded from SullaSettingsModel
+    const firstRunCredentialsNeeded = await SullaSettingsModel.get('firstRunCredentialsNeeded', true);
 
-    // Reload current settings with proper deployment profiles to get the latest firstRunCredentialsNeeded value
-    const deploymentProfiles = await readDeploymentProfiles();
-    this.cfg = settingsImpl.load(deploymentProfiles);
-    settingsImpl.updateLockedFields(deploymentProfiles.locked);
-
-    // Check if username and email from firstrun are saved, and ensure firstRunCredentialsNeeded is false
-    const sullaEmail = (this.cfg?.experimental as any)?.sullaEmail;
-    const sullaPassword = (this.cfg?.experimental as any)?.sullaPassword;
-    if (sullaEmail && sullaPassword) {
-      console.log('[LimaBackend] Found saved credentials from firstrun, ensuring firstRunCredentialsNeeded is false');
-      this.writeSetting({ application: { firstRunCredentialsNeeded: false } });
-      // Reload settings again to get the updated firstRunCredentialsNeeded value
-      this.cfg = settingsImpl.load(deploymentProfiles);
-      settingsImpl.updateLockedFields(deploymentProfiles.locked);
-    }
+    this.progressTracker.numeric('Kubernetes API is ready, firstRunCredentialsNeeded('+firstRunCredentialsNeeded+')', 99, 100);
     
     // if we get here the user has entered their credentials and k8s has booted. we can install sulla.
-    const firstRunCredentialsNeeded = (this.cfg?.application as any)?.firstRunCredentialsNeeded;
     if (config.kubernetes.enabled) {
       if (firstRunCredentialsNeeded === false && this.kubeBackend.sullaStepCustomEnvironment) {
         this.progressTracker.numeric('starting sullaStepCustomEnvironment ', 80, 100);

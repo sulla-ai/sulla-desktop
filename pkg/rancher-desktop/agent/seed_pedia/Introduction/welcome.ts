@@ -1,5 +1,4 @@
-export const welcome = `
----
+export const welcome = `---
 schemaversion: 1
 slug: introduction-welcome
 title: Welcome to Sulla

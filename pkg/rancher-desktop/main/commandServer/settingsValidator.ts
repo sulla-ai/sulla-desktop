@@ -97,8 +97,6 @@ export default class SettingsValidator {
         startInBackground:      this.checkBoolean,
         hideNotificationIcon:   this.checkBoolean,
         window:                 { quitOnClose: this.checkBoolean },
-        firstRunCredentialsNeeded: this.checkBoolean,
-        firstKubernetesIsInstalled: this.checkBoolean,
       },
       containerEngine: {
         allowedImages: {
@@ -133,7 +131,6 @@ export default class SettingsValidator {
       experimental: {
         containerEngine: { webAssembly: { enabled: this.checkMulti(this.checkBoolean, this.checkWASMWithMobyStorage) } },
         kubernetes:      { options: { spinkube: this.checkMulti(this.checkBoolean, this.checkSpinkube) } },
-        sullaModel:      this.checkString,
         soulPrompt:      this.checkString,
         botName:         this.checkString,
         primaryUserName: this.checkString,

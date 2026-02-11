@@ -561,7 +561,6 @@
 
 <script setup lang="ts">
 import AgentHeader from './agent/AgentHeader.vue';
-import AgentSidebarAd from './AgentSidebarAd.vue';
 import AgentPersonaLibrary from './agent/personas/AgentPersonaLibrary.vue';
 
 import { ref, onMounted, onUnmounted, computed, nextTick, watch } from 'vue';
@@ -572,7 +571,6 @@ import {
   getResponseHandler,
 } from '@pkg/agent';
 import type { AgentResponse } from '@pkg/agent/types';
-import { updateAgentConfigFull } from '@pkg/agent/services/ConfigService';
 import { StartupProgressController } from './agent/StartupProgressController';
 import { AgentSettingsController } from './agent/AgentSettingsController';
 import { ChatInterface } from './agent/ChatInterface';
@@ -703,7 +701,6 @@ const settingsController = new AgentSettingsController(
     modelName,
     modelMode,
   },
-  updateAgentConfigFull,
 );
 
 type SidebarTodoStatus = 'pending' | 'in_progress' | 'done' | 'blocked';
@@ -868,7 +865,7 @@ onMounted(async () => {
 
   startupProgress.start();
 
-  settingsController.start();
+  await settingsController.start();
 
   await modelSelector.start();
 
@@ -880,7 +877,6 @@ onMounted(async () => {
 
 onUnmounted(() => {
   startupProgress.dispose();
-  settingsController.dispose();
   modelSelector.dispose();
   // Stop listening on each agent's persona service
   registry.state.agents.forEach((agent: { agentId: string }) => {

@@ -1,4 +1,4 @@
-import { getOllamaBase, getOllamaModel, getLocalConfig } from '../services/ConfigService';
+import { SullaSettingsModel } from '../database/models/SullaSettingsModel';
 import { BaseLanguageModel, type ChatMessage, type NormalizedResponse } from './BaseLanguageModel';
 
 /**
@@ -12,17 +12,24 @@ import { BaseLanguageModel, type ChatMessage, type NormalizedResponse } from './
  */
 export class OllamaService extends BaseLanguageModel {
   private availableModels: string[] = [];
+  protected localTimeoutSeconds: number;
 
-  constructor() {
-    const base = getOllamaBase();
-    const model = getOllamaModel();
+  static async create() {
+    const base = 'http://127.0.0.1:30114';
+    const model = await SullaSettingsModel.get('sullaModel', 'tinyllama:latest');
+    const timeout = await SullaSettingsModel.get('localTimeoutSeconds', 120);
 
+    return new OllamaService(model, base, timeout);
+  }
+
+  private constructor(localModel: string, ollamaBase: string, localTimeoutSeconds: number) {
     super({
       mode: 'local',
-      localModel: model,
-      ollamaBase: base,
-      localTimeoutSeconds: getLocalConfig().timeoutSeconds ?? 60,
+      localModel,
+      ollamaBase,
+      localTimeoutSeconds,
     });
+    this.localTimeoutSeconds = localTimeoutSeconds;
   }
 
   /**
@@ -84,8 +91,6 @@ export class OllamaService extends BaseLanguageModel {
    * @override
    */
   protected async sendRawRequest(messages: ChatMessage[], options: any): Promise<any> {
-    const { timeoutSeconds } = getLocalConfig();
-
     const body: Record<string, any> = {
       model: options.model ?? this.model,
       messages,
@@ -202,12 +207,12 @@ export class OllamaService extends BaseLanguageModel {
   }
 }
 
-// Singleton export (optional — you can also just `new OllamaService()`)
+// Singleton export (optional — you can also just `await OllamaService.create()`)
 let ollamaInstance: OllamaService | null = null;
 
-export function getOllamaService(): OllamaService {
+export async function getOllamaService(): Promise<OllamaService> {
   if (!ollamaInstance) {
-    ollamaInstance = new OllamaService();
+    ollamaInstance = await OllamaService.create();
   }
   return ollamaInstance;
 }

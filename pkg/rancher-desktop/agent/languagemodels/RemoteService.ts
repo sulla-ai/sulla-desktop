@@ -91,7 +91,7 @@ export class RemoteModelService extends BaseLanguageModel {
     }
 
     // Final fallback to Ollama
-    const ollama = getOllamaService();
+    const ollama = await getOllamaService();
     await ollama.initialize();
     if (ollama.isAvailable()) {
       return ollama.chat(messages, options); // will normalize internally

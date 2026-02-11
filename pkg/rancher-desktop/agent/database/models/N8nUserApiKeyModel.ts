@@ -3,6 +3,7 @@
 import { BaseModel } from '../BaseModel';
 import * as crypto from 'crypto';
 import { N8nUserModel } from '../models/N8nUserModel';
+import { SullaSettingsModel } from './SullaSettingsModel';
 
 interface UserApiKeyAttributes {
   id: string;
@@ -49,21 +50,6 @@ export class N8nUserApiKeyModel extends BaseModel<UserApiKeyAttributes> {
   }
 
   /**
-   * Generate a 36-character UUID for database ID fields
-   */
-  public static generateId(): string {
-    const bytes = crypto.randomBytes(16);
-    
-    // Set version (4) and variant bits
-    bytes[6] = (bytes[6] & 0x0f) | 0x40; // Version 4
-    bytes[8] = (bytes[8] & 0x3f) | 0x80; // Variant 10
-    
-    const hex = bytes.toString('hex');
-    
-    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
-  }
-
-  /**
    * Generate JWT token for API key (simplified version)
    */
   public static async createNewApiKeyToken(userId:string): Promise<string> {
@@ -98,7 +84,7 @@ export class N8nUserApiKeyModel extends BaseModel<UserApiKeyAttributes> {
 
     // @ts-ignore
     const apiKeyToken = await N8nUserApiKeyModel.createNewApiKeyToken(_userId);
-    const apiKeyId = N8nUserApiKeyModel.generateId();
+    const apiKeyId = SullaSettingsModel.generateId();
     
     const apiKey = await N8nUserApiKeyModel.create({
       id: apiKeyId,
@@ -153,7 +139,7 @@ export class N8nUserApiKeyModel extends BaseModel<UserApiKeyAttributes> {
 
   async save(): Promise<this> {
     if (!this.attributes.id) {
-      this.attributes.id = N8nUserApiKeyModel.generateId();
+      this.attributes.id = SullaSettingsModel.generateId();
     }
     return this;
   }

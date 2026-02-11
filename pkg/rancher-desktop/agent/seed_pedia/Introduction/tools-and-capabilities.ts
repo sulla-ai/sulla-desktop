@@ -1,5 +1,4 @@
-export const toolsAndCapabilities = `
----
+export const toolsAndCapabilities = `---
 schemaversion: 1
 slug: tools-and-capabilities
 title: Tools & Capabilities

@@ -39,7 +39,6 @@ import { Snapshots } from '@pkg/main/snapshots/snapshots';
 import { Snapshot, SnapshotDialog } from '@pkg/main/snapshots/types';
 import { Tray } from '@pkg/main/tray';
 import setupUpdate from '@pkg/main/update';
-import { hookSullaEnd, sullaEnd, onMainProxyLoad } from '@pkg/sulla';
 import { spawnFile } from '@pkg/utils/childProcess';
 import getCommandLineArgs from '@pkg/utils/commandLine';
 import dockerDirManager from '@pkg/utils/dockerDirManager';
@@ -56,6 +55,8 @@ import getWSLVersion from '@pkg/utils/wslVersion';
 import * as window from '@pkg/window';
 import { closeDashboard, openDashboard } from '@pkg/window/dashboard';
 import { openPreferences, preferencesSetDirtyFlag } from '@pkg/window/preferences';
+import { hookSullaEnd, sullaEnd, onMainProxyLoad } from '@pkg/sulla';
+import { SullaSettingsModel } from './pkg/rancher-desktop/agent/database/models/SullaSettingsModel';
 
 // https://www.electronjs.org/docs/latest/breaking-changes#changed-gtk-4-is-default-when-running-gnome
 if (process.platform === 'linux') {
@@ -210,7 +211,7 @@ Electron.protocol.registerSchemesAsPrivileged([{ scheme: 'app' }, {
 ////////////////////////////////////////////////////////////////////////////////
 
 
-hookSullaEnd(Electron);
+hookSullaEnd(Electron, mainEvents, window);
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -219,12 +220,6 @@ hookSullaEnd(Electron);
 
 
 
-mainEvents.on('sulla-first-run-complete', () => {
-  const firstRunWindow = window.getWindow('first-run');
-  firstRunWindow?.setClosable(true);
-  firstRunWindow?.close();
-  window.openMain();
-});
 
 
 
@@ -486,7 +481,8 @@ async function initUI() {
 }
 
 async function doFirstRunDialog() {
-  if (!noModalDialogs && (settingsImpl.firstRunDialogNeeded() || settingsImpl.firstRunCredentialsNeeded())) {
+  const firstRunCredentialsNeeded = await SullaSettingsModel.get('firstRunCredentialsNeeded', true);
+  if (!noModalDialogs && (settingsImpl.firstRunDialogNeeded() || firstRunCredentialsNeeded)) {
     await window.openFirstRunDialog();
   }
   firstRunDialogComplete = true;
@@ -776,17 +772,8 @@ await onMainProxyLoad(ipcMainProxy);
 ipcMainProxy.handle('start-sulla-custom-env' as any, async() => {
   console.log('Starting Sulla custom environment...');
   
-  // Reload current settings to get the latest firstRunCredentialsNeeded value
-  cfg = settingsImpl.load(deploymentProfiles);
-  settingsImpl.updateLockedFields(deploymentProfiles.locked);
-  
-  const firstRunCredentialsNeeded = (cfg.application as any)?.firstRunCredentialsNeeded;
-  const firstKubernetesIsInstalled = (cfg.application as any)?.firstRunCredentialsNeeded;
-  console.log('Current firstRunCredentialsNeeded:', firstRunCredentialsNeeded);
-  console.log('Current firstKubernetesIsInstalled:', firstKubernetesIsInstalled);
-
-  // Debug logging
-  await (globalThis as any).progressTracker?.action(`DEBUG: firstRunCredentialsNeeded=${firstRunCredentialsNeeded}, firstKubernetesIsInstalled=${firstKubernetesIsInstalled}`, 900, async () => {});
+  const firstRunCredentialsNeeded = await SullaSettingsModel.get('firstRunCredentialsNeeded', true);
+  const firstKubernetesIsInstalled = await SullaSettingsModel.get('firstKubernetesIsInstalled', false);
 
   if (firstRunCredentialsNeeded === false && firstKubernetesIsInstalled === false && k8smanager.kubeBackend.sullaStepCustomEnvironment) {
     await k8smanager.kubeBackend.sullaStepCustomEnvironment();

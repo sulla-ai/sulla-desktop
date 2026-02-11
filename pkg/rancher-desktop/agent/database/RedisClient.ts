@@ -2,7 +2,7 @@
 // Singleton wrapper around ioredis for clean, consistent access
 // Mirrors ChromaClient/PostgresClient structure
 
-import Redis from 'ioredis';
+import Redis, { Pipeline, ChainableCommander } from 'ioredis';
 
 const REDIS_URL = 'redis://127.0.0.1:30117';
 
@@ -15,7 +15,7 @@ export class RedisClient {
 
   constructor() {
     this.client = new Redis(REDIS_URL, {
-      retryStrategy: times => Math.min(times * 50, 2000),
+      retryStrategy: (times: number) => Math.min(times * 50, 2000),
       maxRetriesPerRequest: 3,
       lazyConnect: true, // Don't auto-connect on construction
     });
@@ -26,7 +26,7 @@ export class RedisClient {
       console.log('[RedisClient] Connected');
     });
 
-    this.client.on('error', err => {
+    this.client.on('error', (err: any) => {
       this.connected = false;
       // Reduce error verbosity for common startup errors
       if ((err as any).code === 'ECONNREFUSED' || (err as any).code === 'EPIPE' || (err as any).code === 'ECONNRESET') {
@@ -130,6 +130,11 @@ export class RedisClient {
     return this.client.hgetall(key);
   }
 
+  async hdel(key: string, ...fields: string[]): Promise<number> {
+    await this.ensureConnected();
+    return this.client.hdel(key, ...fields);
+  }
+
   // List commands
   async rpush(key: string, ...values: string[]): Promise<number> {
     await this.ensureConnected();
@@ -153,6 +158,10 @@ export class RedisClient {
       await this.client.quit();
       this.connected = false;
     }
+  }
+  // Pipeline support
+  pipeline(): Pipeline {
+    return this.client.pipeline() as Pipeline;
   }
 
   private async ensureConnected(): Promise<void> {

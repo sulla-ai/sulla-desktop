@@ -2,7 +2,7 @@
 // Provides methods to manage workflows, executions, credentials, and other n8n resources
 
 import Logging from '@pkg/utils/logging';
-import { N8nUserApiKeyModel } from '../database/models/N8nUserApiKeyModel';
+import { SullaSettingsModel } from '../database/models/SullaSettingsModel';
 
 const console = Logging.agent;
 
@@ -24,15 +24,19 @@ export class N8nService {
    * Initialize the service with configuration values
    */
   async initialize(): Promise<void> {
-    // Load API key from database
-    const ApiModel = await N8nUserApiKeyModel.getOrCreateServiceAccount(undefined);
-    const serviceAccountKey = ApiModel.getApiKey();
+    console.log('[N8nService] Initializing...');
+    // Load API key from settings
+    const serviceAccountKey = await SullaSettingsModel.get('serviceAccountApiKey');
 
-    if (!ApiModel?.attributes.apiKey) {
-      throw new Error('No API key found in database');
+    console.log('serviceAccountKey :'+serviceAccountKey);
+
+    if (!serviceAccountKey) {
+      throw new Error('No API key found in settings');
     }
     this.apiKey = serviceAccountKey;
     this.baseUrl = 'http://localhost:30119';
+
+    console.log('[Background] N8nService initialized');
   }
 
   /**

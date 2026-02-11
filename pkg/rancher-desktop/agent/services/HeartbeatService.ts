@@ -4,7 +4,7 @@
 import type { OverlordThreadState } from '../nodes/Graph';
 import { createHeartbeatGraph } from '../nodes/Graph';
 import { getCurrentModel, getCurrentMode } from '../languagemodels';
-import { getAgentConfig, onConfigChange } from './ConfigService';
+import { SullaSettingsModel } from '../database/models/SullaSettingsModel';
 
 export interface HeartbeatConfig {
   enabled: boolean;
@@ -34,12 +34,7 @@ export class HeartbeatService {
   };
 
   constructor() {
-    // Subscribe to config changes to update heartbeat configuration when settings change
-    onConfigChange((newConfig) => {
-      console.log('[HeartbeatService] Configuration changed, updating heartbeat config...');
-      console.log('[HeartbeatService] New heartbeat settings: enabled=', newConfig.heartbeatEnabled, 'delay=', newConfig.heartbeatDelayMinutes, 'model=', newConfig.heartbeatModel);
-      this.pullConfig();
-    });
+    // Settings are loaded on-demand from database
   }
 
   async initialize(): Promise<void> {
@@ -51,7 +46,7 @@ export class HeartbeatService {
     this.initialized = true;
 
     // Pull initial configuration
-    this.pullConfig();
+    await this.pullConfig();
 
     // Start the heartbeat if enabled
     if (this.config.enabled) {
@@ -59,16 +54,15 @@ export class HeartbeatService {
     }
   }
 
-  private pullConfig(): void {
-    const agentConfig = getAgentConfig();
+  private async pullConfig(): Promise<void> {
     const wasEnabled = this.config.enabled;
     const oldDelay = this.config.delayMinutes;
 
     this.config = {
-      enabled: agentConfig.heartbeatEnabled,
-      delayMinutes: agentConfig.heartbeatDelayMinutes,
-      prompt: agentConfig.heartbeatPrompt,
-      model: agentConfig.heartbeatModel,
+      enabled: await SullaSettingsModel.get('heartbeatEnabled', true),
+      delayMinutes: await SullaSettingsModel.get('heartbeatDelayMinutes', 30),
+      prompt: await SullaSettingsModel.get('heartbeatPrompt', ''),
+      model: await SullaSettingsModel.get('heartbeatModel', 'default'),
     };
 
     console.log(`[HeartbeatService] Config pulled: enabled=${this.config.enabled}, delay=${this.config.delayMinutes}min, model=${this.config.model}`);
@@ -109,8 +103,8 @@ export class HeartbeatService {
     }
   }
 
-  refreshConfig(): void {
-    this.pullConfig();
+  async refreshConfig(): Promise<void> {
+    await this.pullConfig();
   }
 
   private async triggerHeartbeat(): Promise<void> {
@@ -125,7 +119,7 @@ export class HeartbeatService {
       this.isExecuting = true;
 
       // Pull fresh config before each heartbeat
-      this.pullConfig();
+      await this.pullConfig();
 
       // Build the heartbeat prompt
       const prompt = this.buildHeartbeatPrompt();
@@ -145,8 +139,8 @@ export class HeartbeatService {
           wsChannel: 'dreaming-protocol',
           cycleComplete: false,
           waitingForUser: false,
-          llmModel: this.getHeartbeatModel(),
-          llmLocal: this.isHeartbeatLocal(),
+          llmModel: await this.getHeartbeatModel(),
+          llmLocal: await this.isHeartbeatLocal(),
           options: {},
           currentNodeId: '',
           consecutiveSameNode: 0,
@@ -215,9 +209,9 @@ export class HeartbeatService {
    * Parse the heartbeat model configuration and return the model name
    * Format: 'default', 'local:modelname', or 'remote:provider:modelname'
    */
-  private getHeartbeatModel(): string {
+  private async getHeartbeatModel(): Promise<string> {
     if (this.config.model === 'default') {
-      return getCurrentModel();
+      return await getCurrentModel();
     }
 
     const parts = this.config.model.split(':');
@@ -228,15 +222,15 @@ export class HeartbeatService {
     }
 
     // Fallback to current model if format is unexpected
-    return getCurrentModel();
+    return await getCurrentModel();
   }
 
   /**
    * Determine if the heartbeat is configured to use local or remote
    */
-  private isHeartbeatLocal(): boolean {
+  private async isHeartbeatLocal(): Promise<boolean> {
     if (this.config.model === 'default') {
-      return getCurrentMode() === 'local';
+      return (await getCurrentMode()) === 'local';
     }
 
     return this.config.model.startsWith('local:');

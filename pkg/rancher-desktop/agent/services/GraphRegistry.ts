@@ -1,6 +1,6 @@
 import { Graph, BaseThreadState, HierarchicalThreadState, createHierarchicalGraph, createSimpleGraph } from '../nodes/Graph';
 import type { SensoryInput } from '../types';
-import { getCurrentModel, getCurrentMode } from '../languagemodels';
+import { SullaSettingsModel } from '../database/models/SullaSettingsModel';
 
 const registry = new Map<string, {
   graph: Graph<any>;
@@ -23,15 +23,15 @@ export const GraphRegistry = {
    * Create a brand new graph + state (always fresh threadId).
    * Use when user explicitly wants "New Conversation".
    */
-  createNew(wsChannel: string): {
+  createNew: async function(wsChannel: string): Promise<{
     graph: Graph<any>;
     state: BaseThreadState;
     threadId: string;
-  } {
+  }> {
     const threadId = nextThreadId();
     const graph = createHierarchicalGraph();
 
-    const state = buildInitialState(wsChannel, threadId);
+    const state = await buildInitialState(wsChannel, threadId);
 
     registry.set(threadId, { graph, state });
     return { graph, state, threadId };
@@ -41,18 +41,18 @@ export const GraphRegistry = {
    * Get or create — resumes if threadId exists, creates new if not.
    * Use in normal message flow.
    */
-  getOrCreateSimpleGraph(wsChannel: string, threadId: string): {
+  getOrCreateSimpleGraph: async function(wsChannel: string, threadId: string): Promise<{
     graph: Graph<BaseThreadState>;
     state: BaseThreadState;
-  } {
+  }> {
     if (registry.has(threadId)) {
-      return registry.get(threadId)!;
+      return Promise.resolve(registry.get(threadId)!);
     }
 
     // No existing → create new under this threadId
     const graph = createSimpleGraph();
 
-    const state = buildSimpleState(wsChannel, threadId);
+    const state = await buildSimpleState(wsChannel, threadId);
 
     registry.set(threadId, { graph, state });
     return { graph, state };
@@ -62,18 +62,18 @@ export const GraphRegistry = {
    * Get or create — resumes if threadId exists, creates new if not.
    * Use in normal message flow.
    */
-  getOrCreate(wsChannel: string, threadId: string): {
+  getOrCreate: async function(wsChannel: string, threadId: string): Promise<{
     graph: Graph<any>;
     state: BaseThreadState;
-  } {
+  }> {
     if (registry.has(threadId)) {
-      return registry.get(threadId)!;
+      return Promise.resolve(registry.get(threadId)!);
     }
 
     // No existing → create new under this threadId
     const graph = createHierarchicalGraph();
 
-    const state = buildInitialState(wsChannel, threadId);
+    const state = await buildInitialState(wsChannel, threadId);
 
     registry.set(threadId, { graph, state });
     return { graph, state };
@@ -105,8 +105,12 @@ export function nextMessageId(): string {
  * @param threadId 
  * @returns 
  */
-function buildInitialState(wsChannel: string, threadId?: string): HierarchicalThreadState {
+async function buildInitialState(wsChannel: string, threadId?: string): Promise<HierarchicalThreadState> {
   const id = threadId ?? nextThreadId();
+
+  const mode = await SullaSettingsModel.get('modelMode', 'local');
+  const llmModel = mode === 'remote' ? await SullaSettingsModel.get('remoteModel', 'grok-4-1-fast-reasoning') : await SullaSettingsModel.get('sullaModel', 'tinyllama:latest');
+  const llmLocal = mode === 'local';
 
   return {
     messages: [],
@@ -117,8 +121,8 @@ function buildInitialState(wsChannel: string, threadId?: string): HierarchicalTh
       cycleComplete: false,
       waitingForUser: false,
 
-      llmModel: getCurrentModel(),
-      llmLocal: getCurrentMode() === 'local',
+      llmModel,
+      llmLocal,
       options: { abort: undefined },
       currentNodeId: 'memory_recall',
       consecutiveSameNode: 0,
@@ -156,8 +160,12 @@ function buildInitialState(wsChannel: string, threadId?: string): HierarchicalTh
  * @param threadId 
  * @returns 
  */
-function buildSimpleState(wsChannel: string, threadId?: string): BaseThreadState {
+async function buildSimpleState(wsChannel: string, threadId?: string): Promise<BaseThreadState> {
   const id = threadId ?? nextThreadId();
+
+  const mode = await SullaSettingsModel.get('modelMode', 'local');
+  const llmModel = mode === 'remote' ? await SullaSettingsModel.get('remoteModel', 'grok-4-1-fast-reasoning') : await SullaSettingsModel.get('sullaModel', 'tinyllama:latest');
+  const llmLocal = mode === 'local';
 
   return {
     messages: [],
@@ -168,8 +176,8 @@ function buildSimpleState(wsChannel: string, threadId?: string): BaseThreadState
       cycleComplete: false,
       waitingForUser: false,
 
-      llmModel: getCurrentModel(),
-      llmLocal: getCurrentMode() === 'local',
+      llmModel,
+      llmLocal,
       options: { abort: undefined },
       currentNodeId: 'memory_recall',
       consecutiveSameNode: 0,

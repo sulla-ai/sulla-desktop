@@ -1,5 +1,4 @@
-export const remoteModels = `
----
+export const remoteModels = `---
 schemaversion: 1
 slug: remote-models
 title: Remote Models (Benefits & Risks)

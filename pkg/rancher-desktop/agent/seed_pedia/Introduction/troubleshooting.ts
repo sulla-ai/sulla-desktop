@@ -1,5 +1,4 @@
-export const troubleshooting = `
----
+export const troubleshooting = `---
 schemaversion: 1
 slug: troubleshooting
 title: Troubleshooting

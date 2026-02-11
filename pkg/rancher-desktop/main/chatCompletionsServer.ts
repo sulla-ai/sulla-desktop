@@ -1,9 +1,8 @@
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import { GraphRegistry, nextThreadId, nextMessageId } from '@pkg/agent/services/GraphRegistry';
-import { getCurrentModel, getCurrentMode } from '@pkg/agent/languagemodels';
+import { SullaSettingsModel } from '@pkg/agent/database/models/SullaSettingsModel';
 import { getSettings } from '@pkg/config/settingsImpl';
-import { getRemoteConfig } from '@pkg/agent/services/ConfigService';
 
 const CHAT_COMPLETIONS_PORT = parseInt('3000', 10);
 const WS_CHANNEL = 'tasker';
@@ -168,7 +167,7 @@ export class ChatCompletionsServer {
     const threadId = nextThreadId();
     
     // Get or create persistent graph for this thread
-    const { graph, state } = GraphRegistry.getOrCreateSimpleGraph(WS_CHANNEL, threadId);
+    const { graph, state } = await GraphRegistry.getOrCreateSimpleGraph(WS_CHANNEL, threadId);
 
     try {
       state.metadata.wsChannel = WS_CHANNEL;
@@ -199,10 +198,8 @@ export class ChatCompletionsServer {
   /**
    * Handle models requests (OpenAI-compatible).
    */
-  public handleModels(req: Request, res: Response) {
+  public async handleModels(req: Request, res: Response) {
     try {
-      const mode = getCurrentMode();
-      const currentModel = getCurrentModel();
       let models: string[] = [];
 
       // Always include available Ollama models (filtered by CPU/RAM)
@@ -238,9 +235,10 @@ export class ChatCompletionsServer {
 
       models.push(...availableOllamaModels);
 
-      const remoteConfig = getRemoteConfig();
-      const isGrokConfigured: boolean = remoteConfig.provider === 'grok' && remoteConfig.apiKey.startsWith('xai-');
-      const isOpenAiConfigured: boolean = remoteConfig.provider === 'openai' && remoteConfig.apiKey.startsWith('sk-') && remoteConfig.apiKey.length > 50;
+      const remoteProvider = await SullaSettingsModel.get('remoteProvider', 'grok');
+      const remoteApiKey = await SullaSettingsModel.get('remoteApiKey', '');
+      const isGrokConfigured: boolean = remoteProvider === 'grok' && remoteApiKey.startsWith('xai-');
+      const isOpenAiConfigured: boolean = remoteProvider === 'openai' && remoteApiKey.startsWith('sk-') && remoteApiKey.length > 50;
       
       // Add remote models if configured
       if (isGrokConfigured) {

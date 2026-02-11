@@ -1,5 +1,4 @@
-export const architectureOverview = `
----
+export const architectureOverview = `---
 schemaversion: 1
 slug: architecture-overview
 title: Architecture Overview

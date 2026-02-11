@@ -29,6 +29,7 @@ import Logging from '@pkg/utils/logging';
 import paths from '@pkg/utils/paths';
 import { RecursivePartial } from '@pkg/utils/typeUtils';
 import { showMessageBox } from '@pkg/window';
+import { SullaSettingsModel } from '@pkg/agent/database/models/SullaSettingsModel';
 
 import SULLA_DEPLOYMENTS from '@pkg/assets/sulla-deployments.yaml';
 
@@ -578,10 +579,7 @@ export default class LimaKubernetesBackend extends events.EventEmitter implement
 
   private async pullOllamaModelWithProgress(): Promise<void> {
     try {
-      const MODEL = (this.cfg as Record<string, unknown>)?.experimental &&
-        ((this.cfg as Record<string, unknown>).experimental as Record<string, unknown>)?.sullaModel
-        ? String(((this.cfg as Record<string, unknown>).experimental as Record<string, unknown>).sullaModel)
-        : 'tinyllama:latest';
+      const MODEL = await SullaSettingsModel.get('sullaModel', 'tinyllama:latest');
 
       console.log(`Starting Ollama model pull: ${MODEL}`);
 
