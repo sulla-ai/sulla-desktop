@@ -101,23 +101,33 @@ export class Tray {
       encoding:   'utf-8',
     };
 
-    this.kubeConfigWatchers = paths.map(filepath => fs.watch(filepath, options, async(eventType) => {
-      if (eventType === 'rename') {
+    this.kubeConfigWatchers = paths
+      .filter(filepath => {
         try {
-          await fs.promises.access(filepath);
-        } catch (ex) {
-          // File doesn't exist; wait for it to be recreated.
-          return;
+          fs.accessSync(filepath);
+          return true;
+        } catch {
+          console.debug(`Skipping watch for non-existent kubeconfig: ${filepath}`);
+          return false;
         }
-      }
+      })
+      .map(filepath => fs.watch(filepath, options, async(eventType) => {
+        if (eventType === 'rename') {
+          try {
+            await fs.promises.access(filepath);
+          } catch (ex) {
+            // File doesn't exist; wait for it to be recreated.
+            return;
+          }
+        }
 
-      // This prevents calling buildFromConfig multiple times in quick succession
-      // while making sure that the last file change within the period is processed.
-      this.runBuildFromConfigTimer ||= setTimeout(() => {
-        this.runBuildFromConfigTimer = null;
-        this.buildFromConfig();
-      }, 1_000);
-    }));
+        // This prevents calling buildFromConfig multiple times in quick succession
+        // while making sure that the last file change within the period is processed.
+        this.runBuildFromConfigTimer ||= setTimeout(() => {
+          this.runBuildFromConfigTimer = null;
+          this.buildFromConfig();
+        }, 1_000);
+      }));
   }
 
   private constructor(settings: Settings) {
