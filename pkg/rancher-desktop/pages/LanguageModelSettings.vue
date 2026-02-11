@@ -220,6 +220,7 @@ export default defineComponent({
       // N8n service test properties
       runningN8nTest:       false,
       n8nTestResult:        null as {success: boolean, message: string, data?: any} | null,
+      n8nUrl:               'http://127.0.0.1:30119',
 
       // Soul prompt settings
       soulPrompt: '',
@@ -1131,72 +1132,147 @@ export default defineComponent({
       this.runningN8nTest = true;
       this.n8nTestResult = null;
 
-      const n8nUrl = 'http://127.0.0.1:30119';
-      const healthUrl = `${n8nUrl}/healthz`;
-      const apiUrl = `${n8nUrl}/rest/settings`;
+      const testResults = [];
 
-      console.log('[N8n Test] Starting N8n service test');
-      console.log('[N8n Test] N8n URL:', n8nUrl);
-      console.log('[N8n Test] Health URL:', healthUrl);
-      console.log('[N8n Test] API URL:', apiUrl);
+      console.log('[N8n Test] Starting comprehensive N8nService class test');
 
       try {
-        // First, check if N8n service is accessible via health check
-        console.log('[N8n Test] Testing health endpoint...');
-        const healthResponse = await fetch(healthUrl, {
-          method: 'GET',
-          signal: AbortSignal.timeout(5000),
-        });
+        // Create and initialize N8nService instance
+        const { createN8nService } = await import('../agent/services/N8nService');
+        const n8nService = await createN8nService();
 
-        console.log('[N8n Test] Health response status:', healthResponse.status);
-        console.log('[N8n Test] Health response ok:', healthResponse.ok);
+        console.log('[N8n Test] N8nService instance created and initialized');
 
-        if (!healthResponse.ok) {
-          throw new Error(`Health check failed: HTTP ${healthResponse.status}`);
+        // Test 1: Health check via service
+        console.log('[N8n Test] Testing N8nService.healthCheck()...');
+        try {
+          const isHealthy = await n8nService.healthCheck();
+          if (isHealthy) {
+            testResults.push({ endpoint: 'healthCheck()', status: 'PASS', message: 'Health check passed via N8nService' });
+          } else {
+            testResults.push({ endpoint: 'healthCheck()', status: 'FAIL', message: 'Health check failed via N8nService' });
+          }
+        } catch (error) {
+          testResults.push({
+            endpoint: 'healthCheck()',
+            status: 'FAIL',
+            message: `Health check error: ${error instanceof Error ? error.message : String(error)}`
+          });
         }
 
-        console.log('[N8n Test] Health check passed, service is accessible');
-
-        // Service is accessible, now test API with service account key
-        const apiKey = await SullaSettingsModel.get('serviceAccountApiKey', '');
-        console.log('[N8n Test] Service account API key loaded:', apiKey ? 'YES' : 'NO');
-
-        if (!apiKey) {
-          throw new Error('Service account API key not found. Please restart Sulla to generate it.');
+        // Test 2: Get workflows
+        console.log('[N8n Test] Testing N8nService.getWorkflows()...');
+        try {
+          const workflows = await n8nService.getWorkflows();
+          testResults.push({
+            endpoint: 'getWorkflows()',
+            status: 'PASS',
+            message: `Workflows retrieved successfully (${Array.isArray(workflows) ? workflows.length : 'unknown'} workflows)`
+          });
+        } catch (error) {
+          testResults.push({
+            endpoint: 'getWorkflows()',
+            status: 'FAIL',
+            message: `Get workflows error: ${error instanceof Error ? error.message : String(error)}`
+          });
         }
 
-        console.log('[N8n Test] Testing API endpoint with auth...');
-        const apiResponse = await fetch(apiUrl, {
-          method: 'GET',
-          headers: {
-            'X-N8N-API-KEY': apiKey,
-          },
-          signal: AbortSignal.timeout(5000),
-        });
-
-        console.log('[N8n Test] API response status:', apiResponse.status);
-        console.log('[N8n Test] API response ok:', apiResponse.ok);
-
-        if (!apiResponse.ok) {
-          const errorText = await apiResponse.text();
-          console.log('[N8n Test] API error response:', errorText);
-          throw new Error(`API access failed: HTTP ${apiResponse.status} - ${errorText}`);
+        // Test 3: Get executions
+        console.log('[N8n Test] Testing N8nService.getExecutions()...');
+        try {
+          const executions = await n8nService.getExecutions();
+          testResults.push({
+            endpoint: 'getExecutions()',
+            status: 'PASS',
+            message: `Executions retrieved successfully (${Array.isArray(executions) ? executions.length : 'unknown'} executions)`
+          });
+        } catch (error) {
+          testResults.push({
+            endpoint: 'getExecutions()',
+            status: 'FAIL',
+            message: `Get executions error: ${error instanceof Error ? error.message : String(error)}`
+          });
         }
 
-        const data = await apiResponse.json();
-        console.log('[N8n Test] API response data:', data);
-        this.n8nTestResult = { success: true, message: 'N8n service is accessible and API key is valid!', data };
+        // Test 4: Get credentials
+        console.log('[N8n Test] Testing N8nService.getCredentials()...');
+        try {
+          const credentials = await n8nService.getCredentials();
+          testResults.push({
+            endpoint: 'getCredentials()',
+            status: 'PASS',
+            message: `Credentials retrieved successfully (${Array.isArray(credentials) ? credentials.length : 'unknown'} credentials)`
+          });
+        } catch (error) {
+          testResults.push({
+            endpoint: 'getCredentials()',
+            status: 'FAIL',
+            message: `Get credentials error: ${error instanceof Error ? error.message : String(error)}`
+          });
+        }
+
+        // Test 5: Get current user
+        console.log('[N8n Test] Testing N8nService.getCurrentUser()...');
+        try {
+          const currentUser = await n8nService.getCurrentUser();
+          testResults.push({
+            endpoint: 'getCurrentUser()',
+            status: 'PASS',
+            message: `Current user retrieved successfully (email: ${currentUser?.email || 'unknown'})`
+          });
+        } catch (error) {
+          testResults.push({
+            endpoint: 'getCurrentUser()',
+            status: 'FAIL',
+            message: `Get current user error: ${error instanceof Error ? error.message : String(error)}`
+          });
+        }
+
+        // Test 6: Get tags
+        console.log('[N8n Test] Testing N8nService.getTags()...');
+        try {
+          const tags = await n8nService.getTags();
+          testResults.push({
+            endpoint: 'getTags()',
+            status: 'PASS',
+            message: `Tags retrieved successfully (${Array.isArray(tags) ? tags.length : 'unknown'} tags)`
+          });
+        } catch (error) {
+          testResults.push({
+            endpoint: 'getTags()',
+            status: 'FAIL',
+            message: `Get tags error: ${error instanceof Error ? error.message : String(error)}`
+          });
+        }
+
+        // Summarize results
+        const passedTests = testResults.filter(t => t.status === 'PASS').length;
+        const totalTests = testResults.length;
+        const failedTests = testResults.filter(t => t.status === 'FAIL');
+
+        console.log(`[N8n Test] Completed: ${passedTests}/${totalTests} N8nService tests passed`);
+
+        if (failedTests.length === 0) {
+          this.n8nTestResult = {
+            success: true,
+            message: `All N8nService methods are working! (${passedTests}/${totalTests} tests passed)`,
+            data: { testResults }
+          };
+        } else {
+          this.n8nTestResult = {
+            success: false,
+            message: `Some N8nService methods failed: ${failedTests.length} failed, ${passedTests} passed`,
+            data: { testResults }
+          };
+        }
+
       } catch (error: unknown) {
         const err = error instanceof Error ? error : new Error(String(error));
         console.log('[N8n Test] Error caught:', err);
         console.log('[N8n Test] Error name:', err.name);
         console.log('[N8n Test] Error message:', err.message);
 
-        if (err.name === 'AbortError') {
-          this.n8nTestResult = { success: false, message: 'N8n service test failed: Service timed out (not accessible)' };
-        } else {
-          this.n8nTestResult = { success: false, message: `N8n service test failed: ${err.message}` };
-        }
+        this.n8nTestResult = { success: false, message: `N8nService test failed: ${err.message}` };
       } finally {
         this.runningN8nTest = false;
         console.log('[N8n Test] Test completed');

@@ -65,9 +65,9 @@ export class ChatCompletionsServer {
       await this.handleEmbeddings(req, res);
     });
 
-    // OpenAI-compatible moderations endpoint
-    this.app.post('/v1/moderations', async (req: Request, res: Response) => {
-      await this.handleModerations(req, res);
+    // N8n API documentation endpoint
+    this.app.get('/api/v1/docs', async (req: Request, res: Response) => {
+      await this.handleApiDocs(req, res);
     });
 
     // Catch-all for unknown routes
@@ -467,8 +467,286 @@ export class ChatCompletionsServer {
 
       console.log('[ChatCompletionsAPI] Moderations response sent');
       res.json(response);
+  /**
+   * Handle API documentation requests.
+   */
+  public async handleApiDocs(req: Request, res: Response) {
+    try {
+      const baseUrl = 'http://localhost:30119'; // n8n base URL
+      const apiVersion = 'v1';
+
+      const docs = {
+        title: 'Sulla N8nService API Documentation',
+        version: '1.0.0',
+        description: 'API documentation for N8nService integration methods',
+        baseUrl: `${baseUrl}/api/${apiVersion}`,
+        endpoints: {
+          health: {
+            method: 'GET',
+            path: '/healthz',
+            description: 'Check if n8n service is accessible',
+            response: {
+              type: 'boolean',
+              example: true
+            }
+          },
+          workflows: {
+            method: 'GET',
+            path: `/api/${apiVersion}/workflows`,
+            description: 'Get all workflows with optional filtering and pagination',
+            parameters: {
+              query: {
+                active: {
+                  type: 'boolean',
+                  description: 'Filter by active workflows only',
+                  example: 'true'
+                },
+                limit: {
+                  type: 'number',
+                  description: 'Maximum number of results to return',
+                  example: '50'
+                },
+                offset: {
+                  type: 'number',
+                  description: 'Number of results to skip (pagination)',
+                  example: '0'
+                },
+                tags: {
+                  type: 'string[]',
+                  description: 'Filter by workflow tags',
+                  example: '["production", "automation"]'
+                },
+                projectId: {
+                  type: 'string',
+                  description: 'Filter by project ID',
+                  example: 'project-123'
+                }
+              }
+            },
+            examples: [
+              {
+                description: 'Get active workflows with pagination',
+                url: `/api/${apiVersion}/workflows?active=true&limit=10&offset=0`
+              },
+              {
+                description: 'Get workflows by tags',
+                url: `/api/${apiVersion}/workflows?tags=production&tags=automation`
+              }
+            ]
+          },
+          executions: {
+            method: 'GET',
+            path: `/api/${apiVersion}/executions`,
+            description: 'Get workflow execution history with filtering and pagination',
+            parameters: {
+              query: {
+                includeData: {
+                  type: 'boolean',
+                  description: 'Whether to include execution detailed data',
+                  example: 'false'
+                },
+                status: {
+                  type: 'string',
+                  enum: ['canceled', 'error', 'running', 'success', 'waiting'],
+                  description: 'Filter by execution status',
+                  example: 'success'
+                },
+                workflowId: {
+                  type: 'string',
+                  description: 'Filter by workflow ID',
+                  example: 'workflow-123'
+                },
+                projectId: {
+                  type: 'string',
+                  description: 'Filter by project ID',
+                  example: 'project-456'
+                },
+                limit: {
+                  type: 'number',
+                  description: 'Maximum number of items to return (max 250)',
+                  default: '100',
+                  example: '50'
+                },
+                cursor: {
+                  type: 'string',
+                  description: 'Cursor for pagination',
+                  example: 'nextCursorValue'
+                }
+              }
+            },
+            examples: [
+              {
+                description: 'Get successful executions with data',
+                url: `/api/${apiVersion}/executions?status=success&includeData=true&limit=20`
+              },
+              {
+                description: 'Get executions for specific workflow',
+                url: `/api/${apiVersion}/executions?workflowId=workflow-123&limit=10`
+              }
+            ]
+          },
+          retryExecution: {
+            method: 'POST',
+            path: `/api/${apiVersion}/executions/{id}/retry`,
+            description: 'Retry a failed or completed workflow execution',
+            parameters: {
+              path: {
+                id: {
+                  type: 'string',
+                  required: true,
+                  description: 'The ID of the execution to retry',
+                  example: '1'
+                }
+              },
+              body: {
+                loadWorkflow: {
+                  type: 'boolean',
+                  description: 'Whether to load the currently saved workflow instead of the version from execution time',
+                  default: 'true',
+                  example: 'true'
+                }
+              }
+            },
+            examples: [
+              {
+                description: 'Retry execution with latest workflow',
+                url: `/api/${apiVersion}/executions/1/retry`,
+                body: {
+                  loadWorkflow: true
+                }
+              },
+              {
+                description: 'Retry execution with original workflow',
+                url: `/api/${apiVersion}/executions/1/retry`,
+                body: {
+                  loadWorkflow: false
+                }
+              }
+            ]
+          },
+          credentials: {
+            method: 'GET',
+            path: `/api/${apiVersion}/credentials`,
+            description: 'Get all stored credentials',
+            response: {
+              type: 'array',
+              description: 'Array of credential objects'
+            }
+          },
+          tags: {
+            method: 'GET',
+            path: `/api/${apiVersion}/tags`,
+            description: 'Get all workflow tags',
+            response: {
+              type: 'array',
+              description: 'Array of tag objects'
+            }
+          },
+          currentUser: {
+            method: 'GET',
+            path: `/api/${apiVersion}/users/me`,
+            description: 'Get current user information',
+            response: {
+              type: 'object',
+              description: 'Current user object with email and other details'
+            }
+          },
+          audit: {
+            method: 'POST',
+            path: `/api/${apiVersion}/audit`,
+            description: 'Create an audit request with configurable options',
+            parameters: {
+              body: {
+                additionalOptions: {
+                  type: 'object',
+                  properties: {
+                    daysAbandonedWorkflow: {
+                      type: 'number',
+                      description: 'Number of days to check for abandoned workflows',
+                      example: 1
+                    },
+                    categories: {
+                      type: 'string[]',
+                      description: 'Categories to include in the audit',
+                      example: '["credentials", "workflows"]'
+                    }
+                  }
+                }
+              }
+            },
+            examples: [
+              {
+                description: 'Create audit for credentials category',
+                url: `/api/${apiVersion}/audit`,
+                body: {
+                  additionalOptions: {
+                    daysAbandonedWorkflow: 1,
+                    categories: ["credentials"]
+                  }
+                }
+              }
+            ]
+          }
+        },
+        authentication: {
+          type: 'Bearer Token',
+          description: 'Use X-N8N-API-KEY header with service account API key',
+          header: 'X-N8N-API-KEY',
+          example: 'X-N8N-API-KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'
+        },
+        usage: {
+          javascript: {
+            description: 'Using N8nService in JavaScript/TypeScript',
+            example: `
+// Create and initialize service
+const { createN8nService } = await import('./agent/services/N8nService');
+const n8nService = await createN8nService();
+
+// Get active workflows with pagination
+const workflows = await n8nService.getWorkflows({
+  active: true,
+  limit: 50,
+  offset: 0
+});
+
+// Get workflow executions
+const executions = await n8nService.getExecutions();
+
+// Check service health
+const isHealthy = await n8nService.healthCheck();
+            `
+          },
+          curl: {
+            description: 'Using cURL commands',
+            examples: [
+              {
+                description: 'Get active workflows',
+                command: `curl -X 'GET' '${baseUrl}/api/${apiVersion}/workflows?active=true&limit=10' -H 'X-N8N-API-KEY: YOUR_API_KEY'`
+              },
+              {
+                description: 'Get workflow executions',
+                command: `curl -X 'GET' '${baseUrl}/api/${apiVersion}/executions' -H 'X-N8N-API-KEY: YOUR_API_KEY'`
+              },
+              {
+                description: 'Check service health',
+                command: `curl -X 'GET' '${baseUrl}/healthz'`
+              }
+            ]
+          }
+        },
+        notes: [
+          'All API endpoints require authentication via X-N8N-API-KEY header',
+          'Service account API key is automatically generated during Sulla setup',
+          'Workflows endpoint supports advanced filtering and pagination',
+          'All responses follow n8n API v1 format with data wrapper',
+          'Rate limiting may apply depending on n8n configuration'
+        ]
+      };
+
+      res.setHeader('Content-Type', 'application/json');
+      res.json(docs);
     } catch (error) {
-      console.error('[ChatCompletionsAPI] Error handling moderations request:', error);
+      console.error('[ChatCompletionsAPI] Error handling API docs request:', error);
       res.status(500).json({
         error: {
           message: 'Internal server error',
