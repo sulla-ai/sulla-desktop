@@ -40,90 +40,43 @@
                 </div>
               </div>
               <div class="relative lg:static xl:pl-10">
-                <div
-                  class="absolute inset-x-[-50vw] -top-32 -bottom-48 mask-[linear-gradient(transparent,white,white)] lg:-top-32 lg:right-0 lg:-bottom-32 lg:left-[calc(50%+14rem)] lg:mask-none dark:mask-[linear-gradient(transparent,white,transparent)] lg:dark:mask-[linear-gradient(white,white,transparent)]">
-                  <svg aria-hidden="true" viewBox="0 0 668 1069" width="668" height="1069" fill="none"
-                    class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 lg:left-0 lg:translate-x-0 lg:translate-y-[-60%]">
-                    <defs>
-                      <clipPath id="clip">
-                        <path fill="#fff" transform="rotate(-180 334 534.5)" d="M0 0h668v1069H0z" />
-                      </clipPath>
-                    </defs>
-                    <g opacity="0.45" clip-path="url(#clip)" stroke-width="3.5">
-                      <!-- Vertical lines (dendrites/axons) with more density -->
-                      <path opacity="0.35"
-                        d="M80 50v969 M140 50v969 M200 50v969 M260 50v969 M320 50v969 M380 50v969 M440 50v969 M500 50v969 M560 50v969 M620 50v969"
-                        stroke="#334155" />
+                <div class="flex flex-col gap-4">
+                  <div class="relative">
+                    <svg aria-hidden="true" viewBox="0 0 20 20" class="pointer-events-none absolute top-1/2 left-4 h-5 w-5 -translate-y-1/2 fill-slate-400 dark:fill-slate-500">
+                      <path d="M16.293 17.707a1 1 0 0 0 1.414-1.414l-1.414 1.414ZM9 14a5 5 0 0 1-5-5H2a7 7 0 0 0 7 7v-2ZM4 9a5 5 0 0 1 5-5V2a7 7 0 0 0-7 7h2Zm5-5a5 5 0 0 1 5 5h2a7 7 0 0 0-7-7v2Zm8.707 12.293-3.757-3.757-1.414 1.414 3.757 3.757 1.414-1.414ZM14 9a4.98 4.98 0 0 1-1.464 3.536l1.414 1.414A6.98 6.98 0 0 0 16 9h-2Zm-1.464 3.536A4.98 4.98 0 0 1 9 14v2a6.98 6.98 0 0 0 4.95-2.05l-1.414-1.414Z"></path>
+                    </svg>
 
-                      <!-- More organic curved connections + branches -->
-                      <path stroke="#0EA5E9" stroke-opacity="0.6" d="
-                        M100 150 Q180 220 120 320 Q80 380 160 450
-                        M200 180 L280 250 Q340 300 260 420 L320 480
-                        M400 120 Q480 200 420 340 Q380 420 460 500
-                        M520 180 Q580 260 540 380 Q600 440 520 520
-                        M300 600 Q380 680 320 780 Q280 840 360 920
-                        M180 700 L260 780 Q320 850 240 950
-                        M500 650 Q560 720 500 820 Q460 880 540 980
-                      " />
-
-                      <!-- Nodes: more, varied sizes, glowing highlights -->
-                      <circle cx="120" cy="180" r="12" fill="#0EA5E9" fill-opacity="0.5" stroke="#0EA5E9" />
-                      <circle cx="280" cy="320" r="14" fill="#1E293B" stroke="#334155" />
-                      <circle cx="420" cy="450" r="10" fill="#0EA5E9" fill-opacity="0.55" stroke="#0EA5E9" />
-                      <circle cx="180" cy="520" r="11" fill="#1E293B" stroke="#334155" />
-                      <circle cx="340" cy="680" r="15" fill="#0EA5E9" fill-opacity="0.6" stroke="#0EA5E9" />
-                      <circle cx="500" cy="750" r="13" fill="#1E293B" stroke="#334155" />
-                      <circle cx="260" cy="820" r="9" fill="#0EA5E9" fill-opacity="0.5" stroke="#0EA5E9" />
-                      <circle cx="380" cy="900" r="12" fill="#1E293B" stroke="#334155" />
-                      <circle cx="540" cy="950" r="14" fill="#0EA5E9" fill-opacity="0.65" stroke="#0EA5E9" />
-
-                      <!-- Extra subtle connections for depth -->
-                      <path stroke="#334155" stroke-opacity="0.4" d="
-                        M140 300 Q220 380 180 480
-                        M360 400 L440 480 Q500 540 420 620
-                        M220 550 Q300 620 240 720
-                        M480 700 Q560 780 500 880
-                      " />
-                    </g>
-                  </svg>
-                </div>
-                <div class="relative">
-                  <img alt="" width="530" height="530" decoding="async" data-nimg="1" class="absolute -top-64 -right-64"
-                    style="color:transparent" :src="splashUrl">
-                  <img alt="" width="567" height="567" decoding="async" data-nimg="1"
-                    class="absolute -right-44 -bottom-40" style="color:transparent" :src="splash2Url">
-                  <div
-                    class="absolute inset-0 rounded-2xl bg-linear-to-tr from-sky-300 via-sky-300/70 to-blue-300 opacity-10 blur-lg">
+                    <input
+                      v-model="searchInput"
+                      type="text"
+                      placeholder="Search knowledge base"
+                      class="h-11 w-full rounded-lg bg-white/95 pr-4 pl-12 text-sm text-slate-900 ring-1 ring-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-300/50 dark:bg-slate-800/75 dark:text-slate-100 dark:ring-white/5 dark:ring-inset"
+                      @keydown.enter="performSearch"
+                    >
+                    <kbd class="pointer-events-none absolute top-1/2 right-3 hidden -translate-y-1/2 font-medium text-slate-400 md:block dark:text-slate-500">
+                      <kbd class="font-sans">⌘</kbd><kbd class="font-sans">K</kbd>
+                    </kbd>
                   </div>
-                  <div
-                    class="absolute inset-0 rounded-2xl bg-linear-to-tr from-sky-300 via-sky-300/70 to-blue-300 opacity-10">
-                  </div>
-                  <div class="relative rounded-2xl bg-[#0A101F]/80 ring-1 ring-white/10 backdrop-blur-sm">
-                    <div
-                      class="absolute -top-px right-11 left-20 h-px bg-linear-to-r from-sky-300/0 via-sky-300/70 to-sky-300/0">
-                    </div>
-                    <div
-                      class="absolute right-20 -bottom-px left-11 h-px bg-linear-to-r from-blue-400/0 via-blue-400 to-blue-400/0">
-                    </div>
-                    <div class="pt-4 pl-4">
-                      <svg aria-hidden="true" viewBox="0 0 42 10" fill="none" class="h-2.5 w-auto stroke-slate-500/30">
-                        <circle cx="5" cy="5" r="4.5"></circle>
-                        <circle cx="21" cy="5" r="4.5"></circle>
-                        <circle cx="37" cy="5" r="4.5"></circle>
-                      </svg>
-                      <div class="mt-4 flex space-x-2 text-xs">
-                        <div class="flex h-6 rounded-full bg-linear-to-r from-sky-400/30 via-sky-400 to-sky-400/30 p-px font-medium text-sky-300">
-                          <div class="flex items-center rounded-full px-2.5 bg-slate-800">sulla.config.js</div>
-                        </div>
-                        <div class="flex h-6 rounded-full text-slate-500">
-                          <div class="flex items-center rounded-full px-2.5">awareness.json</div>
-                        </div>
-                      </div>
-                      <div class="mt-6 flex items-start px-1 text-sm">
-                        <div aria-hidden="true" class="border-r border-slate-300/5 pr-4 font-mono text-slate-600 select-none">01<br>02<br>03<br>04<br>05<br>06<br>07<br></div>
-                        <pre class="prism-code language-javascript flex overflow-x-auto pb-6"><code class="px-4"><div class="token-line"><span class="token comment">// sulla.config.js</span></div><div class="token-line"><span class="token keyword module">export</span><span class="token plain"> </span><span class="token keyword module">default</span><span class="token plain"> </span><span class="token punctuation">{</span><span class="token plain"></span></div><div class="token-line"><span class="token plain">  </span><span class="token literal-property property">soul</span><span class="token operator">:</span><span class="token plain"> </span><span class="token string">'curious_engineer'</span><span class="token punctuation">,</span><span class="token plain"></span></div><div class="token-line"><span class="token plain">  </span><span class="token literal-property property">memory</span><span class="token operator">:</span><span class="token plain"> </span><span class="token punctuation">{</span><span class="token plain"> </span><span class="token literal-property property">provider</span><span class="token operator">:</span><span class="token plain"> </span><span class="token string">'chroma'</span><span class="token punctuation">,</span><span class="token plain"> </span><span class="token literal-property property">persist</span><span class="token operator">:</span><span class="token plain"> </span><span class="token boolean">true</span><span class="token plain"> </span><span class="token punctuation">}</span><span class="token punctuation">,</span><span class="token plain"></span></div><div class="token-line"><span class="token plain">  </span><span class="token literal-property property">memoriesStored</span><span class="token operator">:</span><span class="token plain"> </span><span class="token number">47</span><span class="token punctuation">,</span><span class="token plain"></span></div><div class="token-line"><span class="token plain">  </span><span class="token literal-property property">lastDream</span><span class="token operator">:</span><span class="token plain"> </span><span class="token string">'2026-02-02T03:00:00Z'</span><span class="token punctuation">,</span><span class="token plain"></span></div><div class="token-line"><span class="token punctuation">}</span></div></code></pre>
-                      </div>
-                    </div>
+
+                  <div class="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      class="flex h-6 rounded-full p-px text-xs font-medium"
+                      :class="activeCategory === null ? 'bg-linear-to-r from-sky-400/30 via-sky-400 to-sky-400/30 text-sky-300' : 'text-slate-500 bg-slate-800/60 ring-1 ring-white/5'"
+                      @click="selectCategory(null)"
+                    >
+                      <span class="flex items-center rounded-full px-2.5" :class="activeCategory === null ? 'bg-slate-800' : ''">All</span>
+                    </button>
+                    <button
+                      v-for="category in categories"
+                      :key="category"
+                      type="button"
+                      class="flex h-6 rounded-full p-px text-xs font-medium"
+                      :class="activeCategory === category ? 'bg-linear-to-r from-sky-400/30 via-sky-400 to-sky-400/30 text-sky-300' : 'text-slate-500 bg-slate-800/60 ring-1 ring-white/5'"
+                      @click="selectCategory(category)"
+                    >
+                      <span class="flex items-center rounded-full px-2.5" :class="activeCategory === category ? 'bg-slate-800' : ''">{{ category }}</span>
+                    </button>
                   </div>
                 </div>
               </div>
@@ -163,7 +116,32 @@
           </div>
 
           <div class="max-w-2xl min-w-0 flex-auto px-4 py-16 lg:max-w-none lg:pr-0 lg:pl-8 xl:px-16">
-            <article v-if="activePage">
+            <div v-if="searchResults.length > 0" class="space-y-6">
+              <div v-for="article in paginatedResults" :key="article.slug" class="blog-post border-b border-slate-200 pb-6 dark:border-slate-700">
+                <h2 class="text-2xl font-bold text-slate-900 dark:text-white">{{ article.title }}</h2>
+                <p class="text-slate-600 dark:text-slate-300 mt-2">{{ article.excerpt }}</p>
+                <button @click="selectPage(article.slug)" class="mt-4 px-4 py-2 bg-sky-500 text-white rounded hover:bg-sky-600">Read more</button>
+              </div>
+              <div class="flex justify-between items-center mt-8" v-if="searchResults.length > pageSize">
+                <button @click="page = Math.max(1, page - 1)" :disabled="page <= 1" class="px-4 py-2 bg-gray-300 dark:bg-gray-700 rounded disabled:opacity-50">Previous</button>
+                <span class="text-slate-700 dark:text-slate-300">Page {{ page }} of {{ Math.ceil(searchResults.length / pageSize) }}</span>
+                <button @click="page = Math.min(Math.ceil(searchResults.length / pageSize), page + 1)" :disabled="page >= Math.ceil(searchResults.length / pageSize)" class="px-4 py-2 bg-gray-300 dark:bg-gray-700 rounded disabled:opacity-50">Next</button>
+              </div>
+            </div>
+            <div v-else-if="categoryTitle" class="space-y-6">
+              <h1 class="text-3xl font-bold text-slate-900 dark:text-white">{{ categoryTitle === '' ? 'All Articles' : `Articles in ${categoryTitle}` }}</h1>
+              <div v-for="article in paginatedResults" :key="article.slug" class="blog-post border-b border-slate-200 pb-6 dark:border-slate-700">
+                <h2 class="text-2xl font-bold text-slate-900 dark:text-white">{{ article.title }}</h2>
+                <p class="text-slate-600 dark:text-slate-300 mt-2">{{ article.excerpt }}</p>
+                <button @click="selectPage(article.slug)" class="mt-4 px-4 py-2 bg-sky-500 text-white rounded hover:bg-sky-600">Read more</button>
+              </div>
+              <div class="flex justify-between items-center mt-8" v-if="filteredPages.length > pageSize">
+                <button @click="page = Math.max(1, page - 1)" :disabled="page <= 1" class="px-4 py-2 bg-gray-300 dark:bg-gray-700 rounded disabled:opacity-50">Previous</button>
+                <span class="text-slate-700 dark:text-slate-300">Page {{ page }} of {{ Math.ceil(filteredPages.length / pageSize) }}</span>
+                <button @click="page = Math.min(Math.ceil(filteredPages.length / pageSize), page + 1)" :disabled="page >= Math.ceil(filteredPages.length / pageSize)" class="px-4 py-2 bg-gray-300 dark:bg-gray-700 rounded disabled:opacity-50">Next</button>
+              </div>
+            </div>
+            <article v-else-if="activePage">
               <header class="mb-9 space-y-1">
                 <p class="font-display text-sm font-medium text-sky-500">{{ (activePage.tags && activePage.tags[0]) || 'Memory' }}</p>
                 <h1 class="font-display text-3xl tracking-tight text-slate-900 dark:text-white">{{ activePage.title }}</h1>
@@ -250,6 +228,12 @@ import type { ArticleListItem, ArticleWithContent } from '../agent/database/regi
 const THEME_STORAGE_KEY = 'agentTheme';
 const isDark = ref(false);
 const query = ref('');
+const activeCategory = ref<string | null>(null);
+const searchInput = ref('');
+const page = ref(1);
+const pageSize = 10;
+const categoryTitle = ref('');
+const searchResults = ref<ArticleListItem[]>([]);
 
 const splashUrl = new URL('./assets/splash.png', import.meta.url).toString();
 const splash2Url = new URL('./assets/splash2.png', import.meta.url).toString();
@@ -335,8 +319,23 @@ const tableOfContents = computed<TocHeading[]>(() => {
 
 const filteredPages = computed(() => {
   const q = query.value.trim().toLowerCase();
-  if (!q) return pages.value;
-  return pages.value.filter(p => (p.title || '').toLowerCase().includes(q));
+  const category = activeCategory.value;
+
+  return pages.value.filter(p => {
+    if (category && p.tags && !p.tags.includes(category)) {
+      return false;
+    }
+
+    if (!q) return true;
+
+    return (p.title || '').toLowerCase().includes(q);
+  });
+});
+
+const paginatedResults = computed(() => {
+  const items = searchResults.value.length > 0 ? searchResults.value : filteredPages.value;
+  const start = (page.value - 1) * pageSize;
+  return items.slice(start, start + pageSize);
 });
 
 const sortedPagesByDate = computed(() => {
@@ -366,6 +365,41 @@ const prevPage = computed<any | null>(() => {
 });
 
 const nav = ref<{ tag: string; pages: ArticleListItem[] }[]>([]);
+
+const categories = computed(() => {
+  return nav.value.map(n => n.tag);
+});
+
+const performSearch = async () => {
+  const q = searchInput.value.trim();
+  query.value = q;
+  activeCategory.value = null;
+  categoryTitle.value = '';
+  activePage.value = null;
+  page.value = 1;
+  if (q) {
+    try {
+      console.log(`[Vue] Performing search for: ${q}`);
+      const results = await articlesRegistry.search({ query: q, limit: 100 });
+      searchResults.value = results.items;
+      console.log(`[Vue] Search results:`, searchResults.value.length);
+    } catch (err) {
+      console.error('[Vue] Search failed:', err);
+      searchResults.value = [];
+    }
+  } else {
+    searchResults.value = [];
+  }
+};
+
+const selectCategory = (category: string | null) => {
+  activeCategory.value = category;
+  query.value = '';
+  searchInput.value = '';
+  categoryTitle.value = category || '';
+  activePage.value = null;
+  page.value = 1;
+};
 
 const selectPage = async (slug: string) => {
   const id = String(slug || '').trim();
