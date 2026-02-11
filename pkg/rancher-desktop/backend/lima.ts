@@ -2206,7 +2206,7 @@ export default class LimaBackend extends events.EventEmitter implements VMBacken
    * Runs docker-compose up -d to start all Sulla services in detached mode.
    */
   private async applySullaCompose(): Promise<void> {
-    await this.execCommand({ root: true }, 'docker-compose', '-f', '/tmp/sulla-docker-compose.yml', 'up', '-d');
+    await this.execCommand({ root: true }, 'docker-compose', '-f', '/tmp/sulla-docker-compose.yml', '-p', 'sulla', 'up', '-d');
   }
 
   /**
