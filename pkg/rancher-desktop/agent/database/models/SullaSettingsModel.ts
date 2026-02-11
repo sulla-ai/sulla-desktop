@@ -68,7 +68,7 @@ export class SullaSettingsModel extends BaseModel<SettingsAttributes> {
    * @returns 
    */
   public static async bootstrap(): Promise<void> {
-    if (this.isReady) return; // run once
+    if (this.isReady) return;
 
     console.log('SullaSettingsModel: full bootstrap starting');
 
@@ -77,21 +77,24 @@ export class SullaSettingsModel extends BaseModel<SettingsAttributes> {
     await this.initialize();
     this.isReady = true;
 
-    // Read from installation lock file and sync to persistent storage
-    try {
-      const content = await fs.readFile(this.getFallbackFilePath(), 'utf8');
-      const data = JSON.parse(content) as Record<string, any>;
-      for (const [property, value] of Object.entries(data)) {
-        await this.setSetting(property, value);
+    if (!(await this.getSetting('sullaInstalled', false))) {
+      // Read from installation lock file and sync to persistent storage
+      try {
+        const content = await fs.readFile(this.getFallbackFilePath(), 'utf8');
+        const data = JSON.parse(content) as Record<string, any>;
+        for (const [property, value] of Object.entries(data)) {
+          await this.setSetting(property, value);
+        }
+        console.log(`SullaSettingsModel: synced ${Object.keys(data).length} settings from lock file`);
+      } catch (err) {
+        console.log('SullaSettingsModel: no lock file to sync or error reading:', err);
       }
-      console.log(`SullaSettingsModel: synced ${Object.keys(data).length} settings from lock file`);
-    } catch (err) {
-      console.log('SullaSettingsModel: no lock file to sync or error reading:', err);
+
+      await this.setSetting('sullaInstalled', true);
+
+      // do not delete the fallback file. it acts as our installation lock file
+      console.log('SullaSettingsModel: full bootstrap complete');
     }
-
-    // do not delete the fallback file. it acts as our installation lock file
-
-    console.log('SullaSettingsModel: full bootstrap complete');
   }
 
   // ──────────────────────────────────────────────

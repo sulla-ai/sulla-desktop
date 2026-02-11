@@ -11,6 +11,7 @@ type ModelOption =
 export class AgentModelSelectorController {
   readonly showModelMenu = ref(false);
   readonly modelMenuEl = ref<HTMLElement | null>(null);
+  readonly buttonRef = ref<HTMLElement | null>(null);
   readonly loadingLocalModels = ref(false);
 
   private readonly installedLocalModels = ref<string[]>([]);
@@ -69,6 +70,7 @@ export class AgentModelSelectorController {
   async start(): Promise<void> {
     document.addEventListener('mousedown', this.handleDocumentClick);
 
+    await this.loadRemoteSettings();
     await this.refreshInstalledLocalModels();
   }
 
@@ -125,9 +127,18 @@ export class AgentModelSelectorController {
         SullaSettingsModel.set('remoteApiKey', this.remoteApiKey.value);
 
       }
+
+      // Emit event for other windows to update
+      ipcRenderer.send('model-changed', option.type === 'local' ? { model: option.value, type: 'local' } : { model: option.value, type: 'remote', provider: option.provider });
     } finally {
       this.showModelMenu.value = false;
     }
+  }
+
+  private async loadRemoteSettings(): Promise<void> {
+    this.remoteProvider.value = await SullaSettingsModel.get('remoteProvider', '');
+    this.remoteModel.value = await SullaSettingsModel.get('remoteModel', '');
+    this.remoteApiKey.value = await SullaSettingsModel.get('remoteApiKey', '');
   }
 
   private readonly handleDocumentClick = (ev: MouseEvent) => {
@@ -137,6 +148,10 @@ export class AgentModelSelectorController {
     const container = this.modelMenuEl.value;
 
     if (!container) {
+      return;
+    }
+    // Don't hide if clicking on the toggle button
+    if (ev.target === this.buttonRef.value || this.buttonRef.value?.contains(ev.target as Node)) {
       return;
     }
     if (ev.target instanceof Node && container.contains(ev.target)) {

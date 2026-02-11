@@ -2,6 +2,7 @@
 import { defineComponent } from 'vue';
 
 import { ipcRenderer } from '@pkg/utils/ipcRenderer';
+import { IpcRendererEvent } from 'electron';
 
 // Import soul prompt from TypeScript file
 import { soulPrompt } from '../agent/prompts/soul';
@@ -308,6 +309,9 @@ export default defineComponent({
       this.activationError = `Failed to save settings: ${error?.message || 'Unknown error'}`;
     });
 
+    // Listen for model changes from other windows
+    ipcRenderer.on('model-changed', this.handleModelChanged);
+
     // Load all settings from database
     this.soulPrompt = await SullaSettingsModel.get('soulPrompt', soulPrompt);
     this.heartbeatPrompt = await SullaSettingsModel.get('heartbeatPrompt', heartbeatPrompt);
@@ -342,6 +346,7 @@ export default defineComponent({
     }
     // Clean up IPC listeners
     ipcRenderer.removeAllListeners('settings-write-error');
+    ipcRenderer.removeAllListeners('model-changed');
   },
 
   methods: {
@@ -620,6 +625,9 @@ export default defineComponent({
         this.activeMode = 'local';
         this.activeModel = this.pendingModel;
         console.log(`[LM Settings] Local model activated: ${this.pendingModel}`);
+
+        // Emit event for other windows to update
+        ipcRenderer.send('model-changed', { model: this.pendingModel, type: 'local' });
       } catch (err) {
         this.activationError = 'Failed to connect to Ollama. Is the service running?';
         console.error('Failed to activate local model:', err);
@@ -703,6 +711,9 @@ export default defineComponent({
 
         this.activeMode = 'remote';
         console.log(`[LM Settings] Remote model activated: ${this.selectedProvider}/${this.selectedRemoteModel}`);
+
+        // Emit event for other windows to update
+        ipcRenderer.send('model-changed', { model: this.selectedRemoteModel, type: 'remote', provider: this.selectedProvider });
       } catch (err) {
         this.activationError = 'Failed to save remote settings.';
         console.error('Failed to activate remote model:', err);
@@ -806,6 +817,17 @@ export default defineComponent({
 
     closeWindow() {
       window.close();
+    },
+
+    // Handle model changes from other windows
+    handleModelChanged(event: IpcRendererEvent, data: { model: string; type: 'local' } | { model: string; type: 'remote'; provider: string }) {
+      this.activeModel = data.model;
+      this.activeMode = data.type;
+      if (data.type === 'remote' && data.provider) {
+        this.selectedProvider = data.provider;
+        this.selectedRemoteModel = data.model;
+      }
+      this.pendingModel = this.activeModel;
     },
 
     // Database test methods
@@ -1109,36 +1131,77 @@ export default defineComponent({
       this.runningN8nTest = true;
       this.n8nTestResult = null;
 
+      const n8nUrl = 'http://127.0.0.1:30119';
+      const healthUrl = `${n8nUrl}/healthz`;
+      const apiUrl = `${n8nUrl}/rest/settings`;
+
+      console.log('[N8n Test] Starting N8n service test');
+      console.log('[N8n Test] N8n URL:', n8nUrl);
+      console.log('[N8n Test] Health URL:', healthUrl);
+      console.log('[N8n Test] API URL:', apiUrl);
+
       try {
-        const n8nService = new N8nService();
+        // First, check if N8n service is accessible via health check
+        console.log('[N8n Test] Testing health endpoint...');
+        const healthResponse = await fetch(healthUrl, {
+          method: 'GET',
+          signal: AbortSignal.timeout(5000),
+        });
 
-        // Print the configured password for debugging
-        const { getSettings } = await import('../config/settingsImpl');
-        const settings = getSettings();
-        console.log('Sulla Service Password:', settings.experimental.sullaServicePassword);
+        console.log('[N8n Test] Health response status:', healthResponse.status);
+        console.log('[N8n Test] Health response ok:', healthResponse.ok);
 
-        // Test health check
-        const healthy = await n8nService.healthCheck();
-        if (!healthy) {
-          throw new Error('N8n service is not accessible');
+        if (!healthResponse.ok) {
+          throw new Error(`Health check failed: HTTP ${healthResponse.status}`);
         }
 
-        // Test getting workflows
-        const workflows = await n8nService.getWorkflows();
-        this.n8nTestResult = {
-          success: true,
-          message: 'N8n service is accessible and returned workflows.',
-          data: { workflowCount: workflows.length }
-        };
-      } catch (error) {
-        this.n8nTestResult = {
-          success: false,
-          message: `N8n service test failed: ${error instanceof Error ? error.message : String(error)}`
-        };
+        console.log('[N8n Test] Health check passed, service is accessible');
+
+        // Service is accessible, now test API with service account key
+        const apiKey = await SullaSettingsModel.get('serviceAccountApiKey', '');
+        console.log('[N8n Test] Service account API key loaded:', apiKey ? 'YES' : 'NO');
+
+        if (!apiKey) {
+          throw new Error('Service account API key not found. Please restart Sulla to generate it.');
+        }
+
+        console.log('[N8n Test] Testing API endpoint with auth...');
+        const apiResponse = await fetch(apiUrl, {
+          method: 'GET',
+          headers: {
+            'X-N8N-API-KEY': apiKey,
+          },
+          signal: AbortSignal.timeout(5000),
+        });
+
+        console.log('[N8n Test] API response status:', apiResponse.status);
+        console.log('[N8n Test] API response ok:', apiResponse.ok);
+
+        if (!apiResponse.ok) {
+          const errorText = await apiResponse.text();
+          console.log('[N8n Test] API error response:', errorText);
+          throw new Error(`API access failed: HTTP ${apiResponse.status} - ${errorText}`);
+        }
+
+        const data = await apiResponse.json();
+        console.log('[N8n Test] API response data:', data);
+        this.n8nTestResult = { success: true, message: 'N8n service is accessible and API key is valid!', data };
+      } catch (error: unknown) {
+        const err = error instanceof Error ? error : new Error(String(error));
+        console.log('[N8n Test] Error caught:', err);
+        console.log('[N8n Test] Error name:', err.name);
+        console.log('[N8n Test] Error message:', err.message);
+
+        if (err.name === 'AbortError') {
+          this.n8nTestResult = { success: false, message: 'N8n service test failed: Service timed out (not accessible)' };
+        } else {
+          this.n8nTestResult = { success: false, message: `N8n service test failed: ${err.message}` };
+        }
       } finally {
         this.runningN8nTest = false;
+        console.log('[N8n Test] Test completed');
       }
-    }
+    },
   },
 });
 </script>

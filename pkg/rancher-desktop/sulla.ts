@@ -26,6 +26,7 @@ export async function initiateWindowContext(): Promise<void> {
         const fallbackPath = require('path').join(userDataPath, 'sulla-settings-fallback.json');
         SullaSettingsModel.setFallbackFilePath(fallbackPath);
         console.log('[WindowContext] Fallback path set to:', fallbackPath);
+
     } catch (error) {
         console.error('[WindowContext] Failed to initialize settings:', error);
     }

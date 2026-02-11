@@ -254,6 +254,7 @@
                             <div class="relative mb-0.5" ref="modelSelector.modelMenuEl">
                             <button
                               type="button"
+                              ref="modelSelector.buttonRef"
                               class="flex h-9 shrink-0 items-center gap-2 rounded-full px-2.5 text-[#0d0d0d] hover:bg-[#f0f0f0] disabled:opacity-60 dark:text-white dark:hover:bg-white/10"
                               aria-label="Model select"
                               :disabled="showOverlay"
@@ -577,6 +578,7 @@ import { ChatInterface } from './agent/ChatInterface';
 import { FrontendGraphWebSocketService } from '@pkg/agent/services/FrontendGraphWebSocketService';
 import { AgentModelSelectorController } from './agent/AgentModelSelectorController';
 import { getAgentPersonaRegistry, type ChatMessage } from '@pkg/agent';
+import { ipcRenderer } from '@pkg/utils/ipcRenderer';
 import './assets/AgentModelSelector.css';
 import './agent/personas/persona-profiles.css';
 
@@ -748,6 +750,11 @@ const loading = computed<boolean>(() => {
   return agent.loading;
 });
 
+const handleModelChanged = (event: Electron.IpcRendererEvent, data: { model: string; type: 'local' } | { model: string; type: 'remote'; provider: string }) => {
+  modelName.value = data.model;
+  modelMode.value = data.type;
+};
+
 // Track expanded tool cards
 const expandedToolCards = ref<Set<string>>(new Set());
 
@@ -868,6 +875,9 @@ onMounted(async () => {
   await settingsController.start();
 
   await modelSelector.start();
+
+  // Listen for model changes from other windows
+  ipcRenderer.on('model-changed', handleModelChanged);
 
   // Start listening on each agent's persona service
   registry.state.agents.forEach((agent: { agentId: string }) => {

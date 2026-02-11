@@ -105,11 +105,11 @@ export interface IpcMainEvents {
 
   // #region Snapshots
   snapshot:          (event: SnapshotEvent | null) => void;
-  'snapshot/cancel': () => void;
+  'snapshot-cancel': () => void;
   // #endregion
 
   // #region Agent Configuration
-  'agent-config-updated': (agentConfig: any) => void;
+  'model-changed': (payload: { model: string; type: 'local' } | { model: string; type: 'remote'; provider: string }) => void;
   // #endregion
 }
 
@@ -159,6 +159,7 @@ export interface IpcMainInvokeEvents {
   // #region Snapshots
   'show-snapshots-confirm-dialog':  (options: { window: Partial<Electron.MessageBoxOptions>, format: SnapshotDialog }) => any;
   'show-snapshots-blocking-dialog': (options: { window: Partial<Electron.MessageBoxOptions>, format: SnapshotDialog }) => any;
+  'snapshot-cancel': () => void;
   // #endregion
 }
 
@@ -272,7 +273,10 @@ export interface IpcRendererEvents {
   // #endregion
 
   // #region Snapshots
-  snapshot:          (event: SnapshotEvent | null) => void;
-  'snapshot/cancel': () => void;
+  'snapshot-cancel': () => void;
+  // #endregion
+
+  // #region Agent Configuration
+  'model-changed': (payload: { model: string; type: 'local' } | { model: string; type: 'remote'; provider: string }) => void;
   // #endregion
 }

@@ -769,6 +769,13 @@ ipcMainProxy.handle('start-backend' as any, () => {
 
 await onMainProxyLoad(ipcMainProxy);
 
+ipcMainProxy.on('model-changed', (_event, data) => {
+  // Relay the model-changed event to all open windows
+  Electron.BrowserWindow.getAllWindows().forEach((win) => {
+    win.webContents.send('model-changed', data);
+  });
+});
+
 ipcMainProxy.handle('start-sulla-custom-env' as any, async() => {
   console.log('Starting Sulla custom environment...');
   
@@ -1084,8 +1091,8 @@ ipcMainProxy.on('snapshot', (event, args) => {
   event.reply('snapshot', args);
 });
 
-ipcMainProxy.on('snapshot/cancel', () => {
-  window.send('snapshot/cancel');
+ipcMainProxy.on('snapshot-cancel', () => {
+  window.send('snapshot-cancel');
 });
 
 ipcMainProxy.on('dialog/error', (event, args) => {
