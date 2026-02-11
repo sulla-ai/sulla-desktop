@@ -1,11 +1,12 @@
-# Sulla Desktop - Default Kubernetes Deployments
-# These deployments are applied automatically when Sulla Desktop starts
+# Sulla Desktop - Reliable Kubernetes Deployments
+# Applied automatically on startup - improved reliability
 ---
 apiVersion: v1
 kind: Namespace
 metadata:
   name: sulla
 ---
+# Ollama
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -23,6 +24,8 @@ spec:
       labels:
         app: ollama
     spec:
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 30
       containers:
       - name: ollama
         image: ollama/ollama:latest
@@ -35,11 +38,25 @@ spec:
           name: ollama-data
         resources:
           limits:
-            memory: "4Gi"
-            cpu: "2000m"
+            memory: "6Gi"
+            cpu: "3000m"
           requests:
-            memory: "1Gi"
-            cpu: "500m"
+            memory: "2Gi"
+            cpu: "1000m"
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 11434
+          initialDelaySeconds: 45
+          periodSeconds: 10
+          failureThreshold: 12
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 11434
+          initialDelaySeconds: 90
+          periodSeconds: 15
+          failureThreshold: 8
       volumes:
       - name: ollama-data
         hostPath:
@@ -60,7 +77,7 @@ spec:
     nodePort: 30114
   type: NodePort
 ---
-# Chroma Vector DB for persistent memory
+# Chroma
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -78,6 +95,8 @@ spec:
       labels:
         app: chroma
     spec:
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 30
       containers:
       - name: chroma
         image: chromadb/chroma:latest
@@ -92,24 +111,32 @@ spec:
           value: "8000"
         - name: ANONYMIZED_TELEMETRY
           value: "FALSE"
-        - name: PERSIST_DIRECTORY   # explicit (optional but clearer)
+        - name: PERSIST_DIRECTORY
           value: "/chroma/chroma"
         volumeMounts:
         - mountPath: /chroma/chroma
           name: chroma-data
         resources:
           limits:
-            memory: "1Gi"
-            cpu: "500m"
+            memory: "2Gi"
+            cpu: "1000m"
           requests:
-            memory: "256Mi"
-            cpu: "100m"
-        readinessProbe:            # added — prevents pod ready before Chroma boots
+            memory: "512Mi"
+            cpu: "250m"
+        readinessProbe:
           httpGet:
             path: /api/v2/heartbeat
             port: 8000
-          initialDelaySeconds: 10
-          periodSeconds: 5
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          failureThreshold: 12
+        livenessProbe:
+          httpGet:
+            path: /api/v2/heartbeat
+            port: 8000
+          initialDelaySeconds: 60
+          periodSeconds: 15
+          failureThreshold: 8
       volumes:
       - name: chroma-data
         hostPath:
@@ -130,7 +157,7 @@ spec:
     nodePort: 30115
   type: NodePort
 ---
-# PostgreSQL for LangChain persistence
+# PostgreSQL
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -148,6 +175,8 @@ spec:
       labels:
         app: postgres
     spec:
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 30
       containers:
       - name: postgres
         image: postgres:16-alpine
@@ -169,11 +198,23 @@ spec:
           name: postgres-data
         resources:
           limits:
-            memory: "512Mi"
-            cpu: "500m"
+            memory: "1Gi"
+            cpu: "1000m"
           requests:
-            memory: "128Mi"
-            cpu: "100m"
+            memory: "256Mi"
+            cpu: "250m"
+        readinessProbe:
+          exec:
+            command: ["pg_isready", "-U", "sulla"]
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          failureThreshold: 12
+        livenessProbe:
+          exec:
+            command: ["pg_isready", "-U", "sulla"]
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          failureThreshold: 6
       volumes:
       - name: postgres-data
         hostPath:
@@ -194,7 +235,7 @@ spec:
     nodePort: 30116
   type: NodePort
 ---
-# Redis for LangChain caching and message broker
+# Redis
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -212,6 +253,8 @@ spec:
       labels:
         app: redis
     spec:
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 30
       containers:
       - name: redis
         image: redis:7-alpine
@@ -219,22 +262,30 @@ spec:
         ports:
         - containerPort: 6379
           hostPort: 30117
-        args:
-        - "--appendonly"
-        - !!str yes
-        - "--save"
-        - "60"
-        - "1"
+        command: ["redis-server"]
+        args: ["--appendonly", "yes", "--save", "60", "1"]
         volumeMounts:
         - mountPath: /data
           name: redis-data
         resources:
           limits:
-            memory: "256Mi"
-            cpu: "250m"
+            memory: "512Mi"
+            cpu: "500m"
           requests:
-            memory: "64Mi"
-            cpu: "50m"
+            memory: "128Mi"
+            cpu: "100m"
+        readinessProbe:
+          exec:
+            command: ["redis-cli", "ping"]
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          failureThreshold: 6
+        livenessProbe:
+          exec:
+            command: ["redis-cli", "ping"]
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          failureThreshold: 6
       volumes:
       - name: redis-data
         hostPath:
@@ -255,6 +306,7 @@ spec:
     nodePort: 30117
   type: NodePort
 ---
+# WebSocket Server
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -272,6 +324,8 @@ spec:
       labels:
         app: ws-server
     spec:
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 30
       containers:
       - name: ws
         image: byrdziak/sulla-websocket:latest
@@ -280,12 +334,23 @@ spec:
         - containerPort: 8080
         resources:
           limits:
-            memory: "128Mi"
-            cpu: "200m"
+            memory: "256Mi"
+            cpu: "500m"
           requests:
-            memory: "64Mi"
+            memory: "128Mi"
             cpu: "100m"
-      restartPolicy: Always
+        readinessProbe:
+          tcpSocket:
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          failureThreshold: 6
+        livenessProbe:
+          tcpSocket:
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          failureThreshold: 6
 ---
 apiVersion: v1
 kind: Service
@@ -301,6 +366,7 @@ spec:
     nodePort: 30118
   type: NodePort
 ---
+# n8n
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -318,17 +384,13 @@ spec:
       labels:
         app: n8n
     spec:
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 30
       automountServiceAccountToken: false
       containers:
       - name: n8n
         image: n8nio/n8n:latest
         imagePullPolicy: IfNotPresent
-        readinessProbe:
-          httpGet:
-            path: /healthz
-            port: 5678
-          initialDelaySeconds: 30
-          periodSeconds: 10
         ports:
         - containerPort: 5678
         env:
@@ -339,9 +401,9 @@ spec:
         - name: N8N_PROTOCOL
           value: "http"
         - name: WEBHOOK_URL
-          value: "http://localhost:30119/"           # adjust if you use ingress later
+          value: "http://localhost:30119/"
         - name: EXECUTIONS_MODE
-          value: "regular" # queue mode is for worker pods
+          value: "regular"
         - name: QUEUE_BULL_REDIS_HOST
           value: "redis"
         - name: QUEUE_BULL_REDIS_PORT
@@ -359,22 +421,36 @@ spec:
         - name: DB_POSTGRESDB_PASSWORD
           value: "sulla_dev_password"
         - name: N8N_ENCRYPTION_KEY
-          value: "changeMeToA32CharRandomString1234"   # ← must be ≥32 chars, use real secret in prod
+          value: "changeMeToA32CharRandomString1234"
         - name: N8N_BASIC_AUTH_ACTIVE
           value: "true"
         - name: N8N_BASIC_AUTH_USER
           value: "admin"
         - name: N8N_BASIC_AUTH_PASSWORD
-          value: "n8n_dev_password"                         # ← change this
+          value: "n8n_dev_password"
         - name: N8N_REST_API_ENABLED
           value: "true"
         resources:
           limits:
-            memory: "1Gi"
-            cpu: "1000m"
+            memory: "2Gi"
+            cpu: "1500m"
           requests:
-            memory: "512Mi"
-            cpu: "250m"
+            memory: "1Gi"
+            cpu: "500m"
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: 5678
+          initialDelaySeconds: 60
+          periodSeconds: 10
+          failureThreshold: 12
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 5678
+          initialDelaySeconds: 120
+          periodSeconds: 15
+          failureThreshold: 8
 ---
 apiVersion: v1
 kind: Service
