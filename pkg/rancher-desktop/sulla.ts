@@ -27,9 +27,12 @@ export async function initiateWindowContext(): Promise<void> {
         SullaSettingsModel.setFallbackFilePath(fallbackPath);
         console.log('[WindowContext] Fallback path set to:', fallbackPath);
 
+        await SullaSettingsModel.bootstrap();
     } catch (error) {
         console.error('[WindowContext] Failed to initialize settings:', error);
     }
+
+    
 }
 
 /**

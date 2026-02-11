@@ -69,6 +69,9 @@ export class SullaSettingsModel extends BaseModel<SettingsAttributes> {
    */
   public static async bootstrap(): Promise<void> {
     if (this.isReady) return;
+    if (!this.installationLockFile) {
+      throw new Error('Installation lock file not set for bootstrap');
+    }
 
     console.log('SullaSettingsModel: full bootstrap starting');
 
@@ -107,6 +110,7 @@ export class SullaSettingsModel extends BaseModel<SettingsAttributes> {
    */
   public static async initialize(): Promise<void> {
     const all = await this.all();
+    console.log('SullaSettingsModel: initializing with', all.length, 'settings');
     if (all.length === 0) return;
 
     const pipeline = redisClient.pipeline();
