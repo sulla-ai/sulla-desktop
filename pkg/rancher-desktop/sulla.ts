@@ -94,7 +94,7 @@ export async function instantiateSullaStart(): Promise<void> {
 
 
     } catch (ex: any) {
-        console.error('[Background] Failed to initialize cron services:', ex);
+        console.error('[Background] Failed to initialize Sulla:', ex);
     }
 }
 
