@@ -10,10 +10,27 @@ default:
 
 # Clean build artifacts only (preserves VM and cached images)
 clean:
-    @echo "Cleaning build artifacts..."
+    @echo "Cleaning up for fresh install (this will wipe VM and cached images)..."
+    rm -rf node_modules
+    rm -rf .yarn/cache
+    rm -rf .yarn/install-state.gz
     rm -rf dist
+    rm -rf ~/Library/Preferences/rancher-desktop
+    rm -rf ~/Library/Caches/rancher-desktop
+    rm -rf ~/Library/Logs/rancher-desktop
+    rm -rf ~/.rd
+    rm -rf ~/.kube/config
+    rm -rf resources/cert-manager*
+    rm -rf resources/darwin/lima
     rm -rf resources/darwin/_output
-    @echo "Clean complete."
+    rm -f resources/darwin/alpine-lima-*.iso
+    rm -rf resources/host/
+    rm -rf resources/preload.js*
+    rm -rf resources/rancher-dashboard/
+    rm -rf resources/rdx-proxy.tar
+    rm -rf resources/spin-operator*
+    rm -rf resources/win32/
+    @echo "Cleanup complete. Run 'just build' for a fresh install."
 
 # Clean all caches and generated files for a fresh install (WIPES VM AND IMAGES)
 #rm -rf ~/.lima # This wipes the images too
@@ -57,7 +74,7 @@ rebuild-hard: clean-hard build
 
 # Start the development server (runs in foreground)
 start:
-    NODE_NO_WARNINGS=1 yarn dev
+    NODE_NO_WARNINGS=1 yarn start
 
 up: 
     NODE_NO_WARNINGS=1 just build start
@@ -197,7 +214,17 @@ check-ws:
 logs image:
     LIMA_HOME=~/Library/Application\ Support/rancher-desktop/lima \
     resources/darwin/lima/bin/limactl shell 0 -- \
-    sudo k3s kubectl logs -n sulla deployment/n8n -f
+    sudo k3s kubectl logs -n sulla deployment/{{image}} -f
+
+kill-pod image:
+    LIMA_HOME=~/Library/Application\ Support/rancher-desktop/lima \
+    resources/darwin/lima/bin/limactl shell 0 -- \
+    sudo k3s kubectl delete pod -n sulla -l app={{image}} --force --grace-period=0
+
+watch-pod image:
+    LIMA_HOME=~/Library/Application\ Support/rancher-desktop/lima \
+    resources/darwin/lima/bin/limactl shell 0 -- \
+    sudo k3s kubectl get pods -n sulla -l app={{image}} -w
 
 describe image:
     LIMA_HOME=~/Library/Application\ Support/rancher-desktop/lima \

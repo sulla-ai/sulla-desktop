@@ -62,7 +62,7 @@ export class N8nUserModel extends BaseModel<N8nUserAttributes> {
     }
 
     if (!user) {
-      const serviceAccountEmail = this.getServiceAccountEmail();
+      const serviceAccountEmail = await this.getServiceAccountEmail();
       console.log('[N8NUserModel] trying to load by email:', serviceAccountEmail);
       const users = await N8nUserModel.where('email', serviceAccountEmail);
       user = users.length > 0 ? users[0] : null;

@@ -17,6 +17,7 @@
     "url": "https://github.com/sulla-ai/desktop.git"
   },
   "scripts": {
+    "start": "electron .",
     "dev": "node scripts/ts-wrapper.js scripts/dev.ts",
     "lint": "yarn lint:fix",
     "lint:fix": "yarn lint:typescript:fix && yarn lint:go:fix && yarn lint:spelling",

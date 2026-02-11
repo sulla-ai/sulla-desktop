@@ -22,6 +22,13 @@ export class SullaSettingsModel extends BaseModel<SettingsAttributes> {
   protected guarded: string[] = [];
   protected timestamps = false;
 
+  /**
+   * Define casting rules for automatic type conversion
+   */
+  protected readonly casts: Record<string, string> = {
+    value: 'string',
+  };
+
   // ──────────────────────────────────────────────
   // Persistent installation file path (decided once per process)
   // ──────────────────────────────────────────────
@@ -38,7 +45,10 @@ export class SullaSettingsModel extends BaseModel<SettingsAttributes> {
   }
 
   public static setFallbackFilePath(path: string): void {
-    SullaSettingsModel.installationLockFile = path;
+    if (typeof path !== 'string' || path.trim() === '') {
+      throw new Error('Invalid path: must be a non-empty string');
+    }
+    SullaSettingsModel.installationLockFile = path.trim();
   }
 
   // ──────────────────────────────────────────────
@@ -46,7 +56,6 @@ export class SullaSettingsModel extends BaseModel<SettingsAttributes> {
   // ──────────────────────────────────────────────
 
   private static isReady: boolean = false;
-  private static fallbackData: Map<string, any> = new Map();
 
   // ──────────────────────────────────────────────
   // Bootstrap: sync fallback → real backends
@@ -139,7 +148,7 @@ export class SullaSettingsModel extends BaseModel<SettingsAttributes> {
       const data = JSON.parse(content) as Record<string, any>;
       return property in data ? data[property] : _default;
     } catch (err) {
-      console.warn(`Fallback read fail for ${property}:`, err);
+      // File missing or invalid — return default silently
       return _default;
     }
   }
@@ -153,14 +162,20 @@ export class SullaSettingsModel extends BaseModel<SettingsAttributes> {
   public static async setSetting(property: string, value: any): Promise<void> {
     if (this.isReady) {
       // Write-through to PG + Redis (unchanged)
-      const model = new this();
-      model.attributes = { property, value };
-      await model.save();
+      const existing = await this.find(property);
+      if (existing) {
+        existing.attributes.value = value;
+        await existing.save();
+      } else {
+        const model = new this();
+        model.attributes = { property, value };
+        await model.save();
+      }
       await redisClient.hset('sulla_settings', property, JSON.stringify(value));
       return;
     }
 
-    // Fallback: update buffer and debounce save
+    // Fallback: read-modify-write JSON file
     const filePath = this.getFallbackFilePath();
     let data: Record<string, any> = {};
     try {
@@ -169,8 +184,8 @@ export class SullaSettingsModel extends BaseModel<SettingsAttributes> {
     } catch {} // file missing → start empty
 
     data[property] = value;
-    this.fallbackData = new Map(Object.entries(data));
-    await this.debouncedSaveFallback();
+
+    await fs.writeFile(filePath, JSON.stringify(data, null, 2));
   }
 
   /**
@@ -206,8 +221,7 @@ export class SullaSettingsModel extends BaseModel<SettingsAttributes> {
         data = JSON.parse(content);
       } catch {} // file missing → do nothing
       delete data[property];
-      this.fallbackData = new Map(Object.entries(data));
-      await this.debouncedSaveFallback();
+      await fs.writeFile(filePath, JSON.stringify(data, null, 2));
       return;
     }
 
@@ -230,26 +244,6 @@ export class SullaSettingsModel extends BaseModel<SettingsAttributes> {
 
   public static generateId(): string {
     return crypto.randomUUID();
-  }
-
-  private static saveTimeout: NodeJS.Timeout | null = null;
-  private static readonly DEBOUNCE_MS = 300; // adjust as needed
-
-  private static async debouncedSaveFallback(): Promise<void> {
-    if (this.saveTimeout) {
-      clearTimeout(this.saveTimeout);
-    }
-
-    this.saveTimeout = setTimeout(async () => {
-      this.saveTimeout = null;
-      const filePath = this.getFallbackFilePath();
-      const obj = Object.fromEntries(this.fallbackData);
-      try {
-        await fs.writeFile(filePath, JSON.stringify(obj, null, 2));
-      } catch (err) {
-        console.error('Fallback save failed:', err);
-      }
-    }, this.DEBOUNCE_MS);
   }
 }
 

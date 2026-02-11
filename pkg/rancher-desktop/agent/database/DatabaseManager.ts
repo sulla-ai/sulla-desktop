@@ -49,15 +49,18 @@ export class DatabaseManager {
         // Real health check
         await client.query('SELECT 1');
         console.log('[DB] Connection healthy');
+        this.initialized = true;
+
 
         // One-time setup
         await this.runMigrations();
-        await this.runSeeders();
 
-        // In your main app file or bootstrap
+        // now that tables are ready, sync to persistent storage
         await SullaSettingsModel.bootstrap();
 
-        this.initialized = true;
+        // settings are ready to be used in seeding
+        await this.runSeeders();
+
         console.log('[DB] Database fully initialized');
         return;
 

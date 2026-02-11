@@ -122,7 +122,11 @@ class ChromaDB {
 
   async getCollection(name: string) {
     try {
-      return await this.client.getCollection({ name });
+      const options: any = { name };
+      if (this.embeddingFunction) {
+        options.embeddingFunction = this.embeddingFunction;
+      }
+      return await this.client.getCollection(options);
     } catch (err) {
       console.error(`Get collection ${name} failed:`, err);
       throw err;
