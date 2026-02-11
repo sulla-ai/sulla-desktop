@@ -31,14 +31,8 @@
         </div>
       </rd-fieldset>
 
-      <div class="mb-4">
-        <label class="flex items-center">
-          <input type="checkbox" v-model="enableKubernetes" class="mr-2">
-          Enable Kubernetes Mode (requires more resources)
-        </label>
-      </div>
-
-      <div class="flex justify-end">
+      <div class="flex justify-between">
+        <button type="button" @click="$emit('back')" class="px-6 py-2 text-gray-500 rounded-md hover:bg-gray-200 cursor-pointer">Back</button>
         <button type="submit" class="px-6 py-2 text-white rounded-md hover:opacity-90" :style="{ backgroundColor: '#30a5e9' }">Next</button>
       </div>
     </form>
@@ -57,6 +51,7 @@ const settings = inject<Ref<Settings>>('settings')!;
 const commitChanges = inject<(settings: RecursivePartial<Settings>) => Promise<void>>('commitChanges')!;
 const emit = defineEmits<{
   next: [];
+  back: [];
 }>();
 
 const selectedProvider = ref('grok');
@@ -64,7 +59,6 @@ const selectedModel = ref('grok-4-1-fast-reasoning');
 const apiKey = ref('');
 const testing = ref(false);
 const testResult = ref<{ success: boolean; message: string } | null>(null);
-const enableKubernetes = ref(false);
 
 const providers = [
   { id: 'grok', name: 'Grok (xAI)', baseUrl: 'https://api.x.ai/v1' },
@@ -170,11 +164,6 @@ const handleNext = async () => {
       },
     });
   }
-
-  // Set Kubernetes mode based on checkbox
-  await commitChanges({
-    kubernetes: { enabled: enableKubernetes.value },
-  });
 
   emit('next');
 };

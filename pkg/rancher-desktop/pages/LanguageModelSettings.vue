@@ -21,7 +21,10 @@ const navItems = [
 // Ollama models sorted by resource requirements (smallest to largest)
 const OLLAMA_MODELS = [
   {
-    name: 'tinyllama:latest', displayName: 'TinyLlama', size: '637MB', minMemoryGB: 2, minCPUs: 2, description: 'Compact 1.1B model, fast responses, good for basic tasks',
+    name: 'qwen2:0.5b', displayName: 'Qwen2 0.5B', size: '377MB', minMemoryGB: 1, minCPUs: 1, description: 'Alibaba\'s compact Qwen2 model, very lightweight',
+  },
+  {
+    name: 'qwen2:1.5b', displayName: 'Qwen2 1.5B', size: '934MB', minMemoryGB: 2, minCPUs: 2, description: 'Alibaba\'s Qwen2 model, efficient for basic tasks',
   },
   {
     name: 'phi3:mini', displayName: 'Phi-3 Mini', size: '2.2GB', minMemoryGB: 4, minCPUs: 2, description: 'Microsoft\'s efficient 3.8B model, great reasoning capabilities',
@@ -39,22 +42,10 @@ const OLLAMA_MODELS = [
     name: 'mistral:7b', displayName: 'Mistral 7B', size: '4.1GB', minMemoryGB: 5, minCPUs: 2, description: 'Excellent 7B model, strong coding and reasoning',
   },
   {
+    name: 'qwen2:7b', displayName: 'Qwen2 7B', size: '4.4GB', minMemoryGB: 5, minCPUs: 2, description: 'Alibaba\'s Qwen2 7B model, strong performance',
+  },
+  {
     name: 'llama3.1:8b', displayName: 'Llama 3.1 8B', size: '4.7GB', minMemoryGB: 6, minCPUs: 2, description: 'Meta\'s latest 8B model, excellent all-around performance',
-  },
-  {
-    name: 'llama3.3:latest', displayName: 'Llama 3.3', size: '4.7GB', minMemoryGB: 6, minCPUs: 2, description: 'Meta\'s latest 70B-distilled 8B model, excellent reasoning',
-  },
-  {
-    name: 'qwen2.5:latest', displayName: 'Qwen 2.5', size: '4.7GB', minMemoryGB: 6, minCPUs: 2, description: 'Alibaba\'s excellent 7B model, strong multilingual performance',
-  },
-  {
-    name: 'qwen2.5-coder:latest', displayName: 'Qwen 2.5 Coder', size: '4.7GB', minMemoryGB: 6, minCPUs: 2, description: 'Alibaba\'s coding-specialized model, excellent for development',
-  },
-  {
-    name: 'deepseek-r1:latest', displayName: 'DeepSeek R1', size: '4.7GB', minMemoryGB: 6, minCPUs: 2, description: 'DeepSeek\'s reasoning model, chain-of-thought capabilities',
-  },
-  {
-    name: 'deepseek-v3:latest', displayName: 'DeepSeek V3', size: '4.7GB', minMemoryGB: 6, minCPUs: 2, description: 'DeepSeek\'s latest general purpose model, strong performance',
   },
   {
     name: 'gemma:7b', displayName: 'Gemma 7B', size: '5.0GB', minMemoryGB: 6, minCPUs: 2, description: 'Google\'s larger model, improved capabilities',
@@ -70,7 +61,7 @@ const OLLAMA_MODELS = [
   },
   {
     name: 'deepseek-coder:33b', displayName: 'DeepSeek Coder 33B', size: '19GB', minMemoryGB: 24, minCPUs: 6, description: 'Advanced coding model, excellent for development',
-  },
+  }
 ];
 
 interface InstalledModel {
@@ -188,8 +179,8 @@ export default defineComponent({
       // Which mode is currently active (saved in settings)
       activeMode:       'local' as 'local' | 'remote',
       // Local model settings
-      activeModel:      'tinyllama:latest', // The currently saved/active local model
-      pendingModel:     'tinyllama:latest', // The model selected in dropdown
+      activeModel:      'qwen2:0.5b', // The currently saved/active local model
+      pendingModel:     'qwen2:0.5b', // The model selected in dropdown
       installedModels:  [] as InstalledModel[],
       loadingModels:    false,
       downloadingModel: null as string | null,

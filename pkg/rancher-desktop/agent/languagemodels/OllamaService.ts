@@ -95,6 +95,7 @@ export class OllamaService extends BaseLanguageModel {
       model: options.model ?? this.model,
       messages,
       stream: false,
+      keep_alive: -1,
     };
 
     if (options.format === 'json') {
@@ -104,6 +105,9 @@ export class OllamaService extends BaseLanguageModel {
     if (options.maxTokens) {
       body.options = { ...(body.options ?? {}), num_predict: options.maxTokens };
     }
+
+    // Force GPU usage for all layers if possible
+    body.options = { ...(body.options ?? {}), num_gpu: 999, num_thread: 1 };
 
     const res = await fetch(`${this.baseUrl}/api/chat`, this.buildFetchOptions(body, options.signal));
 
@@ -190,6 +194,7 @@ export class OllamaService extends BaseLanguageModel {
 
             // Check if pull completed
             if (status.includes('complete') || status.includes('success') || data.status === 'complete') {
+              await this.preloadModel(modelName);
               return true;
             }
           } catch (e) {
@@ -203,6 +208,36 @@ export class OllamaService extends BaseLanguageModel {
     } catch (error) {
       console.error('[OllamaService] Error pulling model:', error);
       return false;
+    }
+  }
+
+  /**
+   * Preloads the specified model by making a dummy generate request with keep_alive.
+   * This keeps the model loaded in memory for faster subsequent responses.
+   */
+  private async preloadModel(modelName: string): Promise<void> {
+    try {
+      console.log(`[OllamaService] Preloading model: ${modelName}`);
+      const response = await fetch(`${this.baseUrl}/api/generate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: modelName,
+          prompt: 'Hello',
+          keep_alive: -1,
+          stream: false,
+        }),
+      });
+
+      if (response.ok) {
+        console.log(`[OllamaService] Model ${modelName} preloaded successfully`);
+      } else {
+        console.warn(`[OllamaService] Failed to preload model ${modelName}: ${response.status}`);
+      }
+    } catch (error) {
+      console.warn(`[OllamaService] Error preloading model ${modelName}:`, error);
     }
   }
 }

@@ -46,7 +46,15 @@
 
       <div class="mt-10"></div>
 
+      <div class="mb-4">
+        <label class="flex items-center">
+          <input type="checkbox" v-model="enableKubernetes" @change="onKubernetesChange" class="mr-2">
+          Enable Kubernetes Mode (requires more resources)
+        </label>
+      </div>
+
       <div class="flex justify-end">
+        <button type="button" @click="$emit('back')" class="px-6 py-2 text-gray-500 rounded-md hover:bg-gray-200 cursor-pointer">Back</button>
         <button type="submit" class="px-6 py-2 text-white rounded-md transition-colors font-medium hover:opacity-90" :style="{ backgroundColor: '#30a5e9' }" :disabled="!sullaModel || settings!.virtualMachine.memoryInGB <= 4 || settings!.virtualMachine.numberCPUs <= 2">Next</button>
       </div>
     </form>
@@ -70,26 +78,33 @@ const settings = inject<Ref<Settings>>('settings')!;
 const commitChanges = inject<(settings: RecursivePartial<Settings>) => Promise<void>>('commitChanges')!;
 const emit = defineEmits<{
   next: [];
+  back: [];
 }>();
 
 // Reactive ref for sullaModel
 const sullaModel = ref<string>('');
 
+// Reactive ref for kubernetes mode
+const enableKubernetes = ref(false);
+
 // Set defaults
 settings.value.application.pathManagementStrategy = PathManagementStrategy.RcFiles;
-settings.value.kubernetes.enabled = true;
+settings.value.kubernetes.enabled = false;
 
 onMounted(async () => {
   ipcRenderer.invoke('settings-read' as any).then((loadedSettings: Settings) => {
     settings.value = loadedSettings;
     // Ensure defaults are set after loading
     settings.value.application.pathManagementStrategy = PathManagementStrategy.RcFiles;
-    settings.value.kubernetes.enabled = true;
+    settings.value.kubernetes.enabled = false;
+
+    // Set checkbox state from loaded settings
+    enableKubernetes.value = settings.value.kubernetes.enabled;
 
     // Save the initial settings
     commitChanges({
       application: { pathManagementStrategy: PathManagementStrategy.RcFiles },
-      kubernetes: { enabled: true },
+      kubernetes: { enabled: enableKubernetes.value },
     });
   });
 
@@ -204,6 +219,12 @@ const autoSelectBestModel = () => {
       sullaModel.value = 'qwen2:0.5b';
     }
   }
+};
+
+const onKubernetesChange = async () => {
+  await commitChanges({
+    kubernetes: { enabled: enableKubernetes.value },
+  });
 };
 
 const handleNext = async () => {

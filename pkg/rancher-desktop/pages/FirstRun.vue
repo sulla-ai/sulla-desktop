@@ -42,7 +42,7 @@
 
             <div class="max-w-2xl min-w-0 flex-auto px-4 py-16 lg:max-w-none lg:pr-0 lg:pl-8 xl:px-16">
               <div ref="transcriptEl" id="chat-messages-list" class="pb-40">
-                <component :is="steps[currentStep]" @next="next" :startup-controller="startupController" />
+                <component :is="steps[currentStep]" @next="next" @back="back" :startup-controller="startupController" />
               </div>
             </div>
 
@@ -130,9 +130,6 @@ provide('settings', settings);
 
 const next = async () => {
   console.log('[FirstRun] next() called, currentStep before:', currentStep.value);
-  commitChanges({
-    kubernetes: { enabled: true },
-  });
 
   currentStep.value += 1;
   console.log('[FirstRun] currentStep after:', currentStep.value);
@@ -140,6 +137,14 @@ const next = async () => {
     console.log('[FirstRun] starting controller');
     startupController.start();
     await ipcRenderer.invoke('start-backend' as any);
+  }
+};
+
+const back = () => {
+  console.log('[FirstRun] back() called, currentStep before:', currentStep.value);
+  if (currentStep.value > 0) {
+    currentStep.value -= 1;
+    console.log('[FirstRun] currentStep after:', currentStep.value);
   }
 };
 

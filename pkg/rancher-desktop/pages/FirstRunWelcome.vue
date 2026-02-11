@@ -22,7 +22,8 @@
         </label>
       </rd-fieldset>
 
-      <div class="flex justify-end">
+      <div class="flex justify-between">
+        <button type="button" @click="$emit('back')" class="px-6 py-2 text-gray-500 rounded-md hover:bg-gray-200 cursor-pointer">Back</button>
         <button type="submit" class="px-6 py-2 text-white rounded-md transition-colors font-medium hover:opacity-90" :style="{ backgroundColor: '#30a5e9' }" :disabled="!isEmailValid || !sullaPassword?.trim()">Next</button>
       </div>
     </form>
@@ -37,6 +38,7 @@ import { SullaSettingsModel } from '@pkg/agent/database/models/SullaSettingsMode
 
 const emit = defineEmits<{
   next: [];
+  back: [];
 }>();
 
 // Reactive data for sullaEmail

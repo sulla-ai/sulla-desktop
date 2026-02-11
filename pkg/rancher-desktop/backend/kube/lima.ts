@@ -477,10 +477,27 @@ export default class LimaKubernetesBackend extends events.EventEmitter implement
         const podSpec = template?.spec as Record<string, unknown>;
         const containers = podSpec?.containers as Array<Record<string, unknown>>;
         if (containers?.[0]) {
-          containers[0].resources = {
-            limits: { memory: `${ollamaMemoryGB}Gi`, cpu: `${ollamaCPUs * 1000}m` },
-            requests: { memory: `${Math.ceil(ollamaMemoryGB / 2)}Gi`, cpu: `${Math.ceil(ollamaCPUs * 500)}m` },
-          };
+          // Add environment variables
+          if (!containers[0].env) {
+            containers[0].env = [];
+          }
+          (containers[0].env as Array<Record<string, string>>).push(
+            { name: 'OLLAMA_NUM_GPU_LAYERS', value: '999' },
+            { name: 'OLLAMA_KEEP_ALIVE', value: '-1' },
+            { name: 'OLLAMA_NUM_THREAD', value: '4' },
+            { name: 'OLLAMA_MAX_LOADED_MODELS', value: '1' }
+          );
+          // Add GPU resources
+          const resources = containers[0].resources as Record<string, unknown> || {};
+          if (!resources.limits) {
+            resources.limits = {};
+          }
+          if (!resources.requests) {
+            resources.requests = {};
+          }
+          (resources.limits as Record<string, unknown>)['nvidia.com/gpu'] = 1;
+          (resources.requests as Record<string, unknown>)['nvidia.com/gpu'] = 1;
+          containers[0].resources = resources;
         }
       }
       if (deployment.kind === 'Deployment' && (deployment.metadata as Record<string, unknown>)?.name === 'postgres') {

@@ -129,6 +129,7 @@ export interface LimaConfiguration {
   }
   video?: {
     display?: string;
+    use3DAcceleration?: boolean;
   }
   provision?: {
     mode:   'system' | 'user';
@@ -2189,6 +2190,14 @@ export default class LimaBackend extends events.EventEmitter implements VMBacken
       });
     }
 
+    // Enable GPU support for ollama service
+    if (compose.services?.sulla_ollama) {
+      // Add GPU layers environment variable
+      if (!compose.services.sulla_ollama.environment) {
+        compose.services.sulla_ollama.environment = [];
+      }
+    }
+
     const composeYaml = yaml.stringify(compose, { defaultStringType: 'QUOTE_DOUBLE' });
     await this.writeFile('/tmp/sulla-docker-compose.yml', composeYaml, 0o644);
   }
@@ -2279,6 +2288,8 @@ export default class LimaBackend extends events.EventEmitter implements VMBacken
         proc.on('close', (code) => {
           if (code === 0) {
             console.log(`Ollama model ${MODEL} pulled successfully`);
+            // Preload the model to keep it responsive
+            this.preloadOllamaModel(MODEL);
             resolve();
           } else {
             reject(new Error(`Model pull failed with code ${code}. Output: ${output}`));
@@ -2290,6 +2301,36 @@ export default class LimaBackend extends events.EventEmitter implements VMBacken
     } catch (error) {
       console.error('[Ollama Pull] Failed to spawn process:', error);
       return Promise.resolve();
+    }
+  }
+
+  /**
+   * Preloads the specified Ollama model by making a dummy generate request with keep_alive.
+   * This keeps the model loaded in memory for faster subsequent responses.
+   */
+  private async preloadOllamaModel(modelName: string): Promise<void> {
+    try {
+      console.log(`Preloading Ollama model: ${modelName}`);
+      const response = await fetch('http://127.0.0.1:30114/api/generate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: modelName,
+          prompt: 'Hello',
+          keep_alive: -1,
+          stream: false,
+        }),
+      });
+
+      if (response.ok) {
+        console.log(`Ollama model ${modelName} preloaded successfully`);
+      } else {
+        console.warn(`Failed to preload model ${modelName}: ${response.status}`);
+      }
+    } catch (error) {
+      console.warn(`Error preloading model ${modelName}:`, error);
     }
   }
   async waitForApiReady(timeoutSec = 120): Promise<void> {

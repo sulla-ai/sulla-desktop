@@ -31,6 +31,15 @@ spec:
         image: ollama/ollama:latest
         imagePullPolicy: IfNotPresent
         args: ["serve"]
+        env:
+        - name: OLLAMA_NUM_GPU_LAYERS
+          value: "999"
+        - name: OLLAMA_KEEP_ALIVE
+          value: "-1"
+        - name: OLLAMA_NUM_THREAD
+          value: "4"
+        - name: OLLAMA_MAX_LOADED_MODELS
+          value: "1"
         ports:
         - containerPort: 11434
         volumeMounts:
@@ -40,9 +49,11 @@ spec:
           limits:
             memory: "6Gi"
             cpu: "3000m"
+            nvidia.com/gpu: 1
           requests:
             memory: "2Gi"
             cpu: "1000m"
+            nvidia.com/gpu: 1
         readinessProbe:
           httpGet:
             path: /

@@ -45,6 +45,13 @@ export abstract class BaseModel<T extends ModelAttributes = ModelAttributes> {
     return this;
   }
 
+  protected databaseFill(attributes: Partial<T>) {
+    for (const [key, value] of Object.entries(attributes)) {
+      this.attributes[key as keyof T] = this.castFromDatabase(key, value);
+    }
+    return this;
+  }
+
   /**
    * Cast a value for storage in the database (pack)
    */
@@ -178,6 +185,7 @@ export abstract class BaseModel<T extends ModelAttributes = ModelAttributes> {
     const instance = new this(result);
     instance.exists = true;
     instance.original = { ...result };
+    instance.databaseFill(result);
     return instance;
   }
 
@@ -191,6 +199,7 @@ export abstract class BaseModel<T extends ModelAttributes = ModelAttributes> {
       const instance = new (this as any)(row);
       instance.exists = true;
       instance.original = { ...row };
+      instance.databaseFill(row);
       return instance;
     });
   }
@@ -218,16 +227,10 @@ export abstract class BaseModel<T extends ModelAttributes = ModelAttributes> {
     const rows = await postgresClient.queryAll(query, params);
 
     return rows.map(row => {
-      // Apply casting to the loaded data
-      const castedRow: Partial<T> = {};
-      const tempInstance = new this(); // Create instance to access casting methods
-      for (const [key, value] of Object.entries(row)) {
-        castedRow[key as keyof T] = tempInstance.castFromDatabase(key, value);
-      }
-
-      const instance = new (this as any)(castedRow);
+      const instance = new (this as any)(row);
       instance.exists = true;
-      instance.original = { ...castedRow };
+      instance.original = { ...row };
+      instance.databaseFill(row);
       return instance;
     });
   }

@@ -9,6 +9,11 @@ services:
     volumes:
       - /var/lib/sulla/ollama:/root/.ollama
     restart: unless-stopped
+    environment:
+      - OLLAMA_NUM_GPU_LAYERS=999
+      - OLLAMA_KEEP_ALIVE=-1
+      - OLLAMA_NUM_THREAD=4
+      - OLLAMA_MAX_LOADED_MODELS=1
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:11434/"]
       interval: 30s

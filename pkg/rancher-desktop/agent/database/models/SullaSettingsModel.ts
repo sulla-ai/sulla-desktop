@@ -127,15 +127,15 @@ export class SullaSettingsModel extends BaseModel<SettingsAttributes> {
    */
   public static async getSetting(property: string, _default: any = null): Promise<any> {
     if (this.isReady) {
-      // Redis → PG path (unchanged)
+      // Redis → PG path (values are strings)
       const cached = await redisClient.hget('sulla_settings', property);
       if (cached !== null) {
-        try { return JSON.parse(cached); } catch (e) { console.error(`Redis parse fail: ${property}`, e); }
+        return cached;
       }
       const setting = await this.find(property);
       if (setting) {
         const value = setting.attributes.value;
-        await redisClient.hset('sulla_settings', property, JSON.stringify(value));
+        await redisClient.hset('sulla_settings', property, value);
         return value;
       }
       return _default;
@@ -171,7 +171,7 @@ export class SullaSettingsModel extends BaseModel<SettingsAttributes> {
         model.attributes = { property, value };
         await model.save();
       }
-      await redisClient.hset('sulla_settings', property, JSON.stringify(value));
+      await redisClient.hset('sulla_settings', property, value);
       return;
     }
 
