@@ -118,8 +118,9 @@ restart hard="":
     if [ "{{hard}}" = "--hard" ] || [ "{{hard}}" = "hard" ]; then
         echo "Hard restart: full rebuild (wiping VM and images)..."
         just rebuild-hard
-    else
-        echo "Building (preserving VM and images)..."
+    fi
+    if [ "{{hard}}" = "--build" ] || [ "{{hard}}" = "build" ]; then
+        echo "Building the system"
         just build
     fi
     just start

@@ -1,0 +1,115 @@
+version: '3.8'
+
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: sulla_ollama
+    ports:
+      - "30114:11434"
+    volumes:
+      - /var/lib/sulla/ollama:/root/.ollama
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  chroma:
+    image: chromadb/chroma:latest
+    container_name: sulla_chroma
+    ports:
+      - "30115:8000"
+    environment:
+      - IS_PERSISTENT=TRUE
+      - CHROMA_SERVER_HTTP_PORT=8000
+      - ANONYMIZED_TELEMETRY=FALSE
+      - PERSIST_DIRECTORY=/chroma/chroma
+    volumes:
+      - /var/lib/sulla/chroma:/chroma/chroma
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v2/heartbeat"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: sulla_postgres
+    ports:
+      - "30116:5432"
+    environment:
+      - POSTGRES_USER=sulla
+      - POSTGRES_PASSWORD=sulla_dev_password
+      - POSTGRES_DB=sulla
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    volumes:
+      - /var/lib/sulla/postgres:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sulla"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: sulla_redis
+    ports:
+      - "30117:6379"
+    command: redis-server --appendonly yes --save 60 1
+    volumes:
+      - /var/lib/sulla/redis:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  ws-server:
+    image: byrdziak/sulla-websocket:latest
+    container_name: sulla_ws_server
+    ports:
+      - "30118:8080"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "8080"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: sulla_n8n
+    ports:
+      - "30119:5678"
+    environment:
+      - N8N_HOST=localhost
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - WEBHOOK_URL=http://localhost:30119/
+      - EXECUTIONS_MODE=regular
+      - QUEUE_BULL_REDIS_HOST=redis
+      - QUEUE_BULL_REDIS_PORT=6379
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_HOST=postgres
+      - DB_POSTGRESDB_PORT=5432
+      - DB_POSTGRESDB_DATABASE=sulla
+      - DB_POSTGRESDB_USER=sulla
+      - DB_POSTGRESDB_PASSWORD=sulla_dev_password
+      - N8N_ENCRYPTION_KEY=changeMeToA32CharRandomString1234
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=admin
+      - N8N_BASIC_AUTH_PASSWORD=n8n_dev_password
+      - N8N_REST_API_ENABLED=true
+    depends_on:
+      - postgres
+      - redis
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5678/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 5

@@ -61,8 +61,10 @@ import paths from '@pkg/utils/paths';
 import { executable } from '@pkg/utils/resources';
 import { jsonStringifyWithWhiteSpace } from '@pkg/utils/stringify';
 import { defined, RecursivePartial } from '@pkg/utils/typeUtils';
-import { SullaSettingsModel } from '@pkg/agent/database/models/SullaSettingsModel';
 import { openSudoPrompt } from '@pkg/window';
+import { SullaSettingsModel } from '@pkg/agent/database/models/SullaSettingsModel';
+import SULLA_DOCKER_COMPOSE from '@pkg/assets/sulla-docker-compose.yaml';
+import { instantiateSullaStart } from '@pkg/sulla';
 
 /* eslint @typescript-eslint/switch-exhaustiveness-check: "error" */
 
@@ -691,6 +693,15 @@ export default class LimaBackend extends events.EventEmitter implements VMBacken
         console.log('Administrator access disallowed, not using socket_vmnet.');
         delete config.networks;
       }
+    }
+
+    // Install docker-compose if using MOBY
+    if (this.cfg?.containerEngine?.name === ContainerEngine.MOBY) {
+      config.provision = config.provision || [];
+      config.provision.push({
+        mode: 'system',
+        script: '#!/bin/sh\napk update && apk add docker-compose',
+      });
     }
 
     this.updateConfigPortForwards(config);
@@ -1982,11 +1993,10 @@ export default class LimaBackend extends events.EventEmitter implements VMBacken
         switch (config.containerEngine.name) {
         case ContainerEngine.MOBY:
           this.#containerEngineClient = new MobyClient(this, `unix://${ path.join(paths.altAppHome, 'docker.sock') }`);
-          // Disabled: Sulla Desktop runs in parallel without modifying user's docker context
-          // await this.progressTracker.action('Setting docker context', 50,
-          //   dockerDirManager.ensureDockerContextConfigured(
-          //     this.#adminAccess,
-          //     path.join(paths.altAppHome, 'docker.sock')));
+          await this.progressTracker.action('Setting docker context', 50,
+             dockerDirManager.ensureDockerContextConfigured(
+               this.#adminAccess,
+               path.join(paths.altAppHome, 'docker.sock')));
           break;
         case ContainerEngine.CONTAINERD:
           await this.execCommand({ root: true }, '/sbin/rc-service', '--ifnotstarted', 'buildkitd', 'start');
@@ -1999,15 +2009,15 @@ export default class LimaBackend extends events.EventEmitter implements VMBacken
             this.#containerEngineClient.waitForReady()),
         ];
 
-        if (kubernetesVersion) {
+        if (kubernetesVersion && config.kubernetes.enabled) {
           actions.push(this.kubeBackend.start(config, kubernetesVersion));
         }
 
         await Promise.all(actions);
 
-        this.progressTracker.numeric('Kubernetes starting', 75, 100);
-
         if (config.kubernetes.enabled) {
+          this.progressTracker.numeric('Kubernetes starting', 75, 100);
+
           await this.progressTracker.action('Waiting for Kubernetes API ready (up to 10 min)', 76, async () => {
             const start = Date.now();
             const timeoutMs = 10 * 60 * 1000; // 10 minutes
@@ -2057,20 +2067,231 @@ export default class LimaBackend extends events.EventEmitter implements VMBacken
     // Load firstRunCredentialsNeeded from SullaSettingsModel
     const firstRunCredentialsNeeded = await SullaSettingsModel.get('firstRunCredentialsNeeded', true);
 
-    this.progressTracker.numeric('Kubernetes API is ready, firstRunCredentialsNeeded('+firstRunCredentialsNeeded+')', 99, 100);
-    
-    // if we get here the user has entered their credentials and k8s has booted. we can install sulla.
     if (config.kubernetes.enabled) {
+      this.progressTracker.numeric('Starting Sulla on Kubernetes', 99, 100);
+      
+      // if we get here the user has entered their credentials and k8s has booted. we can install sulla.
       if (firstRunCredentialsNeeded === false && this.kubeBackend.sullaStepCustomEnvironment) {
-        this.progressTracker.numeric('starting sullaStepCustomEnvironment ', 80, 100);
         await this.kubeBackend.sullaStepCustomEnvironment();
       }
     } else {
-      this.progressTracker.numeric('Basic conditions not met ', 80, 100);
+      this.progressTracker.numeric('Docker mode enabled, deploying Sulla via Docker Compose', 99, 100);
+
+      if (firstRunCredentialsNeeded === false && this.sullaStepDockerEnvironment) {
+        await this.sullaStepDockerEnvironment();  
+      }
     }
     
   }
 
+  /**
+   * Pulls the nomic-embed-text model into the running Ollama container.
+   */
+  private async pullNomicEmbedModel(): Promise<void> {
+    console.log(`Pulling nomic-embed-text model`);
+    const nomicProc = this.limaSpawn({ root: true }, ['docker', 'exec', 'sulla_ollama', 'ollama', 'pull', 'nomic-embed-text']);
+
+    return new Promise<void>((resolveNomic, rejectNomic) => {
+      let nomicOutput = '';
+      nomicProc.stdout?.on('data', (chunk: Buffer | string) => {
+        const text = Buffer.isBuffer(chunk) ? chunk.toString('utf8') : chunk;
+        const lines = text.split('\n');
+        lines.forEach((line: string) => {
+          const trimmed = line.trim();
+          if (trimmed) {
+            console.log(`[Ollama Pull Nomic] ${trimmed}`);
+            nomicOutput += trimmed + '\n';
+          }
+        });
+      });
+      nomicProc.stderr?.on('data', (chunk: Buffer | string) => {
+        const text = Buffer.isBuffer(chunk) ? chunk.toString('utf8') : chunk;
+        const trimmed = text.trim();
+        if (trimmed) {
+          console.error(`[Ollama Pull Nomic Error] ${trimmed}`);
+        }
+      });
+      nomicProc.on('close', (code) => {
+        if (code === 0) {
+          console.log(`Ollama model nomic-embed-text pulled successfully`);
+          resolveNomic();
+        } else {
+          rejectNomic(new Error(`Nomic model pull failed with code ${code}. Output: ${nomicOutput}`));
+        }
+      });
+      nomicProc.on('error', rejectNomic);
+    });
+  }
+
+  /**
+   * Deploys Sulla services using Docker Compose when Kubernetes is disabled.
+   * Handles preparation of compose file, deployment, health checks, and model pulling.
+   */
+  async sullaStepDockerEnvironment(): Promise<void> {
+    await this.progressTracker.action('Preparing Sulla Docker Compose file', 30, async () => {
+      this.progressTracker.numeric('Preparing Sulla Docker Compose file', 5, 100);
+      await this.prepareSullaComposeFile();
+      this.progressTracker.numeric('Docker Compose file prepared', 15, 100);
+    });
+
+    await this.progressTracker.action('Deploying Sulla services with Docker Compose', 50, async () => {
+      this.progressTracker.numeric('Deploying Sulla services with Docker Compose', 20, 100);
+      await this.applySullaCompose();
+      this.progressTracker.numeric('Sulla services deployed', 35, 100);
+    });
+
+    await this.progressTracker.action('Waiting for Sulla services to be ready', 180, async () => {
+      this.progressTracker.numeric('Waiting for Sulla services to be ready', 40, 100);
+      await this.waitForSullaDockerServices();
+      this.progressTracker.numeric('Sulla services ready', 60, 100);
+    });
+
+    // Pull and load Ollama model
+    await this.progressTracker.action('Pulling & loading Ollama model', 300, async () => {
+      await this.pullOllamaModelDocker();
+    });
+
+    // Pull and load Ollama model
+    await this.progressTracker.action('Pulling & loading Vector Embedding model', 300, async () => {
+      await this.pullNomicEmbedModel();
+    });
+
+    instantiateSullaStart();
+    mainEvents.emit('sulla-first-run-complete');
+
+    this.progressTracker.numeric('Sulla deployment completed', 100, 100);
+  }
+
+  /**
+   * Prepares the Docker Compose file for Sulla services by parsing and modifying dynamic values like passwords.
+   */
+  private async prepareSullaComposeFile(): Promise<void> {
+    const compose = typeof SULLA_DOCKER_COMPOSE === 'string' ? yaml.parse(SULLA_DOCKER_COMPOSE) : SULLA_DOCKER_COMPOSE;
+
+    // Modify dynamic values like passwords
+    if (compose.services?.postgres?.environment) {
+      compose.services.postgres.environment = compose.services.postgres.environment.map((env: string) => {
+        if (env.startsWith('POSTGRES_PASSWORD=')) {
+          return `POSTGRES_PASSWORD=${this.cfg?.experimental?.sullaServicePassword || 'sulla_dev_password'}`;
+        }
+        return env;
+      });
+    }
+    if (compose.services?.n8n?.environment) {
+      compose.services.n8n.environment = compose.services.n8n.environment.map((env: string) => {
+        if (env.startsWith('N8N_ENCRYPTION_KEY=')) {
+          return `N8N_ENCRYPTION_KEY=${this.cfg?.experimental?.sullaN8nEncryptionKey || 'changeMeToA32CharRandomString1234'}`;
+        }
+        if (env.startsWith('N8N_BASIC_AUTH_PASSWORD=')) {
+          return `N8N_BASIC_AUTH_PASSWORD=${this.cfg?.experimental?.sullaServicePassword || 'n8n_dev_password'}`;
+        }
+        return env;
+      });
+    }
+
+    const composeYaml = yaml.stringify(compose, { defaultStringType: 'QUOTE_DOUBLE' });
+    await this.writeFile('/tmp/sulla-docker-compose.yml', composeYaml, 0o644);
+  }
+
+  /**
+   * Runs docker-compose up -d to start all Sulla services in detached mode.
+   */
+  private async applySullaCompose(): Promise<void> {
+    await this.execCommand({ root: true }, 'docker-compose', '-f', '/tmp/sulla-docker-compose.yml', 'up', '-d');
+  }
+
+  /**
+   * Waits for all Sulla Docker services to be healthy by checking their container status.
+   */
+  private async waitForSullaDockerServices(): Promise<void> {
+    const services = ['sulla_ollama', 'sulla_chroma', 'sulla_postgres', 'sulla_redis', 'sulla_ws_server', 'sulla_n8n'];
+
+    for (const service of services) {
+      await this.waitForDockerServiceHealthy(service);
+    }
+  }
+
+  /**
+   * Waits for a specific Docker container to be healthy by polling its status.
+   * @param serviceName The name of the Docker container to check.
+   * @param timeoutSec Maximum time to wait in seconds (default 300).
+   */
+  private async waitForDockerServiceHealthy(serviceName: string, timeoutSec: number = 300): Promise<void> {
+    const start = Date.now();
+    while (Date.now() - start < timeoutSec * 1000) {
+      try {
+        const status = await this.execCommand({ capture: true, root: true }, 'docker', 'ps', '--filter', `name=${serviceName}`, '--format', '{{.Status}}');
+        if (status.includes('healthy') || status.includes('Up')) {
+          console.log(`Docker service ${serviceName} is ready`);
+          return;
+        }
+      } catch {
+        // Service not ready yet
+      }
+      await new Promise(r => setTimeout(r, 5000));
+    }
+    throw new Error(`Docker service ${serviceName} not healthy after ${timeoutSec}s`);
+  }
+
+  /**
+   * Pulls the specified Ollama model into the running container.
+   * Checks if the model is already downloaded first to avoid redundant pulls.
+   */
+  private async pullOllamaModelDocker(): Promise<void> {
+    try {
+      const MODEL = await SullaSettingsModel.get('sullaModel', 'tinyllama:latest');
+
+      console.log(`Starting Ollama model pull: ${MODEL}`);
+
+      // Check if model is already downloaded
+      try {
+        const listOutput = await this.execCommand({ capture: true, root: true }, 'docker', 'exec', 'sulla_ollama', 'ollama', 'list');
+        if (listOutput.includes(MODEL)) {
+          console.log(`Ollama model ${MODEL} is already downloaded, skipping pull`);
+          return;
+        }
+      } catch (error) {
+        console.warn(`Failed to check if model ${MODEL} is already downloaded:`, error);
+      }
+
+      const proc = this.limaSpawn({ root: true }, ['docker', 'exec', 'sulla_ollama', 'ollama', 'pull', MODEL]);
+
+      return new Promise((resolve, reject) => {
+        let output = '';
+        proc.stdout?.on('data', (chunk: Buffer | string) => {
+          const text = Buffer.isBuffer(chunk) ? chunk.toString('utf8') : chunk;
+          const lines = text.split('\n');
+          lines.forEach((line: string) => {
+            const trimmed = line.trim();
+            if (trimmed) {
+              console.log(`[Ollama Pull] ${trimmed}`);
+              output += trimmed + '\n';
+            }
+          });
+        });
+        proc.stderr?.on('data', (chunk: Buffer | string) => {
+          const text = Buffer.isBuffer(chunk) ? chunk.toString('utf8') : chunk;
+          const trimmed = text.trim();
+          if (trimmed) {
+            console.error(`[Ollama Pull Error] ${trimmed}`);
+          }
+        });
+        proc.on('close', (code) => {
+          if (code === 0) {
+            console.log(`Ollama model ${MODEL} pulled successfully`);
+            resolve();
+          } else {
+            reject(new Error(`Model pull failed with code ${code}. Output: ${output}`));
+          }
+        });
+        proc.on('error', reject);
+      });
+
+    } catch (error) {
+      console.error('[Ollama Pull] Failed to spawn process:', error);
+      return Promise.resolve();
+    }
+  }
   async waitForApiReady(timeoutSec = 120): Promise<void> {
     const start = Date.now();
     while (Date.now() - start < timeoutSec * 1000) {

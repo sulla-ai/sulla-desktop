@@ -1,6 +1,9 @@
 /**
  * This is the main entry point for Vue.
  */
+// hoping this is the absolute earliest we can run in the renderer context
+import { initiateWindowContext } from '@pkg/sulla';
+await initiateWindowContext();
 
 import Cookies from 'cookie-universal';
 import { createApp } from 'vue';
