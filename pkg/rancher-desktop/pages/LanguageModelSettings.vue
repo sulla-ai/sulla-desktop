@@ -228,6 +228,10 @@ export default defineComponent({
       botName: 'Sulla',
       primaryUserName: '',
 
+      // Default prompts for reset
+      soulPromptDefault: soulPrompt,
+      heartbeatPromptDefault: heartbeatPrompt,
+
       // Activation state
       activating:           false,
       activationError:      '' as string,
@@ -1877,7 +1881,7 @@ export default defineComponent({
               <button
                 class="btn role-secondary"
                 type="button"
-                @click="soulPrompt = ''"
+                @click="soulPrompt = soulPromptDefault"
               >
                 Reset to default
               </button>
@@ -1984,7 +1988,7 @@ export default defineComponent({
               <button
                 class="btn role-secondary"
                 type="button"
-                @click="heartbeatPrompt = ''"
+                @click="heartbeatPrompt = heartbeatPromptDefault"
               >
                 Reset to default
               </button>

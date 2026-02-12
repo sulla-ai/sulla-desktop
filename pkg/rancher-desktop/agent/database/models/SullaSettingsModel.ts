@@ -45,11 +45,7 @@ export class SullaSettingsModel extends BaseModel<SettingsAttributes> {
       case 'array':
         return JSON.stringify(value);
       default:
-        if (typeof value === 'object' && value !== null) {
-          return JSON.stringify(value);
-        } else {
-          return String(value);
-        }
+        return JSON.stringify(value);
     }
   }
 
@@ -70,7 +66,6 @@ export class SullaSettingsModel extends BaseModel<SettingsAttributes> {
       case 'array':
         return JSON.parse(value);
       default:
-        if (!cast) return value.replace(/^"|"$/g, '');
         return JSON.parse(value);
     }
   }
