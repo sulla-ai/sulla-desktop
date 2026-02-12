@@ -46,6 +46,9 @@ async function initialize(): Promise<void> {
       created_at: typeof meta.created_at === 'string' ? meta.created_at : now,
       updated_at: typeof meta.updated_at === 'string' ? meta.updated_at : now,
       document: fmMatch[2] || '', // The content body after frontmatter
+      related_slugs: Array.isArray(meta.related_slugs) ? meta.related_slugs : [],
+      mentions: Array.isArray(meta.mentions) ? meta.mentions : [],
+      related_entities: Array.isArray(meta.related_entities) ? meta.related_entities : [],
     });
 
     articles.push(article);

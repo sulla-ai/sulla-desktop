@@ -100,6 +100,49 @@ export abstract class VectorBaseModel {
       [safeMetadata],
       [String(id)] // ensure ID is string
     );
+
+    // Handle graph relationships if attributes have them
+    const session = await (VectorBaseModel.vectorDB as any).getSession();
+    try {
+      const tx = session.beginTransaction();
+
+      // Clear old relationships (optional, or use MERGE)
+      await tx.run(`
+        MATCH (d:Document {id: $id})-[r:MENTIONS|RELATED_TO|KNOWS]->()
+        DELETE r
+      `, { id });
+
+      // Add MENTIONS (example: from mentions array)
+      if (this.attributes.mentions?.length) {
+        for (const target of this.attributes.mentions) {
+          await tx.run(`
+            MATCH (d:Document {id: $id})
+            MERGE (t:Document {id: $target})
+            MERGE (d)-[:MENTIONS]->(t)
+          `, { id, target });
+        }
+      }
+
+      // Add RELATED_TO for entities
+      if (this.attributes.related_entities?.length) {
+        for (const entity of this.attributes.related_entities) {
+          const entityId = typeof entity === 'string' ? entity : entity.id;
+          await tx.run(`
+            MATCH (d:Document {id: $id})
+            MERGE (e:Entity {id: $entityId, name: $entityName})
+            MERGE (d)-[:RELATED_TO]->(e)
+          `, { 
+            id, 
+            entityId,
+            entityName: typeof entity === 'string' ? entity : entity.name 
+          });
+        }
+      }
+
+      await tx.commit();
+    } finally {
+      await session.close();
+    }
   }
 
   // ────────────────────────────────────────────────

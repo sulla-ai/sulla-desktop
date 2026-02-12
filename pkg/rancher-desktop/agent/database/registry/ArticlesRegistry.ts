@@ -258,6 +258,16 @@ export class ArticlesRegistry {
     return true;
   }
 
+  async getRelated(slug: string, relType = 'MENTIONS', limit = 10) {
+    const session = await (VectorBaseModel.vectorDB as any).getSession();
+    const res = await session.run(`
+      MATCH (d:Document {id: $slug})-[r:${relType}]->(target)
+      RETURN target.id AS id, target.title AS title, labels(target)[0] AS type
+      LIMIT $limit
+    `, { slug, limit });
+    return res.records.map((r: any) => r.toObject());
+  }
+
   private toListItem(article: Article): ArticleListItem {
     const attrs = article.attributes;
     return {

@@ -142,6 +142,8 @@ export interface KnowledgeThreadState extends BaseThreadState {
       locked?: boolean;             // default false
       author?: string;
       related_slugs?: string[];
+      mentions?: string[];
+      related_entities?: any[];
     };
 
     // Full serialized article data (JSON string or object)

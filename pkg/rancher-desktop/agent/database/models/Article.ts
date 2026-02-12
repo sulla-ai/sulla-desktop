@@ -16,7 +16,9 @@ export class Article extends VectorBaseModel {
     'order',
     'locked',
     'author',
-    'related_slugs',
+    'related_slugs',        // keep for legacy/flat
+    'mentions',             // new: array of slugs/entities mentioned
+    'related_entities',     // new: array of entity IDs/names
     'document',
     'created_at',
     'updated_at',
@@ -37,5 +39,7 @@ export class Article extends VectorBaseModel {
     order: '100',
     locked: false,
     author: 'Jonathon Byrdziak',
+    mentions: [],
+    related_entities: [],
   };
 }

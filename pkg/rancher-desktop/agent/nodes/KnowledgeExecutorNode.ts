@@ -26,6 +26,8 @@ Rules:
 - tags: 4–8 precise keywords
 - order: incremental (10, 20, 30…)
 - related_slugs: optional relevant KB paths
+- mentions: array of KB slugs/titles mentioned in the content
+- related_entities: array of entities (people, places, concepts) mentioned
 - author: "Jonathon Byrdziak" or null
 
 Output ONLY valid JSON.
@@ -39,6 +41,8 @@ ${JSON_ONLY_RESPONSE_INSTRUCTIONS}
   "tags": ["tag1", "tag2"],
   "order": 100,
   "related_slugs": ["other/article"],
+  "mentions": ["mentioned-article-slug"],
+  "related_entities": ["Entity Name", "Another Entity"],
   ${TOOLS_RESPONSE_JSON}
   "kbFinalContent": "full markdown content, properly escaped for safe json"
 }
@@ -110,6 +114,8 @@ export class KnowledgeExecutorNode extends BaseNode {
       author?: string;
       kbFinalContent: string;
       related_slugs?: string[];
+      mentions?: string[];
+      related_entities?: any[];
     };
 
     state.metadata.kbArticleSchema = {
@@ -120,11 +126,10 @@ export class KnowledgeExecutorNode extends BaseNode {
       tags: data.tags || [],
       order: data.order || 100,
       author: data.author,
+      mentions: data.mentions || [],
+      related_entities: data.related_entities || [],
+      related_slugs: data.related_slugs || [],
     };
-    if (!state.metadata.kbArticleSchema.related_slugs) {
-      state.metadata.kbArticleSchema.related_slugs = [];
-    }
-    state.metadata.kbArticleSchema.related_slugs.push(...(data.related_slugs?.filter(Boolean) ?? []));
 
     state.metadata.kbFinalContent = data.kbFinalContent?.trim() || state.metadata.kbFinalContent;
     state.metadata.kbStatus = 'draft';
