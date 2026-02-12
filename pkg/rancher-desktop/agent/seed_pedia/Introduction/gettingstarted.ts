@@ -2,6 +2,7 @@ export const gettingStarted = `---
 schemaversion: 1
 slug: gettingstarted
 title: Getting Started
+section: Getting Started
 tags:
   - introduction
   - getting-started

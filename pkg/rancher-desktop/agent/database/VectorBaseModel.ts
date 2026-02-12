@@ -94,11 +94,16 @@ export abstract class VectorBaseModel {
 
     console.log(`[VectorBaseModel] Saving ${this.collectionName} id ${id}:`, safeMetadata);
 
+    // Chunk long documents to avoid context length limits
+    const documentChunks = this.chunkDocument(document);
+    const metadataChunks = documentChunks.map(() => safeMetadata);
+    const idChunks = documentChunks.map((_, index) => `${String(id)}_${index}`);
+
     await VectorBaseModel.vectorDB.addDocuments(
       this.collectionName,
-      Array.isArray(document) ? document : [document],
-      [safeMetadata],
-      [String(id)] // ensure ID is string
+      documentChunks,
+      metadataChunks,
+      idChunks
     );
 
     // Handle graph relationships if attributes have them
@@ -145,6 +150,55 @@ export abstract class VectorBaseModel {
     }
   }
 
+  /**
+   * Chunk a document into smaller pieces to avoid embedding model context limits
+   * @param document The document content to chunk
+   * @param maxChunkSize Maximum characters per chunk (default: 1000)
+   * @param overlap Overlap between chunks in characters (default: 100)
+   * @returns Array of document chunks
+   */
+  private chunkDocument(document: string | string[], maxChunkSize = 1000, overlap = 100): string[] {
+    const content = Array.isArray(document) ? document.join('\n') : document;
+
+    if (content.length <= maxChunkSize) {
+      return [content];
+    }
+
+    const chunks: string[] = [];
+    let start = 0;
+
+    while (start < content.length) {
+      let end = start + maxChunkSize;
+
+      // If we're not at the end, try to find a good breaking point
+      if (end < content.length) {
+        // Look for sentence endings within the last 100 characters
+        const lastPeriod = content.lastIndexOf('.', end);
+        const lastNewline = content.lastIndexOf('\n', end);
+        const lastSpace = content.lastIndexOf(' ', end);
+
+        // Use the best breaking point found
+        if (lastPeriod > end - 100) {
+          end = lastPeriod + 1;
+        } else if (lastNewline > end - 100) {
+          end = lastNewline;
+        } else if (lastSpace > end - 100) {
+          end = lastSpace;
+        }
+      }
+
+      const chunk = content.slice(start, end).trim();
+      if (chunk.length > 0) {
+        chunks.push(chunk);
+      }
+
+      // Move start position with overlap
+      start = Math.max(start + 1, end - overlap);
+    }
+
+    return chunks;
+  }
+
   // ────────────────────────────────────────────────
   // Static helpers
   // ────────────────────────────────────────────────
@@ -165,32 +219,107 @@ export abstract class VectorBaseModel {
   ): Promise<T | null> {
     const instance = new this();
     console.log(`[VectorBaseModel] Finding ${instance.collectionName} id ${id}`);
-    const res = await VectorBaseModel.vectorDB.getDocuments(instance.collectionName, [id]);
-    console.log(`[VectorBaseModel] getDocuments result:`, res);
 
-    if (!res?.ids?.length || !res.ids[0]) {
+    // First, try to find all chunks for this document
+    const allChunkIds = await VectorBaseModel.findAllChunkIds(instance.collectionName, id);
+    if (allChunkIds.length === 0) {
       console.log(`[VectorBaseModel] No document found for id ${id}`);
       return null;
     }
 
-    const doc = {
-      id: res.ids[0],
-      document: res.documents?.[0] ?? '',
-      metadata: res.metadatas?.[0] ?? {}
-    };
+    const res = await VectorBaseModel.vectorDB.getDocuments(instance.collectionName, allChunkIds);
+    console.log(`[VectorBaseModel] getDocuments result for ${allChunkIds.length} chunks:`, res);
 
-    console.log(`[VectorBaseModel] Retrieved doc:`, doc);
+    if (!res?.ids?.length) {
+      console.log(`[VectorBaseModel] No chunks found for id ${id}`);
+      return null;
+    }
+
+    // Sort chunks by their index and concatenate documents
+    const sortedChunks = res.ids
+      .map((chunkId: string, index: number) => ({
+        id: chunkId,
+        document: res.documents?.[index] ?? '',
+        metadata: res.metadatas?.[index] ?? {},
+        chunkIndex: VectorBaseModel.getChunkIndex(chunkId)
+      }))
+      .sort((a: any, b: any) => a.chunkIndex - b.chunkIndex);
+
+    const concatenatedDocument = sortedChunks.map((chunk: any) => chunk.document).join(' ');
+    const firstChunkMetadata = sortedChunks[0]?.metadata ?? {};
+
+    console.log(`[VectorBaseModel] Retrieved ${sortedChunks.length} chunks, concatenated to ${concatenatedDocument.length} characters`);
 
     const resultInstance = new this();
-    console.log(`[VectorBaseModel] Retrieved doc:`, doc);
 
-    // Hydrate with metadata from database (bypasses fillable filter)
-    resultInstance.hydrate(doc.metadata);
+    // Hydrate with metadata from the first chunk (bypasses fillable filter)
+    resultInstance.hydrate(firstChunkMetadata);
 
-    // Fill the document since it's not in metadata
-    resultInstance.fill({ document: doc.document });
+    // Fill the document with the concatenated content
+    resultInstance.fill({ document: concatenatedDocument });
 
     return resultInstance;
+  }
+
+  /**
+   * Find all chunk IDs for a given document ID
+   * @param collectionName The collection name to search in
+   * @param baseId The base document ID (without chunk suffix)
+   * @returns Array of chunk IDs
+   */
+  public static async findAllChunkIds(collectionName: string, baseId: string): Promise<string[]> {
+    // First try the base ID (for non-chunked docs)
+    const existingIds: string[] = [];
+    try {
+      const res = await VectorBaseModel.vectorDB.getDocuments(collectionName, [baseId]);
+      if (res?.ids?.length && res.ids[0]) {
+        existingIds.push(baseId);
+        console.log(`[VectorBaseModel] Found base document ${baseId}`);
+      }
+    } catch (err) {
+      // Base ID doesn't exist, continue
+    }
+
+    // If we found the base document, it might be non-chunked, so return it
+    if (existingIds.length > 0) {
+      return existingIds;
+    }
+
+    // Otherwise, look for chunks dynamically
+    // Start with _0 and keep checking until we don't find any more
+    let chunkIndex = 0;
+    const maxChunks = 100; // Reasonable upper limit to prevent infinite loops
+
+    while (chunkIndex < maxChunks) {
+      const chunkId = `${baseId}_${chunkIndex}`;
+      try {
+        const res = await VectorBaseModel.vectorDB.getDocuments(collectionName, [chunkId]);
+        if (res?.ids?.length && res.ids[0]) {
+          existingIds.push(chunkId);
+          console.log(`[VectorBaseModel] Found chunk ${chunkId}`);
+          chunkIndex++;
+        } else {
+          // No more chunks found
+          break;
+        }
+      } catch (err) {
+        // Chunk doesn't exist, stop looking
+        break;
+      }
+    }
+
+    console.log(`[VectorBaseModel] Found ${existingIds.length} chunks for ${baseId}`);
+    return existingIds;
+  }
+
+  /**
+   * Extract chunk index from chunk ID (e.g., "doc_0" -> 0, "doc" -> 0)
+   * @param chunkId The chunk ID
+   * @returns The chunk index
+   */
+  public static getChunkIndex(chunkId: string): number {
+    const match = chunkId.match(/_(\d+)$/);
+    return match ? parseInt(match[1], 10) : 0;
   }
 
   static async search<T extends VectorBaseModel>(

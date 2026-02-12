@@ -2,6 +2,7 @@ export const ollamaLocalModels = `---
 schemaversion: 1
 slug: ollama-local-models
 title: Ollama & Local Models
+section: Getting Started
 tags:
   - Models
   - local

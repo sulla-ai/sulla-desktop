@@ -2,6 +2,7 @@ export const memoryAndDreaming = `---
 schemaversion: 1
 slug: memory-and-dreaming
 title: Memory & Dreaming
+section: Getting Started
 tags:
   - Memory
   - knowledgebase

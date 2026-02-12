@@ -76,23 +76,65 @@ export class ArticlesRegistry {
         const result = await VectorBaseModel.vectorDB.queryDocuments(
           this.collectionName,
           [query],
-          limit + offset,
+          (limit + offset) * 2, // Get more results to account for deduplication
           finalFilter
         );
         console.log(`[ArticlesRegistry] Vector query result ids:`, result.ids?.length || 0);
-        
+
         if (result?.ids?.[0]?.length) {
-          const articles: Article[] = await Promise.all(result.ids[0].map(async (id: string, idx: number) => {
-            const metadata = result.metadatas?.[0]?.[idx] ?? {};
-            const article = new Article();
-            article.fill({ ...metadata, slug: id });
-            return article;
-          }));
-          console.log(`[ArticlesRegistry] Semantic search results:`, articles.length);
-          // Apply offset/limit
+          console.log(`[ArticlesRegistry] Full result structure:`, JSON.stringify(result, null, 2));
+          console.log(`[ArticlesRegistry] First few IDs:`, result.ids[0].slice(0, 5));
+          
+          // Group results by article slug to deduplicate (like sections/categories)
+          const articleGroups = new Map<string, { score: number; index: number; metadata: any }>();
+
+          console.log(`[ArticlesRegistry] Processing ${result.ids[0].length} chunks for deduplication:`);
+          result.ids[0].forEach((id: string, idx: number) => {
+            console.log(`[ArticlesRegistry] Processing chunk ID: "${id}"`);
+            // Extract base slug (remove chunk suffix like _0, _1, etc.)
+            const baseSlug = id.replace(/_\d+$/, '');
+            const score = result.scores?.[0]?.[idx] || 0;
+
+            console.log(`[ArticlesRegistry] Chunk "${id}" -> baseSlug "${baseSlug}", score ${score}`);
+
+            // Keep only the highest-scoring chunk per article
+            if (!articleGroups.has(baseSlug) || score > articleGroups.get(baseSlug)!.score) {
+              articleGroups.set(baseSlug, {
+                score,
+                index: idx,
+                metadata: result.metadatas?.[0]?.[idx] ?? {}
+              });
+              console.log(`[ArticlesRegistry] Set ${baseSlug} with score ${score}`);
+            } else {
+              console.log(`[ArticlesRegistry] Skipped ${baseSlug} - lower score`);
+            }
+          });
+
+          console.log(`[ArticlesRegistry] Final article groups:`, Array.from(articleGroups.keys()));
+          console.log(`[ArticlesRegistry] Deduplicated to ${articleGroups.size} unique articles from ${result.ids[0].length} chunks`);
+
+          // Create deduplicated articles
+          const articles: Article[] = await Promise.all(
+            Array.from(articleGroups.entries()).map(async ([slug, { metadata }]) => {
+              const article = new Article();
+              article.fill({ ...metadata, slug });
+              return article;
+            })
+          );
+
+          console.log(`[ArticlesRegistry] Semantic search results: ${articles.length} unique articles (from ${result.ids[0].length} chunks)`);
+
+          // Sort by relevance score and apply offset/limit
+          articles.sort((a, b) => {
+            const scoreA = articleGroups.get(a.attributes.slug)?.score || 0;
+            const scoreB = articleGroups.get(b.attributes.slug)?.score || 0;
+            return scoreB - scoreA; // Higher scores first
+          });
+
           const slicedArticles = articles.slice(offset, offset + limit);
-          const total = await VectorBaseModel.vectorDB.countDocuments(this.collectionName, filter);
+          const total = articleGroups.size; // Total unique articles
           const items = slicedArticles.map(a => this.toListItem(a));
+
           return {
             items,
             total,
@@ -112,25 +154,48 @@ export class ArticlesRegistry {
         );
         console.log(`[ArticlesRegistry] Vector get result ids:`, result.ids?.length || 0);
         
-        let articles: Article[] = [];
         if (result?.ids?.length) {
-          articles = result.ids.map((id: string, idx: number): Article => {
-            const metadata = result.metadatas?.[idx] ?? {};
+          // Group results by article slug to deduplicate chunks (like sections/categories)
+          const articleGroups = new Map<string, { index: number; metadata: any }>();
+
+          console.log(`[ArticlesRegistry] Processing ${result.ids.length} results for deduplication:`);
+          result.ids.forEach((id: string, idx: number) => {
+            // Extract base slug (remove chunk suffix like _0, _1, etc.)
+            const baseSlug = id.replace(/_\d+$/, '');
+            console.log(`[ArticlesRegistry] Result "${id}" -> baseSlug "${baseSlug}"`);
+
+            // For filter-only search, just keep the first occurrence of each article
+            if (!articleGroups.has(baseSlug)) {
+              articleGroups.set(baseSlug, {
+                index: idx,
+                metadata: result.metadatas?.[idx] ?? {}
+              });
+              console.log(`[ArticlesRegistry] Added ${baseSlug} to results`);
+            } else {
+              console.log(`[ArticlesRegistry] Skipped duplicate ${baseSlug}`);
+            }
+          });
+
+          console.log(`[ArticlesRegistry] Deduplicated to ${articleGroups.size} unique articles from ${result.ids.length} results`);
+
+          // Create deduplicated articles
+          const articles: Article[] = Array.from(articleGroups.entries()).map(([slug, { metadata }]) => {
             const article = new Article();
-            article.fill({ ...metadata, slug: id });
+            article.fill({ ...metadata, slug });
             return article;
           });
+
+          const total = articleGroups.size;
+          const items = articles.slice(offset, offset + limit).map(a => this.toListItem(a));
+
+          return {
+            items,
+            total,
+            hasMore: offset + limit < total
+          };
+        } else {
+          return { items: [], total: 0, hasMore: false };
         }
-
-        const total = await VectorBaseModel.vectorDB.countDocuments(this.collectionName, filter);
-
-        const items = articles.map((a: Article) => this.toListItem(a));
-
-        return {
-          items,
-          total,
-          hasMore: offset + limit < total
-        };
       }
     } catch (err) {
       console.error(`Search ${this.collectionName} failed:`, err);
@@ -190,11 +255,34 @@ export class ArticlesRegistry {
 
     const grouped = new Map<string, ArticleListItem[]>();
 
-    result.ids.forEach((id: string, i: number) => {
-      const metadata = result.metadatas[i];
+    // Group results by article slug to deduplicate chunks
+    const articleGroups = new Map<string, { index: number; metadata: any }>();
+
+    console.log(`[ArticlesRegistry] Processing ${result.ids.length} results for navigation deduplication:`);
+    result.ids.forEach((id: string, idx: number) => {
+      // Extract base slug (remove chunk suffix like _0, _1, etc.)
+      const baseSlug = id.replace(/_\d+$/, '');
+      console.log(`[ArticlesRegistry] Navigation result "${id}" -> baseSlug "${baseSlug}"`);
+
+      // For navigation, just keep the first occurrence of each article
+      if (!articleGroups.has(baseSlug)) {
+        articleGroups.set(baseSlug, {
+          index: idx,
+          metadata: result.metadatas?.[idx] ?? {}
+        });
+        console.log(`[ArticlesRegistry] Added ${baseSlug} to navigation`);
+      } else {
+        console.log(`[ArticlesRegistry] Skipped duplicate navigation ${baseSlug}`);
+      }
+    });
+
+    console.log(`[ArticlesRegistry] Navigation deduplicated to ${articleGroups.size} unique articles from ${result.ids.length} results`);
+
+    // Create deduplicated articles for navigation
+    Array.from(articleGroups.entries()).forEach(([slug, { metadata }]) => {
       const article = new Article();
-      article.fill({ ...metadata, slug: id });
-      
+      article.fill({ ...metadata, slug });
+
       // Parse tags
       let tagsArray: string[] = [];
       if (Array.isArray(article.attributes.tags)) {
@@ -202,10 +290,10 @@ export class ArticlesRegistry {
       } else if (typeof article.attributes.tags === 'string') {
         tagsArray = article.attributes.tags.split(',').map(s => s.trim()).filter(Boolean);
       }
-      
-      // Use tags[0] or section or category, fallback to 'Uncategorized'
-      const tag = tagsArray[0] || article.attributes.section || article.attributes.category || 'Uncategorized';
-      
+
+      // Use section or category for navigation grouping, fallback to tags[0] or 'Uncategorized'
+      const tag = article.attributes.section || article.attributes.category || tagsArray[0] || 'Uncategorized';
+
       if (!grouped.has(tag)) {
         grouped.set(tag, []);
       }
@@ -285,16 +373,12 @@ export class ArticlesRegistry {
     };
   }
 
-  private createExcerpt(text: string, max = 150): string {
+  private createExcerpt(text: string, max = 250): string {
     if (!text) return '';
+    // Simple approach: just take the first max characters and clean up whitespace
     const clean = text
-      .replace(/#{1,6}\s+/g, '')
-      .replace(/(\*\*|__)(.*?)\1/g, '$2')
-      .replace(/(\*|_)(.*?)\1/g, '$2')
-      .replace(/`([^`]+)`/g, '$1')
-      .replace(/```[\s\S]*?```/g, '[code]')
-      .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-      .replace(/\n+/g, ' ')
+      .replace(/\n+/g, ' ')  // Replace newlines with spaces
+      .replace(/\s+/g, ' ')  // Normalize whitespace
       .trim();
     return clean.length > max ? clean.slice(0, max) + '...' : clean;
   }

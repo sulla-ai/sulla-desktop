@@ -2,6 +2,7 @@ export const kubernetesBasics = `---
 schemaversion: 1
 slug: kubernetes-basics
 title: Kubernetes in Sulla
+section: Getting Started
 tags:
   - Kubernetes
   - basics

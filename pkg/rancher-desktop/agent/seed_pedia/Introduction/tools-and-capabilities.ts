@@ -2,6 +2,7 @@ export const toolsAndCapabilities = `---
 schemaversion: 1
 slug: tools-and-capabilities
 title: Tools & Capabilities
+section: Getting Started
 tags:
   - Tools
   - reference

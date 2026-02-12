@@ -2,6 +2,7 @@ export const dockerBasics = `---
 schemaversion: 1
 slug: docker-basics
 title: Docker in Sulla
+section: Getting Started
 tags:
   - Docker
   - basics

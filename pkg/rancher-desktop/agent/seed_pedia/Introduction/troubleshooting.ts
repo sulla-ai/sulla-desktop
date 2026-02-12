@@ -2,6 +2,7 @@ export const troubleshooting = `---
 schemaversion: 1
 slug: troubleshooting
 title: Troubleshooting
+section: Getting Started
 tags:
   - Troubleshooting
   - recovery

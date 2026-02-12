@@ -45,7 +45,8 @@ export class SullaSettingsModel extends BaseModel<SettingsAttributes> {
       case 'array':
         return JSON.stringify(value);
       default:
-        return JSON.stringify(value);
+        // For uncast values, treat as plain string (don't JSON stringify)
+        return String(value);
     }
   }
 
@@ -67,7 +68,8 @@ export class SullaSettingsModel extends BaseModel<SettingsAttributes> {
         case 'array':
           return JSON.parse(value);
         default:
-          return JSON.parse(value);
+          // For uncast values, return as string (don't try to parse as JSON)
+          return value.replace(/^"|"$/g, '');
       }
     } catch (err) {
       console.error('Error casting value:', err);

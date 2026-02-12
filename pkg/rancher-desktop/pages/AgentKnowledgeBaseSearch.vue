@@ -356,12 +356,12 @@ interface TocHeading {
 const getArticleIntro = (excerpt: string): string => {
   if (!excerpt) return '';
   
-  // Clean up the excerpt and take first 150 characters, ending at word boundary
+  // Clean up the excerpt and take first 250 characters, ending at word boundary
   const cleanExcerpt = excerpt.replace(/\s+/g, ' ').trim();
-  if (cleanExcerpt.length <= 150) return cleanExcerpt;
+  if (cleanExcerpt.length <= 250) return cleanExcerpt;
   
-  // Find the last space before 150 characters
-  const truncated = cleanExcerpt.substring(0, 150);
+  // Find the last space before 250 characters
+  const truncated = cleanExcerpt.substring(0, 250);
   const lastSpaceIndex = truncated.lastIndexOf(' ');
   
   if (lastSpaceIndex > 0) {

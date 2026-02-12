@@ -2,6 +2,7 @@ export const architectureOverview = `---
 schemaversion: 1
 slug: architecture-overview
 title: Architecture Overview
+section: Getting Started
 tags:
   - Architecture
   - overview

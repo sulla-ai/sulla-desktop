@@ -2,6 +2,7 @@ export const welcome = `---
 schemaversion: 1
 slug: welcome
 title: Welcome to Sulla Desktop
+section: Getting Started
 tags:
   - Introduction
   - onboarding

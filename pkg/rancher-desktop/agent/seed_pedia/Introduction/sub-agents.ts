@@ -2,6 +2,7 @@ export const subAgents = `---
 schemaversion: 1
 slug: sub-agents
 title: Sub-Agents
+section: Getting Started
 tags:
   - sub-agents
   - ai-agents
