@@ -1,42 +1,52 @@
 // PostgresClient.ts — upgraded to pg.Pool + proper shutdown
 
 import { Pool, PoolClient, QueryResult, QueryResultRow } from 'pg';
-
-const POSTGRES_URL = 'postgresql://sulla:sulla_dev_password@127.0.0.1:30116/sulla';
+import { SullaSettingsModel } from './models/SullaSettingsModel';
 
 export class PostgresClient {
   private pool: Pool | null = null;
   private connected = false;
 
-  constructor() {
+  public async initialize(): Promise<void> {
+    if (this.pool) return; // Already initialized
+
+    // Get password from settings
+    const password = await SullaSettingsModel.get('sullaServicePassword', 'sulla_dev_password');
+
     this.pool = new Pool({
-      connectionString: POSTGRES_URL,
+      host: '127.0.0.1',
+      port: 30116,
+      user: 'sulla',
+      password: password,
+      database: 'sulla',
       max: 20,                    // max connections in pool
       idleTimeoutMillis: 30000,   // close idle after 30s
       connectionTimeoutMillis: 2000,
     });
 
     // Graceful pool error handling
-    this.pool.on('error', (err, client) => {
+    this.pool.on('error', (err) => {
       console.error('[PostgresPool] Unexpected error on idle client', err);
       this.connected = false;
     });
+
+    await this.connect();
   }
 
   /**
-   * Initializes the connection pool and sets the search_path to "$user", public
-   * @returns true if initialization was successful, false otherwise
+   * Connect to the database and set up search_path
+   * @returns true if connection was successful, false otherwise
    */
-  async initialize(): Promise<boolean> {
+  private async connect(): Promise<boolean> {
     if (this.connected) return true;
 
     try {
       const client = await this.pool!.connect();
       await client.query('SELECT 1');
-      
+
       // Set search_path once on first connect (matches your psql behavior)
       await client.query(`SET search_path TO "$user", public`);
-      
+
       client.release();
       this.connected = true;
       console.log('[PostgresClient] Pool connected and healthy');
@@ -50,8 +60,7 @@ export class PostgresClient {
 
   async getClient(): Promise<PoolClient> {
     if (!this.connected) {
-      const ok = await this.initialize();
-      if (!ok) throw new Error('Postgres pool not ready');
+      await this.initialize();
     }
     return this.pool!.connect();
   }

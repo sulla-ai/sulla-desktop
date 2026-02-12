@@ -43,6 +43,7 @@ services:
     ports:
       - "30116:5432"
     environment:
+      - POSTGRES_HOST_AUTH_METHOD=trust
       - POSTGRES_USER=sulla
       - POSTGRES_PASSWORD=sulla_dev_password
       - POSTGRES_DB=sulla

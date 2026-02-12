@@ -2193,6 +2193,9 @@ export default class LimaBackend extends events.EventEmitter implements VMBacken
         if (env.startsWith('N8N_BASIC_AUTH_PASSWORD=')) {
           return `N8N_BASIC_AUTH_PASSWORD=${sullaServicePassword}`;
         }
+        if (env.startsWith('DB_POSTGRESDB_PASSWORD=')) {
+          return `DB_POSTGRESDB_PASSWORD=${sullaServicePassword}`;
+        }
         return env;
       });
     }
