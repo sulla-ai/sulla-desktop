@@ -5,7 +5,7 @@
       <AgentHeader :is-dark="isDark" :toggle-theme="toggleTheme" />
 
       <div class="flex w-full flex-col">
-        <div class="overflow-hidden bg-slate-900 dark:-mt-19 dark:-mb-32 dark:pt-19 dark:pb-32 relative min-h-[400px]">
+        <div class="overflow-hidden bg-slate-900 dark:-mt-19 dark:-mb-32 dark:pt-19 dark:pb-32 dark:min-h-[600px] banner-dark-min-height relative before:absolute before:inset-0 before:bg-linear-to-b before:from-transparent before:via-transparent before:to-slate-900 dark:before:to-slate-900 before:pointer-events-none before:z-5">
           <img alt="" width="530" height="530" decoding="async" data-nimg="1"
             class="absolute right-full bottom-full -mr-72 -mb-56 opacity-50" style="color:transparent"
             :src="splashUrl">
@@ -107,7 +107,7 @@
           </div>
         </div>
 
-        <div class="relative mx-auto flex w-full max-w-8xl flex-auto justify-center sm:px-2 lg:px-8 xl:px-12">
+        <div class="relative mx-auto flex w-full max-w-8xl flex-auto justify-center sm:px-2 lg:px-8 xl:px-12 relative z-20">
           <div class="hidden lg:relative lg:block lg:flex-none">
             <div class="absolute inset-y-0 right-0 w-[50vw] bg-slate-50 dark:hidden"></div>
             <div class="absolute top-16 right-0 bottom-0 hidden h-12 w-px bg-linear-to-t from-slate-800 dark:block"></div>
@@ -139,7 +139,7 @@
             </div>
           </div>
 
-          <div class="max-w-2xl min-w-0 flex-auto px-4 py-16 lg:max-w-none lg:pr-0 lg:pl-8 xl:px-16">
+          <div class="max-w-2xl min-w-0 flex-auto px-4 py-16 lg:max-w-none lg:pr-0 lg:pl-8 xl:px-16 relative z-20">
             <div v-if="searchResults.length > 0" class="space-y-6">
               <div v-for="article in paginatedResults" :key="article.slug" class="blog-post border-b border-slate-200 pb-6 dark:border-slate-700">
                 <h2 class="text-2xl font-bold text-slate-900 dark:text-white">{{ article.title }}</h2>
@@ -215,8 +215,7 @@
               Select an article from the sidebar.
             </article>
           </div>
-          <div
-            class="hidden xl:sticky xl:top-19 xl:-mr-6 xl:block xl:h-[calc(100vh-4.75rem)] xl:flex-none xl:overflow-y-auto xl:py-16 xl:pr-6">
+          <div class="hidden xl:sticky xl:top-19 xl:-mr-6 xl:block xl:h-[calc(100vh-4.75rem)] xl:flex-none xl:overflow-y-auto xl:py-16 xl:pr-6 relative z-20">
             <nav aria-labelledby="on-this-page-title" class="w-56">
               <h2 id="on-this-page-title" class="font-display text-sm font-medium text-slate-900 dark:text-white">On
                 this page</h2>
@@ -232,6 +231,82 @@
                 </li>
               </ol>
             </nav>
+
+            <!-- Article Meta Information -->
+            <div v-if="activePage" class="mt-8 pt-8 border-t border-slate-200 dark:border-slate-800">
+              <!-- Article Tags -->
+              <div v-if="activePage.tags && activePage.tags.length > 0" class="mb-6">
+                <h3 class="font-display text-sm font-medium text-slate-900 dark:text-white mb-3">Tags</h3>
+                <div class="flex flex-wrap gap-2">
+                  <span
+                    v-for="tag in activePage.tags"
+                    :key="tag"
+                    class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-sky-100 text-sky-800 dark:bg-sky-900 dark:text-sky-300"
+                  >
+                    {{ tag }}
+                  </span>
+                </div>
+              </div>
+
+              <!-- Article Metadata -->
+              <div class="mb-6">
+                <h3 class="font-display text-sm font-medium text-slate-900 dark:text-white mb-3">Article Info</h3>
+                <dl class="space-y-2 text-sm">
+                  <div v-if="activePage.updated_at">
+                    <dt class="font-medium text-slate-500 dark:text-slate-400">Last Updated</dt>
+                    <dd class="text-slate-900 dark:text-white">{{ new Date(activePage.updated_at).toLocaleDateString('en-US', { 
+                      year: 'numeric', 
+                      month: 'long', 
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    }) }}</dd>
+                  </div>
+                  <div v-if="activePage.slug">
+                    <dt class="font-medium text-slate-500 dark:text-slate-400">Slug</dt>
+                    <dd class="text-slate-900 dark:text-white font-mono text-xs">{{ activePage.slug }}</dd>
+                  </div>
+                </dl>
+              </div>
+
+              <!-- Related Articles -->
+              <div v-if="relatedArticles.length > 0" class="mb-6">
+                <h3 class="font-display text-sm font-medium text-slate-900 dark:text-white mb-3">Related Articles</h3>
+                <ul class="space-y-2">
+                  <li v-for="article in relatedArticles.slice(0, 5)" :key="article.slug">
+                    <a
+                      href="#"
+                      class="block text-sm text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200 transition-colors"
+                      @click.prevent="selectPage(article.slug)"
+                    >
+                      <div class="font-medium">{{ article.title }}</div>
+                      <div class="text-xs text-slate-500 dark:text-slate-500 mt-1">
+                        {{ article.tags && article.tags[0] ? article.tags[0] : 'Article' }}
+                      </div>
+                    </a>
+                  </li>
+                </ul>
+              </div>
+
+              <!-- Quick Actions -->
+              <div class="mb-6">
+                <h3 class="font-display text-sm font-medium text-slate-900 dark:text-white mb-3">Quick Actions</h3>
+                <div class="space-y-2">
+                  <button
+                    @click="$router.push({ name: 'AgentKnowledgeBaseSearch', query: { category: activePage.tags?.[0] } })"
+                    class="w-full text-left px-3 py-2 text-sm text-slate-600 hover:text-slate-900 hover:bg-slate-50 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-slate-800 rounded transition-colors"
+                  >
+                    Find similar articles
+                  </button>
+                  <button
+                    @click="$router.push({ name: 'AgentKnowledgeBaseSearch' })"
+                    class="w-full text-left px-3 py-2 text-sm text-slate-600 hover:text-slate-900 hover:bg-slate-50 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-slate-800 rounded transition-colors"
+                  >
+                    Browse all articles
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -245,6 +320,7 @@ import KnowledgeGraph from './KnowledgeGraph.vue';
 import AgentHeader from './agent/AgentHeader.vue';
 import { articlesRegistry } from '../agent/database/registry/ArticlesRegistry';
 import { computed, onMounted, ref, watch } from 'vue';
+import { useRouter, useRoute } from 'vue-router';
 import DOMPurify from 'dompurify';
 import { marked } from 'marked';
 import './assets/AgentKnowledgeBase.css';
@@ -253,6 +329,8 @@ import type { ArticleListItem, ArticleWithContent } from '../agent/database/regi
 const THEME_STORAGE_KEY = 'agentTheme';
 const isDark = ref(false);
 const showOverlay = ref(true);  // ← new toggle state
+
+const router = useRouter();
 
 const query = ref('');
 const activeCategory = ref<string | null>(null);
@@ -392,6 +470,19 @@ const prevPage = computed<any | null>(() => {
   return idx > 0 ? sortedPagesByDate.value[idx - 1] : null;
 });
 
+const relatedArticles = computed(() => {
+  if (!activePage.value?.tags || activePage.value.tags.length === 0) return [];
+  
+  // Find articles that share at least one tag with the current article
+  return pages.value.filter(article => {
+    if (article.slug === activePage.value?.slug) return false; // Exclude current article
+    
+    return article.tags && article.tags.some(tag => 
+      activePage.value?.tags?.includes(tag)
+    );
+  }).slice(0, 5); // Limit to 5 related articles
+});
+
 const nav = ref<{ tag: string; pages: ArticleListItem[] }[]>([]);
 
 const categories = computed(() => {
@@ -400,33 +491,20 @@ const categories = computed(() => {
 
 const performSearch = async () => {
   const q = searchInput.value.trim();
-  query.value = q;
-  activeCategory.value = null;
-  categoryTitle.value = '';
-  activePage.value = null;
-  page.value = 1;
   if (q) {
-    try {
-      console.log(`[Vue] Performing search for: ${q}`);
-      const results = await articlesRegistry.search({ query: q, limit: 100 });
-      searchResults.value = results.items;
-      console.log(`[Vue] Search results:`, searchResults.value.length);
-    } catch (err) {
-      console.error('[Vue] Search failed:', err);
-      searchResults.value = [];
-    }
-  } else {
-    searchResults.value = [];
+    // Navigate to search page with query parameter
+    router.push({ name: 'AgentKnowledgeBaseSearch', query: { q } });
   }
 };
 
 const selectCategory = (category: string | null) => {
-  activeCategory.value = category;
-  query.value = '';
-  searchInput.value = '';
-  categoryTitle.value = category || '';
-  activePage.value = null;
-  page.value = 1;
+  if (category) {
+    // Navigate to search page with category parameter
+    router.push({ name: 'AgentKnowledgeBaseSearch', query: { category } });
+  } else {
+    // For "All" category, navigate to search page without parameters
+    router.push({ name: 'AgentKnowledgeBaseSearch' });
+  }
 };
 
 const selectPage = async (slug: string) => {
@@ -471,7 +549,7 @@ onMounted(async () => {
   } finally {
     loadingPages.value = false;
   }
-
+  console.log('activeSlug', activeSlug.value);
   if (!activeSlug.value && nav.value.length > 0 && nav.value[0].pages.length > 0) {
     await selectPage(nav.value[0].pages[0].slug);
   }
@@ -492,3 +570,9 @@ function toggleTheme() {
   localStorage.setItem(THEME_STORAGE_KEY, isDark.value ? 'dark' : 'light');
 }
 </script>
+
+<style scoped>
+.dark .banner-dark-min-height {
+  min-height: 600px;
+}
+</style>
