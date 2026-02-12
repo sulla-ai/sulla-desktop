@@ -6,7 +6,15 @@
 
       <div class="flex w-full flex-col">
         <div class="overflow-hidden bg-slate-900 dark:-mt-19 dark:-mb-32 dark:pt-19 dark:pb-32 relative min-h-[400px]">
-          <!-- Graph background -->
+          <img alt="" width="530" height="530" decoding="async" data-nimg="1"
+            class="absolute right-full bottom-full -mr-72 -mb-56 opacity-50" style="color:transparent"
+            :src="splashUrl">
+          <img alt="" width="530" height="530" decoding="async" data-nimg="1" 
+            class="absolute -top-64 -right-64"
+            style="color:transparent" :src="splashUrl">
+          <img alt="" width="567" height="567" decoding="async" data-nimg="1"
+            class="absolute -right-44 -bottom-40" style="color:transparent" :src="splash2Url">
+          
           <div class="absolute inset-0 z-0 opacity-30">
             <KnowledgeGraph />
           </div>
@@ -29,9 +37,6 @@
               <div
                 class="mx-auto grid max-w-2xl grid-cols-1 items-center gap-x-8 gap-y-16 px-4 lg:max-w-8xl lg:grid-cols-2 lg:px-8 xl:gap-x-16 xl:px-12">
                 <div class="relative z-10 md:text-center lg:text-left">
-                  <img alt="" width="530" height="530" decoding="async" data-nimg="1"
-                    class="absolute right-full bottom-full -mr-72 -mb-56 opacity-50" style="color:transparent"
-                    :src="splashUrl">
                   <div class="relative">
                     <p
                       class="inline bg-linear-to-r from-indigo-200 via-sky-400 to-indigo-200 bg-clip-text font-display text-5xl tracking-tight text-transparent">
