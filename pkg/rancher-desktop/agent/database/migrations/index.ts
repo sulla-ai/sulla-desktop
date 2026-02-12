@@ -8,6 +8,7 @@ import { up as up_0008, down as down_0008 } from './0008_create_calendar_events_
 import { up as up_0009, down as down_0009 } from './0009_add_status_to_calendar_events';
 import { up as up_0010, down as down_0010 } from './0010_create_sections_and_categories_tables';
 import { up as up_0011, down as down_0011 } from './0011_create_settings_table';
+import { up as up_0012, down as down_0012 } from './0012_add_cast_column_to_sulla_settings';
 
 export const migrationsRegistry = [
   { name: '0001_create_migrations_and_seeders_table', up: up_0001, down: down_0001 },
@@ -19,4 +20,5 @@ export const migrationsRegistry = [
   { name: '0009_add_status_to_calendar_events', up: up_0009, down: down_0009 },
   { name: '0010_create_sections_and_categories_tables', up: up_0010, down: down_0010 },
   { name: '0011_create_settings_table', up: up_0011, down: down_0011 },
+  { name: '0012_add_cast_column_to_sulla_settings', up: up_0012, down: down_0012 },
 ] as const;

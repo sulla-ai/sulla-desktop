@@ -1,5 +1,5 @@
 import { getToolRegistry } from './ToolRegistry';
-import { ChromaTool } from './ChromaTool';
+import { KnowledgeGraphTool } from './KnowledgeGraphTool';
 import { KubectlTool } from './KubectlTool';
 import { RdctlTool } from './RdctlTool';
 import { LimactlTool } from './LimactlTool';
@@ -27,7 +27,7 @@ export function registerDefaultTools(): void {
     }
   };
 
-  ensure(new ChromaTool());
+  ensure(new KnowledgeGraphTool());
   ensure(new KubectlTool());
   ensure(new RdctlTool());
   ensure(new LimactlTool());
@@ -44,7 +44,7 @@ export function registerDefaultTools(): void {
 
 export { getToolRegistry } from './ToolRegistry';
 export { BaseTool } from './BaseTool';
-export { ChromaTool } from './ChromaTool';
+export { KnowledgeGraphTool } from './KnowledgeGraphTool';
 export { KubectlTool } from './KubectlTool';
 export { LimactlTool } from './LimactlTool';
 export { ExecTool } from './ExecTool';

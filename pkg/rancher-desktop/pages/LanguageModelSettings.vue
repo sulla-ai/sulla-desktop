@@ -237,7 +237,9 @@ export default defineComponent({
 
   computed: {
     currentNavItem(): { id: string; name: string } {
-      return this.navItems.find(item => item.id === this.currentNav) || this.navItems[0];
+      const item = this.navItems.find(item => item.id === this.currentNav) || this.navItems[0];
+      console.log('computed currentNavItem:', item, 'currentNav:', this.currentNav);
+      return item;
     },
     soulPromptEditor: {
       get(): string {
@@ -260,11 +262,14 @@ export default defineComponent({
     },
     pendingModelDescription(): string {
       const model = OLLAMA_MODELS.find(m => m.name === this.pendingModel);
-
-      return model?.description || '';
+      const desc = model?.description || '';
+      console.log('computed pendingModelDescription:', desc, 'pendingModel:', this.pendingModel);
+      return desc;
     },
     isPendingModelInstalled(): boolean {
-      return this.installedModels.some(m => m.name === this.pendingModel);
+      const installed = this.installedModels.some(m => m.name === this.pendingModel);
+      console.log('computed isPendingModelInstalled:', installed, 'pendingModel:', this.pendingModel, 'installedModels:', this.installedModels.map(m => m.name));
+      return installed;
     },
     isPendingDifferentFromActive(): boolean {
       return this.pendingModel !== this.activeModel;
@@ -297,7 +302,9 @@ export default defineComponent({
       return this.modelStatuses['nomic-embed-text'] || 'missing';
     },
     defaultModelStatus(): 'installed' | 'missing' | 'failed' {
-      return this.modelStatuses[this.activeModel] || 'missing';
+      const status = this.modelStatuses[this.activeModel] || 'missing';
+      console.log('computed defaultModelStatus:', status, 'activeModel:', this.activeModel, 'modelStatuses:', this.modelStatuses);
+      return status;
     },
     hasDownloadedModels(): boolean {
       return this.installedModels.length > 0;
@@ -305,11 +312,14 @@ export default defineComponent({
   },
 
   async mounted() {
+    console.log('LanguageModelSettings mounted');
     // Listen for settings write errors from main process
     ipcRenderer.on('settings-write-error', (_event: unknown, error: any) => {
       console.error('[LM Settings] Settings write error from main process:', error);
       this.activationError = `Failed to save settings: ${error?.message || 'Unknown error'}`;
     });
+
+    this.activeMode = await SullaSettingsModel.get('activeMode', 'local');
 
     // Listen for model changes from other windows
     ipcRenderer.on('model-changed', this.handleModelChanged);
@@ -321,13 +331,16 @@ export default defineComponent({
     this.heartbeatDelayMinutes = await SullaSettingsModel.get('heartbeatDelayMinutes', 30);
     this.botName = await SullaSettingsModel.get('botName', 'Sulla');
     this.primaryUserName = await SullaSettingsModel.get('primaryUserName', '');
-    this.activeMode = await SullaSettingsModel.get('modelMode', 'local');
+    this.activeMode = (await SullaSettingsModel.get('modelMode', 'local')) as 'local' | 'remote';
+    // Strip quotes if present (in case of malformed storage)
+    const mode = typeof this.activeMode === 'string' ? this.activeMode.replace(/^"|"$/g, '') : this.activeMode;
+    this.activeMode = (mode === 'local' || mode === 'remote') ? mode : 'local';
     this.viewingTab = this.activeMode;
     this.selectedProvider = await SullaSettingsModel.get('remoteProvider', 'grok');
     this.selectedRemoteModel = await SullaSettingsModel.get('remoteModel', 'grok-4-1-fast-reasoning');
     this.apiKey = await SullaSettingsModel.get('remoteApiKey', '');
     this.remoteRetryCount = await SullaSettingsModel.get('remoteRetryCount', 3);
-    this.remoteTimeoutSeconds = await SullaSettingsModel.get('remoteTimeoutSeconds', 60);
+    this.remoteTimeoutSeconds = Number(await SullaSettingsModel.get('remoteTimeoutSeconds', 60));
     this.localTimeoutSeconds = await SullaSettingsModel.get('localTimeoutSeconds', 120);
     this.localRetryCount = await SullaSettingsModel.get('localRetryCount', 2);
     this.heartbeatEnabled = await SullaSettingsModel.get('heartbeatEnabled', true);
@@ -335,17 +348,22 @@ export default defineComponent({
     this.activeModel = await SullaSettingsModel.get('sullaModel', 'tinyllama:latest');
     this.pendingModel = this.activeModel;
 
+    console.log('Loaded settings values:', {
+      activeMode: this.activeMode,
+      viewingTab: this.viewingTab,
+      selectedProvider: this.selectedProvider,
+      selectedRemoteModel: this.selectedRemoteModel,
+      remoteTimeoutSeconds: this.remoteTimeoutSeconds,
+      localTimeoutSeconds: this.localTimeoutSeconds,
+      remoteRetryCount: this.remoteRetryCount,
+      localRetryCount: this.localRetryCount
+    });
+
     await this.loadModels();
-    this.fetchContainerStats();
-    this.statsInterval = setInterval(() => this.fetchContainerStats(), 3000);
     ipcRenderer.send('dialog/ready');
   },
 
   beforeUnmount() {
-    if (this.statsInterval) {
-      clearInterval(this.statsInterval);
-      this.statsInterval = null;
-    }
     // Clean up IPC listeners
     ipcRenderer.removeAllListeners('settings-write-error');
     ipcRenderer.removeAllListeners('model-changed');
@@ -423,10 +441,16 @@ export default defineComponent({
       });
     },
     navClicked(navId: string) {
+      console.log('navClicked called with navId:', navId, 'current viewingTab:', this.viewingTab);
       this.currentNav = navId;
-      if (navId === 'models') {
+      console.log('currentNav set to:', this.currentNav);
+      if (navId === 'overview') {
+        this.fetchContainerStats();
+      } else if (navId === 'models') {
         this.loadModels();
+        this.fetchContainerStats();
         this.checkModelStatuses();
+        console.log('After models nav, viewingTab:', this.viewingTab);
       }
     },
 
@@ -625,6 +649,8 @@ export default defineComponent({
         await this.writeExperimentalSettings({ modelMode: 'local' });
 
         this.activeMode = 'local';
+        this.viewingTab = 'local';
+        console.log('Activated local model, activeMode and viewingTab set to local');
         this.activeModel = this.pendingModel;
         console.log(`[LM Settings] Local model activated: ${this.pendingModel}`);
 
@@ -712,6 +738,9 @@ export default defineComponent({
         await this.writeExperimentalSettings({ modelMode: 'remote' });
 
         this.activeMode = 'remote';
+        this.viewingTab = 'remote';
+        console.log('Activated remote model, activeMode and viewingTab set to remote');
+        this.activeModel = this.pendingModel;
         console.log(`[LM Settings] Remote model activated: ${this.selectedProvider}/${this.selectedRemoteModel}`);
 
         // Emit event for other windows to update
@@ -727,28 +756,23 @@ export default defineComponent({
     async checkModelStatuses() {
       this.checkingModelStatuses = true;
       try {
-        // Check status of key models by attempting to load them
+        // Ollama availability already checked in loadModels(), proceed with model checks
+        
+        // Check status of key models by checking against installed models list
         const keyModels = ['nomic-embed-text', this.activeModel].filter((model, index, arr) => arr.indexOf(model) === index);
         
         for (const modelName of keyModels) {
           try {
-            // Try to get model info to check if it's available
-            const response = await this.silentFetch('http://127.0.0.1:30114/api/show', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ name: modelName }),
-            });
-            
-            if (response && response.ok) {
-              this.modelStatuses[modelName] = 'installed';
-            } else {
-              this.modelStatuses[modelName] = 'missing';
-            }
+            // Check if model is in the installed models list from /api/tags
+            const isInstalled = this.installedModels.some(model => model.name === modelName);
+            this.modelStatuses[modelName] = isInstalled ? 'installed' : 'missing';
           } catch (error) {
-            console.warn(`Failed to check status of model ${modelName}:`, error);
+            // Silently handle errors - don't log or break the interface
             this.modelStatuses[modelName] = 'failed';
           }
         }
+      } catch (error) {
+        // If the entire loop fails, silently continue
       } finally {
         this.checkingModelStatuses = false;
       }
@@ -808,8 +832,19 @@ export default defineComponent({
           ...extra,
         };
 
+        // Define cast types for settings
+        const settingCasts: Record<string, string> = {
+          remoteRetryCount: 'number',
+          remoteTimeoutSeconds: 'number',
+          localTimeoutSeconds: 'number',
+          localRetryCount: 'number',
+          heartbeatDelayMinutes: 'number',
+          heartbeatEnabled: 'boolean',
+        };
+
         for (const [key, value] of Object.entries(settingsToSave)) {
-          await SullaSettingsModel.set(key, value);
+          const cast = settingCasts[key];
+          await SullaSettingsModel.set(key, value, cast);
         }
       } catch (err) {
         console.error('[LM Settings] Error in writeExperimentalSettings:', err);
@@ -2225,6 +2260,7 @@ export default defineComponent({
     color: var(--primary, #3b82f6);
     border-bottom-color: var(--primary, #3b82f6);
     font-weight: 500;
+    background: var(--primary-bg, rgba(59, 130, 246, 0.1));
   }
 }
 

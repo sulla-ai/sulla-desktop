@@ -86,8 +86,8 @@ const handleNext = async () => {
   // Save to SullaSettingsModel
   await SullaSettingsModel.set('sullaEmail', sullaEmail.value);
   await SullaSettingsModel.set('sullaPassword', sullaPassword.value);
-  await SullaSettingsModel.set('sullaSubscribeToUpdates', sullaSubscribeToUpdates.value);
-  await SullaSettingsModel.set('firstRunCredentialsNeeded', false);
+  await SullaSettingsModel.set('sullaSubscribeToUpdates', sullaSubscribeToUpdates.value, 'boolean');
+  await SullaSettingsModel.set('firstRunCredentialsNeeded', false, 'boolean');
 
   console.log('[FirstRunWelcome] Settings committed successfully');
 

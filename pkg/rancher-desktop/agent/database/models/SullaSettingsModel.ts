@@ -9,6 +9,7 @@ import { redisClient } from '../RedisClient';
 interface SettingsAttributes {
   property: string;
   value: any;
+  cast?: string;
 }
 
 export class SullaSettingsModel extends BaseModel<SettingsAttributes> {
@@ -18,7 +19,7 @@ export class SullaSettingsModel extends BaseModel<SettingsAttributes> {
   }
 
   protected primaryKey = 'property';
-  protected fillable: string[] = ['property', 'value'];
+  protected fillable: string[] = ['property', 'value', 'cast'];
   protected guarded: string[] = [];
   protected timestamps = false;
 
@@ -28,6 +29,51 @@ export class SullaSettingsModel extends BaseModel<SettingsAttributes> {
   protected readonly casts: Record<string, string> = {
     value: 'string',
   };
+
+  /**
+   * Convert value to string based on cast type
+   */
+  private static toStringValue(value: any, cast: string): string {
+    switch(cast) {
+      case 'string':
+      case 'slug':
+        return String(value);
+      case 'number':
+        return String(value);
+      case 'boolean':
+        return String(value);
+      case 'array':
+        return JSON.stringify(value);
+      default:
+        if (typeof value === 'object' && value !== null) {
+          return JSON.stringify(value);
+        } else {
+          return String(value);
+        }
+    }
+  }
+
+  /**
+   * Cast value back from string based on cast type
+   */
+  private static castValue(value: string, cast?: string): any {
+    switch(cast) {
+      case 'string':
+      case 'slug':
+        return value.replace(/^"|"$/g, '');
+      case 'number':
+        return Number(value.replace(/^"|"$/g, ''));
+      case 'boolean':
+        const cleaned = value.replace(/^"|"$/g, '').toLowerCase();
+        const truthyValues = ['true', '1', 'yes', 'on'];
+        return truthyValues.includes(cleaned);
+      case 'array':
+        return JSON.parse(value);
+      default:
+        if (!cast) return value.replace(/^"|"$/g, '');
+        return JSON.parse(value);
+    }
+  }
 
   // ──────────────────────────────────────────────
   // Persistent installation file path (decided once per process)
@@ -137,13 +183,20 @@ export class SullaSettingsModel extends BaseModel<SettingsAttributes> {
       // Redis → PG path (values are strings)
       const cached = await redisClient.hget('sulla_settings', property);
       if (cached !== null) {
-        return cached;
+        // Get cast from DB since Redis doesn't store it
+        const setting = await this.find(property);
+        if (setting) {
+          const cast = setting.attributes.cast;
+          return this.castValue(cached, cast);
+        }
+        return this.castValue(cached); // fallback without cast
       }
       const setting = await this.find(property);
       if (setting) {
         const value = setting.attributes.value;
+        const cast = setting.attributes.cast;
         await redisClient.hset('sulla_settings', property, value);
-        return value;
+        return this.castValue(value, cast);
       }
       return _default;
     }
@@ -166,19 +219,23 @@ export class SullaSettingsModel extends BaseModel<SettingsAttributes> {
    * @param value 
    * @returns 
    */
-  public static async setSetting(property: string, value: any): Promise<void> {
+  public static async setSetting(property: string, value: any, cast?: string): Promise<void> {
+    const valueCast = cast || typeof value;
+    const stringValue = this.toStringValue(value, valueCast);
+
     if (this.isReady) {
       // Write-through to PG + Redis (unchanged)
       const existing = await this.find(property);
       if (existing) {
-        existing.attributes.value = value;
+        existing.attributes.value = stringValue;
+        existing.attributes.cast = cast;
         await existing.save();
       } else {
         const model = new this();
-        model.attributes = { property, value };
+        model.attributes = { property, value: stringValue, cast };
         await model.save();
       }
-      await redisClient.hset('sulla_settings', property, value);
+      await redisClient.hset('sulla_settings', property, stringValue);
       return;
     }
 
@@ -211,8 +268,8 @@ export class SullaSettingsModel extends BaseModel<SettingsAttributes> {
    * @param value 
    * @returns 
    */
-  public static async set(property: string, value: any): Promise<void> {
-    return this.setSetting(property, value);
+  public static async set(property: string, value: any, cast?: string): Promise<void> {
+    return this.setSetting(property, value, cast);
   }
 
   // ──────────────────────────────────────────────
@@ -253,4 +310,3 @@ export class SullaSettingsModel extends BaseModel<SettingsAttributes> {
     return crypto.randomUUID();
   }
 }
-

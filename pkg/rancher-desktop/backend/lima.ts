@@ -2063,7 +2063,7 @@ export default class LimaBackend extends events.EventEmitter implements VMBacken
 
     
 
-    await SullaSettingsModel.set('firstKubernetesIsInstalled', true);
+    await SullaSettingsModel.set('firstKubernetesIsInstalled', true, 'boolean');
 
     // Load firstRunCredentialsNeeded from SullaSettingsModel
     const firstRunCredentialsNeeded = await SullaSettingsModel.get('firstRunCredentialsNeeded', true);
