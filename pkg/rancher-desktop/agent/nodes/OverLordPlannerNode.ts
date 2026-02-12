@@ -71,6 +71,12 @@ export class OverLordPlannerNode extends BaseNode {
 
   async execute(state: OverlordThreadState): Promise<NodeResult<OverlordThreadState>> {
 
+    // Establish WebSocket connection using the dynamic channel from state
+    const connectionId = state.metadata.wsChannel as string;
+    if (connectionId && !this.isWebSocketConnected(connectionId)) {
+      this.connectWebSocket(connectionId);
+    }
+
     const heartbeatPromptSetting = await SullaSettingsModel.get('heartbeatPrompt', '');
     const basePrompt = heartbeatPromptSetting || heartbeatPrompt;
     const decisionPrompt = `${basePrompt}\n\n${OVERLORD_DECISION_PROMPT}`;

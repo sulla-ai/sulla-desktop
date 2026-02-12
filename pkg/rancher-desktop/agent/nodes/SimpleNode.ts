@@ -49,6 +49,12 @@ export class SimpleNode extends BaseNode {
 
   async execute(state: BaseThreadState): Promise<NodeResult<BaseThreadState>> {
 
+    // Establish WebSocket connection using the dynamic channel from state
+    const connectionId = state.metadata.wsChannel as string;
+    if (connectionId && !this.isWebSocketConnected(connectionId)) {
+      this.connectWebSocket(connectionId);
+    }
+
     let prompt = SIMPLE_PROMPT_FALLBACK;
     if (state.prompt) {
       prompt = state.prompt;

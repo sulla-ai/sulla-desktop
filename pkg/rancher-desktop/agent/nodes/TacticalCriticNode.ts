@@ -74,6 +74,13 @@ export class TacticalCriticNode extends BaseNode {
   }
 
   async execute(state: HierarchicalThreadState): Promise<NodeResult<HierarchicalThreadState>> {
+
+    // Establish WebSocket connection using the dynamic channel from state
+    const connectionId = state.metadata.wsChannel as string;
+    if (connectionId && !this.isWebSocketConnected(connectionId)) {
+      this.connectWebSocket(connectionId);
+    }
+
     const plan = state.metadata.plan;
     if (!plan?.model || !plan.milestones?.length) {
       return { state, decision: { type: 'next' } };

@@ -29,7 +29,7 @@ import paths from '@pkg/utils/paths';
 type consoleKey = 'log' | 'error' | 'info' | 'warn';
 type logLevel = 'debug' | 'info';
 
-let LOG_LEVEL: logLevel = 'info';
+let LOG_LEVEL: logLevel = 'debug';
 
 export function setLogLevel(level: logLevel): void {
   LOG_LEVEL = level;

@@ -78,6 +78,13 @@ export class KnowledgePlannerNode extends BaseNode {
   }
 
   async execute(state: KnowledgeThreadState): Promise<NodeResult<KnowledgeThreadState>> {
+
+    // Establish WebSocket connection using the dynamic channel from state
+    const connectionId = state.metadata.wsChannel as string;
+    if (connectionId && !this.isWebSocketConnected(connectionId)) {
+      this.connectWebSocket(connectionId);
+    }
+
     let content = state.messages
       .filter(m => m.role === 'user' || m.role === 'assistant')
       .map(m => m.content)

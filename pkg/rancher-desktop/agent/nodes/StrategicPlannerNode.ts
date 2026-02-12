@@ -177,6 +177,12 @@ export class StrategicPlannerNode extends BaseNode {
 
   async execute(state: HierarchicalThreadState): Promise<NodeResult<HierarchicalThreadState>> {
 
+    // Establish WebSocket connection using the dynamic channel from state
+    const connectionId = state.metadata.wsChannel as string;
+    if (connectionId && !this.isWebSocketConnected(connectionId)) {
+      this.connectWebSocket(connectionId);
+    }
+
     const enriched = await this.enrichPrompt(STRATEGIC_PLAN_PROMPT, state, {
       includeSoul: true,
       includeAwareness: true,

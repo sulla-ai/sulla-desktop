@@ -1,10 +1,7 @@
 // N8nService - Service for interacting with n8n API
 // Provides methods to manage workflows, executions, credentials, and other n8n resources
 
-import Logging from '@pkg/utils/logging';
 import { SullaSettingsModel } from '../database/models/SullaSettingsModel';
-
-const console = Logging.agent;
 
 /**
  * N8n API Service
@@ -24,19 +21,20 @@ export class N8nService {
    * Initialize the service with configuration values
    */
   async initialize(): Promise<void> {
-    console.log('[N8nService] Initializing...');
-    // Load API key from settings
-    const serviceAccountKey = await SullaSettingsModel.get('serviceAccountApiKey');
+    // Get or create the service account API key
+    const { N8nUserApiKeyModel } = await import('../database/models/N8nUserApiKeyModel');
 
-    console.log('serviceAccountKey :'+serviceAccountKey);
-
-    if (!serviceAccountKey) {
-      throw new Error('No API key found in settings');
+    // get the fresh api key
+    const n8nUserId = await SullaSettingsModel.get('serviceAccountUserId'); 
+    const serviceAccount = await N8nUserApiKeyModel.getOrCreateServiceAccount(n8nUserId);
+    if (!serviceAccount.attributes.id) {
+      throw new Error('Failed to get service account ID');
     }
-    this.apiKey = serviceAccountKey;
-    this.baseUrl = 'http://localhost:30119';
+    this.apiKey = await N8nUserApiKeyModel.createNewApiKeyToken(serviceAccount.attributes.id);
 
-    console.log('[Background] N8nService initialized');
+    console.log(`API key ${this.apiKey ? 'generated/retrieved' : 'failed'} for user ID ${n8nUserId}, length: ${this.apiKey?.length || 0}`);
+
+    this.baseUrl = 'http://localhost:30119';
   }
 
   /**
@@ -50,6 +48,9 @@ export class N8nService {
       'X-N8N-API-KEY': this.apiKey,
       ...options.headers as Record<string, string>
     };
+
+    console.log(`[N8nService] Requesting: ${url}`);
+    console.log(`[N8nService] Headers:`, { ...headers, 'X-N8N-API-KEY': this.apiKey ? `exists (${this.apiKey.length} chars)` : 'missing' });
 
     try {
       const response = await fetch(url, {

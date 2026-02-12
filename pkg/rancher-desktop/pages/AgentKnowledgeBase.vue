@@ -5,84 +5,103 @@
       <AgentHeader :is-dark="isDark" :toggle-theme="toggleTheme" />
 
       <div class="flex w-full flex-col">
-        <div class="overflow-hidden bg-slate-900 dark:-mt-19 dark:-mb-32 dark:pt-19 dark:pb-32">
-          <div class="py-16 sm:px-2 lg:relative lg:px-0 lg:py-20">
-            <div
-              class="mx-auto grid max-w-2xl grid-cols-1 items-center gap-x-8 gap-y-16 px-4 lg:max-w-8xl lg:grid-cols-2 lg:px-8 xl:gap-x-16 xl:px-12">
-              <div class="relative z-10 md:text-center lg:text-left">
-                <img alt="" width="530" height="530" decoding="async" data-nimg="1"
-                  class="absolute right-full bottom-full -mr-72 -mb-56 opacity-50" style="color:transparent"
-                  :src="splashUrl">
-                <div class="relative">
-                  <p
-                    class="inline bg-linear-to-r from-indigo-200 via-sky-400 to-indigo-200 bg-clip-text font-display text-5xl tracking-tight text-transparent">
-                    Sulla KnowledgeBase.</p>
-                  <p class="mt-3 text-2xl tracking-tight text-slate-400">
-                    Long-term memories Sulla has collected and organized through dreaming.
-                  </p>
-                  <div class="mt-8 flex gap-4 md:justify-center lg:justify-start">
+        <div class="overflow-hidden bg-slate-900 dark:-mt-19 dark:-mb-32 dark:pt-19 dark:pb-32 relative min-h-[400px]">
+          <!-- Graph background -->
+          <div class="absolute inset-0 z-0 opacity-30">
+            <KnowledgeGraph />
+          </div>
 
-                    <router-link
-                      to="/KnowledgeBase/Create"
-                      class="text-sm font-semibold"
-                      :class="['rounded-full bg-sky-300 py-2 px-4 text-sm font-semibold text-slate-900 hover:bg-sky-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-300/50 active:bg-sky-500']"
-                    >
-                      Create new page
-                    </router-link>
-                    <a
-                      class="rounded-full bg-slate-800 py-2 px-4 text-sm font-medium text-white hover:bg-slate-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/50 active:text-slate-400"
-                      href="#"
-                      @click.prevent="$router.push('/KnowledgeBase/Sections')"
-                    >
-                      Manage Sections
-                    </a>
+          <!-- Overlay content with toggle -->
+          <div class="relative z-10">
+            <div class="absolute top-4 right-4 z-20">
+              <button 
+                @click="showOverlay = !showOverlay"
+                class="px-4 py-2 rounded-full bg-slate-800/80 hover:bg-slate-700/80 text-white/90 hover:text-white text-sm font-medium transition-all duration-300 backdrop-blur-sm border border-slate-600/50 shadow-lg"
+              >
+                {{ showOverlay ? 'Hide Overlay' : 'Show Overlay' }}
+              </button>
+            </div>
+
+            <div 
+              v-if="showOverlay"
+              class="py-16 sm:px-2 lg:relative lg:px-0 lg:py-20 transition-all duration-500"
+            >
+              <div
+                class="mx-auto grid max-w-2xl grid-cols-1 items-center gap-x-8 gap-y-16 px-4 lg:max-w-8xl lg:grid-cols-2 lg:px-8 xl:gap-x-16 xl:px-12">
+                <div class="relative z-10 md:text-center lg:text-left">
+                  <img alt="" width="530" height="530" decoding="async" data-nimg="1"
+                    class="absolute right-full bottom-full -mr-72 -mb-56 opacity-50" style="color:transparent"
+                    :src="splashUrl">
+                  <div class="relative">
+                    <p
+                      class="inline bg-linear-to-r from-indigo-200 via-sky-400 to-indigo-200 bg-clip-text font-display text-5xl tracking-tight text-transparent">
+                      Sulla KnowledgeBase.</p>
+                    <p class="mt-3 text-2xl tracking-tight text-slate-400">
+                      Long-term memories Sulla has collected and organized through dreaming.
+                    </p>
+                    <div class="mt-8 flex gap-4 md:justify-center lg:justify-start">
+                      <router-link
+                        to="/KnowledgeBase/Create"
+                        class="text-sm font-semibold rounded-full bg-sky-300 py-2 px-4 text-sm font-semibold text-slate-900 hover:bg-sky-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-300/50 active:bg-sky-500"
+                      >
+                        Create new page
+                      </router-link>
+                      <a
+                        class="rounded-full bg-slate-800 py-2 px-4 text-sm font-medium text-white hover:bg-slate-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/50 active:text-slate-400"
+                        href="#"
+                        @click.prevent="$router.push('/KnowledgeBase/Sections')"
+                      >
+                        Manage Sections
+                      </a>
+                    </div>
                   </div>
                 </div>
-              </div>
-              <div class="relative lg:static xl:pl-10">
-                <div class="flex flex-col gap-4">
-                  <div class="relative">
-                    <svg aria-hidden="true" viewBox="0 0 20 20" class="pointer-events-none absolute top-1/2 left-4 h-5 w-5 -translate-y-1/2 fill-slate-400 dark:fill-slate-500">
-                      <path d="M16.293 17.707a1 1 0 0 0 1.414-1.414l-1.414 1.414ZM9 14a5 5 0 0 1-5-5H2a7 7 0 0 0 7 7v-2ZM4 9a5 5 0 0 1 5-5V2a7 7 0 0 0-7 7h2Zm5-5a5 5 0 0 1 5 5h2a7 7 0 0 0-7-7v2Zm8.707 12.293-3.757-3.757-1.414 1.414 3.757 3.757 1.414-1.414ZM14 9a4.98 4.98 0 0 1-1.464 3.536l1.414 1.414A6.98 6.98 0 0 0 16 9h-2Zm-1.464 3.536A4.98 4.98 0 0 1 9 14v2a6.98 6.98 0 0 0 4.95-2.05l-1.414-1.414Z"></path>
-                    </svg>
+                <div class="relative lg:static xl:pl-10">
+                  <div class="flex flex-col gap-4">
+                    <div class="relative">
+                      <svg aria-hidden="true" viewBox="0 0 20 20" class="pointer-events-none absolute top-1/2 left-4 h-5 w-5 -translate-y-1/2 fill-slate-400 dark:fill-slate-500">
+                        <path d="M16.293 17.707a1 1 0 0 0 1.414-1.414l-1.414 1.414ZM9 14a5 5 0 0 1-5-5H2a7 7 0 0 0 7 7v-2ZM4 9a5 5 0 0 1 5-5V2a7 7 0 0 0-7 7h2Zm5-5a5 5 0 0 1 5 5h2a7 7 0 0 0-7-7v2Zm8.707 12.293-3.757-3.757-1.414 1.414 3.757 3.757 1.414-1.414ZM14 9a4.98 4.98 0 0 1-1.464 3.536l1.414 1.414A6.98 6.98 0 0 0 16 9h-2Zm-1.464 3.536A4.98 4.98 0 0 1 9 14v2a6.98 6.98 0 0 0 4.95-2.05l-1.414-1.414Z"></path>
+                      </svg>
 
-                    <input
-                      v-model="searchInput"
-                      type="text"
-                      placeholder="Search knowledge base"
-                      class="h-11 w-full rounded-lg bg-white/95 pr-4 pl-12 text-sm text-slate-900 ring-1 ring-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-300/50 dark:bg-slate-800/75 dark:text-slate-100 dark:ring-white/5 dark:ring-inset"
-                      @keydown.enter="performSearch"
-                    >
-                    <kbd class="pointer-events-none absolute top-1/2 right-3 hidden -translate-y-1/2 font-medium text-slate-400 md:block dark:text-slate-500">
-                      <kbd class="font-sans">⌘</kbd><kbd class="font-sans">K</kbd>
-                    </kbd>
-                  </div>
+                      <input
+                        v-model="searchInput"
+                        type="text"
+                        placeholder="Search knowledge base"
+                        class="h-11 w-full rounded-lg bg-white/95 pr-4 pl-12 text-sm text-slate-900 ring-1 ring-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-300/50 dark:bg-slate-800/75 dark:text-slate-100 dark:ring-white/5 dark:ring-inset"
+                        @keydown.enter="performSearch"
+                      >
+                      <kbd class="pointer-events-none absolute top-1/2 right-3 hidden -translate-y-1/2 font-medium text-slate-400 md:block dark:text-slate-500">
+                        <kbd class="font-sans">⌘</kbd><kbd class="font-sans">K</kbd>
+                      </kbd>
+                    </div>
 
-                  <div class="flex flex-wrap items-center gap-2">
-                    <button
-                      type="button"
-                      class="flex h-6 rounded-full p-px text-xs font-medium"
-                      :class="activeCategory === null ? 'bg-linear-to-r from-sky-400/30 via-sky-400 to-sky-400/30 text-sky-300' : 'text-slate-500 bg-slate-800/60 ring-1 ring-white/5'"
-                      @click="selectCategory(null)"
-                    >
-                      <span class="flex items-center rounded-full px-2.5" :class="activeCategory === null ? 'bg-slate-800' : ''">All</span>
-                    </button>
-                    <button
-                      v-for="category in categories"
-                      :key="category"
-                      type="button"
-                      class="flex h-6 rounded-full p-px text-xs font-medium"
-                      :class="activeCategory === category ? 'bg-linear-to-r from-sky-400/30 via-sky-400 to-sky-400/30 text-sky-300' : 'text-slate-500 bg-slate-800/60 ring-1 ring-white/5'"
-                      @click="selectCategory(category)"
-                    >
-                      <span class="flex items-center rounded-full px-2.5" :class="activeCategory === category ? 'bg-slate-800' : ''">{{ category }}</span>
-                    </button>
+                    <div class="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        class="flex h-6 rounded-full p-px text-xs font-medium"
+                        :class="activeCategory === null ? 'bg-linear-to-r from-sky-400/30 via-sky-400 to-sky-400/30 text-sky-300' : 'text-slate-500 bg-slate-800/60 ring-1 ring-white/5'"
+                        @click="selectCategory(null)"
+                      >
+                        <span class="flex items-center rounded-full px-2.5" :class="activeCategory === null ? 'bg-slate-800' : ''">All</span>
+                      </button>
+                      <button
+                        v-for="category in categories"
+                        :key="category"
+                        type="button"
+                        class="flex h-6 rounded-full p-px text-xs font-medium"
+                        :class="activeCategory === category ? 'bg-linear-to-r from-sky-400/30 via-sky-400 to-sky-400/30 text-sky-300' : 'text-slate-500 bg-slate-800/60 ring-1 ring-white/5'"
+                        @click="selectCategory(category)"
+                      >
+                        <span class="flex items-center rounded-full px-2.5" :class="activeCategory === category ? 'bg-slate-800' : ''">{{ category }}</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
           </div>
         </div>
+
         <div class="relative mx-auto flex w-full max-w-8xl flex-auto justify-center sm:px-2 lg:px-8 xl:px-12">
           <div class="hidden lg:relative lg:block lg:flex-none">
             <div class="absolute inset-y-0 right-0 w-[50vw] bg-slate-50 dark:hidden"></div>
@@ -209,14 +228,15 @@
               </ol>
             </nav>
           </div>
-          <!--$--><!--/$-->
         </div>
 
       </div>
     </div>
   </div>
 </template>
+
 <script setup lang="ts">
+import KnowledgeGraph from './KnowledgeGraph.vue';
 import AgentHeader from './agent/AgentHeader.vue';
 import { articlesRegistry } from '../agent/database/registry/ArticlesRegistry';
 import { computed, onMounted, ref, watch } from 'vue';
@@ -227,6 +247,8 @@ import type { ArticleListItem, ArticleWithContent } from '../agent/database/regi
 
 const THEME_STORAGE_KEY = 'agentTheme';
 const isDark = ref(false);
+const showOverlay = ref(true);  // ← new toggle state
+
 const query = ref('');
 const activeCategory = ref<string | null>(null);
 const searchInput = ref('');
@@ -244,6 +266,7 @@ const activeSlug = ref<string | null>(null);
 const activePage = ref<ArticleWithContent | null>(null);
 const loadingPage = ref(false);
 const articleContentEl = ref<HTMLElement | null>(null);
+
 
 interface TocHeading {
   id: string;

@@ -62,8 +62,8 @@ export class N8nUserApiKeyModel extends BaseModel<UserApiKeyAttributes> {
       iat: Math.floor(Date.now() / 1000),
     };
 
-    // Use a simple secret for JWT (in production this should be configurable)
-    const jwtSecret = 'sulla-integration-secret';
+    // Use the same secret as n8n's JWT secret (from settings)
+    const jwtSecret = await SullaSettingsModel.get('sullaN8nEncryptionKey') || 'changeMeToA32CharRandomString1234';
     const jwt = await import('jsonwebtoken');
     const apiKeyToken = jwt.default.sign(jwtPayload, jwtSecret);
     return apiKeyToken;

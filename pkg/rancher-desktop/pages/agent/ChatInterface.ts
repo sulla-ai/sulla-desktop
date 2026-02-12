@@ -181,11 +181,36 @@ export class ChatInterface {
       localStorage.setItem(this.hasSentMessageKey, 'true');
     }
 
-    const personaService = this.registry.getActivePersonaService();
-    if (personaService) {
-      personaService.addUserMessage(this.activeAgentId.value, userText);
-      // Update UI immediately after sending
-      this.updateMessages();
+    const maxRetries = 5;
+    const retryDelay = 1000; // 1 second
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const personaService = this.registry.getActivePersonaService();
+        if (!personaService) {
+          console.warn(`[ChatInterface] Attempt ${attempt}: No active persona service, retrying in ${retryDelay}ms`);
+          if (attempt < maxRetries) {
+            await new Promise(resolve => setTimeout(resolve, retryDelay));
+            continue;
+          } else {
+            console.error('[ChatInterface] Failed to send message after all retries: No active persona service');
+            return;
+          }
+        }
+
+        personaService.addUserMessage(this.activeAgentId.value, userText);
+        // Update UI immediately after sending
+        this.updateMessages();
+        console.log(`[ChatInterface] Message sent successfully on attempt ${attempt}`);
+        return;
+      } catch (error) {
+        console.warn(`[ChatInterface] Attempt ${attempt} failed:`, error);
+        if (attempt < maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, retryDelay));
+        } else {
+          console.error(`[ChatInterface] Failed to send message after ${maxRetries} attempts:`, error);
+        }
+      }
     }
   }
 

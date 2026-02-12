@@ -93,6 +93,13 @@ export class TacticalExecutorNode extends BaseNode {
   }
 
   async execute(state: HierarchicalThreadState): Promise<NodeResult<HierarchicalThreadState>> {
+
+    // Establish WebSocket connection using the dynamic channel from state
+    const connectionId = state.metadata.wsChannel as string;
+    if (connectionId && !this.isWebSocketConnected(connectionId)) {
+      this.connectWebSocket(connectionId);
+    }
+
     const plan = state.metadata.plan;
     const steps = state.metadata.currentSteps ?? [];
     const stepIdx = state.metadata.activeStepIndex ?? 0;

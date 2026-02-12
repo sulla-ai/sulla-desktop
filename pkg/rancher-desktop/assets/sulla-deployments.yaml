@@ -440,6 +440,12 @@ spec:
           value: "n8n_dev_password"
         - name: N8N_REST_API_ENABLED
           value: "true"
+        - name: N8N_DIAGNOSTICS_ENABLED
+          value: "false"
+        - name: N8N_TELEMETRY_ENABLED
+          value: "false"
+        - name: N8N_JWT_SECRET
+          value: "n8n-self-set-secret-key"
         resources:
           limits:
             memory: "2Gi"

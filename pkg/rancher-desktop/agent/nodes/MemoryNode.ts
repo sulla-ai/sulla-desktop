@@ -103,6 +103,13 @@ export class MemoryNode extends BaseNode {
   }
 
   async execute(state: BaseThreadState): Promise<NodeResult<BaseThreadState>> {
+
+    // Establish WebSocket connection using the dynamic channel from state
+    const connectionId = state.metadata.wsChannel as string;
+    if (connectionId && !this.isWebSocketConnected(connectionId)) {
+      this.connectWebSocket(connectionId);
+    }
+
     const prompt = MEMORY_QUERY_PROMPT;
     const enriched = await this.enrichPrompt(prompt, state, {
       includeSoul: true,

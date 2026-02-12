@@ -469,6 +469,10 @@ export default class LimaKubernetesBackend extends events.EventEmitter implement
     const ollamaCPUs = Math.max(1, Math.floor(vmCPUs * 0.75));
     console.log(`Configuring Ollama pod: ${ollamaMemoryGB}Gi memory, ${ollamaCPUs} CPUs (VM: ${vmMemoryGB}GB, ${vmCPUs} CPUs)`);
 
+    // Fetch settings from SullaSettingsModel
+    const sullaServicePassword = await SullaSettingsModel.get('sullaServicePassword') || 'sulla_dev_password';
+    const sullaN8nEncryptionKey = await SullaSettingsModel.get('sullaN8nEncryptionKey') || 'changeMeToA32CharRandomString1234';
+
     const deployments = (SULLA_DEPLOYMENTS as unknown[]).map((doc: unknown) => {
       const deployment = doc as Record<string, unknown>;
       if (deployment.kind === 'Deployment' && (deployment.metadata as Record<string, unknown>)?.name === 'ollama') {
@@ -508,7 +512,7 @@ export default class LimaKubernetesBackend extends events.EventEmitter implement
         if (containers?.[0]?.env) {
           containers[0].env = (containers[0].env as Array<any>).map((envVar: any) => {
             if (envVar.name === 'POSTGRES_PASSWORD' || envVar.name === 'DB_POSTGRESDB_PASSWORD') {
-              envVar.value = this.cfg?.experimental?.sullaServicePassword || 'sulla_dev_password';
+              envVar.value = sullaServicePassword;
             }
             return envVar;
           });
@@ -522,10 +526,13 @@ export default class LimaKubernetesBackend extends events.EventEmitter implement
         if (containers?.[0]?.env) {
           containers[0].env = (containers[0].env as Array<any>).map((envVar: any) => {
             if (envVar.name === 'N8N_ENCRYPTION_KEY') {
-              envVar.value = this.cfg?.experimental?.sullaN8nEncryptionKey || 'changeMeToA32CharRandomString1234';
+              envVar.value = sullaN8nEncryptionKey;
+            }
+            if (envVar.name === 'N8N_JWT_SECRET') {
+              envVar.value = sullaN8nEncryptionKey;
             }
             if (envVar.name === 'N8N_BASIC_AUTH_PASSWORD') {
-              envVar.value = this.cfg?.experimental?.sullaServicePassword || 'n8n_dev_password';
+              envVar.value = sullaServicePassword;
             }
             return envVar;
           });

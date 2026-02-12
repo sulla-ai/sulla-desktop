@@ -2169,11 +2169,15 @@ export default class LimaBackend extends events.EventEmitter implements VMBacken
   private async prepareSullaComposeFile(): Promise<void> {
     const compose = typeof SULLA_DOCKER_COMPOSE === 'string' ? yaml.parse(SULLA_DOCKER_COMPOSE) : SULLA_DOCKER_COMPOSE;
 
+    // Fetch settings from SullaSettingsModel
+    const sullaServicePassword = await SullaSettingsModel.get('sullaServicePassword') || 'sulla_dev_password';
+    const sullaN8nEncryptionKey = await SullaSettingsModel.get('sullaN8nEncryptionKey') || 'changeMeToA32CharRandomString1234';
+
     // Modify dynamic values like passwords
     if (compose.services?.postgres?.environment) {
       compose.services.postgres.environment = compose.services.postgres.environment.map((env: string) => {
         if (env.startsWith('POSTGRES_PASSWORD=')) {
-          return `POSTGRES_PASSWORD=${this.cfg?.experimental?.sullaServicePassword || 'sulla_dev_password'}`;
+          return `POSTGRES_PASSWORD=${sullaServicePassword}`;
         }
         return env;
       });
@@ -2181,10 +2185,13 @@ export default class LimaBackend extends events.EventEmitter implements VMBacken
     if (compose.services?.n8n?.environment) {
       compose.services.n8n.environment = compose.services.n8n.environment.map((env: string) => {
         if (env.startsWith('N8N_ENCRYPTION_KEY=')) {
-          return `N8N_ENCRYPTION_KEY=${this.cfg?.experimental?.sullaN8nEncryptionKey || 'changeMeToA32CharRandomString1234'}`;
+          return `N8N_ENCRYPTION_KEY=${sullaN8nEncryptionKey}`;
+        }
+        if (env.startsWith('N8N_JWT_SECRET=')) {
+          return `N8N_JWT_SECRET=${sullaN8nEncryptionKey}`;
         }
         if (env.startsWith('N8N_BASIC_AUTH_PASSWORD=')) {
-          return `N8N_BASIC_AUTH_PASSWORD=${this.cfg?.experimental?.sullaServicePassword || 'n8n_dev_password'}`;
+          return `N8N_BASIC_AUTH_PASSWORD=${sullaServicePassword}`;
         }
         return env;
       });

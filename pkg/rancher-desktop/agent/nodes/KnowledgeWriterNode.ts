@@ -39,6 +39,13 @@ export class KnowledgeWriterNode extends BaseNode {
   }
 
   async execute(state: KnowledgeThreadState): Promise<NodeResult<KnowledgeThreadState>> {
+
+    // Establish WebSocket connection using the dynamic channel from state
+    const connectionId = state.metadata.wsChannel as string;
+    if (connectionId && !this.isWebSocketConnected(connectionId)) {
+      this.connectWebSocket(connectionId);
+    }
+
     const page = state.metadata.kbFinalContent;
     const schema = state.metadata.kbArticleSchema;
     if (!page?.trim()) {

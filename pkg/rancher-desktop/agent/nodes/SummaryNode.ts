@@ -70,6 +70,13 @@ export class SummaryNode extends BaseNode {
   }
 
   async execute(state: BaseThreadState): Promise<NodeResult<BaseThreadState>> {
+
+    // Establish WebSocket connection using the dynamic channel from state
+    const connectionId = state.metadata.wsChannel as string;
+    if (connectionId && !this.isWebSocketConnected(connectionId)) {
+      this.connectWebSocket(connectionId);
+    }
+
     const messages = state.messages
       .filter((m: ChatMessage) => m.role === 'user' || m.role === 'assistant')
       .map(m => `${m.role.toUpperCase()}: ${m.content}`)
