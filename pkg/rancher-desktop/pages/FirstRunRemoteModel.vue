@@ -63,8 +63,10 @@ const testResult = ref<{ success: boolean; message: string } | null>(null);
 const providers = [
   { id: 'grok', name: 'Grok (xAI)', baseUrl: 'https://api.x.ai/v1' },
   { id: 'openai', name: 'OpenAI', baseUrl: 'https://api.openai.com/v1' },
-  { id: 'anthropic', name: 'Anthropic' },
-  { id: 'google', name: 'Google' },
+  { id: 'anthropic', name: 'Anthropic', baseUrl: 'https://api.anthropic.com/v1' },
+  { id: 'google', name: 'Google', baseUrl: 'https://generativelanguage.googleapis.com/v1beta' },
+  { id: 'kimi', name: 'Kimi (Moonshot AI)', baseUrl: 'https://api.moonshot.cn/v1' },
+  { id: 'nvidia', name: 'NVIDIA (Free Moonshot/Kimi)', baseUrl: 'https://integrate.api.nvidia.com/v1' },
 ];
 
 const models = {
@@ -88,6 +90,16 @@ const models = {
   google: [
     { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro' },
     { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash' },
+  ],
+  kimi: [
+    { id: 'kimi-k2.5', name: 'Kimi K2.5' },
+    { id: 'kimi-k2', name: 'Kimi K2' },
+  ],
+  nvidia: [
+    { id: 'moonshotai/kimi-k2.5', name: 'Kimi K2.5 (Free)' },
+    { id: 'moonshotai/kimi-k2', name: 'Kimi K2 (Free)' },
+    { id: 'nvidia/llama-3.1-nemotron-70b-instruct', name: 'Llama 3.1 Nemotron 70B' },
+    { id: 'meta/llama-3.1-70b-instruct', name: 'Llama 3.1 70B' },
   ],
 };
 
@@ -118,7 +130,7 @@ const testCredentials = async () => {
 
     const timeoutMs = 10000; // 10 seconds
 
-    if (selectedProvider.value === 'grok' || selectedProvider.value === 'openai') {
+    if (selectedProvider.value === 'grok' || selectedProvider.value === 'openai' || selectedProvider.value === 'kimi' || selectedProvider.value === 'nvidia') {
       const testUrl = `${provider.baseUrl}/chat/completions`;
       const testBody = {
         model: selectedModel.value,
