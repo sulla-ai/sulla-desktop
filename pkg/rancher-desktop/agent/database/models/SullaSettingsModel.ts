@@ -64,9 +64,17 @@ export class SullaSettingsModel extends BaseModel<SettingsAttributes> {
         const truthyValues = ['true', '1', 'yes', 'on'];
         return truthyValues.includes(cleaned);
       case 'array':
-        return JSON.parse(value);
+        try {
+          return JSON.parse(value);
+        } catch {
+          return value;
+        }
       default:
-        return JSON.parse(value);
+        try {
+          return JSON.parse(value);
+        } catch {
+          return value;
+        }
     }
   }
 
