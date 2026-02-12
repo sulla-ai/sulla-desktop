@@ -492,7 +492,7 @@ export abstract class BaseNode {
     /**
      * Optional: append assistant response to state.messages
      */
-    protected appendResponse(state: BaseThreadState, content: string): void {
+    protected async appendResponse(state: BaseThreadState, content: string): Promise<void> {
         // Ensure content is a string
         const contentStr = typeof content === 'string' ? content : JSON.stringify(content);
         
@@ -536,9 +536,9 @@ export abstract class BaseNode {
      * @param message Message to send (object or string)
      * @returns true if sent successfully
      */
-    protected dispatchToWebSocket(connectionId: string, message: unknown): boolean {
+    protected async dispatchToWebSocket(connectionId: string, message: unknown): Promise<boolean> {
         const wsService = getWebSocketClientService();
-        return wsService.send(connectionId, message);
+        return await wsService.send(connectionId, message);
     }
 
     /**
@@ -577,9 +577,9 @@ export abstract class BaseNode {
     /**
      * Dispatch token information to AgentPersona via WebSocket
      */
-    private dispatchTokenInfoToAgentPersona(state: BaseThreadState, reply: NormalizedResponse): void {
+    private async dispatchTokenInfoToAgentPersona(state: BaseThreadState, reply: NormalizedResponse): Promise<void> {
         const wsChannel = state.metadata.wsChannel || DEFAULT_WS_CHANNEL;
-        const sent = this.dispatchToWebSocket(wsChannel, {
+        const sent = await this.dispatchToWebSocket(wsChannel, {
             type: 'token_info',
             data: {
                 tokens_used: reply.metadata.tokens_used,
@@ -606,12 +606,12 @@ export abstract class BaseNode {
      * @param kind Optional UI kind tag - defaults to 'progress'
      * @returns true if message was sent via WebSocket
      */
-    protected wsChatMessage(
+    protected async wsChatMessage(
         state: BaseThreadState,
         content: string,
         role: 'assistant' | 'system' = 'assistant',
         kind: string = 'progress',
-    ): boolean {
+    ): Promise<boolean> {
         if (!content.trim()) {
             return false;
         }
@@ -621,11 +621,12 @@ export abstract class BaseNode {
 
         // Ensure WebSocket connection exists
         if (!this.isWebSocketConnected(connectionId)) {
+            console.log(`[${this.name}:BaseNode] Not Connected`)
             this.connectWebSocket(connectionId);
         }
 
         // Send via WebSocket
-        const sent = this.dispatchToWebSocket(connectionId, {
+        const sent = await this.dispatchToWebSocket(connectionId, {
             type: 'assistant_message',
             data: {
                 content: content.trim(),
@@ -650,15 +651,15 @@ export abstract class BaseNode {
      * @param args Arguments passed to the tool
      * @returns true if event was sent via WebSocket
      */
-    protected emitToolCallEvent(
+    protected async emitToolCallEvent(
         state: BaseThreadState,
         toolRunId: string,
         toolName: string,
         args: Record<string, any>
-    ): boolean {
+    ): Promise<boolean> {
         const connectionId = (state.metadata.wsChannel as string) || DEFAULT_WS_CHANNEL;
         
-        return this.dispatchToWebSocket(connectionId, {
+        return await this.dispatchToWebSocket(connectionId, {
             type: 'progress',
             data: {
                 phase: 'tool_call',
@@ -679,16 +680,16 @@ export abstract class BaseNode {
      * @param result Optional result data if success is true
      * @returns true if event was sent via WebSocket
      */
-    protected emitToolResultEvent(
+    protected async emitToolResultEvent(
         state: BaseThreadState,
         toolRunId: string,
         success: boolean,
         error?: string,
         result?: any
-    ): boolean {
+    ): Promise<boolean> {
         const connectionId = (state.metadata.wsChannel as string) || DEFAULT_WS_CHANNEL;
         
-        return this.dispatchToWebSocket(connectionId, {
+        return await this.dispatchToWebSocket(connectionId, {
             type: 'progress',
             data: {
                 phase: 'tool_result',
@@ -758,8 +759,8 @@ export abstract class BaseNode {
 
             // Disallowed → emit tool call and failure, then continue
             if (allowedTools?.length && !allowedTools.includes(toolName)) {
-                this.emitToolCallEvent(state, toolRunId, toolName, { args });
-                this.emitToolResultEvent(state, toolRunId, false, `Tool not allowed in this node: ${toolName}`);
+                await this.emitToolCallEvent(state, toolRunId, toolName, { args });
+                await this.emitToolResultEvent(state, toolRunId, false, `Tool not allowed in this node: ${toolName}`);
                 
                 await this.appendToolResultMessage(state, toolName, {
                     toolName,
@@ -772,8 +773,8 @@ export abstract class BaseNode {
 
             const tool = registry.get(toolName);
             if (!tool) {
-                this.emitToolCallEvent(state, toolRunId, toolName, { args });
-                this.emitToolResultEvent(state, toolRunId, false, `Unknown tool: ${toolName}`);
+                await this.emitToolCallEvent(state, toolRunId, toolName, { args });
+                await this.emitToolResultEvent(state, toolRunId, false, `Unknown tool: ${toolName}`);
                 
                 await this.appendToolResultMessage(state, toolName, {
                     toolName,
@@ -785,13 +786,13 @@ export abstract class BaseNode {
             }
 
             // Emit tool call event before execution
-            this.emitToolCallEvent(state, toolRunId, toolName, { args });
+            await this.emitToolCallEvent(state, toolRunId, toolName, { args });
 
             try {
                 const outcome = await tool.execute(state, { toolName, args });
 
                 // Emit tool result event on success
-                this.emitToolResultEvent(state, toolRunId, outcome.success, outcome.error, outcome.result);
+                await this.emitToolResultEvent(state, toolRunId, outcome.success, outcome.error, outcome.result);
 
                 await this.appendToolResultMessage(state, toolName, outcome);
 
@@ -805,7 +806,7 @@ export abstract class BaseNode {
                 const error = err.message || String(err);
                 
                 // Emit tool result event on error
-                this.emitToolResultEvent(state, toolRunId, false, error);
+                await this.emitToolResultEvent(state, toolRunId, false, error);
                 
                 await this.appendToolResultMessage(state, toolName, {
                     toolName,

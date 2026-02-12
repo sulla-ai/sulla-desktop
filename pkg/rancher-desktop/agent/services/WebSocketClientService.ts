@@ -286,9 +286,25 @@ export class WebSocketClientService {
     return true;
   }
 
-  send(connectionId: string, message: unknown): boolean {
-    const conn = this.connections.get(connectionId);
-    if (!conn) return false;
+  async send(connectionId: string, message: unknown): Promise<boolean> {
+    let conn = this.connections.get(connectionId);
+    if (!conn || !conn.isConnected()) {
+      this.connect(connectionId);
+      conn = this.connections.get(connectionId);
+      if (!conn) return false;
+
+      // Wait for connection to establish
+      let attempts = 0;
+      const maxAttempts = 50; // 5 seconds
+      while (!conn.isConnected() && attempts < maxAttempts) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        attempts++;
+      }
+      if (!conn.isConnected()) {
+        console.error(`Failed to establish WebSocket connection for ${connectionId}`);
+        return false;
+      }
+    }
 
     if (typeof message === 'object' && message && 'type' in message) {
       conn.send(message as any);

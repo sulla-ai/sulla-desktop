@@ -224,6 +224,12 @@ export class StrategicPlannerNode extends BaseNode {
     console.log('[StrategicPlanner] updatePlan started');
     console.log('[StrategicPlanner] state.metadata:', JSON.stringify(state.metadata, null, 2));
     
+    // Defensive check for milestones
+    if (!plan.milestones || !Array.isArray(plan.milestones)) {
+      console.error('[StrategicPlanner] Invalid milestones:', plan.milestones);
+      plan.milestones = [];
+    }
+    
     // check if the plan is already in the state object
     let planModel = state.metadata.plan?.model;
     console.log('[StrategicPlanner] Existing planModel:', planModel ? 'found' : 'not found');
