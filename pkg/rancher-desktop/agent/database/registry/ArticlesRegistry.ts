@@ -1,7 +1,7 @@
-// ArticlesRegistry.ts - Uses ChromaDb for collection ops, Article model for single docs
+// ArticlesRegistry.ts - Uses vector database for collection ops, Article model for single docs
 
 import { Article } from '../models/Article';
-import { chromaClient } from '../ChromaDb';
+import { VectorBaseModel } from '../VectorBaseModel';
 
 export interface ArticleSearchOptions {
   query?: string;
@@ -49,51 +49,70 @@ export class ArticlesRegistry {
   private constructor() {}
 
   async search(options: ArticleSearchOptions = {}): Promise<SearchResult<ArticleListItem>> {
-    const {
-      query,
-      category,
-      section,
-      tags,
-      limit = 20,
-      offset = 0,
-      sortBy = 'updated_at',
-      sortOrder = 'desc'
-    } = options;
-
-    // Build filter for ChromaDb
-    const filter: any = {};
-    if (category) filter.category = category;
-    if (section) filter.section = section;
-    if (tags?.length) filter.tags = { $in: tags };
-
     try {
-      let articles: Article[] = [];
+      const {
+        query,
+        category,
+        section,
+        tags,
+        limit = 20,
+        offset = 0,
+        sortBy = 'updated_at',
+        sortOrder = 'desc'
+      } = options;
+
+      // Build filter for vector database
+      const filter: any = {};
+      if (category) filter.category = { $eq: category };
+      if (section) filter.section = { $eq: section };
+      if (tags?.length) filter.tags = { $in: tags };
+
+      const finalFilter = Object.keys(filter).length > 0 ? filter : undefined;
+      console.log(`[ArticlesRegistry] Final filter:`, finalFilter);
 
       if (query?.trim()) {
-        // Semantic search via ChromaDb
-        const result = await chromaClient.queryDocuments(
+        console.log(`[ArticlesRegistry] Performing semantic search for query: ${query}`);
+        // Semantic search via vector database
+        const result = await VectorBaseModel.vectorDB.queryDocuments(
           this.collectionName,
           [query],
           limit + offset,
-          filter
+          finalFilter
         );
+        console.log(`[ArticlesRegistry] Vector query result ids:`, result.ids?.length || 0);
         
         if (result?.ids?.[0]?.length) {
-          articles = await Promise.all(result.ids[0].map(async (id: string, idx: number) => {
+          const articles: Article[] = await Promise.all(result.ids[0].map(async (id: string, idx: number) => {
             const metadata = result.metadatas?.[0]?.[idx] ?? {};
             const article = new Article();
             article.fill({ ...metadata, slug: id });
             return article;
           }));
+          console.log(`[ArticlesRegistry] Semantic search results:`, articles.length);
+          // Apply offset/limit
+          const slicedArticles = articles.slice(offset, offset + limit);
+          const total = await VectorBaseModel.vectorDB.countDocuments(this.collectionName, filter);
+          const items = slicedArticles.map(a => this.toListItem(a));
+          return {
+            items,
+            total,
+            hasMore: offset + limit < total
+          };
+        } else {
+          console.log(`[ArticlesRegistry] No semantic search results found`);
+          return { items: [], total: 0, hasMore: false };
         }
       } else {
-        // Filter-only fetch via ChromaDb
-        const result = await chromaClient.getDocuments(
+        console.log(`[ArticlesRegistry] Performing exact match search`);
+        // Filter-only fetch via vector database
+        const result = await VectorBaseModel.vectorDB.getDocuments(
           this.collectionName,
           [],
-          filter
+          finalFilter
         );
+        console.log(`[ArticlesRegistry] Vector get result ids:`, result.ids?.length || 0);
         
+        let articles: Article[] = [];
         if (result?.ids?.length) {
           articles = result.ids.map((id: string, idx: number): Article => {
             const metadata = result.metadatas?.[idx] ?? {};
@@ -102,67 +121,68 @@ export class ArticlesRegistry {
             return article;
           });
         }
+
+        const total = await VectorBaseModel.vectorDB.countDocuments(this.collectionName, filter);
+
+        const items = articles.map((a: Article) => this.toListItem(a));
+
+        return {
+          items,
+          total,
+          hasMore: offset + limit < total
+        };
       }
-
-      // Apply offset/limit
-      articles = articles.slice(offset, offset + limit);
-
-      // Sort in-memory if not relevance-sorted
-      if (!query) {
-        articles.sort((a, b) => {
-          const va = a.attributes[sortBy] ?? '';
-          const vb = b.attributes[sortBy] ?? '';
-          const cmp = va < vb ? -1 : va > vb ? 1 : 0;
-          return sortOrder === 'asc' ? cmp : -cmp;
-        });
-      }
-
-      const total = await chromaClient.countDocuments(this.collectionName, filter);
-
-      const items = articles.map(a => this.toListItem(a));
-
-      return {
-        items,
-        total,
-        hasMore: offset + limit < total
-      };
-    } catch (error) {
-      console.error('[ArticlesRegistry] Search failed:', error);
-      return { items: [], total: 0, hasMore: false };
+    } catch (err) {
+      console.error(`Search ${this.collectionName} failed:`, err);
+      throw err;
     }
   }
 
   async getBySlug(slug: string): Promise<ArticleWithContent | null> {
+    console.log(`[ArticlesRegistry] getBySlug called with slug: ${slug}`);
     const article = await Article.find(slug);
-    if (!article) return null;
+    console.log(`[ArticlesRegistry] Article.find result:`, article);
+    if (!article) {
+      console.log(`[ArticlesRegistry] No article found for slug: ${slug}`);
+      return null;
+    }
 
-    return {
+    const result = {
       ...this.toListItem(article),
       document: article.attributes.document || ''
     };
+    console.log(`[ArticlesRegistry] Returning ArticleWithContent:`, { ...result, document: result.document.substring(0, 100) + '...' });
+
+    return result;
   }
 
   async getCategories(): Promise<string[]> {
-    // Use ChromaDb to fetch all articles and extract categories
-    const result = await chromaClient.getDocuments(this.collectionName, [], undefined);
+    // Use vector database to fetch all articles and extract categories
+    const result = await VectorBaseModel.vectorDB.getDocuments(this.collectionName, [], undefined);
     const cats = new Set<string>();
     result.metadatas.forEach((m: any) => m?.category && cats.add(m.category));
     return Array.from(cats).sort();
   }
 
   async getTags(): Promise<string[]> {
-    // Use ChromaDb to fetch all articles and extract tags
-    const result = await chromaClient.getDocuments(this.collectionName, [], undefined);
+    // Use vector database to fetch all articles and extract tags
+    const result = await VectorBaseModel.vectorDB.getDocuments(this.collectionName, [], undefined);
     const tags = new Set<string>();
     result.metadatas.forEach((m: any) => {
-      if (Array.isArray(m?.tags)) m.tags.forEach((t: string) => tags.add(t));
+      let tagsArray: string[] = [];
+      if (Array.isArray(m?.tags)) {
+        tagsArray = m.tags;
+      } else if (typeof m?.tags === 'string') {
+        tagsArray = m.tags.split(',').map((s: string) => s.trim()).filter(Boolean);
+      }
+      tagsArray.forEach((t: string) => tags.add(t));
     });
     return Array.from(tags).sort();
   }
 
   async getNavStructure(): Promise<{ tag: string; pages: ArticleListItem[] }[]> {
-    // Get all articles via ChromaDb and group them by category
-    const result = await chromaClient.getDocuments(
+    // Get all articles via vector database and group them by category
+    const result = await VectorBaseModel.vectorDB.getDocuments(
       this.collectionName,
       [],
       undefined
@@ -175,8 +195,16 @@ export class ArticlesRegistry {
       const article = new Article();
       article.fill({ ...metadata, slug: id });
       
+      // Parse tags
+      let tagsArray: string[] = [];
+      if (Array.isArray(article.attributes.tags)) {
+        tagsArray = article.attributes.tags;
+      } else if (typeof article.attributes.tags === 'string') {
+        tagsArray = article.attributes.tags.split(',').map(s => s.trim()).filter(Boolean);
+      }
+      
       // Use tags[0] or section or category, fallback to 'Uncategorized'
-      const tag = article.attributes.tags?.[0] || article.attributes.section || article.attributes.category || 'Uncategorized';
+      const tag = tagsArray[0] || article.attributes.section || article.attributes.category || 'Uncategorized';
       
       if (!grouped.has(tag)) {
         grouped.set(tag, []);

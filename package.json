@@ -64,6 +64,7 @@
     "@langchain/openai": "^1.2.5",
     "@napi-rs/xattr": "^1.0.3",
     "@preact/signals": "^2.6.2",
+    "@qdrant/js-client-rest": "^1.16.2",
     "@rancher/components": "0.3.0-alpha.1",
     "@schedule-x/calendar": "^4.1.0",
     "@schedule-x/drag-and-drop": "^3.7.3",

@@ -88,45 +88,39 @@ spec:
     nodePort: 30114
   type: NodePort
 ---
-# Chroma
+# Qdrant
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: chroma
+  name: qdrant
   namespace: sulla
   labels:
-    app: chroma
+    app: qdrant
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: chroma
+      app: qdrant
   template:
     metadata:
       labels:
-        app: chroma
+        app: qdrant
     spec:
       restartPolicy: Always
       terminationGracePeriodSeconds: 30
       containers:
-      - name: chroma
-        image: chromadb/chroma:latest
+      - name: qdrant
+        image: qdrant/qdrant:latest
         imagePullPolicy: IfNotPresent
         ports:
-        - containerPort: 8000
+        - containerPort: 6333
           hostPort: 30115
         env:
-        - name: IS_PERSISTENT
-          value: "TRUE"
-        - name: CHROMA_SERVER_HTTP_PORT
-          value: "8000"
-        - name: ANONYMIZED_TELEMETRY
-          value: "FALSE"
-        - name: PERSIST_DIRECTORY
-          value: "/chroma/chroma"
+        - name: QDRANT__SERVICE__HTTP_PORT
+          value: "6333"
         volumeMounts:
-        - mountPath: /chroma/chroma
-          name: chroma-data
+        - mountPath: /qdrant/storage
+          name: qdrant-data
         resources:
           limits:
             memory: "2Gi"
@@ -136,35 +130,35 @@ spec:
             cpu: "250m"
         readinessProbe:
           httpGet:
-            path: /api/v2/heartbeat
-            port: 8000
+            path: /healthz
+            port: 6333
           initialDelaySeconds: 30
           periodSeconds: 10
           failureThreshold: 12
         livenessProbe:
           httpGet:
-            path: /api/v2/heartbeat
-            port: 8000
+            path: /healthz
+            port: 6333
           initialDelaySeconds: 60
           periodSeconds: 15
           failureThreshold: 8
       volumes:
-      - name: chroma-data
+      - name: qdrant-data
         hostPath:
-          path: /var/lib/sulla/chroma
+          path: /var/lib/sulla/qdrant
           type: DirectoryOrCreate
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: chromadb
+  name: qdrant
   namespace: sulla
 spec:
   selector:
-    app: chroma
+    app: qdrant
   ports:
-  - port: 8000
-    targetPort: 8000
+  - port: 6333
+    targetPort: 6333
     nodePort: 30115
   type: NodePort
 ---

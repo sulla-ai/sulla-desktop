@@ -9,6 +9,7 @@ import { soulPrompt } from '../agent/prompts/soul';
 import { heartbeatPrompt } from '../agent/prompts/heartbeat';
 import { N8nService } from '../agent/services/N8nService';
 import { SullaSettingsModel } from '../agent/database/models/SullaSettingsModel';
+import { randomUUID } from 'crypto';
 
 // Nav items for the Language Model Settings sidebar
 const navItems = [
@@ -866,7 +867,7 @@ export default defineComponent({
       const counts: any = {};
 
       try {
-        let testSlug = 'test-' + Date.now();
+        let testSlug = randomUUID();
 
         await this.runTest('Article.create()', async () => {
           // Import Article class dynamically
@@ -1963,7 +1964,7 @@ export default defineComponent({
         >
           <h2>Database Tests</h2>
           <p class="description">
-            Test ChromaDB functionality and verify that the Article and ArticlesRegistry classes work correctly.
+            Test Vectordb functionality and verify that the Article and ArticlesRegistry classes work correctly.
           </p>
 
           <div class="diagnostics-grid">

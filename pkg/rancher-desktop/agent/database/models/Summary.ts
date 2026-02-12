@@ -1,20 +1,20 @@
 // src/models/Summary.ts
-// Chroma model for conversation_summaries collection
+// Vector model for conversation_summaries collection
 // Links thread_id to conversation table, searchable by topics/entities
 
-import { ChromaBaseModel } from '../ChromaBaseModel';
+import { VectorBaseModel } from '../VectorBaseModel';
 
-export class Summary extends ChromaBaseModel {
+export class Summary extends VectorBaseModel {
   protected collectionName = 'conversation_summaries';
   protected idField = 'threadId';
 
   protected fillable = [
     'threadId',
-    'document',  // Changed from 'summary' to 'document' for ChromaBaseModel
+    'document',  // Changed from 'summary' to 'document' for VectorBaseModel
     'topics',
     'entities',
     'timestamp',
-    // Removed 'conversationId' - Chroma doesn't allow null/undefined in metadata
+    // Removed 'conversationId' - vector database doesn't allow null/undefined in metadata
   ];
 
   protected required = [
@@ -27,7 +27,7 @@ export class Summary extends ChromaBaseModel {
   protected defaults = {
     topics: [],
     entities: [],
-    // Removed 'conversationId: null' - not needed in Chroma metadata
+    // Removed 'conversationId: null' - not needed in vector metadata
   };
 
   // Convenience methods
@@ -57,7 +57,7 @@ export class Summary extends ChromaBaseModel {
     summaryText: string,
     topics: string[],
     entities: string[],
-    conversationId?: number  // Keep parameter for API compatibility but don't store in Chroma
+    conversationId?: number  // Keep parameter for API compatibility but don't store in vector database
   ): Promise<Summary> {
     const summaryDoc = `${summaryText}\n\nTopics: ${topics.join(', ')}\nEntities: ${entities.join(', ')}`;
     

@@ -20,21 +20,18 @@ services:
       timeout: 10s
       retries: 5
 
-  chroma:
-    image: chromadb/chroma:latest
-    container_name: sulla_chroma
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: sulla_qdrant
     ports:
-      - "30115:8000"
+      - "30115:6333"
     environment:
-      - IS_PERSISTENT=TRUE
-      - CHROMA_SERVER_HTTP_PORT=8000
-      - ANONYMIZED_TELEMETRY=FALSE
-      - PERSIST_DIRECTORY=/chroma/chroma
+      - QDRANT__SERVICE__HTTP_PORT=6333
     volumes:
-      - /var/lib/sulla/chroma:/chroma/chroma
+      - /var/lib/sulla/qdrant:/qdrant/storage
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v2/heartbeat"]
+      test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
       interval: 30s
       timeout: 10s
       retries: 5

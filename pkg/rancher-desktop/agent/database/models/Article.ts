@@ -1,8 +1,8 @@
 // src/models/Article.ts
 
-import { ChromaBaseModel } from '../ChromaBaseModel';
+import { VectorBaseModel } from '../VectorBaseModel';
 
-export class Article extends ChromaBaseModel {
+export class Article extends VectorBaseModel {
   protected readonly collectionName = 'knowledgebase_articles';
   protected readonly idField = 'slug';
 

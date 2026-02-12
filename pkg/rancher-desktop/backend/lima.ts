@@ -2206,6 +2206,18 @@ export default class LimaBackend extends events.EventEmitter implements VMBacken
    * Runs docker-compose up -d to start all Sulla services in detached mode.
    */
   private async applySullaCompose(): Promise<void> {
+    // Clean up any existing sulla containers to prevent name conflicts
+    try {
+      const existingContainers = await this.execCommand({ capture: true, root: true }, 'docker', 'ps', '-aq', '--filter', 'name=sulla_');
+      if (existingContainers.trim()) {
+        console.log('[Sulla] Stopping existing sulla containers before starting new ones');
+        await this.execCommand({ root: true }, 'docker', 'stop', ...existingContainers.trim().split('\n'));
+        await this.execCommand({ root: true }, 'docker', 'rm', ...existingContainers.trim().split('\n'));
+      }
+    } catch (error) {
+      console.warn('[Sulla] Failed to clean up existing containers:', error);
+    }
+
     await this.execCommand({ root: true }, 'docker-compose', '-f', '/tmp/sulla-docker-compose.yml', '-p', 'sulla', 'up', '-d');
   }
 
@@ -2213,7 +2225,7 @@ export default class LimaBackend extends events.EventEmitter implements VMBacken
    * Waits for all Sulla Docker services to be healthy by checking their container status.
    */
   private async waitForSullaDockerServices(): Promise<void> {
-    const services = ['sulla_ollama', 'sulla_chroma', 'sulla_postgres', 'sulla_redis', 'sulla_ws_server', 'sulla_n8n'];
+    const services = ['sulla_ollama', 'sulla_qdrant', 'sulla_postgres', 'sulla_redis', 'sulla_ws_server', 'sulla_n8n'];
 
     for (const service of services) {
       await this.waitForDockerServiceHealthy(service);

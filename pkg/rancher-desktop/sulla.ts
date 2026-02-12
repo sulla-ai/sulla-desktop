@@ -9,11 +9,31 @@ import { SullaIntegrations } from './agent/integrations';
 import { postgresClient } from '@pkg/agent/database/PostgresClient';
 import { getChatCompletionsServer } from '@pkg/main/chatCompletionsServer';
 import { createN8nService } from './agent/services/N8nService';
-import { chromaClient } from '@pkg/agent/database/ChromaDb';
+import { QdrantDB } from '@pkg/agent/database/QdrantDb';
+import { VectorBaseModel } from '@pkg/agent/database/VectorBaseModel';
 import { getDatabaseManager } from '@pkg/agent/database/DatabaseManager';
 import { initSullaEvents } from '@pkg/main/sullaEvents';
 import * as path from 'path';
 import { app } from 'electron';
+import { execSync } from 'child_process';
+
+const checkDockerMode = async () => {
+  try {
+    const output = execSync('LIMA_HOME=~/Library/Application\\ Support/rancher-desktop/lima ~/Sites/sulla/sulla-desktop/resources/darwin/lima/bin/limactl list --json', { encoding: 'utf8' });
+    const instances = JSON.parse(output);
+    const instance = instances.find((i: any) => i.name === '0');
+    const vmRunning = instance?.status === 'Running';
+
+    // Check if Kubernetes is enabled
+    const k8sEnabled = await SullaSettingsModel.get('kubernetes.enabled', false);
+
+    // We're in Docker mode if VM is not running OR Kubernetes is not enabled
+    return !vmRunning || !k8sEnabled;
+  } catch (err) {
+    // If we can't check, assume Docker mode (VM not accessible)
+    return true;
+  }
+};
 
 export async function initiateWindowContext(): Promise<void> {
     // This function serves as the explicit initialization hook
@@ -32,7 +52,6 @@ export async function initiateWindowContext(): Promise<void> {
         console.error('[WindowContext] Failed to initialize settings:', error);
     }
 
-    
 }
 
 /**
@@ -49,7 +68,7 @@ export async function instantiateSullaStart(): Promise<void> {
 
     try {
 
-        await chromaClient.initializeEmbeddings();
+        await VectorBaseModel.vectorDB.initializeEmbeddings();
 
         const backendGraphWebSocketService = getBackendGraphWebSocketService();
         console.log('[Background] BackendGraphWebSocketService initialized - backend agent messages will be processed');
@@ -117,13 +136,24 @@ export async function onMainProxyLoad(ipcMainProxy: any) {
     });
 
     // Handle app quit requests from the UI
-    ipcMainProxy.handle('app-quit', () => {
+    ipcMainProxy.handle('app-quit', async () => {
         console.log('[Sulla] Quitting application...');
         const firstRunWindow = window.getWindow('first-run');
         if (firstRunWindow) {
             firstRunWindow.setClosable(true);
             firstRunWindow.close();
         }
+
+        // Stop Docker containers early if in Docker mode
+        if (await checkDockerMode()) {
+          try {
+            execSync('docker-compose down', { cwd: process.cwd(), stdio: 'inherit' });
+            console.log('[Shutdown] Local Docker containers stopped');
+          } catch (err) {
+            console.warn('[Shutdown] Docker compose down failed:', err);
+          }
+        }
+
         app.quit();
     });
 }
@@ -171,11 +201,30 @@ export function hookSullaEnd(Electron: any, mainEvents: any, window:any) {
             const errorMessage = err instanceof Error ? err.message : String(err);
             console.warn('[Shutdown] Postgres close failed:', errorMessage);
         }
+
+        // Stop Docker containers if in Docker mode
+        if (await checkDockerMode()) {
+          try {
+            execSync('docker-compose down', { cwd: process.cwd(), stdio: 'inherit' });
+            console.log('[Shutdown] Docker containers stopped');
+          } catch (err) {
+            console.warn('[Shutdown] Docker compose down failed:', err);
+          }
+        }
     });
 
     Electron.app.on('before-quit', async () => {
         try {
             await getDatabaseManager().stop();
+            // Stop Docker containers if in Docker mode
+            if (await checkDockerMode()) {
+              try {
+                execSync('docker-compose down', { cwd: process.cwd(), stdio: 'inherit' });
+                console.log('[Shutdown] Docker containers stopped');
+              } catch (err) {
+                console.warn('[Shutdown] Docker compose down failed:', err);
+              }
+            }
         } catch { } // swallow any remaining errors
     });
 

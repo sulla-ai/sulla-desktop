@@ -6,6 +6,7 @@ import { postgresClient, PostgresClient } from '@pkg/agent/database/PostgresClie
 import { migrationsRegistry } from './migrations';
 import { seedersRegistry } from './seeders';
 import { SullaSettingsModel } from './models/SullaSettingsModel';
+import { VectorBaseModel } from './VectorBaseModel';
 
 const MIGRATIONS_TABLE = 'sulla_migrations';
 const SEEDERS_TABLE   = 'sulla_seeders';
@@ -57,6 +58,9 @@ export class DatabaseManager {
 
         // now that tables are ready, sync to persistent storage
         await SullaSettingsModel.bootstrap();
+
+        // initialize QdrantDB embeddings
+        await VectorBaseModel.vectorDB.initializeEmbeddings();
 
         // settings are ready to be used in seeding
         await this.runSeeders();

@@ -4111,6 +4111,25 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@qdrant/js-client-rest@npm:^1.16.2":
+  version: 1.16.2
+  resolution: "@qdrant/js-client-rest@npm:1.16.2"
+  dependencies:
+    "@qdrant/openapi-typescript-fetch": "npm:1.2.6"
+    undici: "npm:^6.0.0"
+  peerDependencies:
+    typescript: ">=4.7"
+  checksum: 10c0/428a0274f864388ed2fecc914a8cfd930dfbb6a54d65462c3c47edfe2c891fd9f3f94b120e87411a0b0d53e0b3668fd5727151ec2c87c4648164a34954faff69
+  languageName: node
+  linkType: hard
+
+"@qdrant/openapi-typescript-fetch@npm:1.2.6":
+  version: 1.2.6
+  resolution: "@qdrant/openapi-typescript-fetch@npm:1.2.6"
+  checksum: 10c0/0359bb6939f84572e2d689b70949daea37a7cfc16f54919db8acbc496e65aca2f2a5e99e9790ec1b29e9e83f513c96ceb76054f31f9917b3fd798bed174bf96b
+  languageName: node
+  linkType: hard
+
 "@rancher/components@npm:0.3.0-alpha.1":
   version: 0.3.0-alpha.1
   resolution: "@rancher/components@npm:0.3.0-alpha.1"
@@ -16242,6 +16261,7 @@ __metadata:
     "@napi-rs/xattr": "npm:^1.0.3"
     "@playwright/test": "npm:1.57.0"
     "@preact/signals": "npm:^2.6.2"
+    "@qdrant/js-client-rest": "npm:^1.16.2"
     "@rancher/components": "npm:0.3.0-alpha.1"
     "@schedule-x/calendar": "npm:^4.1.0"
     "@schedule-x/drag-and-drop": "npm:^3.7.3"
@@ -18636,6 +18656,13 @@ __metadata:
   version: 7.16.0
   resolution: "undici-types@npm:7.16.0"
   checksum: 10c0/3033e2f2b5c9f1504bdc5934646cb54e37ecaca0f9249c983f7b1fc2e87c6d18399ebb05dc7fd5419e02b2e915f734d872a65da2e3eeed1813951c427d33cc9a
+  languageName: node
+  linkType: hard
+
+"undici@npm:^6.0.0":
+  version: 6.23.0
+  resolution: "undici@npm:6.23.0"
+  checksum: 10c0/d846b3fdfd05aa6081ba1eab5db6bbc21b283042c7a43722b86d1ee2bf749d7c990ceac0c809f9a07ffd88b1b0f4c0f548a8362c035088cb1997d63abdda499c
   languageName: node
   linkType: hard
 

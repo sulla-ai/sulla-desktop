@@ -1,15 +1,18 @@
-// src/database/ChromaBaseModel.ts
-import { chromaClient } from './ChromaDb';
+// src/database/VectorBaseModel.ts
+import { QdrantDB } from './QdrantDb';
+import { IVectorDatabase } from '../types';
 
-interface ChromaDocument {
+interface VectorDocument {
   id: string;
   document: string;
   metadata: Record<string, any>;
 }
 
-export abstract class ChromaBaseModel {
+export abstract class VectorBaseModel {
   protected abstract collectionName: string;
   protected abstract idField: string; // e.g. 'threadId' or 'slug'
+
+  public static vectorDB: IVectorDatabase = new QdrantDB();
 
   protected fillable: string[] = [];
   protected required: string[] = [];
@@ -28,6 +31,18 @@ export abstract class ChromaBaseModel {
         if (!descriptor?.get) {
           (this as any)[key] = value;
         }
+      }
+    }
+  }
+
+  protected hydrate(data: Record<string, any>) {
+    // Set all attributes from database data, bypassing fillable filter
+    for (const [key, value] of Object.entries(data)) {
+      this.attributes[key] = value;
+      // Set as property only if no getter exists
+      const descriptor = Object.getOwnPropertyDescriptor(this.constructor.prototype, key);
+      if (!descriptor?.get) {
+        (this as any)[key] = value;
       }
     }
   }
@@ -57,7 +72,7 @@ export abstract class ChromaBaseModel {
 
     const document = this.attributes.document;
     if (!document || (Array.isArray(document) && !document.length)) {
-      console.warn(`[ChromaBaseModel] Skipping save - no document content for ${this.constructor.name} id ${id}`);
+      console.warn(`[VectorBaseModel] Skipping save - no document content for ${this.constructor.name} id ${id}`);
       return;
     }
 
@@ -77,9 +92,9 @@ export abstract class ChromaBaseModel {
       }
     }
 
-    console.log(`[ChromaBaseModel] Saving ${this.collectionName} id ${id}:`, safeMetadata);
+    console.log(`[VectorBaseModel] Saving ${this.collectionName} id ${id}:`, safeMetadata);
 
-    await chromaClient.addDocuments(
+    await VectorBaseModel.vectorDB.addDocuments(
       this.collectionName,
       Array.isArray(document) ? document : [document],
       [safeMetadata],
@@ -91,7 +106,7 @@ export abstract class ChromaBaseModel {
   // Static helpers
   // ────────────────────────────────────────────────
 
-  static async create<T extends ChromaBaseModel>(
+  static async create<T extends VectorBaseModel>(
     this: new (data?: Record<string, any>) => T,
     attributes: Record<string, any>
   ): Promise<T> {
@@ -101,14 +116,19 @@ export abstract class ChromaBaseModel {
     return instance;
   }
 
-  static async find<T extends ChromaBaseModel>(
+  static async find<T extends VectorBaseModel>(
     this: new (attributes?: Record<string, any>) => T,
     id: string
   ): Promise<T | null> {
     const instance = new this();
-    const res = await chromaClient.getDocuments(instance.collectionName, [id]);
+    console.log(`[VectorBaseModel] Finding ${instance.collectionName} id ${id}`);
+    const res = await VectorBaseModel.vectorDB.getDocuments(instance.collectionName, [id]);
+    console.log(`[VectorBaseModel] getDocuments result:`, res);
 
-    if (!res?.ids?.length || !res.ids[0]) return null;
+    if (!res?.ids?.length || !res.ids[0]) {
+      console.log(`[VectorBaseModel] No document found for id ${id}`);
+      return null;
+    }
 
     const doc = {
       id: res.ids[0],
@@ -116,17 +136,28 @@ export abstract class ChromaBaseModel {
       metadata: res.metadatas?.[0] ?? {}
     };
 
-    return new this(doc.metadata);
+    console.log(`[VectorBaseModel] Retrieved doc:`, doc);
+
+    const resultInstance = new this();
+    console.log(`[VectorBaseModel] Retrieved doc:`, doc);
+
+    // Hydrate with metadata from database (bypasses fillable filter)
+    resultInstance.hydrate(doc.metadata);
+
+    // Fill the document since it's not in metadata
+    resultInstance.fill({ document: doc.document });
+
+    return resultInstance;
   }
 
-  static async search<T extends ChromaBaseModel>(
+  static async search<T extends VectorBaseModel>(
     this: new (attributes?: Record<string, any>) => T,
     query: string,
     limit = 5,
     filter?: Record<string, any>
   ): Promise<T[]> {
     const instance = new this();
-    const res = await chromaClient.queryDocuments(
+    const res = await VectorBaseModel.vectorDB.queryDocuments(
       instance.collectionName,
       [query],
       limit,
@@ -137,7 +168,9 @@ export abstract class ChromaBaseModel {
 
     return res.ids[0].map((id: string, idx: number) => {
       const metadata = res.metadatas?.[0]?.[idx] ?? {};
-      return new this(metadata);
+      const instance = new this();
+      instance.hydrate(metadata);
+      return instance;
     });
   }
 
@@ -145,7 +178,7 @@ export abstract class ChromaBaseModel {
     const id = this.attributes[this.idField];
     if (!id) return;
 
-    await chromaClient.deleteDocuments(this.collectionName, [String(id)]);
+    await VectorBaseModel.vectorDB.deleteDocuments(this.collectionName, [String(id)]);
   }
 
   get attributesSnapshot(): Readonly<Record<string, any>> {

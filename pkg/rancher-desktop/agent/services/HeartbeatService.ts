@@ -27,7 +27,7 @@ export class HeartbeatService {
   private intervalId: ReturnType<typeof setInterval> | null = null;
   private isExecuting = false; // Track if heartbeat is actively executing
   private config: HeartbeatConfig = {
-    enabled: true,
+    enabled: false,
     delayMinutes: 30,
     prompt: '',
     model: 'default',
@@ -58,9 +58,12 @@ export class HeartbeatService {
     const wasEnabled = this.config.enabled;
     const oldDelay = this.config.delayMinutes;
 
+    const rawDelay = await SullaSettingsModel.get('heartbeatDelayMinutes', 30);
+    const safeDelay = isNaN(rawDelay) || rawDelay <= 0 ? 30 : Math.max(1, rawDelay);
+
     this.config = {
       enabled: await SullaSettingsModel.get('heartbeatEnabled', true),
-      delayMinutes: await SullaSettingsModel.get('heartbeatDelayMinutes', 30),
+      delayMinutes: safeDelay,
       prompt: await SullaSettingsModel.get('heartbeatPrompt', ''),
       model: await SullaSettingsModel.get('heartbeatModel', 'default'),
     };

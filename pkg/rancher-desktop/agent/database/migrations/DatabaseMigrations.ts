@@ -1,11 +1,11 @@
-import { ChromaDb } from './ChromaDb';
+import { QdrantDB } from '../QdrantDb';
 
 export class DatabaseMigrations {
   private static instance: DatabaseMigrations;
-  private chromaClient: ChromaDb;
+  private qdrantClient: QdrantDB;
 
   private constructor() {
-    this.chromaClient = ChromaDb.getInstance();
+    this.qdrantClient = new QdrantDB();
   }
 
   static getInstance(): DatabaseMigrations {
@@ -41,11 +41,11 @@ export class DatabaseMigrations {
 
     try {
       // Get or create sections collection
-      const sectionsCollection = await this.chromaClient.getOrCreateCollection('knowledgebase_sections');
+      const sectionsCollection = await this.qdrantClient.getOrCreateCollection('knowledgebase_sections');
       console.log('[Migration 001] Sections collection ready:', sectionsCollection.name);
 
       // Get or create categories collection
-      const categoriesCollection = await this.chromaClient.getOrCreateCollection('knowledgebase_categories');
+      const categoriesCollection = await this.qdrantClient.getOrCreateCollection('knowledgebase_categories');
       console.log('[Migration 001] Categories collection ready:', categoriesCollection.name);
 
       console.log('[Migration 001] Collections created successfully');
@@ -62,7 +62,7 @@ export class DatabaseMigrations {
     console.log('[Database Init] Initializing default sections and categories...');
 
     try {
-      const { SectionsRegistry } = await import('./registry/SectionsRegistry');
+      const { SectionsRegistry } = await import('../registry/SectionsRegistry');
       const registry = SectionsRegistry.getInstance();
 
       // Check if we already have sections
