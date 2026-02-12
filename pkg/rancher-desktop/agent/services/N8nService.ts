@@ -27,12 +27,12 @@ export class N8nService {
     // get the fresh api key
     const n8nUserId = await SullaSettingsModel.get('serviceAccountUserId'); 
     const serviceAccount = await N8nUserApiKeyModel.getOrCreateServiceAccount(n8nUserId);
-    if (!serviceAccount.attributes.id) {
-      throw new Error('Failed to get service account ID');
+    if (!serviceAccount.attributes.id || !serviceAccount.attributes.apiKey) {
+      throw new Error('[N8NService] Failed to get service account ID or API key');
     }
-    this.apiKey = await N8nUserApiKeyModel.createNewApiKeyToken(serviceAccount.attributes.id);
+    this.apiKey = serviceAccount.attributes.apiKey;
 
-    console.log(`API key ${this.apiKey ? 'generated/retrieved' : 'failed'} for user ID ${n8nUserId}, length: ${this.apiKey?.length || 0}`);
+    console.log(`API key ${this.apiKey ? 'generated/retrieved' : 'failed'} with ID ${serviceAccount.attributes.id}, length: ${this.apiKey?.length || 0}`);
 
     this.baseUrl = 'http://localhost:30119';
   }

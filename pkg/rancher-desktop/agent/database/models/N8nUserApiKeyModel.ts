@@ -63,7 +63,7 @@ export class N8nUserApiKeyModel extends BaseModel<UserApiKeyAttributes> {
     };
 
     // Use the same secret as n8n's JWT secret (from settings)
-    const jwtSecret = await SullaSettingsModel.get('sullaN8nEncryptionKey') || 'changeMeToA32CharRandomString1234';
+    const jwtSecret = await SullaSettingsModel.get('sullaN8nEncryptionKey', 'changeMeToA32CharRandomString1234');
     const jwt = await import('jsonwebtoken');
     const apiKeyToken = jwt.default.sign(jwtPayload, jwtSecret);
     return apiKeyToken;
@@ -82,11 +82,20 @@ export class N8nUserApiKeyModel extends BaseModel<UserApiKeyAttributes> {
       _userId = user.attributes.id;
     }
 
+    // First check if an API key already exists for this user
+    const existingApiKeys = await N8nUserApiKeyModel.where('userId', _userId);
+    if (existingApiKeys.length > 0) {
+      console.log(`[N8nUserApiKeyModel] Found existing API key for user ${_userId}`);
+      return existingApiKeys[0];
+    }
+
+    console.log(`[N8nUserApiKeyModel] Creating new API key for user ${_userId}`);
+
     // @ts-ignore
     const apiKeyToken = await N8nUserApiKeyModel.createNewApiKeyToken(_userId);
     const apiKeyId = SullaSettingsModel.generateId();
-    
-    const apiKey = await N8nUserApiKeyModel.create({
+
+    const apiKeyTokenModel = await N8nUserApiKeyModel.create({
       id: apiKeyId,
       userId: _userId,
       label: 'Sulla Integration',
@@ -133,14 +142,14 @@ export class N8nUserApiKeyModel extends BaseModel<UserApiKeyAttributes> {
       ],
       audience: 'public-api',
     });
-    
-    return apiKey;
+
+    return apiKeyTokenModel;
   }
 
   async save(): Promise<this> {
     if (!this.attributes.id) {
       this.attributes.id = SullaSettingsModel.generateId();
     }
-    return this;
+    return super.save(); // Actually save to database!
   }
 }

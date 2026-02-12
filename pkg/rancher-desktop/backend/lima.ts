@@ -2187,8 +2187,8 @@ export default class LimaBackend extends events.EventEmitter implements VMBacken
         if (env.startsWith('N8N_ENCRYPTION_KEY=')) {
           return `N8N_ENCRYPTION_KEY=${sullaN8nEncryptionKey}`;
         }
-        if (env.startsWith('N8N_JWT_SECRET=')) {
-          return `N8N_JWT_SECRET=${sullaN8nEncryptionKey}`;
+        if (env.startsWith('N8N_USER_MANAGEMENT_JWT_SECRET=')) {
+          return `N8N_USER_MANAGEMENT_JWT_SECRET=${sullaN8nEncryptionKey}`;
         }
         if (env.startsWith('N8N_BASIC_AUTH_PASSWORD=')) {
           return `N8N_BASIC_AUTH_PASSWORD=${sullaServicePassword}`;

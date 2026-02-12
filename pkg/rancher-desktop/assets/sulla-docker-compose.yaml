@@ -110,7 +110,7 @@ services:
       - N8N_REST_API_ENABLED=true
       - N8N_DIAGNOSTICS_ENABLED=false
       - N8N_TELEMETRY_ENABLED=false
-      - N8N_JWT_SECRET=n8n-self-set-secret-key
+      - N8N_USER_MANAGEMENT_JWT_SECRET=n8n-self-set-secret-key
     depends_on:
       - postgres
       - redis

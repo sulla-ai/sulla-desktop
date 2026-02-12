@@ -444,7 +444,7 @@ spec:
           value: "false"
         - name: N8N_TELEMETRY_ENABLED
           value: "false"
-        - name: N8N_JWT_SECRET
+        - name: N8N_USER_MANAGEMENT_JWT_SECRET
           value: "n8n-self-set-secret-key"
         resources:
           limits:

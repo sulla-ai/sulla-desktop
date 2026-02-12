@@ -528,7 +528,7 @@ export default class LimaKubernetesBackend extends events.EventEmitter implement
             if (envVar.name === 'N8N_ENCRYPTION_KEY') {
               envVar.value = sullaN8nEncryptionKey;
             }
-            if (envVar.name === 'N8N_JWT_SECRET') {
+            if (envVar.name === 'N8N_USER_MANAGEMENT_JWT_SECRET') {
               envVar.value = sullaN8nEncryptionKey;
             }
             if (envVar.name === 'N8N_BASIC_AUTH_PASSWORD') {
