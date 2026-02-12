@@ -47,7 +47,7 @@ export class N8nService {
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${this.apiKey}`,
+      'X-N8N-API-KEY': this.apiKey,
       ...options.headers as Record<string, string>
     };
 

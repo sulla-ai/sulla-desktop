@@ -51,6 +51,9 @@ if (intent === "direct_answer") {
   planneeded = false;
   emit_chat_message = "Direct, concise answer.";
 } else {
+  // you need a plan if the intent was to get you to do anything
+  // you need a plan if the intent was for more information
+  // you need a plan if the intent was to accomplish something
   planneeded = true;
   // ... rest of complex planning output
 }

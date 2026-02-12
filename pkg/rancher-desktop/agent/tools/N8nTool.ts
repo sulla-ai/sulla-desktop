@@ -58,6 +58,8 @@ JSON values go in quotes as strings -- tool parses them automatically.
     const params = this.argsToObject(rest);
 
     try {
+      await this.n8nService.initialize();
+
       switch (subcommand) {
         // WORKFLOWS
         case 'workflows':
