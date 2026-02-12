@@ -201,6 +201,13 @@ export class StrategicPlannerNode extends BaseNode {
     }
 
     if (plan.planneeded) {
+      // Ensure required fields have defaults
+      plan.goal = plan.goal?.trim() || "Assist with user request";
+      plan.goaldescription = plan.goaldescription?.trim() || "Provide helpful response to user inquiry";
+      plan.estimatedcomplexity = plan.estimatedcomplexity || "moderate";
+      plan.requirestools = plan.requirestools ?? true;
+      plan.responseguidance = plan.responseguidance || { tone: "helpful", format: "concise" };
+
       await this.updatePlan(state, plan);
     }
 

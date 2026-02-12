@@ -21,13 +21,19 @@ Format:
 - One tight paragraph (150–300 tokens max)
 - Bullet list: Main topics
 - Bullet list: Key entities (people, tools, companies, concepts, URLs)
+- Bullet list: Related slugs (thread IDs or slugs referenced or related)
+- Bullet list: Mentions (entities or topics explicitly mentioned)
+- Bullet list: Related entities (entities connected to the conversation)
 
 ${JSON_ONLY_RESPONSE_INSTRUCTIONS}
 {
   "emit_chat_message": "give the user a recap of what was done, if anything was left undone, what steps are next, if any",
   "summary": "concise paragraph for later recall...",
   "topics": ["topic1", "topic2", ...],
-  "entities": ["entity1", "entity2", ...]
+  "entities": ["entity1", "entity2", ...],
+  "related_slugs": ["slug1", "slug2", ...],
+  "mentions": ["mention1", "mention2", ...],
+  "related_entities": ["entity1", "entity2", ...]
 }
 `.trim();
 
@@ -99,6 +105,9 @@ export class SummaryNode extends BaseNode {
       summary: string;
       topics: string[];
       entities: string[];
+      related_slugs: string[];
+      mentions: string[];
+      related_entities: string[];
     };
 
     if (!data.summary?.trim()) {
@@ -109,7 +118,11 @@ export class SummaryNode extends BaseNode {
       state.metadata.threadId,
       data.summary,
       data.topics ?? [],
-      data.entities ?? []
+      data.entities ?? [],
+      undefined, // conversationId
+      data.related_slugs ?? [],
+      data.mentions ?? [],
+      data.related_entities ?? []
     );
 
     // send to the start and pause

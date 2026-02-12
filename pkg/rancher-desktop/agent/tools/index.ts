@@ -11,6 +11,7 @@ import { ToolListTool } from './ToolListTool';
 import { EmitChatMessageTool } from './EmitChatMessageTool';
 import { EmitChatImageTool } from './EmitChatImageTool';
 import { SlackTool } from '../integrations/slack/SlackTool';
+import { N8nTool } from './N8nTool';
 
 let registered = false;
 
@@ -39,6 +40,7 @@ export function registerDefaultTools(): void {
   ensure(new EmitChatMessageTool());
   ensure(new EmitChatImageTool());
   ensure(new SlackTool());
+  ensure(new N8nTool());
   registered = true;
 }
 
@@ -56,3 +58,4 @@ export { ToolListTool } from './ToolListTool';
 export { EmitChatMessageTool } from './EmitChatMessageTool';
 export { EmitChatImageTool } from './EmitChatImageTool';
 export { SlackTool } from '../integrations/slack/SlackTool';
+export { N8nTool } from './N8nTool';

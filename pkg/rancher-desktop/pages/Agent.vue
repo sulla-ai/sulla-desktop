@@ -121,7 +121,7 @@
  </code></pre>
                 </div>
 
-                <div v-else-if="m.role !== 'system'" class="max-w-[min(760px,92%)]">
+                <div v-else class="max-w-[min(760px,92%)]">
                   <div v-if="m.image" class="space-y-2">
                     <img
                       :src="m.image.dataUrl"
@@ -258,7 +258,7 @@
                               class="flex h-9 shrink-0 items-center gap-2 rounded-full px-2.5 text-[#0d0d0d] hover:bg-[#f0f0f0] disabled:opacity-60 dark:text-white dark:hover:bg-white/10"
                               aria-label="Model select"
                               :disabled="showOverlay"
-                              @click="modelSelector.toggleModelMenu"
+                              @click="handleModelSwitcherClick"
                             >
                               <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0" aria-hidden="true">
                                 <path d="M12 8V4" />
@@ -921,5 +921,15 @@ const toggleTheme = () => {
   isDark.value = !isDark.value;
   localStorage.setItem(THEME_STORAGE_KEY, isDark.value ? 'dark' : 'light');
 };
-</script>
 
+const handleModelSwitcherClick = () => {
+  console.log('[Agent] Model switcher clicked');
+  modelSelector.toggleModelMenu();
+};
+
+// Watch for changes in chat messages
+watch(() => chatController.messages.value.length, (newLength, oldLength) => {
+  console.log('[Agent] chatController messages length changed:', oldLength, '->', newLength);
+  console.log('[Agent] Current messages:', chatController.messages.value.map(m => ({ role: m.role, content: m.content.slice(0, 50) + '...' })));
+});
+</script>

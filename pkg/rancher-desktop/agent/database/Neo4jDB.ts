@@ -31,7 +31,9 @@ class OllamaEmbeddingAdapter {
 
 export class Neo4jDB implements IVectorDatabase {
   private driver: Driver;
-  private embeddingFunction: OpenAIEmbeddingAdapter | OllamaEmbeddingAdapter | undefined;
+  private session?: Session;
+  private embeddingFunction?: OpenAIEmbeddingAdapter | OllamaEmbeddingAdapter;
+  private createdCollections = new Set<string>();
   private initialized = false;
   private vectorSize = 768;
   private maxRetries = 3;
@@ -127,15 +129,29 @@ export class Neo4jDB implements IVectorDatabase {
   }
 
   async createCollection(name: string): Promise<void> {
+    if (this.createdCollections.has(name)) {
+      console.log(`[Neo4jDB] Collection ${name} already exists, skipping creation`);
+      return;
+    }
+
     const session = await this.getSession();
     try {
+      // Create constraint first
       await session.run(`
-        CREATE CONSTRAINT document_id IF NOT EXISTS FOR (d:Document) REQUIRE d.id IS UNIQUE;
-        CREATE VECTOR INDEX ${name}_vector IF NOT EXISTS
-        FOR (d:Document) ON (d.embedding)
-        OPTIONS {indexProvider: 'vector-2.0', indexConfig: { 'vector.dimensions': ${this.vectorSize}, 'vector.similarity_function': 'cosine' }};
+        CREATE CONSTRAINT document_id IF NOT EXISTS FOR (d:Document) REQUIRE d.id IS UNIQUE
       `);
-      console.log(`[Neo4jDB] Collection ${name} ready (vector index created)`);
+      console.log(`[Neo4jDB] Constraint created for ${name}`);
+
+      // Then create vector index
+      await session.run(`
+        CREATE VECTOR INDEX ${name} IF NOT EXISTS
+        FOR (d:Document) ON (d.embedding)
+        OPTIONS {indexProvider: 'vector-2.0', indexConfig: { \`vector.dimensions\`: ${this.vectorSize}, \`vector.similarity_function\`: 'cosine' }}
+      `);
+      console.log(`[Neo4jDB] Vector index created for ${name}`);
+
+      console.log(`[Neo4jDB] Collection ${name} ready`);
+      this.createdCollections.add(name);
     } finally {
       await session.close();
     }
@@ -154,7 +170,7 @@ export class Neo4jDB implements IVectorDatabase {
     const session = await this.getSession();
     try {
       await session.run(`MATCH (n:Document) DETACH DELETE n`);
-      await session.run(`DROP INDEX ${name}_vector IF EXISTS`);
+      await session.run(`DROP INDEX ${name} IF EXISTS`);
       console.log(`[Neo4jDB] Cleared ${name}`);
     } finally {
       await session.close();
@@ -196,6 +212,10 @@ export class Neo4jDB implements IVectorDatabase {
   }
 
   async queryDocuments(collectionName: string, queryTexts: string[], nResults = 5, where?: any): Promise<any> {
+    if (!this.createdCollections.has(collectionName)) {
+      return false;
+    }
+
     await this.ensureInitialized();
 
     const queryVectors = await this.embeddingFunction!.generateForQueries(queryTexts);
@@ -205,7 +225,7 @@ export class Neo4jDB implements IVectorDatabase {
       const session = await this.getSession();
       try {
         const result = await session.run(`
-          CALL db.index.vector.queryNodes('${collectionName}_vector', $limit, $queryVector)
+          CALL db.index.vector.queryNodes('${collectionName}', $limit, $queryVector)
           YIELD node, score
           RETURN node.id AS id,
                  node.text AS text,
@@ -213,7 +233,7 @@ export class Neo4jDB implements IVectorDatabase {
                  score
           ORDER BY score DESC
           LIMIT $limit
-        `, { queryVector, limit: nResults });
+        `, { queryVector, limit: Integer.fromNumber(nResults) });
 
         return result.records.map(r => ({
           id: r.get('id'),

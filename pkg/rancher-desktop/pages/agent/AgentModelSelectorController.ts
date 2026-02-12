@@ -99,11 +99,10 @@ export class AgentModelSelectorController {
   }
 
   async toggleModelMenu(): Promise<void> {
-    if (!this.deps.systemReady.value) {
-      return;
-    }
+    console.log('[ModelSelector] toggleModelMenu called');
 
     this.showModelMenu.value = !this.showModelMenu.value;
+    console.log('[ModelSelector] Menu toggled to:', this.showModelMenu.value);
     if (this.showModelMenu.value) {
       await this.refreshInstalledLocalModels();
     }

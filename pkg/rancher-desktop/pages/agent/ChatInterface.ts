@@ -106,6 +106,7 @@ export class ChatInterface {
       const personaService = this.registry.getActivePersonaService();
       return personaService?.messages.length ?? 0;
     }, (newLength, oldLength) => {
+      console.log('[ChatInterface] Watcher triggered: newLength=', newLength, 'oldLength=', oldLength);
       this.updateMessages();
     });
 
@@ -116,12 +117,15 @@ export class ChatInterface {
   private updateMessages(): void {
     const personaService = this.registry.getActivePersonaService();
     if (!personaService) {
+      console.log('[ChatInterface] updateMessages: no personaService');
       this.messages.value = [];
       return;
     }
     const msgs = personaService.messages;
     console.log('[ChatInterface] updateMessages: setting', msgs.length, 'messages');
+    console.log('[ChatInterface] Messages content:', msgs.map(m => ({ role: m.role, content: m.content.slice(0, 100) + '...' })));
     this.messages.value = [...msgs];
+    console.log('[ChatInterface] Messages set to', this.messages.value.length, 'messages');
   }
 
   // Graph running state from active agent's persona service

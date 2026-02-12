@@ -14,7 +14,9 @@ export class Summary extends VectorBaseModel {
     'topics',
     'entities',
     'timestamp',
-    // Removed 'conversationId' - vector database doesn't allow null/undefined in metadata
+    'related_slugs',        // keep for legacy/flat
+    'mentions',             // new: array of slugs/entities mentioned
+    'related_entities',     // new: array of entity IDs/names
   ];
 
   protected required = [
@@ -57,7 +59,10 @@ export class Summary extends VectorBaseModel {
     summaryText: string,
     topics: string[],
     entities: string[],
-    conversationId?: number  // Keep parameter for API compatibility but don't store in vector database
+    conversationId?: number,  // Keep parameter for API compatibility but don't store in vector database
+    relatedSlugs?: string[],
+    mentions?: string[],
+    relatedEntities?: string[]
   ): Promise<Summary> {
     const summaryDoc = `${summaryText}\n\nTopics: ${topics.join(', ')}\nEntities: ${entities.join(', ')}`;
     
@@ -68,6 +73,9 @@ export class Summary extends VectorBaseModel {
       topics,
       entities,
       timestamp: Date.now(),
+      related_slugs: relatedSlugs || [],
+      mentions: mentions || [],
+      related_entities: relatedEntities || [],
       // Removed conversationId - not stored in Chroma metadata
     });
 
