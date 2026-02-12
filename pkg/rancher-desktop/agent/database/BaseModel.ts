@@ -214,8 +214,8 @@ export abstract class BaseModel<T extends ModelAttributes = ModelAttributes> {
     const params: any[] = [];
 
     if (typeof conditions === 'string') {
-      query += ` WHERE ${conditions}`;
-      if (value !== undefined) params.push(value);
+      query += ` WHERE "${conditions}" = $1`;
+      params.push(value);
     } else {
       const clauses = Object.entries(conditions).map(([k], i) => {
         params.push(conditions[k]);
