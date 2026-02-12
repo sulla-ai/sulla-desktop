@@ -3,26 +3,28 @@ import { BaseTool } from './BaseTool';
 import type { ToolContext } from './BaseTool';
 import { articlesRegistry } from '../database/registry/ArticlesRegistry';
 
-export class ChromaTool extends BaseTool {
-  override readonly name = 'chroma';
-  override readonly aliases = ['knowledgebase', 'memory', 'storage'];
+export class KnowledgeGraphTool extends BaseTool {
+  override readonly name = 'knowledge-graph';
+  override readonly aliases = ['kg', 'knowledgebase', 'memory', 'storage', 'graph'];
 
   override getPlanningInstructions(): string {
-    return `["chroma", "search", "query"] - Knowledgebase articles via ArticlesRegistry
+    return `["knowledge-graph", "search", "query"] - Knowledge graph articles and relationships via ArticlesRegistry
 
 Examples:
-["chroma", "search", "docker basics", 5]
-["chroma", "search", "ollama", 3, "docker"]
-["chroma", "list", 10]                // top 10 by order
-["chroma", "find", "memory-and-dreaming"]
-["chroma", "categories"]             // get all categories
-["chroma", "tags"]                   // get all tags
-["chroma", "nav"]                    // get navigation structure
+["knowledge-graph", "search", "docker basics", 5]
+["knowledge-graph", "search", "ollama", 3, "docker"]
+["knowledge-graph", "list", 10]                // top 10 by order
+["knowledge-graph", "find", "memory-and-dreaming"]
+["knowledge-graph", "related", "architecture-overview", "MENTIONS"]
+["knowledge-graph", "categories"]             // get all categories
+["knowledge-graph", "tags"]                   // get all tags
+["knowledge-graph", "nav"]                    // get navigation structure
 
 Subcommands:
 - search <query> [limit=5] [tag?] → semantic search, optional tag filter
 - list [limit=10]                 → ordered by 'order' field
 - find <slug>                     → returns full article (metadata + content)
+- related <slug> [relationship=MENTIONS] → get related articles by graph relationship
 - categories                      → get all article categories
 - tags                            → get all article tags
 - nav                             → get navigation structure
@@ -34,7 +36,7 @@ Subcommands:
     if (helpResult) {
       return helpResult;
     }
-    
+
     const subcommand = this.getFirstArg(context);
     const rest = this.getArgsArray(context, 1); // everything after subcommand
 
@@ -84,7 +86,7 @@ Subcommands:
         case 'find': {
           const slug = rest[0];
           if (!slug) throw new Error('Missing slug');
-          
+
           const article = await articlesRegistry.getBySlug(slug);
           if (!article) return { toolName: this.name, success: false, result: null };
 
@@ -92,6 +94,24 @@ Subcommands:
             toolName: this.name,
             success: true,
             result: article
+          };
+        }
+
+        case 'related': {
+          const slug = rest[0];
+          const relationship = rest[1] || 'MENTIONS';
+          if (!slug) throw new Error('Missing slug');
+
+          const relatedArticles = await articlesRegistry.getRelated(slug, relationship);
+
+          return {
+            toolName: this.name,
+            success: true,
+            result: {
+              slug,
+              relationship,
+              related: relatedArticles
+            }
           };
         }
 
