@@ -53,28 +53,25 @@ export class SullaSettingsModel extends BaseModel<SettingsAttributes> {
    * Cast value back from string based on cast type
    */
   private static castValue(value: string, cast?: string): any {
-    switch(cast) {
-      case 'string':
-      case 'slug':
-        return value.replace(/^"|"$/g, '');
-      case 'number':
-        return Number(value.replace(/^"|"$/g, ''));
-      case 'boolean':
-        const cleaned = value.replace(/^"|"$/g, '').toLowerCase();
-        const truthyValues = ['true', '1', 'yes', 'on'];
-        return truthyValues.includes(cleaned);
-      case 'array':
-        try {
+    try {
+      switch(cast) {
+        case 'string':
+        case 'slug':
+          return value.replace(/^"|"$/g, '');
+        case 'number':
+          return Number(value.replace(/^"|"$/g, ''));
+        case 'boolean':
+          const cleaned = value.replace(/^"|"$/g, '').toLowerCase();
+          const truthyValues = ['true', '1', 'yes', 'on'];
+          return truthyValues.includes(cleaned);
+        case 'array':
           return JSON.parse(value);
-        } catch {
-          return value;
-        }
-      default:
-        try {
+        default:
           return JSON.parse(value);
-        } catch {
-          return value;
-        }
+      }
+    } catch (err) {
+      console.error('Error casting value:', err);
+      return value;
     }
   }
 
