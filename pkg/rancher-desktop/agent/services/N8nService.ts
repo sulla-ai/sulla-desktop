@@ -2,6 +2,8 @@
 // Provides methods to manage workflows, executions, credentials, and other n8n resources
 
 import { SullaSettingsModel } from '../database/models/SullaSettingsModel';
+import { N8nCredentialsEntityModel } from '../database/models/N8nCredentialsEntityModel';
+import { N8nUserModel } from '../database/models/N8nUserModel';
 
 /**
  * N8n API Service
@@ -10,11 +12,13 @@ import { SullaSettingsModel } from '../database/models/SullaSettingsModel';
 export class N8nService {
   private baseUrl: string;
   private apiKey: string;
+  private userId: string;
 
   constructor() {
     // Initialize with empty defaults - call initialize() to set values
     this.baseUrl = '';
     this.apiKey = '';
+    this.userId = '';
   }
 
   /**
@@ -31,6 +35,7 @@ export class N8nService {
       throw new Error('[N8NService] Failed to get service account ID or API key');
     }
     this.apiKey = serviceAccount.attributes.apiKey;
+    this.userId = n8nUserId;
 
     console.log(`API key ${this.apiKey ? 'generated/retrieved' : 'failed'} with ID ${serviceAccount.attributes.id}, length: ${this.apiKey?.length || 0}`);
 
@@ -371,34 +376,25 @@ export class N8nService {
     limit?: number;
     cursor?: string;
   }): Promise<any[]> {
-    let url = '/api/v1/credentials';
-
-    if (params) {
-      const queryParams = new URLSearchParams();
-
-      if (params.limit !== undefined) {
-        queryParams.append('limit', Math.min(params.limit, 250).toString());
-      }
-
-      if (params.cursor) {
-        queryParams.append('cursor', params.cursor);
-      }
-
-      const queryString = queryParams.toString();
-      if (queryString) {
-        url += '?' + queryString;
-      }
+    // Use direct database query instead of API
+    const credentials = await N8nCredentialsEntityModel.where({});
+    
+    // Apply basic limit if specified
+    let result = credentials;
+    if (params?.limit) {
+      result = credentials.slice(0, Math.min(params.limit, 250));
     }
-
-    const result = await this.request(url);
-    return result.data || result;
+    
+    // Return in API-compatible format
+    return result.map(cred => cred.attributes);
   }
 
   /**
    * Get credential by ID
    */
   async getCredential(id: string): Promise<any> {
-    return this.request(`/api/v1/credentials/${id}`);
+    const credential = await N8nCredentialsEntityModel.find(id);
+    return credential ? credential.attributes : null;
   }
 
   /**
@@ -410,10 +406,17 @@ export class N8nService {
     data: any;
     isResolvable?: boolean;
   }): Promise<any> {
-    return this.request('/api/v1/credentials', {
-      method: 'POST',
-      body: JSON.stringify(credentialData)
+    const credential = await N8nCredentialsEntityModel.create({
+      name: credentialData.name,
+      type: credentialData.type,
+      data: JSON.stringify(credentialData.data), // Store data as JSON string
+      isResolvable: credentialData.isResolvable ?? false,
+      isManaged: false, // Default values
+      isGlobal: false,
+      resolvableAllowFallback: false
     });
+    await credential.save();
+    return credential.attributes;
   }
 
   /**
@@ -427,19 +430,42 @@ export class N8nService {
     isResolvable?: boolean;
     isPartialData?: boolean;
   }): Promise<any> {
-    return this.request(`/api/v1/credentials/${id}`, {
-      method: 'PATCH',
-      body: JSON.stringify(credentialData)
-    });
+    const credential = await N8nCredentialsEntityModel.find(id);
+    if (!credential) {
+      throw new Error(`Credential with id ${id} not found`);
+    }
+
+    // Update attributes with provided data
+    if (credentialData.name !== undefined) {
+      credential.attributes.name = credentialData.name;
+    }
+    if (credentialData.type !== undefined) {
+      credential.attributes.type = credentialData.type;
+    }
+    if (credentialData.data !== undefined) {
+      credential.attributes.data = JSON.stringify(credentialData.data);
+    }
+    if (credentialData.isGlobal !== undefined) {
+      credential.attributes.isGlobal = credentialData.isGlobal;
+    }
+    if (credentialData.isResolvable !== undefined) {
+      credential.attributes.isResolvable = credentialData.isResolvable;
+    }
+
+    await credential.save();
+    return credential.attributes;
   }
 
   /**
    * Delete a credential
    */
   async deleteCredential(id: string): Promise<any> {
-    return this.request(`/api/v1/credentials/${id}`, {
-      method: 'DELETE'
-    });
+    const credential = await N8nCredentialsEntityModel.find(id);
+    if (!credential) {
+      throw new Error(`Credential with id ${id} not found`);
+    }
+    await credential.delete();
+    return { success: true };
   }
 
   /**
@@ -505,7 +531,8 @@ export class N8nService {
    * Get current user info
    */
   async getCurrentUser(): Promise<any> {
-    return this.request('/api/v1/users/me');
+    const user = await N8nUserModel.load(this.userId);
+    return user ? user.attributes : null;
   }
 
   // ========== HEALTH CHECK ==========
