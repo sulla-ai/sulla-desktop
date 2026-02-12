@@ -9,7 +9,6 @@ import { SullaIntegrations } from './agent/integrations';
 import { postgresClient } from '@pkg/agent/database/PostgresClient';
 import { getChatCompletionsServer } from '@pkg/main/chatCompletionsServer';
 import { createN8nService } from './agent/services/N8nService';
-import { QdrantDB } from '@pkg/agent/database/QdrantDb';
 import { VectorBaseModel } from '@pkg/agent/database/VectorBaseModel';
 import { getDatabaseManager } from '@pkg/agent/database/DatabaseManager';
 import { initSullaEvents } from '@pkg/main/sullaEvents';

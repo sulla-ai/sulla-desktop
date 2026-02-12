@@ -59,7 +59,7 @@ export class DatabaseManager {
         // now that tables are ready, sync to persistent storage
         await SullaSettingsModel.bootstrap();
 
-        // initialize QdrantDB embeddings
+        // initialize vector embeddings
         await VectorBaseModel.vectorDB.initializeEmbeddings();
 
         // settings are ready to be used in seeding

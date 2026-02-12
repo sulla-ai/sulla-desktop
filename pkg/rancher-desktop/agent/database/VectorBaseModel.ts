@@ -1,5 +1,5 @@
 // src/database/VectorBaseModel.ts
-import { QdrantDB } from './QdrantDb';
+import { Neo4jDB } from './Neo4jDB';
 import { IVectorDatabase } from '../types';
 
 interface VectorDocument {
@@ -12,7 +12,7 @@ export abstract class VectorBaseModel {
   protected abstract collectionName: string;
   protected abstract idField: string; // e.g. 'threadId' or 'slug'
 
-  public static vectorDB: IVectorDatabase = new QdrantDB();
+  public static vectorDB: IVectorDatabase = new Neo4jDB();
 
   protected fillable: string[] = [];
   protected required: string[] = [];

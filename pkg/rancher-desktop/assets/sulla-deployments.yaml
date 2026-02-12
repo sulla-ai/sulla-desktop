@@ -88,39 +88,41 @@ spec:
     nodePort: 30114
   type: NodePort
 ---
-# Qdrant
+# Neo4j
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: qdrant
+  name: neo4j
   namespace: sulla
   labels:
-    app: qdrant
+    app: neo4j
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: qdrant
+      app: neo4j
   template:
     metadata:
       labels:
-        app: qdrant
+        app: neo4j
     spec:
       restartPolicy: Always
       terminationGracePeriodSeconds: 30
       containers:
-      - name: qdrant
-        image: qdrant/qdrant:latest
+      - name: neo4j
+        image: neo4j:latest
         imagePullPolicy: IfNotPresent
         ports:
-        - containerPort: 6333
-          hostPort: 30115
+        - containerPort: 7474
+          hostPort: 30120
+        - containerPort: 7687
+          hostPort: 30121
         env:
-        - name: QDRANT__SERVICE__HTTP_PORT
-          value: "6333"
+        - name: NEO4J_AUTH
+          value: "none"
         volumeMounts:
-        - mountPath: /qdrant/storage
-          name: qdrant-data
+        - mountPath: /data
+          name: neo4j-data
         resources:
           limits:
             memory: "2Gi"
@@ -130,36 +132,39 @@ spec:
             cpu: "250m"
         readinessProbe:
           httpGet:
-            path: /healthz
-            port: 6333
+            path: /
+            port: 7474
           initialDelaySeconds: 30
           periodSeconds: 10
           failureThreshold: 12
         livenessProbe:
           httpGet:
-            path: /healthz
-            port: 6333
+            path: /
+            port: 7474
           initialDelaySeconds: 60
           periodSeconds: 15
           failureThreshold: 8
       volumes:
-      - name: qdrant-data
+      - name: neo4j-data
         hostPath:
-          path: /var/lib/sulla/qdrant
+          path: /var/lib/sulla/neo4j
           type: DirectoryOrCreate
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: qdrant
+  name: neo4j
   namespace: sulla
 spec:
   selector:
-    app: qdrant
+    app: neo4j
   ports:
-  - port: 6333
-    targetPort: 6333
-    nodePort: 30115
+  - port: 7474
+    targetPort: 7474
+    nodePort: 30120
+  - port: 7687
+    targetPort: 7687
+    nodePort: 30121
   type: NodePort
 ---
 # PostgreSQL

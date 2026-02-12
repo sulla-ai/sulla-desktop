@@ -20,18 +20,19 @@ services:
       timeout: 10s
       retries: 5
 
-  qdrant:
-    image: qdrant/qdrant:latest
-    container_name: sulla_qdrant
+  neo4j:
+    image: neo4j:latest
+    container_name: sulla_neo4j
     ports:
-      - "30115:6333"
+      - "7474:7474"
+      - "7687:7687"
     environment:
-      - QDRANT__SERVICE__HTTP_PORT=6333
+      - NEO4J_AUTH=none
     volumes:
-      - /var/lib/sulla/qdrant:/qdrant/storage
+      - /var/lib/sulla/neo4j:/data
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
+      test: ["CMD", "curl", "-f", "http://localhost:7474"]
       interval: 30s
       timeout: 10s
       retries: 5

@@ -1,11 +1,11 @@
-import { QdrantDB } from '../QdrantDb';
+import { VectorBaseModel } from '../VectorBaseModel';
 
 export class DatabaseMigrations {
   private static instance: DatabaseMigrations;
-  private qdrantClient: QdrantDB;
+  private vectorDB = VectorBaseModel.vectorDB;
 
   private constructor() {
-    this.qdrantClient = new QdrantDB();
+    // Use the shared vectorDB instance
   }
 
   static getInstance(): DatabaseMigrations {
@@ -41,11 +41,11 @@ export class DatabaseMigrations {
 
     try {
       // Get or create sections collection
-      const sectionsCollection = await this.qdrantClient.getOrCreateCollection('knowledgebase_sections');
+      const sectionsCollection = await this.vectorDB.getOrCreateCollection('knowledgebase_sections');
       console.log('[Migration 001] Sections collection ready:', sectionsCollection.name);
 
       // Get or create categories collection
-      const categoriesCollection = await this.qdrantClient.getOrCreateCollection('knowledgebase_categories');
+      const categoriesCollection = await this.vectorDB.getOrCreateCollection('knowledgebase_categories');
       console.log('[Migration 001] Categories collection ready:', categoriesCollection.name);
 
       console.log('[Migration 001] Collections created successfully');

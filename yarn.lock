@@ -1569,7 +1569,16 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@babel/runtime@npm:^7.12.13":
+"@babel/runtime-corejs3@npm:^7.21.5":
+  version: 7.29.0
+  resolution: "@babel/runtime-corejs3@npm:7.29.0"
+  dependencies:
+    core-js-pure: "npm:^3.48.0"
+  checksum: 10c0/7f1197fa3a50836a6ce1ca3b51df69b65421f790d3f877f2cba8e6c3c238e358da9eafa083fd100cc7a2c4c57db7e27c6bf36b8ea8dd4caa29bfa363adbbaa81
+  languageName: node
+  linkType: hard
+
+"@babel/runtime@npm:^7.12.13, @babel/runtime@npm:^7.5.5":
   version: 7.28.6
   resolution: "@babel/runtime@npm:7.28.6"
   checksum: 10c0/358cf2429992ac1c466df1a21c1601d595c46930a13c1d4662fde908d44ee78ec3c183aaff513ecb01ef8c55c3624afe0309eeeb34715672dbfadb7feedb2c0d
@@ -4108,25 +4117,6 @@ __metadata:
   version: 1.1.0
   resolution: "@protobufjs/utf8@npm:1.1.0"
   checksum: 10c0/a3fe31fe3fa29aa3349e2e04ee13dc170cc6af7c23d92ad49e3eeaf79b9766264544d3da824dba93b7855bd6a2982fb40032ef40693da98a136d835752beb487
-  languageName: node
-  linkType: hard
-
-"@qdrant/js-client-rest@npm:^1.16.2":
-  version: 1.16.2
-  resolution: "@qdrant/js-client-rest@npm:1.16.2"
-  dependencies:
-    "@qdrant/openapi-typescript-fetch": "npm:1.2.6"
-    undici: "npm:^6.0.0"
-  peerDependencies:
-    typescript: ">=4.7"
-  checksum: 10c0/428a0274f864388ed2fecc914a8cfd930dfbb6a54d65462c3c47edfe2c891fd9f3f94b120e87411a0b0d53e0b3668fd5727151ec2c87c4648164a34954faff69
-  languageName: node
-  linkType: hard
-
-"@qdrant/openapi-typescript-fetch@npm:1.2.6":
-  version: 1.2.6
-  resolution: "@qdrant/openapi-typescript-fetch@npm:1.2.6"
-  checksum: 10c0/0359bb6939f84572e2d689b70949daea37a7cfc16f54919db8acbc496e65aca2f2a5e99e9790ec1b29e9e83f513c96ceb76054f31f9917b3fd798bed174bf96b
   languageName: node
   linkType: hard
 
@@ -8023,6 +8013,16 @@ __metadata:
   languageName: node
   linkType: hard
 
+"buffer@npm:^6.0.3":
+  version: 6.0.3
+  resolution: "buffer@npm:6.0.3"
+  dependencies:
+    base64-js: "npm:^1.3.1"
+    ieee754: "npm:^1.2.1"
+  checksum: 10c0/2a905fbbcde73cc5d8bd18d1caa23715d5f83a5935867c2329f0ac06104204ba7947be098fe1317fbd8830e26090ff8e764f08cd14fefc977bb248c3487bcbd0
+  languageName: node
+  linkType: hard
+
 "builder-util-runtime@npm:9.5.1":
   version: 9.5.1
   resolution: "builder-util-runtime@npm:9.5.1"
@@ -8881,6 +8881,13 @@ __metadata:
   dependencies:
     browserslist: "npm:^4.28.1"
   checksum: 10c0/7bb6522127928fff5d56c7050f379a034de85fe2d5c6e6925308090d4b51fb0cb88e0db99619c932ee84d8756d531bf851232948fe1ad18598cb1e7278e8db13
+  languageName: node
+  linkType: hard
+
+"core-js-pure@npm:^3.48.0":
+  version: 3.48.0
+  resolution: "core-js-pure@npm:3.48.0"
+  checksum: 10c0/8694e37e4df9a1ac878551ad2bfddf543f2563e7c2e98d2dd12ba29b7f1c1b0a2520ecc693102fc2b18bda1fad6f8a9d8009cf38c77249a8513a8dfccef1d635
   languageName: node
   linkType: hard
 
@@ -11836,7 +11843,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"ieee754@npm:^1.1.13":
+"ieee754@npm:^1.1.13, ieee754@npm:^1.2.1":
   version: 1.2.1
   resolution: "ieee754@npm:1.2.1"
   checksum: 10c0/b0782ef5e0935b9f12883a2e2aa37baa75da6e66ce6515c168697b42160807d9330de9a32ec1ed73149aea02e0d822e572bca6f1e22bdcbd2149e13b050b17bb
@@ -14360,6 +14367,78 @@ __metadata:
   languageName: node
   linkType: hard
 
+"neo4j-driver-bolt-connection@npm:4.4.11":
+  version: 4.4.11
+  resolution: "neo4j-driver-bolt-connection@npm:4.4.11"
+  dependencies:
+    buffer: "npm:^6.0.3"
+    neo4j-driver-core: "npm:4.4.11"
+    string_decoder: "npm:^1.3.0"
+  checksum: 10c0/413ced9a9e7442f1a6a1c5803b95cbb13db23dabbef12cda40b965a4fb9c3302bbd2c5e0ec0d498d63defa69f84e298fc32c15ac00d94e6e4e648e4cc38f8292
+  languageName: node
+  linkType: hard
+
+"neo4j-driver-bolt-connection@npm:6.0.1":
+  version: 6.0.1
+  resolution: "neo4j-driver-bolt-connection@npm:6.0.1"
+  dependencies:
+    buffer: "npm:^6.0.3"
+    neo4j-driver-core: "npm:6.0.1"
+    string_decoder: "npm:^1.3.0"
+  checksum: 10c0/1b5cd252c9a4e905ac9212524880da3d63565c3647854a56db06df768d5c073889a2355fdd00a900501b5e99e39dad49c329022bc9ef599360a8d33dc6b28b99
+  languageName: node
+  linkType: hard
+
+"neo4j-driver-core@npm:4.4.11, neo4j-driver-core@npm:^4.4.6":
+  version: 4.4.11
+  resolution: "neo4j-driver-core@npm:4.4.11"
+  checksum: 10c0/1e0394673113dff47c98fba2a8a514f9a35b0f054b160fc514b61a5c173882bb95084b039c8478caef76cc11a0e116ea20677febb6e11ee5813136ff50c2a9da
+  languageName: node
+  linkType: hard
+
+"neo4j-driver-core@npm:6.0.1":
+  version: 6.0.1
+  resolution: "neo4j-driver-core@npm:6.0.1"
+  checksum: 10c0/4072bf5e3047a34222b60c83c4bffe5758153a6f73f803166ff8a09be1a5bc3dc76a91e3d5fef5768d3c8a62b28c6b6ac6bcdec3552f70d951b4c53ce3e3be43
+  languageName: node
+  linkType: hard
+
+"neo4j-driver@npm:^4.4.6":
+  version: 4.4.11
+  resolution: "neo4j-driver@npm:4.4.11"
+  dependencies:
+    "@babel/runtime": "npm:^7.5.5"
+    neo4j-driver-bolt-connection: "npm:4.4.11"
+    neo4j-driver-core: "npm:4.4.11"
+    rxjs: "npm:^6.6.3"
+  checksum: 10c0/3107994e2c6c9bcc1f385684319adfc9172272c70a904d1eb56493362fa2fc3a4e039ba6477b824668f51b7b95b499b0bc94bab0f4730e40a1746798072af376
+  languageName: node
+  linkType: hard
+
+"neo4j-driver@npm:^6.0.1":
+  version: 6.0.1
+  resolution: "neo4j-driver@npm:6.0.1"
+  dependencies:
+    neo4j-driver-bolt-connection: "npm:6.0.1"
+    neo4j-driver-core: "npm:6.0.1"
+    rxjs: "npm:^7.8.2"
+  checksum: 10c0/d03e6c6fc3207f49a827daa66b92a7e66577eabdee5a8f285d475a77d4d8973414645b74114c6d5281d30e25fd25f596fd0ae835288092482af83f25692a5710
+  languageName: node
+  linkType: hard
+
+"neovis.js@npm:^2.1.0":
+  version: 2.1.0
+  resolution: "neovis.js@npm:2.1.0"
+  dependencies:
+    "@babel/runtime-corejs3": "npm:^7.21.5"
+    deepmerge: "npm:^4.3.1"
+    neo4j-driver: "npm:^4.4.6"
+    neo4j-driver-core: "npm:^4.4.6"
+    vis-network: "npm:^9.1.6"
+  checksum: 10c0/017e3a01624338f418ddc2bc74edb00a80eb58215118b2cf7a0faf1114bfe6e2f2e004d4d4dd51a5e24b676291aad050da484f9d3f3f29ea6f736370f5c7e781
+  languageName: node
+  linkType: hard
+
 "netmask@npm:^2.0.2":
   version: 2.0.2
   resolution: "netmask@npm:2.0.2"
@@ -16261,7 +16340,6 @@ __metadata:
     "@napi-rs/xattr": "npm:^1.0.3"
     "@playwright/test": "npm:1.57.0"
     "@preact/signals": "npm:^2.6.2"
-    "@qdrant/js-client-rest": "npm:^1.16.2"
     "@rancher/components": "npm:0.3.0-alpha.1"
     "@schedule-x/calendar": "npm:^4.1.0"
     "@schedule-x/drag-and-drop": "npm:^3.7.3"
@@ -16354,6 +16432,8 @@ __metadata:
     marked: "npm:17.0.1"
     mustache: "npm:4.2.0"
     native-reg: "npm:1.1.1"
+    neo4j-driver: "npm:^6.0.1"
+    neovis.js: "npm:^2.1.0"
     node-addon-api: "npm:8"
     node-forge: "npm:1.3.3"
     node-gyp: "npm:12.1.0"
@@ -16382,6 +16462,7 @@ __metadata:
     tsconfig-paths: "npm:4.2.0"
     tsx: "npm:4.21.0"
     typescript: "npm:5.9.3"
+    vis-network: "npm:^10.0.2"
     vue: "npm:3.5.27"
     vue-3-slider-component: "npm:1.0.2"
     vue-router: "npm:4.6.4"
@@ -16910,6 +16991,24 @@ __metadata:
   dependencies:
     queue-microtask: "npm:^1.2.2"
   checksum: 10c0/200b5ab25b5b8b7113f9901bfe3afc347e19bb7475b267d55ad0eb86a62a46d77510cb0f232507c9e5d497ebda569a08a9867d0d14f57a82ad5564d991588b39
+  languageName: node
+  linkType: hard
+
+"rxjs@npm:^6.6.3":
+  version: 6.6.7
+  resolution: "rxjs@npm:6.6.7"
+  dependencies:
+    tslib: "npm:^1.9.0"
+  checksum: 10c0/e556a13a9aa89395e5c9d825eabcfa325568d9c9990af720f3f29f04a888a3b854f25845c2b55875d875381abcae2d8100af9cacdc57576e7ed6be030a01d2fe
+  languageName: node
+  linkType: hard
+
+"rxjs@npm:^7.8.2":
+  version: 7.8.2
+  resolution: "rxjs@npm:7.8.2"
+  dependencies:
+    tslib: "npm:^2.1.0"
+  checksum: 10c0/1fcd33d2066ada98ba8f21fcbbcaee9f0b271de1d38dc7f4e256bfbc6ffcdde68c8bfb69093de7eeb46f24b1fb820620bf0223706cff26b4ab99a7ff7b2e2c45
   languageName: node
   linkType: hard
 
@@ -17771,7 +17870,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"string_decoder@npm:^1.1.1":
+"string_decoder@npm:^1.1.1, string_decoder@npm:^1.3.0":
   version: 1.3.0
   resolution: "string_decoder@npm:1.3.0"
   dependencies:
@@ -18428,7 +18527,14 @@ __metadata:
   languageName: node
   linkType: hard
 
-"tslib@npm:^2.0.1, tslib@npm:^2.0.3, tslib@npm:^2.4.0, tslib@npm:^2.8.1":
+"tslib@npm:^1.9.0":
+  version: 1.14.1
+  resolution: "tslib@npm:1.14.1"
+  checksum: 10c0/69ae09c49eea644bc5ebe1bca4fa4cc2c82b7b3e02f43b84bd891504edf66dbc6b2ec0eef31a957042de2269139e4acff911e6d186a258fb14069cd7f6febce2
+  languageName: node
+  linkType: hard
+
+"tslib@npm:^2.0.1, tslib@npm:^2.0.3, tslib@npm:^2.1.0, tslib@npm:^2.4.0, tslib@npm:^2.8.1":
   version: 2.8.1
   resolution: "tslib@npm:2.8.1"
   checksum: 10c0/9c4759110a19c53f992d9aae23aac5ced636e99887b51b9e61def52611732872ff7668757d4e4c61f19691e36f4da981cd9485e869b4a7408d689f6bf1f14e62
@@ -18656,13 +18762,6 @@ __metadata:
   version: 7.16.0
   resolution: "undici-types@npm:7.16.0"
   checksum: 10c0/3033e2f2b5c9f1504bdc5934646cb54e37ecaca0f9249c983f7b1fc2e87c6d18399ebb05dc7fd5419e02b2e915f734d872a65da2e3eeed1813951c427d33cc9a
-  languageName: node
-  linkType: hard
-
-"undici@npm:^6.0.0":
-  version: 6.23.0
-  resolution: "undici@npm:6.23.0"
-  checksum: 10c0/d846b3fdfd05aa6081ba1eab5db6bbc21b283042c7a43722b86d1ee2bf749d7c990ceac0c809f9a07ffd88b1b0f4c0f548a8362c035088cb1997d63abdda499c
   languageName: node
   linkType: hard
 
@@ -18956,6 +19055,34 @@ __metadata:
     core-util-is: "npm:1.0.2"
     extsprintf: "npm:^1.2.0"
   checksum: 10c0/293fb060a4c9b07965569a0c3e45efa954127818707995a8a4311f691b5d6687be99f972c759838ba6eecae717f9af28e3c49d2afc7bbdf5f0b675238f1426e8
+  languageName: node
+  linkType: hard
+
+"vis-network@npm:^10.0.2":
+  version: 10.0.2
+  resolution: "vis-network@npm:10.0.2"
+  peerDependencies:
+    "@egjs/hammerjs": ^2.0.0
+    component-emitter: ^1.3.0 || ^2.0.0
+    keycharm: ^0.2.0 || ^0.3.0 || ^0.4.0
+    uuid: ^3.4.0 || ^7.0.0 || ^8.0.0 || ^9.0.0 || ^10.0.0 || ^11.0.0 || ^13.0.0
+    vis-data: ">=8.0.0"
+    vis-util: ">=6.0.0"
+  checksum: 10c0/c28750254abe82e6aecf1014a7bb1d3ac7955c3f731a333fb6386522cf4922ecf47abd503f394cfcd8c00b457a14747f2bcc10e7eec56a2105df4334204a0116
+  languageName: node
+  linkType: hard
+
+"vis-network@npm:^9.1.6":
+  version: 9.1.13
+  resolution: "vis-network@npm:9.1.13"
+  peerDependencies:
+    "@egjs/hammerjs": ^2.0.0
+    component-emitter: ^1.3.0 || ^2.0.0
+    keycharm: ^0.2.0 || ^0.3.0 || ^0.4.0
+    uuid: ^3.4.0 || ^7.0.0 || ^8.0.0 || ^9.0.0 || ^10.0.0 || ^11.0.0
+    vis-data: ^6.3.0 || ^7.0.0
+    vis-util: ^5.0.1
+  checksum: 10c0/9f0f08a8056806b0f9785ee49d36452a3cad299a8cf917a967ccba2b57327916068a37b385ee83c20802a854bfa8e8077efe0420a0881310406e26c89b4790dd
   languageName: node
   linkType: hard
 
