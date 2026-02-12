@@ -16419,7 +16419,7 @@ __metadata:
 
 "rancher-icons@https://github.com/rancher/icons#v2.0.21":
   version: 2.0.21
-  resolution: "rancher-icons@git+ssh://git@github.com/rancher/icons.git#commit=a5b583d46c268282c2753b955cfafc383241b55f"
+  resolution: "rancher-icons@https://github.com/rancher/icons.git#commit=a5b583d46c268282c2753b955cfafc383241b55f"
   checksum: 10c0/dea8fbe74133a0e6aedb86cf6e5ab8beda881c115dc2e9d5373c246fc8814a9a4cf714be6636ce7d4e2e4c88f8333b65bdb2bbc9ee8c14ca1d5955e8e7228dcc
   languageName: node
   linkType: hard
