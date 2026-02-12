@@ -193,11 +193,38 @@ export class Neo4jDB implements IVectorDatabase {
   async getDocuments(collectionName: string, ids: string[], where?: any): Promise<any> {
     const session = await this.getSession();
     try {
-      const result = await session.run(`
+      let query = `
         MATCH (d:Document)
-        WHERE d.id IN $ids
+      `;
+      const params: any = {};
+
+      // Handle ids filter
+      if (ids && ids.length > 0) {
+        query += ` WHERE d.id IN $ids`;
+        params.ids = ids;
+      }
+
+      // Handle where filter
+      if (where) {
+        const whereConditions: string[] = [];
+        for (const [key, condition] of Object.entries(where)) {
+          if (condition && typeof condition === 'object' && '$eq' in condition) {
+            whereConditions.push(`d.${key} = $${key}`);
+            params[key] = condition.$eq;
+          }
+          // Add more conditions as needed (e.g., $in, $gt, etc.)
+        }
+        if (whereConditions.length > 0) {
+          query += ids && ids.length > 0 ? ' AND ' : ' WHERE ';
+          query += whereConditions.join(' AND ');
+        }
+      }
+
+      query += `
         RETURN d.id AS id, d.text AS text, d AS metadata
-      `, { ids });
+      `;
+
+      const result = await session.run(query, params);
 
       return {
         ids: result.records.map(r => r.get('id')),

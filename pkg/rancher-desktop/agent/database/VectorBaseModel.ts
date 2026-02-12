@@ -164,10 +164,10 @@ export abstract class VectorBaseModel {
       filter
     );
 
-    if (!res?.ids?.[0]?.length) return [];
+    if (!res || !res.length) return [];
 
-    return res.ids[0].map((id: string, idx: number) => {
-      const metadata = res.metadatas?.[0]?.[idx] ?? {};
+    return res.map((result: any) => {
+      const metadata = result.payload;
       const instance = new this();
       instance.hydrate(metadata);
       return instance;
