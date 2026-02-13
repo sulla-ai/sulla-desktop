@@ -10,6 +10,7 @@ import { heartbeatPrompt } from '../agent/prompts/heartbeat';
 import { N8nService } from '../agent/services/N8nService';
 import { SullaSettingsModel } from '../agent/database/models/SullaSettingsModel';
 import { randomUUID } from 'crypto';
+import { REMOTE_PROVIDERS } from '../shared/remoteProviders';
 
 // Nav items for the Language Model Settings sidebar
 const navItems = [
@@ -72,92 +73,6 @@ interface InstalledModel {
   modified_at: string;
   digest: string;
 }
-
-// Remote API providers
-const REMOTE_PROVIDERS = [
-  {
-    id:          'grok',
-    name:        'Grok (xAI)',
-    description: 'xAI\'s Grok models - fast, witty, and capable',
-    baseUrl:     'https://api.x.ai/v1',
-    models:      [
-      { id: 'grok-4-1-fast-reasoning', name: 'Grok 4.1 Fast Reasoning', description: '2M context, best for reasoning tasks', pricing: '$0.20/$0.50' },
-      { id: 'grok-4-1-fast-non-reasoning', name: 'Grok 4.1 Fast', description: '2M context, fast general purpose', pricing: '$0.20/$0.50' },
-      { id: 'grok-code-fast-1', name: 'Grok Code Fast', description: '256K context, optimized for code', pricing: '$0.20/$1.50' },
-      { id: 'grok-4-fast-reasoning', name: 'Grok 4 Fast Reasoning', description: '2M context, reasoning tasks', pricing: '$0.20/$0.50' },
-      { id: 'grok-4-fast-non-reasoning', name: 'Grok 4 Fast', description: '2M context, fast general purpose', pricing: '$0.20/$0.50' },
-      { id: 'grok-4-0709', name: 'Grok 4', description: '256K context, flagship model', pricing: '$3.00/$15.00' },
-      { id: 'grok-3-mini', name: 'Grok 3 Mini', description: '131K context, fast and affordable', pricing: '$0.30/$0.50' },
-      { id: 'grok-3', name: 'Grok 3', description: '131K context, previous flagship', pricing: '$3.00/$15.00' },
-    ],
-    signupUrl:   'https://x.ai/api',
-    signupText:  'Get API key from xAI',
-  },
-  {
-    id:          'openai',
-    name:        'OpenAI',
-    description: 'GPT-4, GPT-3.5, and other OpenAI models',
-    baseUrl:     'https://api.openai.com/v1',
-    models:      [
-      { id: 'gpt-4o', name: 'GPT-4o', description: 'Most capable multimodal model' },
-      { id: 'gpt-4o-mini', name: 'GPT-4o Mini', description: 'Fast and affordable' },
-      { id: 'gpt-4-turbo', name: 'GPT-4 Turbo', description: 'High capability with vision' },
-    ],
-    signupUrl:   'https://platform.openai.com/signup',
-    signupText:  'Get API key from OpenAI',
-  },
-  {
-    id:          'anthropic',
-    name:        'Anthropic',
-    description: 'Claude models - safe, helpful, and honest',
-    baseUrl:     'https://api.anthropic.com/v1',
-    models:      [
-      { id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet', description: 'Best balance of speed and capability' },
-      { id: 'claude-3-opus-20240229', name: 'Claude 3 Opus', description: 'Most capable Claude model' },
-      { id: 'claude-3-haiku-20240307', name: 'Claude 3 Haiku', description: 'Fastest Claude model' },
-    ],
-    signupUrl:   'https://console.anthropic.com/',
-    signupText:  'Get API key from Anthropic',
-  },
-  {
-    id:          'google',
-    name:        'Google AI',
-    description: 'Gemini models from Google',
-    baseUrl:     'https://generativelanguage.googleapis.com/v1beta',
-    models:      [
-      { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro', description: 'Most capable Gemini model' },
-      { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash', description: 'Fast and efficient' },
-    ],
-    signupUrl:   'https://ai.google.dev/',
-    signupText:  'Get API key from Google AI',
-  },
-  {
-    id:          'kimi',
-    name:        'Kimi (Moonshot AI)',
-    description: 'Kimi K2.5 models from Moonshot AI',
-    baseUrl:     'https://api.moonshot.cn/v1',
-    models:      [
-      { id: 'kimi-k2.5', name: 'Kimi K2.5', description: '256K context, advanced reasoning and long-context capabilities' },
-      { id: 'kimi-k2', name: 'Kimi K2', description: '200K context, balanced performance' },
-    ],
-    signupUrl:   'https://platform.moonshot.cn/',
-    signupText:  'Get API key from Moonshot AI',
-  },
-  {
-    id:          'nvidia',
-    name:        'NVIDIA (Free Moonshot/Kimi)',
-    description: 'Access Moonshot Kimi models for free through NVIDIA API',
-    baseUrl:     'https://integrate.api.nvidia.com/v1',
-    models:      [
-      { id: 'moonshotai/kimi-k2.5', name: 'Kimi K2.5 (Free)', description: '256K context, FREE through NVIDIA API' },
-      { id: 'moonshotai/kimi-k2', name: 'Kimi K2 (Free)', description: '200K context, FREE through NVIDIA API' },
-      { id: 'nvidia/llama-3.1-nemotron-70b-instruct', name: 'Llama 3.1 Nemotron 70B', description: 'NVIDIA optimized Llama model' },
-      { id: 'meta/llama-3.1-70b-instruct', name: 'Llama 3.1 70B', description: 'Meta Llama 3.1' },
-    ],
-    signupUrl:   'https://build.nvidia.com/',
-    signupText:  'Get free API key from NVIDIA (includes Moonshot access)',
-  },
-];
 
 export default defineComponent({
   name: 'language-model-settings',
