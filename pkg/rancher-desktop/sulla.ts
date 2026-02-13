@@ -127,7 +127,7 @@ export async function onMainProxyLoad(ipcMainProxy: any) {
     // Assume main process
     const fallbackPath = path.join(app.getPath('userData'), 'sulla-settings-fallback.json');
     SullaSettingsModel.setFallbackFilePath(fallbackPath);
-    SullaSettingsModel.set('pathUserData', app.getPath('userData'));
+    SullaSettingsModel.set('pathUserData', app.getPath('userData'), 'string');
 
     // Cache it in settings on first request
     ipcMainProxy.handle('get-user-data-path', async () => {

@@ -524,7 +524,7 @@ export default defineComponent({
       // Save the pending model as the active model
       this.activeModel = this.pendingModel;
       try {
-        await SullaSettingsModel.set('sullaModel', this.pendingModel);
+        await SullaSettingsModel.set('sullaModel', this.pendingModel, 'string');
         console.log(`[LM Settings] Model activated: ${this.pendingModel}`);
       } catch (err) {
         console.error('Failed to save model setting:', err);
@@ -720,8 +720,8 @@ export default defineComponent({
       try {
         await this.writeExperimentalSettings();
         // Save prompts to database
-        await SullaSettingsModel.set('soulPrompt', this.soulPrompt);
-        await SullaSettingsModel.set('heartbeatPrompt', this.heartbeatPrompt);
+        await SullaSettingsModel.set('soulPrompt', this.soulPrompt, 'string');
+        await SullaSettingsModel.set('heartbeatPrompt', this.heartbeatPrompt, 'string');
         console.log('[LM Settings] Settings saved');
       } catch (err) {
         console.error('Failed to save LM settings:', err);

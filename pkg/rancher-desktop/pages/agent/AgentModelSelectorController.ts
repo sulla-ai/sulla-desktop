@@ -115,15 +115,15 @@ export class AgentModelSelectorController {
   async selectModel(option: ModelOption): Promise<void> {
     try {
       if (option.type === 'local') {
-          SullaSettingsModel.set('modelMode', 'local');
-          SullaSettingsModel.set('sullaModel', option.value);
+          SullaSettingsModel.set('modelMode', 'local', 'string');
+          SullaSettingsModel.set('sullaModel', option.value, 'string');
       } else {
 
         // Save model mode, remote provider, remote model, and remote API key to new settings
-        SullaSettingsModel.set('modelMode', 'remote');
-        SullaSettingsModel.set('remoteProvider', option.provider);
-        SullaSettingsModel.set('remoteModel', option.value);
-        SullaSettingsModel.set('remoteApiKey', this.remoteApiKey.value);
+        SullaSettingsModel.set('modelMode', 'remote', 'string');
+        SullaSettingsModel.set('remoteProvider', option.provider, 'string');
+        SullaSettingsModel.set('remoteModel', option.value, 'string');
+        SullaSettingsModel.set('remoteApiKey', this.remoteApiKey.value, 'string');
 
       }
 

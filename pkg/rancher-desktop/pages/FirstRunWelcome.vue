@@ -74,18 +74,18 @@ const handleNext = async () => {
   console.log('[FirstRunWelcome] Loading service password and encryption key...');
   
   const sullaServicePassword = await SullaSettingsModel.get('sullaServicePassword', SullaSettingsModel.generatePassword());
-  await SullaSettingsModel.set('sullaServicePassword', sullaServicePassword);
+  await SullaSettingsModel.set('sullaServicePassword', sullaServicePassword, 'string');
   console.log('[FirstRunWelcome] Loaded sullaServicePassword:', sullaServicePassword);
 
   // Load sullaN8nEncryptionKey from SullaSettingsModel
   const loadedKey = await SullaSettingsModel.get('sullaN8nEncryptionKey', SullaSettingsModel.generateEncryptionKey());
-  await SullaSettingsModel.set('sullaN8nEncryptionKey', loadedKey);
+  await SullaSettingsModel.set('sullaN8nEncryptionKey', loadedKey, 'string');
   console.log('[FirstRunWelcome] Loaded sullaN8nEncryptionKey:', loadedKey);
 
 
   // Save to SullaSettingsModel
-  await SullaSettingsModel.set('sullaEmail', sullaEmail.value);
-  await SullaSettingsModel.set('sullaPassword', sullaPassword.value);
+  await SullaSettingsModel.set('sullaEmail', sullaEmail.value, 'string');
+  await SullaSettingsModel.set('sullaPassword', sullaPassword.value, 'string');
   await SullaSettingsModel.set('sullaSubscribeToUpdates', sullaSubscribeToUpdates.value, 'boolean');
   await SullaSettingsModel.set('firstRunCredentialsNeeded', false, 'boolean');
 

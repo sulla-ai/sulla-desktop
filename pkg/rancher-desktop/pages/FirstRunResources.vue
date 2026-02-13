@@ -237,7 +237,7 @@ const handleNext = async () => {
   });
 
   // Save sullaModel to SullaSettingsModel
-  await SullaSettingsModel.set('sullaModel', sullaModel.value);
+  await SullaSettingsModel.set('sullaModel', sullaModel.value, 'string');
 
   emit('next');
 };
