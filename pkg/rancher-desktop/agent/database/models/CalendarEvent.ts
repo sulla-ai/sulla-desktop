@@ -46,7 +46,7 @@ export class CalendarEvent extends BaseModel<CalendarEventAttributes> {
   ): Promise<CalendarEvent[]> {
     return this.where(
       'start_time >= $1',
-      startAfter
+      [startAfter]
     ).then(results => results.slice(0, limit));
   }
 

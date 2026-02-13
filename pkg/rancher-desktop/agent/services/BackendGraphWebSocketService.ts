@@ -3,6 +3,7 @@ import { getSchedulerService } from './SchedulerService';
 import type { CalendarEventData } from './CalendarClient';
 import { AbortService } from './AbortService';
 import { GraphRegistry, nextThreadId, nextMessageId } from './GraphRegistry';
+import { OverlordThreadState } from '../nodes/Graph'
 
 const BACKEND_CHANNEL_ID = 'dreaming-protocol';
 const CALENDAR_CHANNEL_ID = 'calendar_event';
@@ -112,21 +113,19 @@ export class BackendGraphWebSocketService {
   }
 
   private async processUserInput(userText: string, threadIdFromMsg?: string): Promise<void> {
-    const channelId = BACKEND_CHANNEL_ID;
-    const threadId = threadIdFromMsg || nextThreadId();
-    
-    console.log('[BackendGraphWS] Processing user input - Thread ID:', threadId, 'Channel:', channelId);
-
     // Get or create persistent graph for this thread - do this outside try/catch
-    const { graph, state } = await GraphRegistry.getOrCreate(channelId, threadId);
-    console.log('[BackendGraphWS] Graph retrieved/created for thread:', threadId);
+    console.log('[BackendGraphWS] Graph retrieved/created for channelId:', BACKEND_CHANNEL_ID);
+
+    const { graph, state } = await GraphRegistry.getOrCreateOverlordGraph(
+      BACKEND_CHANNEL_ID
+    ) as { graph: any; state: OverlordThreadState };
 
     try {
 
       // === NEW: Notify AgentPersonaService about the threadId ===
       if (!threadIdFromMsg) {
         console.log('[BackendGraphWS] New thread created, notifying frontend:', state.metadata.threadId);
-        this.wsService.send(channelId, {
+        this.wsService.send(BACKEND_CHANNEL_ID, {
           type: 'thread_created',
           data: {
             threadId: state.metadata.threadId
@@ -134,10 +133,8 @@ export class BackendGraphWebSocketService {
           timestamp: Date.now()
         });
       } else {
-        console.log('[BackendGraphWS] Using existing thread:', threadId);
+        console.log('[BackendGraphWS] Using existing thread:', threadIdFromMsg);
       }
-
-      state.metadata.wsChannel = channelId;
 
       // Append new user message
       const newMsg = {

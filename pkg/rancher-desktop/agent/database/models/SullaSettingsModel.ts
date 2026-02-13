@@ -43,10 +43,11 @@ export class SullaSettingsModel extends BaseModel<SettingsAttributes> {
       case 'boolean':
         return String(value);
       case 'array':
+      case 'json':
         return JSON.stringify(value);
       default:
         // For uncast values, treat as plain string (don't JSON stringify)
-        return String(value);
+        return value;
     }
   }
 
@@ -66,10 +67,11 @@ export class SullaSettingsModel extends BaseModel<SettingsAttributes> {
           const truthyValues = ['true', '1', 'yes', 'on'];
           return truthyValues.includes(cleaned);
         case 'array':
+        case 'json':
           return JSON.parse(value);
         default:
           // For uncast values, return as string (don't try to parse as JSON)
-          return value.replace(/^"|"$/g, '');
+          return value.replace(/^"|"$/g, '').replace(/\\n/g, '\n').replace(/\\"/g, '"');
       }
     } catch (err) {
       console.error('Error casting value:', err);

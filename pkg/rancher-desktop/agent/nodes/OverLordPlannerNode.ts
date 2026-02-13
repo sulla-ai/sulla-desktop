@@ -81,6 +81,8 @@ export class OverLordPlannerNode extends BaseNode {
     const basePrompt = heartbeatPromptSetting || heartbeatPrompt;
     const decisionPrompt = `${basePrompt}\n\n${OVERLORD_DECISION_PROMPT}`;
 
+    console.log('[OverLordPlannerNode] Decision prompt:', decisionPrompt);
+
     const enriched = await this.enrichPrompt(decisionPrompt, state, {
       includeSoul: true,
       includeAwareness: true,
@@ -96,6 +98,8 @@ export class OverLordPlannerNode extends BaseNode {
       enriched,
       { format: 'json' }
     );
+
+    console.log('[OverLordPlannerNode] LLM response:', llmResponse);
 
     if (!llmResponse) {
       return { state, decision: { type: 'continue' } };

@@ -1,6 +1,6 @@
-import { Graph, BaseThreadState, HierarchicalThreadState, createHierarchicalGraph, createSimpleGraph } from '../nodes/Graph';
-import type { SensoryInput } from '../types';
+import { Graph, createOverlordGraph, OverlordThreadState, BaseThreadState, HierarchicalThreadState, createHierarchicalGraph, createSimpleGraph } from '../nodes/Graph';
 import { SullaSettingsModel } from '../database/models/SullaSettingsModel';
+import { getCurrentModel, getCurrentMode } from '../languagemodels';
 
 const registry = new Map<string, {
   graph: Graph<any>;
@@ -31,7 +31,7 @@ export const GraphRegistry = {
     const threadId = nextThreadId();
     const graph = createHierarchicalGraph();
 
-    const state = await buildInitialState(wsChannel, threadId);
+    const state = await buildHierarchicalState(wsChannel, threadId);
 
     registry.set(threadId, { graph, state });
     return { graph, state, threadId };
@@ -62,6 +62,27 @@ export const GraphRegistry = {
    * Get or create — resumes if threadId exists, creates new if not.
    * Use in normal message flow.
    */
+  getOrCreateOverlordGraph: async function(wsChannel: string, prompt?: string): Promise<{
+    graph: Graph<OverlordThreadState>;
+    state: BaseThreadState;
+  }> {
+    if (registry.has(wsChannel)) {
+      return Promise.resolve(registry.get(wsChannel)!);
+    }
+
+    // No existing → create new under this threadId
+    const graph = createOverlordGraph();
+
+    const state = await buildOverlordState(wsChannel, prompt ?? '');
+
+    registry.set(wsChannel, { graph, state });
+    return { graph, state };
+  },
+
+  /**
+   * Get or create — resumes if threadId exists, creates new if not.
+   * Use in normal message flow.
+   */
   getOrCreate: async function(wsChannel: string, threadId: string): Promise<{
     graph: Graph<any>;
     state: BaseThreadState;
@@ -73,7 +94,7 @@ export const GraphRegistry = {
     // No existing → create new under this threadId
     const graph = createHierarchicalGraph();
 
-    const state = await buildInitialState(wsChannel, threadId);
+    const state = await buildHierarchicalState(wsChannel, threadId);
 
     registry.set(threadId, { graph, state });
     return { graph, state };
@@ -102,10 +123,83 @@ export function nextMessageId(): string {
 /**
  * 
  * @param wsChannel 
+ * @param prompt 
+ * @returns 
+ */
+async function buildOverlordState(wsChannel: string, prompt: string): Promise<OverlordThreadState> {
+  // Build a minimal ThreadState and execute nodes directly (skip Sensory/ContextDetector/ConversationThread)
+
+  let heartbeartModeheal = await SullaSettingsModel.get('heartbeatModel', 'default');
+
+  const now = Date.now();
+  const threadId = `overlord_${ now }`;
+
+  const state: OverlordThreadState = {
+    messages:        [{
+      role:      'user',
+      content:   prompt,
+      metadata:  { source: 'system' },
+    }],
+    metadata: {
+      threadId,
+      wsChannel: wsChannel,
+      cycleComplete: false,
+      waitingForUser: false,
+      llmModel: await resolveModel(heartbeartModeheal),
+      llmLocal: await resolveIsLocal(heartbeartModeheal),
+      options: {},
+      currentNodeId: '',
+      consecutiveSameNode: 0,
+      iterations: 0,
+      revisionCount: 0,
+      maxIterationsReached: false,
+      memory: {
+        knowledgeBaseContext: '',
+        chatSummariesContext: '',
+      },
+      subGraph: {
+        state: 'completed',
+        name: 'hierarchical',
+        prompt: '',
+        response: '',
+      },
+      finalSummary: '',
+      finalState: 'running',
+      returnTo: null,
+      primaryProject: '',
+      projectDescription: '',
+      projectGoals: [],
+      projectState: 'continue',
+    },
+  };
+
+  return state;
+}
+
+
+async function resolveModel(setting: string): Promise<string> {
+  if (setting === 'default') return await getCurrentModel();
+
+  const parts = setting.split(':');
+  if (parts[0] === 'local' && parts.length === 2) return parts[1];
+  if (parts[0] === 'remote' && parts.length >= 3) return parts.slice(2).join(':');
+
+  return await getCurrentModel();
+}
+
+async function resolveIsLocal(setting: string): Promise<boolean> {
+  if (setting === 'default') return (await getCurrentMode()) === 'local';
+  return setting.startsWith('local:');
+}
+
+
+/**
+ * 
+ * @param wsChannel 
  * @param threadId 
  * @returns 
  */
-async function buildInitialState(wsChannel: string, threadId?: string): Promise<HierarchicalThreadState> {
+async function buildHierarchicalState(wsChannel: string, threadId?: string): Promise<HierarchicalThreadState> {
   const id = threadId ?? nextThreadId();
 
   const mode = await SullaSettingsModel.get('modelMode', 'local');

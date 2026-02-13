@@ -214,8 +214,15 @@ export abstract class BaseModel<T extends ModelAttributes = ModelAttributes> {
     const params: any[] = [];
 
     if (typeof conditions === 'string') {
-      query += ` WHERE "${conditions}" = $1`;
-      params.push(value);
+      if (Array.isArray(value)) {
+        // Raw SQL with params: conditions is the WHERE clause, value is the params array
+        query += ` WHERE ${conditions}`;
+        params.push(...value);
+      } else {
+        // Simple equality: conditions is column name, value is the value
+        query += ` WHERE "${conditions}" = $1`;
+        params.push(value);
+      }
     } else {
       const clauses = Object.entries(conditions).map(([k], i) => {
         params.push(conditions[k]);

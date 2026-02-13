@@ -350,7 +350,9 @@ export class Graph<TState = HierarchicalThreadState> {
     await this.initialize();
 
     let state = initialState;
-    (state as any).metadata.currentNodeId ??= entryPointNodeId ?? this.entryPoint;
+    if (!(state as any).metadata.currentNodeId) {
+      (state as any).metadata.currentNodeId = entryPointNodeId || this.entryPoint;
+    }
 
     console.log(`[Graph] Start from ${(state as any).metadata.currentNodeId}`);
 
@@ -979,7 +981,7 @@ export function createHierarchicalGraph(): Graph<HierarchicalThreadState> {
  * Create a specialized graph for heartbeat-triggered OverLord planning
  * This graph handles autonomous strategic oversight during idle periods
  */
-export function createHeartbeatGraph(): Graph<OverlordThreadState> {
+export function createOverlordGraph(): Graph<OverlordThreadState> {
   const {
     MemoryNode,
     OverLordPlannerNode
