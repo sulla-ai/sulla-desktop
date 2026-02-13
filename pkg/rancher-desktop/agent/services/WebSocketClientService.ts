@@ -10,6 +10,7 @@ export interface WebSocketMessage {
 }
 
 export type WebSocketMessageHandler = (message: WebSocketMessage) => void;
+export type ConnectHandler = () => void;
 
 interface ConnectionConfig {
   url: string;
@@ -341,4 +342,4 @@ export class WebSocketClientService {
   }
 }
 
-export const getWebSocketClientService = WebSocketClientService.getInstance;
+export const getWebSocketClientService = () => new WebSocketClientService();

@@ -1,8 +1,9 @@
+// AgentPersonaService.ts
 import { computed, reactive, ref } from 'vue';
-
 import { getWebSocketClientService, type WebSocketMessage } from '@pkg/agent/services/WebSocketClientService';
 import { AgentPersonaRegistry } from '../registry/AgentPersonaRegistry';
 import type { ChatMessage, AgentRegistryEntry } from '../registry/AgentPersonaRegistry';
+
 
 export type PersonaTemplateId =
   | 'terminal'
@@ -71,19 +72,14 @@ export type AgentPersonaState = {
 
 export class AgentPersonaService {
   private readonly registry: AgentPersonaRegistry;
-  private readonly wsService = getWebSocketClientService();
-  private readonly wsUnsubByAgentId = new Map<string, () => void>();
+  private wsService = getWebSocketClientService();
+  private readonly wsUnsub = new Map<string, () => void>();
 
-  private readonly showInternalProgress = false;
-
-  // Messages stored locally - persona is source of truth (reactive array)
   readonly messages: ChatMessage[] = reactive([]);
-
-  // Track tool run ID to message ID mapping for updating tool cards
   private readonly toolRunIdToMessageId = new Map<string, string>();
 
-  // Track if graph is currently running
   graphRunning = ref(false);
+
 
   readonly state = reactive<AgentPersonaState>({
     agentId: 'unit-01',
@@ -121,68 +117,90 @@ export class AgentPersonaService {
 
   readonly emotionClass = computed(() => `persona-profile-${this.state.emotion}`);
 
-  constructor(registry: AgentPersonaRegistry, agentData?: AgentRegistryEntry) {
-    this.registry = registry;
-    
-    if (agentData) {
-      // Populate state from agent data from registry
-      this.state.agentId = agentData.agentId;
-      this.state.agentName = agentData.agentName;
-      this.state.templateId = agentData.templateId;
-      this.state.emotion = agentData.emotion;
-      this.state.status = agentData.status;
-      this.state.tokensPerSecond = agentData.tokensPerSecond;
-      this.state.totalTokensUsed = agentData.totalTokensUsed;
-      this.state.temperature = agentData.temperature;
-    }
+  private refreshWebSocketService(): void {
+    // Clone/refresh the service to avoid corruption from multiple connection attempts
+    this.wsService = getWebSocketClientService();
   }
 
-  startListening(agentIds: string[]): void {
-    // Only listen to WebSocket - no global event handler
-    for (const agentId of agentIds) {
-      if (!agentId || this.wsUnsubByAgentId.has(agentId)) {
-        continue;
-      }
+  constructor(registry: AgentPersonaRegistry, agentData?: AgentRegistryEntry) {
+    this.registry = registry;
 
-      this.wsService.connect(agentId);
-      const unsub = this.wsService.onMessage(agentId, (msg: WebSocketMessage) => {
-        this.handleWebSocketMessage(agentId, msg);
+    if (agentData) {
+      Object.assign(this.state, {
+        agentId: agentData.agentId,
+        agentName: agentData.agentName,
+        templateId: agentData.templateId,
+        emotion: agentData.emotion,
+        status: agentData.status,
+        tokensPerSecond: agentData.tokensPerSecond ?? 847,
+        temperature: agentData.temperature ?? 0.7,
+        totalTokensUsed: agentData.totalTokensUsed ?? 0,
+      });
+    }
+
+    // Connect immediately — this is the core fix
+    this.connectAndListen();
+  }
+
+  private connectAndListen() {
+    const id = this.state.agentId;
+    if (this.wsUnsub.has(id)) return;
+
+    console.log(`[AgentPersona:${this.state.agentName}] Connecting WebSocket for ${id}`);
+
+    const maxAttempts = 3;
+    let attempts = 0;
+
+    const attemptConnect = () => {
+      attempts++;
+      this.refreshWebSocketService(); // Clone/refresh service for each attempt
+      this.wsService.connect(id);
+
+      const unsub = this.wsService.onMessage(id, (msg: WebSocketMessage) => {
+        this.handleWebSocketMessage(id, msg);
       });
 
       if (unsub) {
-        this.wsUnsubByAgentId.set(agentId, unsub);
+        this.wsUnsub.set(id, unsub);
+        console.log(`[AgentPersona:${this.state.agentName}] WebSocket connected successfully on attempt ${attempts}`);
+      } else if (attempts < maxAttempts) {
+        console.warn(`[AgentPersona:${this.state.agentName}] WebSocket connection attempt ${attempts} failed, retrying...`);
+        setTimeout(attemptConnect, 1000 * attempts); // Exponential backoff
+      } else {
+        console.error(`[AgentPersona:${this.state.agentName}] Failed to connect WebSocket after ${maxAttempts} attempts`);
       }
-    }
+    };
+
+    attemptConnect();
   }
 
-  addUserMessage(agentId: string, content: string): boolean {
-    if (!content.trim()) {
-      return false;
-    }
+  // Kept old signature for compatibility, but agentId is now ignored (service owns its channel)
+  async addUserMessage(_agentId: string, content: string): Promise<boolean> {
+    return this._addUserMessage(content);
+  }
 
-    // Ensure WebSocket connection for this agent
-    this.startListening([agentId]);
+  // Internal clean version
+  private async _addUserMessage(content: string): Promise<boolean> {
+    if (!content.trim()) return false;
 
-    // Store message locally - persona is source of truth
-    this.messages.push({ id: `${Date.now()}_user`, channelId: agentId, role: 'user', content });
-    this.registry.setLoading(agentId, true);
+    const id = this.state.agentId;
 
-    const sent = this.wsService.send(agentId, {
-      type: 'user_message',
-      data: {
-        role: 'user',
-        content,
-        threadId: this.getThreadId(), // Include stored threadId if available
-      },
-      timestamp: Date.now(),
+    this.messages.push({
+      id: `user_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      channelId: id,
+      role: 'user',
+      content,
     });
 
-    if (!sent) {
-      console.warn(`[AgentPersonaService] Failed to send user message on ${agentId}`);
-    }
+    this.registry.setLoading(id, true);
 
-    return sent;
+    return this.wsService.send(id, {
+      type: 'user_message',
+      data: { role: 'user', content, threadId: this.state.threadId },
+      timestamp: Date.now(),
+    });
   }
+
 
   setThreadId(threadId: string): void {
     this.state.threadId = threadId;
@@ -196,9 +214,9 @@ export class AgentPersonaService {
     this.state.threadId = undefined;
   }
 
-  emitStopSignal(agentId: string): boolean {
+  async emitStopSignal(agentId: string): Promise<boolean> {
     console.log('[AgentPersonaModel] Emitting stop signal for agent:', agentId);
-    const sent = this.wsService.send(agentId, {
+    const sent = await this.wsService.send(agentId, {
       type: 'stop_run',
       timestamp: Date.now(),
     });
@@ -212,16 +230,16 @@ export class AgentPersonaService {
 
   stopListening(agentIds?: string[]): void {
     // Only disconnect WebSockets - no global event handler to unsubscribe
-    const ids = agentIds?.length ? agentIds : [...this.wsUnsubByAgentId.keys()];
+    const ids = agentIds?.length ? agentIds : [...this.wsUnsub.keys()];
     for (const agentId of ids) {
-      const unsub = this.wsUnsubByAgentId.get(agentId);
+      const unsub = this.wsUnsub.get(agentId);
       if (unsub) {
         try {
           unsub();
         } catch {
           // ignore
         }
-        this.wsUnsubByAgentId.delete(agentId);
+        this.wsUnsub.delete(agentId);
       }
       this.wsService.disconnect(agentId);
     }

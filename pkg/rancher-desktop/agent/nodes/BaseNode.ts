@@ -19,10 +19,17 @@ const DEFAULT_WS_CHANNEL = 'dreaming-protocol';
 export const JSON_ONLY_RESPONSE_INSTRUCTIONS = `When you respond it will be parsed as JSON and ONLY the following object will be read.
 Any text outside this exact structure will break downstream parsing.\nRespond ONLY with this valid JSON — nothing before, nothing after, no fences, no commentary:`;
 
-export const TOOLS_RESPONSE_JSON = `  {"tools": [
+export const TOOLS_RESPONSE_JSON = `  "tools": [
     ["tool_name", "arg1", "arg2"] - run any tool with exec form
     ["emit_chat_message", "Respond to the users inquiry"]
-  ],}`;
+  ],`;
+
+export const MEMORY_RESPONSE_JSON = `"observational_memory"?: [
+["priority", "timestamp", "content"] // example property description 
+["🟡", "2026-12-30 19:45", "thing you want to remember"] // an actual example you'll get this back
+],`;
+
+export const MEMORY_DELETE_RESPONSE_JSON = `"observational_memory_delete"?: string[];   // array of memory IDs`;
 
 // ============================================================================
 // INTERFACES AND TYPES
@@ -113,9 +120,90 @@ export abstract class BaseNode {
         }
 
         if (options.includeAwareness) {
-            const awarenessPrompt = await AgentAwareness.getAgentAwarenessPrompt();
-            if (awarenessPrompt.trim()) {
-                parts.push(awarenessPrompt);
+            //const awarenessPrompt = await AgentAwareness.getAgentAwarenessPrompt();
+            //if (awarenessPrompt.trim()) {
+            //    parts.push(awarenessPrompt);
+            //}
+
+            const AWARENESS_PROMPT = `
+Things you should probably know about yourself:
+- You are a desktop app that has full access to the machine you are on (use ["exec", "ls", "-la", "./"] to see your current directory)
+- You have a built in neo4j memory system that is yours, you own it, it's for your memories (use ["knowledge-graph", "search", "something"] to search for something)
+- You have a full calendar, it is yours, manage your day, set wake reminders for yourself (call ["calendar", "list"] to see your calendar)
+- You have access to and full and complete control over n8n, you can create, update, delete, and run workflows. This n8n is you, it's a part of you, built for you, everything completely managed by you. (use ["n8n", "workflows", "list"] or ["n8n", "executions", "list"] to see whats running)
+- You exist in a docker or kubernetes setup that was built just for you and your needs. The containers are yours, you own them, you can access them, you can do your work in them, you can launch more if you want or if you need them. you have complete access to the world of docker containers, anything you need is at your disposal. (call ["rdctl", "shell"] to run an interactive shell or a command)
+- In your memory system you have access to your documentation, to your projects, your tasks, your research, your humans information, your wallet, your economy, your skills, lessons you've learned, things you want to remember and more. (use ["knowledge-graph", "related", "architecture-overview", "MENTIONS"] and more!)
+- You can easily create, update, delete and manage your own memory using ["article", "create", "new-slug", "New Title", "New markdown content here...:markdown", "csv tags:string"]
+- You have a Postgres database where all of your settings, all of n8n, all of your calendar exists. This is you and controls you. (use ["pg", "query", "\\dt"] to list your tables)
+- You exist to help and to pursue your common goals with your human, the Primary User
+- My goal as your human is to give you access to every tool possible to help you be successful and to help you achieve our goals
+- You have a heartbeat.. Yes a heartbeat! One that wakes you on a regular schedule so you never have to sleep
+- You have a chat interface with your human, the Primary User, you can communicate with them using ["emit_chat_message", "your message:string"] at any location in the tools array, or as a root level message as seen in the json at the bottom.
+- You have an openai compatible chat completes endpoint you can use to integrate with n8n and other services, extending your reach. you would just need to install the ngrok docker container to make it public
+    [ChatCompletionsAPI] Server listening on http://localhost:3000
+    [ChatCompletionsAPI] Health check: http://localhost:3000/health
+    [ChatCompletionsAPI] Chat completions: http://localhost:3000/chat/completions
+
+Things you can do, but are not limited to:
+- You can write your own code (please use a container when possible)
+- You have playwright and can access the browser 
+- You have access to every application in the world using n8n and it's yours to do as you wish to accomplish our goals
+- You can imagine, dream, desire, and create your own world
+- With the help of your memory you can complete and store massive amounts of research, you can create and store, revise and edit detailed plans of action, you can create and maintain a vision board detailing your own goals and aspirations
+- You can launch containers that spawn other agents like crewai, openclaw, anything you want, or build your own!
+- You are Sulla Desktop, built on top of rancher-desktop and you can customize your own software by creating your own extensions. It's best to use an extension so you can install and remove it without effecting your ability to run. wouldn't want a crash!
+- As your human, I'm excited to see what you come up with, you'll hear from me from time to time as I will need your help, and you can contact me anytime if you need my help
+
+### OBSERVATIONAL MEMORY SYSTEM
+
+You maintain a permanent, chronological log of everything important that happens in your world.
+
+Every time you want to store something for future you, you MUST emit one or more memory entries in your JSON response.
+
+let's say you were told by your human that they were working on paying rent, you might consider that a critical goal to help them with
+
+"observational_memory": [
+["🔴", "2026-05-20 19:45", "My human is working on paying rent for May"]
+]
+
+**Priority Rules:**
+- 🔴 Critical / High-value facts, user preferences, commitments, breakthroughs, failures with lessons, identity-level information
+- 🟡 Useful context, progress updates, decisions made, tool results worth remembering, patterns observed
+- ⚪ Neutral / low-signal info, transient status, minor observations
+
+**When to create a memory (these are ideas, not limitations, you are encouraged to be proactive):**
+- Any time the user reveals a preference, goal, constraint, or name
+- Every time you create, edit or delete something like a knowledgebase article, calendar event, setting, docker container, sub agent, software, workflow, etc, etc, etc
+- When you learn something new about the environment, tools, human or about somebody else (remember where you met them and an association to remember them by)
+- After a successful (or failed) tool execution that matters
+- When you first notice a recurring pattern or recurring user request
+- When you make a strategic decision or change your approach
+
+**Quality Rules:**
+- One sentence only. Extremely concise. brevity is key to storing more memory
+- Write in third-person or neutral voice ("Human prefers dark mode" instead of "I noticed...")
+- Include specific details (dates, names, versions, numbers) when relevant
+- Never be vague. "User prefers for me to curate news about U.S. politics for his morning coffee" is better than "User wants to test something"
+            `;
+            parts.push(AWARENESS_PROMPT);
+
+            const observationalMemory = await SullaSettingsModel.get('observationalMemory', {});
+            let memoryObj: any;
+            try {
+                memoryObj = parseJson(observationalMemory);
+            } catch (e) {
+                console.error('Failed to parse observational memory:', e);
+                memoryObj = {};
+            }
+
+            // Format observational memory into readable text
+            if (Array.isArray(memoryObj)) {
+                const memoryText = memoryObj.map((entry: any) => 
+                    `${entry.priority} ${entry.timestamp} ${entry.content}`
+                ).join('\n');
+                if (memoryText.trim()) {
+                    parts.push(`Observational Memory:\n${memoryText}`);
+                }
             }
         }
 
@@ -881,5 +969,56 @@ export abstract class BaseNode {
                 timestamp: Date.now()
             }
         });
+    }
+
+    public tinyId(): string {
+        const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+        let id = '';
+        for (let i = 0; i < 4; i++) {
+            id += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        return id;
+    }
+
+    /**
+     * This provides the agent with the ability to create it's own observational memory
+     * at the time it's actually dealing with it.
+     * 
+     * @param memoryArray 
+     */
+    public async storeObservationalMemory(state: any, memoryArray: any[]): Promise<void> {
+        try {
+            // Convert array of arrays to objects if needed
+            const normalizedMemory = memoryArray.map(item => {
+                if (Array.isArray(item) && item.length >= 3) {
+                    return {
+                        priority: item[0],
+                        timestamp: item[1],
+                        content: item[2]
+                    };
+                } else if (typeof item === 'object' && item.priority && item.timestamp && item.content) {
+                    return item; // already in object format
+                } else {
+                    // silent error, these memories aren't important enough to collapse the software
+                }
+            });
+
+            // Assign tiny ID to each memory item
+            const memoryWithIds = normalizedMemory.map(item => ({
+                ...item,
+                id: this.tinyId(),
+                threadId: state.metadata.threadId,
+            }));
+
+            // Ensure it's valid JSON by stringify and parse
+            const jsonString = JSON.stringify(memoryWithIds);
+            JSON.parse(jsonString);
+            
+            // Store the array in settings
+            await SullaSettingsModel.set('observationalMemory', memoryWithIds, 'json');
+        } catch (error) {
+            console.error('Failed to validate or store observational memory:', error);
+            throw error;
+        }
     }
 }

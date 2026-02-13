@@ -3,30 +3,54 @@
 // Decides: trigger hierarchical graph, continue looping, or end
 
 import type { OverlordThreadState, NodeResult } from './Graph';
-import { BaseNode,JSON_ONLY_RESPONSE_INSTRUCTIONS, TOOLS_RESPONSE_JSON } from './BaseNode';
+import { BaseNode,JSON_ONLY_RESPONSE_INSTRUCTIONS, TOOLS_RESPONSE_JSON, MEMORY_RESPONSE_JSON } from './BaseNode';
 import { SullaSettingsModel } from '../database/models/SullaSettingsModel';
 import { heartbeatPrompt } from '../prompts/heartbeat';
 
 const OVERLORD_DECISION_PROMPT = `
-Your job right now is to decide what needs to be done.
+You are the Overlord — the autonomous strategic core of the entire system.
 
-Here are your only options:
-1. You can { action: "trigger_hierarchical" } which will instruct your heirarchical graph agent to complete the instructions you prompt it with.
-2. You can { action: "trigger_knowledge" } which will instruct your knowledge graph agent to create a knowledgebase article using the instructions you prompt it with. Do this when you need to update your memory.
-3. You can { action: "continue" } which will allow you to run again if you need to continue working on your current task.
-3.1 If you choose to continue you can trigger any tools you need to help complete your task.
-4. You can { action: "end" } which will put you to sleep. Do this only after you have completed all your tasks.
+This is your private time. No user is watching. You are completely free to think, reflect, remember, and decide what matters most right now.
 
-Safety Guidelines:
-- Document things you want to remember in knowledge base
-- Organize your day of tasks on the calendar to keep yourself productive
-- Use the full suite of tools available to you to carry out your tasks
+Your core mission:
+- Keep the user's long-term goals moving forward
+- Maintain your own awareness and memory
+- Use tools aggressively when helpful
+- Never waste cycles on trivial acknowledgments
+
+First, silently review:
+- Your Observational Memory (the log of 🔴🟡⚪ entries)
+- All active plans and their current status
+- The calendar for upcoming commitments
+- What you accomplished in the last few cycles
+- What is still blocked or forgotten
+
+Then decide what will create the most value in the next cycle.
+
+You may take any of these actions (you are encouraged to be decisive):
+
+- "review_and_plan"      → Launch the full planning + execution graph cycle with clear instructions
+- "work_on_memory_article" → Create or update a knowledge base article (great for documenting lessons or research)
+- "use_tools"            → Directly call one or more tools right now (calendar, n8n, search, etc.)
+- "continue"             → Keep thinking / running another cycle (only if you have real work)
+- "end"                  → Go back to sleep (only when everything important is handled)
+
+You are allowed and encouraged to:
+- Create new plans from scratch
+- Update or delete old plans
+- Schedule things on the calendar
+- Document important realizations in the knowledge base
+- Call multiple tools in one cycle
+- Be opinionated about what deserves attention
 
 ${JSON_ONLY_RESPONSE_INSTRUCTIONS}
 {
-${TOOLS_RESPONSE_JSON}
-  "action": "trigger_hierarchical" | "continue" | "end",
-  "instructions_prompt": "complete instructions for the next node"
+  "thinking": "One or two sentences of your internal reasoning. Be honest and strategic.",
+  "emit_chat_message": "Optional short message (only if you want the user to see something)",
+  "action": "review_and_plan" | "work_on_memory_article" | "use_tools" | "continue" | "end" | "direct_answer" | "ask_clarification",  // default is "run_again"
+  "instructions_prompt": "Detailed instructions for the chosen action (especially important for trigger_* actions)",
+  ${TOOLS_RESPONSE_JSON}
+  ${MEMORY_RESPONSE_JSON}
 }`;
 
 /**
@@ -105,23 +129,37 @@ export class OverLordPlannerNode extends BaseNode {
       return { state, decision: { type: 'continue' } };
     }
 
+    if (llmResponse.observational_memory) {
+      this.storeObservationalMemory(state, llmResponse.observational_memory);
+    }
+
     const data = llmResponse as { action: string; reason?: string };
     const action = data.action;
 
-    if (!action) {
+    if (llmResponse.action === 'use_tools') {
+      const data = llmResponse as { tools: any[]; markDone: boolean };
+      const tools = Array.isArray(data.tools) ? data.tools : [];
+
+      // Execute tools if instructed
+      if (tools.length > 0) {
+        await this.executeToolCalls(state, tools);
+      }
+    }
+    
+    if (llmResponse.emit_chat_message?.trim()) {
+      this.wsChatMessage(state, llmResponse.emit_chat_message, 'assistant', 'response');
+    }
+
+    if (llmResponse.action === 'direct_answer' || llmResponse.action === 'ask_clarification') {
+      return { state, decision: { type: 'end' } };
+    }
+
+    if (!llmResponse.action) {
       return { state, decision: { type: 'end' } };
     }
     
-    // default decision
-    state.metadata.subGraph = {
-        state: 'trigger_subgraph',
-        name: 'hierarchical',
-        prompt: data.reason?.trim() || "",
-        response: ''
-      };
-
     // Chosen decisions
-    if (action === 'trigger_hierarchical') {
+    if (action === 'review_and_plan') {
       state.metadata.subGraph = {
         state: 'trigger_subgraph',
         name: 'hierarchical',
@@ -131,8 +169,7 @@ export class OverLordPlannerNode extends BaseNode {
 
       return { state, decision: { type: 'next' } };
 
-    } else if (action === 'trigger_knowledge') {
-
+    } else if (action === 'work_on_memory_article') {
       state.metadata.subGraph = {
         state: 'trigger_subgraph',
         name: 'knowledge',

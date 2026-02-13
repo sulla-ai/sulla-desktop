@@ -3,7 +3,7 @@
 // Only runs when currentSteps + activeStepIndex exist (guaranteed by graph flow)
 
 import type { HierarchicalThreadState, NodeResult } from './Graph';
-import { BaseNode, JSON_ONLY_RESPONSE_INSTRUCTIONS } from './BaseNode';
+import { BaseNode, JSON_ONLY_RESPONSE_INSTRUCTIONS, TOOLS_RESPONSE_JSON } from './BaseNode';
 import { AgentPlanTodo } from '../database/models/AgentPlanTodo';
 
 const TACTICAL_EXECUTOR_PROMPT = `
@@ -50,10 +50,7 @@ After completing the current tactical step, if you believe this step is fully do
 
 ${JSON_ONLY_RESPONSE_INSTRUCTIONS}
 {
-  "tools": [
-    ["tool_name", "arg1", "arg2"],
-    ["emit_chat_message", "User update"]
-  ],
+  ${TOOLS_RESPONSE_JSON}
   "markDone": true | false
 }
 `.trim();

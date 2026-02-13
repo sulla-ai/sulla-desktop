@@ -1,3 +1,5 @@
+// BackendGraphWebSocketService.ts
+// listens for messages from the frontend and processes them
 import { getWebSocketClientService, type WebSocketMessage } from './WebSocketClientService';
 import { getSchedulerService } from './SchedulerService';
 import type { CalendarEventData } from './CalendarClient';
@@ -153,7 +155,7 @@ export class BackendGraphWebSocketService {
       console.log('[BackendGraphWS] Reset pause flags, starting graph execution');
 
       // Execute on the persistent graph
-      await graph.execute(state, 'memory_recall');
+      await graph.execute(state, 'context_trimmer');
       console.log('[BackendGraphWS] Graph execution completed');
 
       // Build response from final state

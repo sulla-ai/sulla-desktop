@@ -1,13 +1,15 @@
+// AgentPersonaRegistry.ts
 import { computed, reactive } from 'vue';
 import type { PersonaEmotion, PersonaStatus, PersonaTemplateId } from '@pkg/agent';
 import { AgentPersonaService } from '@pkg/agent';
+
 
 export type ChatMessage = {
   id: string;
   channelId: string;
   role: 'user' | 'assistant' | 'error' | 'system';
   content: string;
-  kind?: 'text' | 'tool' | 'planner' | 'critic' | 'progress';
+  kind?: 'text' | 'tool' | 'planner' | 'critic' | 'progress' | 'error';
   image?: {
     dataUrl: string;
     alt?: string;
@@ -42,12 +44,10 @@ export type AgentRegistryEntry = {
   loading: boolean;
 };
 
-// Registry of AgentPersonaService instances - manages multiple AI personas
 export class AgentPersonaRegistry {
   private readonly backgroundAgentId = 'dreaming-protocol';
   private readonly activeAgentListeners = new Set<(agent: AgentRegistryEntry | undefined) => void>();
 
-  // Per-agent persona services - each service represents ONE agent
   private readonly personaServices = new Map<string, AgentPersonaService>();
 
   readonly state = reactive<{ agents: AgentRegistryEntry[]; activeAgentId: string }>({
@@ -96,64 +96,51 @@ export class AgentPersonaRegistry {
   });
 
   constructor() {
-    // Initialize persona services for each agent
+    // New — no need to call startListening anymore
     this.state.agents.forEach(agent => {
-      this.getOrCreatePersonaService(agent.agentId);
+      this.getOrCreatePersonaService(agent.agentId);  // constructor already connects
     });
-
-    // Start listening for WebSocket messages for all running agents
-    this.state.agents.forEach(agent => {
-      if (agent.isRunning) {
-        const personaService = this.getOrCreatePersonaService(agent.agentId);
-        personaService.startListening([agent.agentId]);
-      }
-    });
-
   }
 
-  // Get or create persona service for an agent
+  // Kept for full backward compatibility with any other code
   getOrCreatePersonaService(agentId: string): AgentPersonaService {
     if (!this.personaServices.has(agentId)) {
       const agentData = this.state.agents.find(a => a.agentId === agentId);
-      this.personaServices.set(agentId, new AgentPersonaService(this, agentData));
+      const service = new AgentPersonaService(this, agentData);
+      this.personaServices.set(agentId, service);
     }
     return this.personaServices.get(agentId)!;
   }
 
-  // Get persona service for active agent
+  getPersonaService(agentId: string): AgentPersonaService | undefined {
+    return this.personaServices.get(agentId);
+  }
+
   getActivePersonaService(): AgentPersonaService | undefined {
-    const activeAgent = this.activeAgent.value;
-    if (!activeAgent) return undefined;
-    return this.getOrCreatePersonaService(activeAgent.agentId);
+    return this.getPersonaService(this.state.activeAgentId);
   }
 
   readonly visibleAgents = computed(() => this.state.agents.filter(a => a.isRunning));
+  readonly activeAgent = computed(() => 
+    this.state.agents.find(a => a.agentId === this.state.activeAgentId) || this.state.agents[0]
+  );
 
-  readonly activeAgent = computed(() => this.state.agents.find(a => a.agentId === this.state.activeAgentId) || this.state.agents[0]);
-
-  // Registry knows which persona is active - personas themselves don't care
   setActiveAgent(agentId: string): void {
-    this.state.activeAgentId = agentId;
-    this.notifyActiveAgentListeners();
+    if (this.state.agents.some(a => a.agentId === agentId)) {
+      this.state.activeAgentId = agentId;
+      this.notifyActiveAgentListeners();
+    }
   }
 
   onActiveAgentChange(listener: (agent: AgentRegistryEntry | undefined) => void): () => void {
     this.activeAgentListeners.add(listener);
     listener(this.activeAgent.value);
-    return () => {
-      this.activeAgentListeners.delete(listener);
-    };
+    return () => this.activeAgentListeners.delete(listener);
   }
 
   private notifyActiveAgentListeners(): void {
     const agent = this.activeAgent.value;
-    this.activeAgentListeners.forEach(listener => {
-      try {
-        listener(agent);
-      } catch {
-        // ignore listener errors
-      }
-    });
+    this.activeAgentListeners.forEach(l => { try { l(agent); } catch {} });
   }
 
   setAgentRunning(agentId: string, isRunning: boolean): void {
@@ -251,10 +238,7 @@ export class AgentPersonaRegistry {
 }
 
 let instance: AgentPersonaRegistry | null = null;
-
 export function getAgentPersonaRegistry(): AgentPersonaRegistry {
-  if (!instance) {
-    instance = new AgentPersonaRegistry();
-  }
+  if (!instance) instance = new AgentPersonaRegistry();
   return instance;
 }

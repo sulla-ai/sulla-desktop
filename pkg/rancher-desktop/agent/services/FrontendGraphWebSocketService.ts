@@ -113,7 +113,7 @@ export class FrontendGraphWebSocketService {
       state.metadata.waitingForUser = false;
 
       // Execute on the persistent graph
-      await graph.execute(state, 'memory_recall');
+      await graph.execute(state, 'context_trimmer');
 
       // Build response from final state
       const content = state.metadata.finalSummary?.trim() || (state.metadata as any).response?.trim() || '';

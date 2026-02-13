@@ -180,7 +180,7 @@ export class ChatCompletionsServer {
       state.metadata.waitingForUser = false;
 
       // Execute on the persistent graph
-      await graph.execute(state, 'memory_recall');
+      await graph.execute(state, 'context_trimmer');
 
       // Return the combined response accumulated in state.metadata.totalSummary
       return state.metadata.totalSummary?.trim() || '';

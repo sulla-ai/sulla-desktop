@@ -22,25 +22,6 @@ Examples:
 ["n8n", "table", "rows", "get", "table-789", "--search", "john@example.com"]
 ["n8n", "source", "pull", "--force", "true"]
 
-Subcommands & common flags:
-workflows list    [--active true/false] [--tags tag1,tag2] [--name pattern] [--limit N] [--cursor token]
-workflow get      <workflowId> [--excludePinnedData true]
-workflow create   [--name "..."] [--nodes "[{...}]"] [--connections "{...}"] [--settings "{...}"]
-workflow update   <workflowId> [--name "..."] [--nodes "..."] [--connections "..."] [--settings "..."]
-workflow delete   <workflowId>
-workflow activate <workflowId>
-executions list   [--status success/error/waiting] [--workflowId id] [--limit N] [--cursor token]
-execution retry   <executionId>
-credentials list  [--limit N] [--cursor token]
-credential create [--name "..."] [--type type] [--data "{...}"]
-credential update <credentialId> [--name "..."] [--data "{...}"]
-tags list
-variables list    [--projectId id] [--limit N]
-tables list
-table rows get    <tableId> [--limit N] [--search term] [--filter "{...}"]
-source pull       [--force true] [--autoPublish published]
-
-JSON values go in quotes as strings -- tool parses them automatically.
 `.trim();
   }
 

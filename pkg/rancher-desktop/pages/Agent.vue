@@ -732,18 +732,12 @@ const frontendGraphController = new FrontendGraphWebSocketService({
 
 const {
   query,
-  transcriptEl,
-  currentAgentId,
-  activePlanId,
-  activePlanGoal,
-  activePlanTodos,
   messages,
   hasMessages,
   graphRunning,
 } = chatController;
 
 const registry = getAgentPersonaRegistry();
-const activeChannelId = computed(() => registry.activeAgent.value?.agentId || 'chat-controller');
 const loading = computed<boolean>(() => {
   const agent = registry.activeAgent.value;
   if (!agent) return false;
@@ -878,11 +872,6 @@ onMounted(async () => {
 
   // Listen for model changes from other windows
   ipcRenderer.on('model-changed', handleModelChanged);
-
-  // Start listening on each agent's persona service
-  registry.state.agents.forEach((agent: { agentId: string }) => {
-    registry.getOrCreatePersonaService(agent.agentId).startListening([agent.agentId]);
-  });
 });
 
 onUnmounted(() => {

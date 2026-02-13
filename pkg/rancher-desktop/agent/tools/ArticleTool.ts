@@ -18,7 +18,7 @@ Examples:
 ["article", "search", "ollama local models", 5]
 ["article", "search", "docker basics", 3, "docker"]
 ["article", "list", 10]                // top 10 by order
-["article", "create", "new-slug", "New Title", "New markdown content here...", "tag1,tag2", "10", "false", "jonathon"]
+["article", "create", "new-slug", "New Title", "New markdown content here...:markdown", "csv tags:string"]
 ["article", "update", "existing-slug", "Updated Title", null, "new-tag", null, "true"]   // null = keep existing
 ["article", "delete", "old-slug"]
 

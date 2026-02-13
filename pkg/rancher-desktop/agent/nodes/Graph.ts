@@ -1,4 +1,5 @@
 // Graph - LangGraph-style workflow orchestrator
+// sits on the backend and processes the graphs
 
 import type { AbortService } from '../services/AbortService';
 import { throwIfAborted } from '../services/AbortService';
@@ -365,8 +366,8 @@ export class Graph<TState = HierarchicalThreadState> {
         
         throwIfAborted(state, 'Graph execution aborted');
 
-        if ((state as any).metadata.waitingForUser && (state as any).metadata.currentNodeId === 'memory_recall') {
-          console.log('[Graph] Waiting for user at memory_recall → forcing end');
+        if ((state as any).metadata.waitingForUser && (state as any).metadata.currentNodeId === 'context_trimmer') {
+          console.log('[Graph] Waiting for user at context_trimmer → forcing end');
           break;
         }
 
@@ -588,7 +589,7 @@ export async function createInitialThreadState<T extends BaseThreadState>(
       cycleComplete: false,
       waitingForUser: false,
       options: overrides.options ?? { abort: undefined },
-      currentNodeId: overrides.currentNodeId ?? 'memory_recall',
+      currentNodeId: overrides.currentNodeId ?? 'context_trimmer',
       consecutiveSameNode: 0,
       iterations: 0,
       revisionCount: 0,
@@ -777,7 +778,6 @@ export function createKnowledgeGraph(): Graph<KnowledgeThreadState> {
  */
 export function createHierarchicalGraph(): Graph<HierarchicalThreadState> {
   const {
-    MemoryNode,
     StrategicPlannerNode,
     TacticalPlannerNode,
     TacticalExecutorNode,
@@ -789,7 +789,6 @@ export function createHierarchicalGraph(): Graph<HierarchicalThreadState> {
   const graph = new Graph<HierarchicalThreadState>();
 
   // Add nodes
-  graph.addNode(new MemoryNode());
   graph.addNode(new ContextTrimmerNode());
   graph.addNode(new StrategicPlannerNode());
   graph.addNode(new TacticalPlannerNode());
@@ -798,49 +797,30 @@ export function createHierarchicalGraph(): Graph<HierarchicalThreadState> {
   graph.addNode(new StrategicCriticNode());
   graph.addNode(new SummaryNode());
 
-  graph.addConditionalEdge('memory_recall', state => {
-    if (state.metadata.cycleComplete || state.metadata.waitingForUser) {
-      console.log('[Graph] Cycle complete → pausing at memory_recall');
-      state.metadata.options.abort?.pauseForUserInput?.('');
-      return 'end';
-    }
-
-    return 'context_trimmer';
-  });
-
   graph.addEdge('context_trimmer', 'strategic_planner');
 
   // Conditional: StrategicPlanner → end (simple) or TacticalPlanner (complex)
   graph.addConditionalEdge('strategic_planner', state => {
-    // After planner ran, we look at what actually happened
+    const hasPlan = !!state.metadata.plan?.model;
+    const hasMilestones = !!state.metadata.plan?.milestones?.length;
 
-    const hasActivePlan = !!state.metadata.plan?.model;
-    const hasMilestones  = !!state.metadata.plan?.milestones?.length;
-
-    if (!hasActivePlan || !hasMilestones) {
-      // send to the start and pause
-      state.metadata.cycleComplete = true;
-      state.metadata.waitingForUser = true;
-
-      // Planner decided no plan needed (or failed to create one)
-      return 'memory_recall';
+    if (!hasPlan || !hasMilestones) {
+      return 'strategic_planner';
     }
 
-    // Valid plan exists → proceed to tactical
+    // Force tactical_planner even if activeMilestoneIndex is unset
+    state.metadata.plan.activeMilestoneIndex ??= 0;
     return 'tactical_planner';
   });
 
   graph.addConditionalEdge('tactical_planner', state => {
     const steps = state.metadata.currentSteps ?? [];
-
     if (steps.length === 0) {
-      // No work to do → go directly to critic or summary
-      // Prefer summary to avoid critic spam when nothing happened
-      console.log('[Graph] No tactical steps → routing to summary');
-      return 'summary';
+      // No steps → milestone complete → check if all milestones done
+      return state.metadata.plan?.allMilestonesComplete
+        ? 'strategic_critic'
+        : 'tactical_planner';  // ← loop back to plan next milestone
     }
-
-    // Steps exist → execute them
     return 'tactical_executor';
   });
 
@@ -886,14 +866,30 @@ export function createHierarchicalGraph(): Graph<HierarchicalThreadState> {
       steps[idx].done = true;
     }
 
-    if (idx < steps.length - 1) {
-      state.metadata.activeStepIndex = idx + 1;
-      return 'tactical_executor';
+    // Mark current step done (already there)
+    if (steps[idx]) steps[idx].done = true;
+
+    // Advance step index
+    state.metadata.activeStepIndex = idx + 1;
+
+    if (state.metadata.activeStepIndex < steps.length) {
+      return 'tactical_executor'; // more steps in current milestone
     }
 
-    return state.metadata.plan?.allMilestonesComplete
-      ? 'strategic_critic'
-      : 'tactical_planner';
+    // Milestone complete → advance milestone index
+    const plan = state.metadata.plan;
+    if (plan) {
+      plan.activeMilestoneIndex = (plan.activeMilestoneIndex ?? 0) + 1;
+      plan.allMilestonesComplete = 
+        plan.activeMilestoneIndex >= (plan.milestones?.length ?? 0);
+
+      // Reset tactical steps for next milestone
+      state.metadata.currentSteps = [];
+      state.metadata.activeStepIndex = 0;
+    }
+
+    // Always go back to tactical_planner to handle next milestone
+    return 'tactical_planner';
   });
 
   // Strategic Critic edge — now handles approve/revise/kill-switch fully
@@ -966,10 +962,10 @@ export function createHierarchicalGraph(): Graph<HierarchicalThreadState> {
   });
 
   // allow looping over again
-  graph.addEdge('summary', 'memory_recall');
+  graph.addEdge('summary', 'context_trimmer');
 
   // Set entry and end points
-  graph.setEntryPoint('memory_recall');
+  graph.setEntryPoint('context_trimmer');
   graph.setEndPoints('summary');
 
   return graph;
@@ -981,19 +977,19 @@ export function createHierarchicalGraph(): Graph<HierarchicalThreadState> {
  */
 export function createOverlordGraph(): Graph<OverlordThreadState> {
   const {
-    MemoryNode,
+    ContextTrimmerNode,
     OverLordPlannerNode
   } = require('.');
 
   // Create lightweight heartbeat graph with only core nodes
   const graph = new Graph<OverlordThreadState>();
 
-  graph.addNode(new MemoryNode());           // id: 'memory_recall'
+  graph.addNode(new ContextTrimmerNode());
   graph.addNode(new OverLordPlannerNode());  // id: 'overlord_planner'
   graph.addNode(new SubgraphTriggerNode());
 
   // Entry point
-  graph.addEdge('memory_recall', 'overlord_planner');
+  graph.addEdge('context_trimmer', 'overlord_planner');
 
   // OverLord core loop: think → trigger subgraph → loop or end
   graph.addConditionalEdge('overlord_planner', state => {
@@ -1013,7 +1009,7 @@ export function createOverlordGraph(): Graph<OverlordThreadState> {
   // No need to add hierarchical nodes or edges — handled by sub-graph
   // When hierarchical finishes, it routes back to 'overlord_planner'
 
-  graph.setEntryPoint('memory_recall');
+  graph.setEntryPoint('context_trimmer');
   graph.setEndPoints('overlord_planner');
 
   return graph;
