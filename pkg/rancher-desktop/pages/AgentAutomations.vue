@@ -70,7 +70,7 @@
             </div>
 
             <!-- Sidebar -->
-            <div class="space-y-8">
+            <div class="lg:col-span-2 space-y-8">
               <!-- Installation Guide -->
               <div class="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-slate-800">
                 <h3 class="text-lg font-semibold text-slate-900 dark:text-white mb-4">Getting Started</h3>
