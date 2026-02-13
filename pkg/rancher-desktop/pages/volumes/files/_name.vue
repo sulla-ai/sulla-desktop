@@ -530,14 +530,14 @@ export default defineComponent({
   min-height: 0;
 }
 
-.files-table::v-deep .sortable-table-header {
+.files-table:deep(.sortable-table-header) {
   position: sticky;
   top: 0;
   background: var(--body-bg);
   z-index: 1;
 }
 
-.files-table::v-deep tbody {
+.files-table:deep(tbody) {
   overflow-y: auto;
 }
 </style>
