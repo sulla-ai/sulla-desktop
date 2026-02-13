@@ -21,6 +21,7 @@ Examples:
 ["n8n", "variables", "list", "--projectId", "project-123"]
 ["n8n", "table", "rows", "get", "table-789", "--search", "john@example.com"]
 ["n8n", "source", "pull", "--force", "true"]
+["n8n", "refresh_api_key"] // deletes and creates a new one in case you run into errors with the api key/authorization
 
 `.trim();
   }
@@ -201,8 +202,11 @@ Examples:
           }
           break;
 
+        case 'refresh_api_key':
+          return { toolName: this.name, success: true, result: await this.n8nService.refreshApiKey() };
+
         default:
-          throw new Error(`Unknown n8n subcommand: ${subcommand}`);
+          return { toolName: this.name, success: false, error: `Unknown subcommand: ${subcommand}` };
       }
 
       throw new Error(`Invalid n8n command format`);

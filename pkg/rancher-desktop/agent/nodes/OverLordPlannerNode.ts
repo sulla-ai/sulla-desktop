@@ -130,7 +130,7 @@ export class OverLordPlannerNode extends BaseNode {
     }
 
     if (llmResponse.observational_memory) {
-      this.storeObservationalMemory(state, llmResponse.observational_memory);
+      await this.executeSingleTool(state, ["observational_memory", llmResponse.observational_memory]);
     }
 
     const data = llmResponse as { action: string; reason?: string };
@@ -147,7 +147,7 @@ export class OverLordPlannerNode extends BaseNode {
     }
     
     if (llmResponse.emit_chat_message?.trim()) {
-      this.wsChatMessage(state, llmResponse.emit_chat_message, 'assistant', 'response');
+      await this.executeSingleTool(state, ["emit_chat_message", llmResponse.emit_chat_message]);
     }
 
     if (llmResponse.action === 'direct_answer' || llmResponse.action === 'ask_clarification') {
