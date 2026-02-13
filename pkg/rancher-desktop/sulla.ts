@@ -18,7 +18,15 @@ import { execSync } from 'child_process';
 
 const checkDockerMode = async () => {
   try {
-    const limactlPath = path.join(process.resourcesPath, 'darwin/lima/bin/limactl');
+    let resourcesPath;
+    if (process.resourcesPath.includes('node_modules/electron')) {
+      // Development: use source resources
+      resourcesPath = path.join(__dirname, '../../../resources');
+    } else {
+      // Production: use app resources
+      resourcesPath = process.resourcesPath;
+    }
+    const limactlPath = path.join(resourcesPath, 'darwin/lima/bin/limactl');
     const output = execSync(`LIMA_HOME=~/Library/Application\\ Support/rancher-desktop/lima "${limactlPath}" list --json`, { encoding: 'utf8' });
     const instances = JSON.parse(output);
     const instance = instances.find((i: any) => i.name === '0');
