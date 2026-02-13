@@ -18,6 +18,7 @@ import AgentKnowledgeBaseCreate from '../pages/AgentKnowledgeBaseCreate.vue';
 import AgentKnowledgeBaseSearch from '../pages/AgentKnowledgeBaseSearch.vue';
 import AgentIntegrations from '../pages/AgentIntegrations.vue';
 import AgentIntegrationDetail from '../pages/AgentIntegrationDetail.vue';
+import AgentAutomations from '../pages/AgentAutomations.vue';
 import AgentKnowledgeBaseSections from '../pages/AgentKnowledgeBaseSections.vue';
 import FirstRun from '../pages/FirstRun.vue';
 
@@ -33,6 +34,7 @@ const router = createRouter({
     { path: '/KnowledgeBase/Sections', component: AgentKnowledgeBaseSections, name: 'AgentKnowledgeBaseSections' },
     { path: '/Integrations', component: AgentIntegrations, name: 'AgentIntegrations' },
     { path: '/Integrations/:id', component: AgentIntegrationDetail, name: 'AgentIntegrationDetail' },
+    { path: '/Automations', component: AgentAutomations, name: 'AgentAutomations' },
     { path: '/FirstRun', component: FirstRun, name: 'FirstRun' },
   ],
 });
