@@ -214,8 +214,19 @@ export abstract class BaseModel<T extends ModelAttributes = ModelAttributes> {
     const params: any[] = [];
 
     if (typeof conditions === 'string') {
-      query += ` WHERE "${conditions}" = $1`;
-      params.push(value);
+      if (conditions.includes('=') || conditions.includes('>') || conditions.includes('<') || conditions.includes('LIKE') || conditions.includes('ILIKE')) {
+        // Raw SQL condition
+        query += ` WHERE ${conditions}`;
+        if (Array.isArray(value)) {
+          params.push(...value);
+        } else {
+          params.push(value);
+        }
+      } else {
+        // Simple column name
+        query += ` WHERE "${conditions}" = $1`;
+        params.push(value);
+      }
     } else {
       const clauses = Object.entries(conditions).map(([k], i) => {
         params.push(conditions[k]);
