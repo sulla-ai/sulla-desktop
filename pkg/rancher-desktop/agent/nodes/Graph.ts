@@ -350,9 +350,7 @@ export class Graph<TState = HierarchicalThreadState> {
     await this.initialize();
 
     let state = initialState;
-    if (!(state as any).metadata.currentNodeId) {
-      (state as any).metadata.currentNodeId = entryPointNodeId || this.entryPoint;
-    }
+    (state as any).metadata.currentNodeId = entryPointNodeId || this.entryPoint;
 
     console.log(`[Graph] Start from ${(state as any).metadata.currentNodeId}`);
 

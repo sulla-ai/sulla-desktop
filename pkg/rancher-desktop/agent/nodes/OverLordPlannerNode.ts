@@ -112,6 +112,15 @@ export class OverLordPlannerNode extends BaseNode {
       return { state, decision: { type: 'end' } };
     }
     
+    // default decision
+    state.metadata.subGraph = {
+        state: 'trigger_subgraph',
+        name: 'hierarchical',
+        prompt: data.reason?.trim() || "",
+        response: ''
+      };
+
+    // Chosen decisions
     if (action === 'trigger_hierarchical') {
       state.metadata.subGraph = {
         state: 'trigger_subgraph',
