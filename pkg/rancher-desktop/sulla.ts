@@ -18,7 +18,15 @@ import { execSync } from 'child_process';
 
 const checkDockerMode = async () => {
   try {
-    const limactlPath = path.join(process.resourcesPath, 'darwin/lima/bin/limactl');
+    let resourcesPath;
+    if (process.resourcesPath.includes('node_modules/electron')) {
+      // Development: use source resources
+      resourcesPath = path.join(__dirname, '../../../resources');
+    } else {
+      // Production: use app resources
+      resourcesPath = process.resourcesPath;
+    }
+    const limactlPath = path.join(resourcesPath, 'darwin/lima/bin/limactl');
     const output = execSync(`LIMA_HOME=~/Library/Application\\ Support/rancher-desktop/lima "${limactlPath}" list --json`, { encoding: 'utf8' });
     const instances = JSON.parse(output);
     const instance = instances.find((i: any) => i.name === '0');
@@ -147,7 +155,8 @@ export async function onMainProxyLoad(ipcMainProxy: any) {
         // Stop Docker containers early if in Docker mode
         if (await checkDockerMode()) {
           try {
-            execSync('docker-compose down', { cwd: process.cwd(), stdio: 'inherit' });
+            const composeFilePath = path.join(process.cwd(), 'pkg/rancher-desktop/assets/sulla-docker-compose.yaml');
+            execSync(`docker-compose -f "${composeFilePath}" down`, { cwd: process.cwd(), stdio: 'inherit' });
             console.log('[Shutdown] Local Docker containers stopped');
           } catch (err) {
             console.warn('[Shutdown] Docker compose down failed:', err);
@@ -205,7 +214,8 @@ export function hookSullaEnd(Electron: any, mainEvents: any, window:any) {
         // Stop Docker containers if in Docker mode
         if (await checkDockerMode()) {
           try {
-            execSync('docker-compose down', { cwd: process.cwd(), stdio: 'inherit' });
+            const composeFilePath = path.join(process.cwd(), 'pkg/rancher-desktop/assets/sulla-docker-compose.yaml');
+            execSync(`docker-compose -f "${composeFilePath}" down`, { cwd: process.cwd(), stdio: 'inherit' });
             console.log('[Shutdown] Docker containers stopped');
           } catch (err) {
             console.warn('[Shutdown] Docker compose down failed:', err);
@@ -219,7 +229,8 @@ export function hookSullaEnd(Electron: any, mainEvents: any, window:any) {
             // Stop Docker containers if in Docker mode
             if (await checkDockerMode()) {
               try {
-                execSync('docker-compose down', { cwd: process.cwd(), stdio: 'inherit' });
+                const composeFilePath = path.join(process.cwd(), 'pkg/rancher-desktop/assets/sulla-docker-compose.yaml');
+                execSync(`docker-compose -f "${composeFilePath}" down`, { cwd: process.cwd(), stdio: 'inherit' });
                 console.log('[Shutdown] Docker containers stopped');
               } catch (err) {
                 console.warn('[Shutdown] Docker compose down failed:', err);
