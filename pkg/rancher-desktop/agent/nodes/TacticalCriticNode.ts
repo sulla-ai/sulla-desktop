@@ -139,7 +139,7 @@ export class TacticalCriticNode extends BaseNode {
     console.log('TacticalCritic: Verdict', state.metadata.tacticalCriticVerdict);
 
     if (data.emit_chat_message?.trim()) {
-      this.wsChatMessage(state, data.emit_chat_message, 'assistant', 'progress');
+      await this.executeSingleTool(state, ['emit_chat_message', data.emit_chat_message, 'assistant', 'progress']);
     }
 
     if (decision === 'approve') {

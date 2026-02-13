@@ -97,7 +97,7 @@ export class StrategicPlannerNode extends BaseNode {
     const plan = llmResponse as StrategicPlan;
 
     if (plan.observational_memory) {
-      this.storeObservationalMemory(state, plan.observational_memory);
+      await this.executeSingleTool(state, ["observational_memory", plan.observational_memory]);
     }
 
     if (plan.action === 'use_tools') {
@@ -111,7 +111,7 @@ export class StrategicPlannerNode extends BaseNode {
     }
     
     if (plan.emit_chat_message?.trim()) {
-      this.wsChatMessage(state, plan.emit_chat_message, 'assistant', 'response');
+      await this.executeSingleTool(state, ["emit_chat_message", plan.emit_chat_message]);
     }
 
     if (plan.action === 'direct_answer' || plan.action === 'ask_clarification') {

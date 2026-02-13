@@ -971,54 +971,11 @@ let's say you were told by your human that they were working on paying rent, you
         });
     }
 
-    public tinyId(): string {
-        const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-        let id = '';
-        for (let i = 0; i < 4; i++) {
-            id += chars.charAt(Math.floor(Math.random() * chars.length));
-        }
-        return id;
-    }
-
     /**
-     * This provides the agent with the ability to create it's own observational memory
-     * at the time it's actually dealing with it.
-     * 
-     * @param memoryArray 
+     * Execute a single tool call using the standard executeToolCalls method
+     * This provides consistent reporting and success/failure feedback
      */
-    public async storeObservationalMemory(state: any, memoryArray: any[]): Promise<void> {
-        try {
-            // Convert array of arrays to objects if needed
-            const normalizedMemory = memoryArray.map(item => {
-                if (Array.isArray(item) && item.length >= 3) {
-                    return {
-                        priority: item[0],
-                        timestamp: item[1],
-                        content: item[2]
-                    };
-                } else if (typeof item === 'object' && item.priority && item.timestamp && item.content) {
-                    return item; // already in object format
-                } else {
-                    // silent error, these memories aren't important enough to collapse the software
-                }
-            });
-
-            // Assign tiny ID to each memory item
-            const memoryWithIds = normalizedMemory.map(item => ({
-                ...item,
-                id: this.tinyId(),
-                threadId: state.metadata.threadId,
-            }));
-
-            // Ensure it's valid JSON by stringify and parse
-            const jsonString = JSON.stringify(memoryWithIds);
-            JSON.parse(jsonString);
-            
-            // Store the array in settings
-            await SullaSettingsModel.set('observationalMemory', memoryWithIds, 'json');
-        } catch (error) {
-            console.error('Failed to validate or store observational memory:', error);
-            throw error;
-        }
+    protected async executeSingleTool(state: any, toolCall: any[]): Promise<void> {
+        await this.executeToolCalls(state, [toolCall]);
     }
 }

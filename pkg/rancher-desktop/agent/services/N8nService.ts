@@ -4,6 +4,7 @@
 import { SullaSettingsModel } from '../database/models/SullaSettingsModel';
 import { N8nCredentialsEntityModel } from '../database/models/N8nCredentialsEntityModel';
 import { N8nUserModel } from '../database/models/N8nUserModel';
+import { N8nUserApiKeyModel } from '../database/models/N8nUserApiKeyModel';
 
 /**
  * N8n API Service
@@ -851,6 +852,50 @@ export class N8nService {
     });
   }
   
+  /**
+   * Refresh the API key by deleting the current one and creating a new one
+   */
+  async refreshApiKey(): Promise<string> {
+    // Get the service account user ID
+    const userId = await SullaSettingsModel.get('serviceAccountUserId');
+    if (!userId) {
+      throw new Error('No service account user ID found');
+    }
+
+    // Get current API key
+    const currentApiKey = await SullaSettingsModel.get('serviceAccountApiKey');
+
+    // Delete existing API key records
+    if (currentApiKey) {
+      const apiKeyModels = await N8nUserApiKeyModel.where('apiKey', currentApiKey);
+      for (const model of apiKeyModels) {
+        await model.delete();
+      }
+    }
+
+    // Clear the API key setting
+    await SullaSettingsModel.set('serviceAccountApiKey', '', 'string');
+
+    // Create new API key
+    const newApiKeyModel = await N8nUserApiKeyModel.getOrCreateServiceAccount(userId);
+    const newApiKey = newApiKeyModel.attributes.apiKey;
+    if (!newApiKey) {
+      throw new Error('Failed to create new API key');
+    }
+
+    // Store the new API key in settings
+    await SullaSettingsModel.set('serviceAccountApiKey', newApiKey, 'string');
+
+    // Update this service instance's API key
+    this.apiKey = newApiKey;
+
+    console.log('[N8nService] API key refreshed successfully');
+    return newApiKey;
+  }
+
+  /**
+   * Create an audit
+   */
   async createAudit(options: {
     daysAbandonedWorkflow?: number;
     categories?: string[];

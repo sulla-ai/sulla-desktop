@@ -12,6 +12,7 @@ import { EmitChatMessageTool } from './EmitChatMessageTool';
 import { EmitChatImageTool } from './EmitChatImageTool';
 import { SlackTool } from '../integrations/slack/SlackTool';
 import { N8nTool } from './N8nTool';
+import { ObservationalMemoryTool } from './ObservationalMemoryTool';
 
 let registered = false;
 
@@ -41,9 +42,11 @@ export function registerDefaultTools(): void {
   ensure(new EmitChatImageTool());
   ensure(new SlackTool());
   ensure(new N8nTool());
+  ensure(new ObservationalMemoryTool());
   registered = true;
 }
 
+export { ObservationalMemoryTool } from './ObservationalMemoryTool';
 export { getToolRegistry } from './ToolRegistry';
 export { BaseTool } from './BaseTool';
 export { KnowledgeGraphTool } from './KnowledgeGraphTool';
