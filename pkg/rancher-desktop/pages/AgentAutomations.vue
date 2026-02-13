@@ -71,72 +71,54 @@
 
             <!-- Sidebar -->
             <div class="lg:col-span-2 space-y-8">
-              <!-- Installation Guide -->
-              <div class="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-slate-800">
-                <h3 class="text-lg font-semibold text-slate-900 dark:text-white mb-4">Getting Started</h3>
-                <p class="text-sm text-slate-600 dark:text-slate-300 mb-6">Follow these steps to start using N8N for workflow automation.</p>
-
-                <div class="space-y-6">
-                  <div class="border-l-2 border-blue-200 dark:border-blue-800 pl-4">
-                    <div class="flex items-center gap-2 mb-2">
-                      <div class="flex h-6 w-6 items-center justify-center rounded-full bg-blue-600 text-white text-xs font-medium">
-                        1
-                      </div>
-                      <h4 class="font-medium text-slate-900 dark:text-white">Install N8N</h4>
-                    </div>
-                    <div class="prose prose-sm max-w-none dark:prose-invert">
-                      <div class="whitespace-pre-wrap text-sm text-slate-600 dark:text-slate-300 leading-relaxed">N8N is available via Docker Compose. Run the automated setup or manually configure it.</div>
-                    </div>
-                  </div>
-
-                  <div class="border-l-2 border-blue-200 dark:border-blue-800 pl-4">
-                    <div class="flex items-center gap-2 mb-2">
-                      <div class="flex h-6 w-6 items-center justify-center rounded-full bg-blue-600 text-white text-xs font-medium">
-                        2
-                      </div>
-                      <h4 class="font-medium text-slate-900 dark:text-white">Access Dashboard</h4>
-                    </div>
-                    <div class="prose prose-sm max-w-none dark:prose-invert">
-                      <div class="whitespace-pre-wrap text-sm text-slate-600 dark:text-slate-300 leading-relaxed">Click the "Open N8N Dashboard" button above to access the web interface.</div>
-                    </div>
-                  </div>
-
-                  <div class="border-l-2 border-blue-200 dark:border-blue-800 pl-4">
-                    <div class="flex items-center gap-2 mb-2">
-                      <div class="flex h-6 w-6 items-center justify-center rounded-full bg-blue-600 text-white text-xs font-medium">
-                        3
-                      </div>
-                      <h4 class="font-medium text-slate-900 dark:text-white">Create Workflows</h4>
-                    </div>
-                    <div class="prose prose-sm max-w-none dark:prose-invert">
-                      <div class="whitespace-pre-wrap text-sm text-slate-600 dark:text-slate-300 leading-relaxed">Start building automated workflows by connecting triggers and actions.</div>
-                    </div>
-                  </div>
-                </div>
-
-                <div class="mt-6 p-4 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-800">
-                  <h5 class="font-medium text-amber-900 dark:text-amber-100 mb-2">Important Notes</h5>
-                  <ul class="space-y-1 text-sm text-amber-800 dark:text-amber-200">
-                    <li class="flex items-start gap-2">
-                      <svg class="h-4 w-4 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
-                      </svg>
-                      Ensure Docker is running before starting N8N
-                    </li>
-                    <li class="flex items-start gap-2">
-                      <svg class="h-4 w-4 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
-                      </svg>
-                      N8N runs on port 5678 by default
-                    </li>
-                  </ul>
-                </div>
-              </div>
-
               <!-- Additional Resources -->
               <div class="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-slate-800">
                 <h3 class="text-lg font-semibold text-slate-900 dark:text-white mb-4">Resources</h3>
                 <div class="space-y-3">
+                  <a
+                    href="https://docs.n8n.io/getting-started/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="flex items-center justify-between rounded-lg border border-gray-200 p-4 hover:bg-slate-50 dark:border-gray-700 dark:hover:bg-slate-800"
+                  >
+                    <div class="flex items-center gap-3">
+                      <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-700">
+                        <svg class="h-4 w-4 text-slate-600 dark:text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                        </svg>
+                      </div>
+                      <div>
+                        <h4 class="font-medium text-slate-900 dark:text-white text-sm">Getting Started Guide</h4>
+                        <p class="text-xs text-slate-600 dark:text-slate-400">Step-by-step introduction to N8N</p>
+                      </div>
+                    </div>
+                    <svg class="h-4 w-4 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                    </svg>
+                  </a>
+
+                  <a
+                    href="https://n8n.io/workflows/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="flex items-center justify-between rounded-lg border border-gray-200 p-4 hover:bg-slate-50 dark:border-gray-700 dark:hover:bg-slate-800"
+                  >
+                    <div class="flex items-center gap-3">
+                      <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-700">
+                        <svg class="h-4 w-4 text-slate-600 dark:text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                        </svg>
+                      </div>
+                      <div>
+                        <h4 class="font-medium text-slate-900 dark:text-white text-sm">Workflow Templates</h4>
+                        <p class="text-xs text-slate-600 dark:text-slate-400">Ready-to-use workflow examples</p>
+                      </div>
+                    </div>
+                    <svg class="h-4 w-4 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                    </svg>
+                  </a>
+
                   <a
                     href="https://docs.n8n.io/"
                     target="_blank"
@@ -169,7 +151,7 @@
                       <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-700">
                         <svg class="h-4 w-4 text-slate-600 dark:text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                      </svg>
+                        </svg>
                       </div>
                       <div>
                         <h4 class="font-medium text-slate-900 dark:text-white text-sm">Community Forum</h4>
