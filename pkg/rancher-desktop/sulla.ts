@@ -18,7 +18,8 @@ import { execSync } from 'child_process';
 
 const checkDockerMode = async () => {
   try {
-    const output = execSync('LIMA_HOME=~/Library/Application\\ Support/rancher-desktop/lima ~/Sites/sulla/sulla-desktop/resources/darwin/lima/bin/limactl list --json', { encoding: 'utf8' });
+    const limactlPath = path.join(process.resourcesPath, 'darwin/lima/bin/limactl');
+    const output = execSync(`LIMA_HOME=~/Library/Application\\ Support/rancher-desktop/lima "${limactlPath}" list --json`, { encoding: 'utf8' });
     const instances = JSON.parse(output);
     const instance = instances.find((i: any) => i.name === '0');
     const vmRunning = instance?.status === 'Running';
