@@ -16,7 +16,7 @@
         <div class="mb-4">
           <label for="model" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Model:</label>
           <select id="model" v-model="selectedModel" class="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100">
-            <option v-for="model in currentModels" :key="model.id" :value="model.id">{{ model.name }}</option>
+            <option v-for="model in currentModels" :key="model.id" :value="model.id">{{ model.name }} - {{ model.description }}{{ model.pricing ? ` (${model.pricing})` : '' }}</option>
           </select>
         </div>
         <div class="mb-4">
@@ -46,6 +46,14 @@ import { RecursivePartial } from '@pkg/utils/typeUtils';
 import { Settings } from '@pkg/config/settings';
 import RdFieldset from '@pkg/components/form/RdFieldset.vue';
 import { ipcRenderer } from 'electron';
+import { REMOTE_PROVIDERS } from '../shared/remoteProviders';
+
+interface Model {
+  id: string;
+  name: string;
+  description: string;
+  pricing?: string;
+}
 
 const settings = inject<Ref<Settings>>('settings')!;
 const commitChanges = inject<(settings: RecursivePartial<Settings>) => Promise<void>>('commitChanges')!;
@@ -60,48 +68,9 @@ const apiKey = ref('');
 const testing = ref(false);
 const testResult = ref<{ success: boolean; message: string } | null>(null);
 
-const providers = [
-  { id: 'grok', name: 'Grok (xAI)', baseUrl: 'https://api.x.ai/v1' },
-  { id: 'openai', name: 'OpenAI', baseUrl: 'https://api.openai.com/v1' },
-  { id: 'anthropic', name: 'Anthropic', baseUrl: 'https://api.anthropic.com/v1' },
-  { id: 'google', name: 'Google', baseUrl: 'https://generativelanguage.googleapis.com/v1beta' },
-  { id: 'kimi', name: 'Kimi (Moonshot AI)', baseUrl: 'https://api.moonshot.cn/v1' },
-  { id: 'nvidia', name: 'NVIDIA (Free Moonshot/Kimi)', baseUrl: 'https://integrate.api.nvidia.com/v1' },
-];
+const providers = REMOTE_PROVIDERS;
 
-const models = {
-  grok: [
-    { id: 'grok-4-1-fast-reasoning', name: 'Grok 4.1 Fast Reasoning' },
-    { id: 'grok-4-1', name: 'Grok 4.1' },
-    { id: 'grok-beta', name: 'Grok Beta' },
-  ],
-  openai: [
-    { id: 'gpt-4o', name: 'GPT-4o' },
-    { id: 'gpt-4o-mini', name: 'GPT-4o Mini' },
-    { id: 'gpt-4-turbo', name: 'GPT-4 Turbo' },
-    { id: 'gpt-4', name: 'GPT-4' },
-    { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo' },
-  ],
-  anthropic: [
-    { id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet' },
-    { id: 'claude-3-opus-20240229', name: 'Claude 3 Opus' },
-    { id: 'claude-3-haiku-20240307', name: 'Claude 3 Haiku' },
-  ],
-  google: [
-    { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro' },
-    { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash' },
-  ],
-  kimi: [
-    { id: 'kimi-k2.5', name: 'Kimi K2.5' },
-    { id: 'kimi-k2', name: 'Kimi K2' },
-  ],
-  nvidia: [
-    { id: 'moonshotai/kimi-k2.5', name: 'Kimi K2.5 (Free)' },
-    { id: 'moonshotai/kimi-k2', name: 'Kimi K2 (Free)' },
-    { id: 'nvidia/llama-3.1-nemotron-70b-instruct', name: 'Llama 3.1 Nemotron 70B' },
-    { id: 'meta/llama-3.1-70b-instruct', name: 'Llama 3.1 70B' },
-  ],
-};
+const models = Object.fromEntries(REMOTE_PROVIDERS.map(provider => [provider.id, provider.models]));
 
 const currentModels = computed(() => models[selectedProvider.value as keyof typeof models] || []);
 

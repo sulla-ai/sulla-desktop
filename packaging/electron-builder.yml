@@ -1,7 +1,7 @@
 # copyright needs to stay in sync with message in About panel in background.ts
 copyright: Copyright © 2026 Jonathon Byrdziak
 productName: Sulla Desktop
-icon: ./pkg/rancher-desktop/pages/agent/sulla-icon.png
+icon: ./resources/icons/mac-icon.png
 appId: io.sulla.desktop
 asar: true
 asarUnpack:
@@ -24,7 +24,7 @@ mac:
   darkModeSupport: true
   hardenedRuntime: true
   gatekeeperAssess: false
-  icon: ./pkg/rancher-desktop/pages/agent/sulla-icon.png
+  icon: ./resources/icons/mac-icon.png
   target: [ dmg, zip ]
   identity: ~ # We sign in a separate step
   extraFiles:

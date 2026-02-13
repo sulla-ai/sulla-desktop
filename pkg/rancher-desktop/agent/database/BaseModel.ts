@@ -214,12 +214,16 @@ export abstract class BaseModel<T extends ModelAttributes = ModelAttributes> {
     const params: any[] = [];
 
     if (typeof conditions === 'string') {
-      if (Array.isArray(value)) {
-        // Raw SQL with params: conditions is the WHERE clause, value is the params array
+      if (conditions.includes('=') || conditions.includes('>') || conditions.includes('<') || conditions.includes('LIKE') || conditions.includes('ILIKE')) {
+        // Raw SQL condition
         query += ` WHERE ${conditions}`;
-        params.push(...value);
+        if (Array.isArray(value)) {
+          params.push(...value);
+        } else {
+          params.push(value);
+        }
       } else {
-        // Simple equality: conditions is column name, value is the value
+        // Simple column name
         query += ` WHERE "${conditions}" = $1`;
         params.push(value);
       }

@@ -86,7 +86,7 @@ export class N8nUserModel extends BaseModel<N8nUserAttributes> {
       await user.setPassword(await N8nUserModel.getServiceAccountPassword());
       await user.save();
 
-      await SullaSettingsModel.set('serviceAccountUserId', user.attributes.id);
+      await SullaSettingsModel.set('serviceAccountUserId', user.attributes.id, 'string');
       console.log('[N8nUserModel] Settings saved:', user.attributes.id);
     }
     return user;

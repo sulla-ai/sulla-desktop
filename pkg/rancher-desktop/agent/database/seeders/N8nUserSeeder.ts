@@ -33,7 +33,7 @@ async function initialize(): Promise<void> {
       await user.setPassword(await N8nUserModel.getServiceAccountPassword());
       await user.save();
 
-      await SullaSettingsModel.set('serviceAccountUserId', user.attributes.id);
+      await SullaSettingsModel.set('serviceAccountUserId', user.attributes.id, 'string');
       console.log('[N8nUserModel] Settings saved:', user.attributes.id);
   } else {
     user = await N8nUserModel.getOrCreateServiceAccount();
@@ -43,7 +43,7 @@ async function initialize(): Promise<void> {
   const apiKeyModel = await N8nUserApiKeyModel.getOrCreateServiceAccount(user.attributes.id);
 
   const serviceAccountApiKey = apiKeyModel.attributes.apiKey;
-  await SullaSettingsModel.set('serviceAccountApiKey', serviceAccountApiKey);
+  await SullaSettingsModel.set('serviceAccountApiKey', serviceAccountApiKey, 'string');
   
   console.log(`[N8nUserSeeder] Created N8N User with ID: ${user.attributes.id}`);
   console.log(`[N8nUserSeeder] Created N8N API key with ID: ${apiKeyModel.attributes.id}`);

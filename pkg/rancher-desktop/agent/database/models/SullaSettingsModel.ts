@@ -143,7 +143,7 @@ export class SullaSettingsModel extends BaseModel<SettingsAttributes> {
         console.log('SullaSettingsModel: no lock file to sync or error reading:', err);
       }
 
-      await this.setSetting('sullaInstalled', true);
+      await this.setSetting('sullaInstalled', true, 'boolean');
 
       // do not delete the fallback file. it acts as our installation lock file
       console.log('SullaSettingsModel: full bootstrap complete');
