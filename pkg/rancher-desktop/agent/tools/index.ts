@@ -2,6 +2,7 @@
 import { toolRegistry } from "./registry";
 
 // Import all your tools here (this is the only place you need to add new ones)
+// Meta category tools
 import { AddObservationalMemoryTool } from "./meta/add-observational-memory.tool";
 import { BrowseToolsTool } from "./meta/browse-tools.tool";
 import { CreatePlanTool } from "./meta/create-plan.tool";
@@ -10,283 +11,47 @@ import { RemoveObservationalMemoryTool } from "./meta/remove-observational-memor
 import { SetActionTool } from "./meta/set-action.tool";
 
 // Memory category tools
-import { ArticleCreateTool } from "./memory/article-create.tool";
 import { ArticleFindTool } from "./memory/article-find.tool";
+import { ArticleSearchTool } from "./memory/article-search.tool";
+import { ArticleListTool } from "./memory/article-list.tool";
+import { ArticleCreateTool } from "./memory/article-create.tool";
 import { ArticleUpdateTool } from "./memory/article-update.tool";
 import { ArticleDeleteTool } from "./memory/article-delete.tool";
-import { ArticleListTool } from "./memory/article-list.tool";
-import { ArticleSearchTool } from "./memory/article-search.tool";
-import { ArticleFindRelatedTool } from "./memory/article-find-related.tool";
-
-// Browser category tools
-import { BraveSearchTool } from "./browser/brave-search.tool";
-import { DuckDuckGoSearchTool } from "./browser/duckduckgo-search.tool";
-
-// Calendar category tools
-import { CalendarCreateTool } from "./calendar/calendar-create.tool";
-import { CalendarListTool } from "./calendar/calendar-list.tool";
-import { CalendarGetTool } from "./calendar/calendar-get.tool";
-import { CalendarUpdateTool } from "./calendar/calendar-update.tool";
-import { CalendarDeleteTool } from "./calendar/calendar-delete.tool";
-import { CalendarCancelTool } from "./calendar/calendar-cancel.tool";
-import { CalendarListUpcomingTool } from "./calendar/calendar-list-upcoming.tool";
-
-// GitHub category tools
-import { GitHubGetIssuesTool } from "./github/github-get-issues.tool";
-import { GitHubGetIssueTool } from "./github/github-get-issue.tool";
-import { GitHubCommentOnIssueTool } from "./github/github-comment-on-issue.tool";
-import { GitHubCreateFileTool } from "./github/github-create-file.tool";
-import { GitHubReadFileTool } from "./github/github-read-file.tool";
-import { GitHubListBranchesTool } from "./github/github-list-branches.tool";
-
-
-// Kubectl category tools
-import { KubectlGetTool } from "./kubectl/kubectl-get.tool";
-import { KubectlDescribeTool } from "./kubectl/kubectl-describe.tool";
-import { KubectlLogsTool } from "./kubectl/kubectl-logs.tool";
-import { KubectlApplyTool } from "./kubectl/kubectl-apply.tool";
-import { KubectlDeleteTool } from "./kubectl/kubectl-delete.tool";
-import { KubectlExecTool } from "./kubectl/kubectl-exec.tool";
-import { KubectlPortForwardTool } from "./kubectl/kubectl-port-forward.tool";
-
-// Lima category tools
-import { LimaListTool } from "./lima/lima-list.tool";
-import { LimaStartTool } from "./lima/lima-start.tool";
-import { LimaStopTool } from "./lima/lima-stop.tool";
-import { LimaDeleteTool } from "./lima/lima-delete.tool";
-import { LimaCreateTool } from "./lima/lima-create.tool";
-import { LimaShellTool } from "./lima/lima-shell.tool";
-
-// File system category tools
-import { FsLsTool } from "./fs/fs-ls.tool";
-import { FsCatTool } from "./fs/fs-cat.tool";
-import { FsPwdTool } from "./fs/fs-pwd.tool";
-import { FsStatTool } from "./fs/fs-stat.tool";
-import { FsDuTool } from "./fs/fs-du.tool";
-import { FsDfTool } from "./fs/fs-df.tool";
-import { FsHeadTool } from "./fs/fs-head.tool";
-import { FsTailTool } from "./fs/fs-tail.tool";
-import { FsFindTool } from "./fs/fs-find.tool";
-import { FsGrepTool } from "./fs/fs-grep.tool";
-
-// Networking category tools
-import { NetworkingPingTool } from "./networking/networking-ping.tool";
-import { NetworkingDigTool } from "./networking/networking-dig.tool";
-import { NetworkingIfconfigTool } from "./networking/networking-ifconfig.tool";
-
-// Docker category tools
-import { DockerPsTool } from "./docker/docker-ps.tool";
-import { DockerRunTool } from "./docker/docker-run.tool";
-import { DockerBuildTool } from "./docker/docker-build.tool";
-import { DockerPullTool } from "./docker/docker-pull.tool";
-import { DockerImagesTool } from "./docker/docker-images.tool";
-import { DockerLogsTool } from "./docker/docker-logs.tool";
-import { DockerExecTool } from "./docker/docker-exec.tool";
-import { DockerStopTool } from "./docker/docker-stop.tool";
-import { DockerRmTool } from "./docker/docker-rm.tool";
-
-// Slack category tools
-import { SlackSendTool } from "./slack/slack-send.tool";
-import { SlackUpdateTool } from "./slack/slack-update.tool";
-import { SlackReactTool } from "./slack/slack-react.tool";
-import { SlackUnreactTool } from "./slack/slack-unreact.tool";
-import { SlackJoinTool } from "./slack/slack-join.tool";
-import { SlackListTool } from "./slack/slack-list.tool";
-import { SlackHistoryTool } from "./slack/slack-history.tool";
-import { SlackThreadTool } from "./slack/slack-thread.tool";
-import { SlackUserTool } from "./slack/slack-user.tool";
+import { ArticleRelatedTool } from "./memory/article-related.tool";
 
 // Database category tools
-import { PgQueryTool } from "./pg/pg-query.tool";
-import { PgQueryOneTool } from "./pg/pg-queryone.tool";
-import { PgQueryAllTool } from "./pg/pg-queryall.tool";
-import { PgExecuteTool } from "./pg/pg-execute.tool";
-import { PgCountTool } from "./pg/pg-count.tool";
-import { PgTransactionTool } from "./pg/pg-transaction.tool";
+import { PostgresQueryTool } from "./postgres/postgres-query.tool";
+import { PostgresQueryOneTool } from "./postgres/postgres-queryone.tool";
+import { PostgresQueryAllTool } from "./postgres/postgres-queryall.tool";
+import { PostgresExecuteTool } from "./postgres/postgres-execute.tool";
+import { PostgresCountTool } from "./postgres/postgres-count.tool";
+import { PostgresTransactionTool } from "./postgres/postgres-transaction.tool";
 
-// Redis category tools
-import { RedisGetTool } from "./redis/redis-get.tool";
-import { RedisSetTool } from "./redis/redis-set.tool";
-import { RedisDelTool } from "./redis/redis-del.tool";
-import { RedisIncrTool } from "./redis/redis-incr.tool";
-import { RedisDecrTool } from "./redis/redis-decr.tool";
-import { RedisExpireTool } from "./redis/redis-expire.tool";
-import { RedisTtlTool } from "./redis/redis-ttl.tool";
-import { RedisHgetTool } from "./redis/redis-hget.tool";
-import { RedisHsetTool } from "./redis/redis-hset.tool";
-import { RedisHgetallTool } from "./redis/redis-hgetall.tool";
-import { RedisRpushTool } from "./redis/redis-rpush.tool";
-import { RedisLpopTool } from "./redis/redis-lpop.tool";
-
-// Rdctl category tools
-import { RdctlInfoTool } from "./rdctl/rdctl-info.tool";
-import { RdctlStartTool } from "./rdctl/rdctl-start.tool";
-import { RdctlShutdownTool } from "./rdctl/rdctl-shutdown.tool";
-import { RdctlShellTool } from "./rdctl/rdctl-shell.tool";
-import { RdctlSetTool } from "./rdctl/rdctl-set.tool";
-import { RdctlListSettingsTool } from "./rdctl/rdctl-list-settings.tool";
-import { RdctlResetTool } from "./rdctl/rdctl-reset.tool";
-import { RdctlSnapshotTool } from "./rdctl/rdctl-snapshot.tool";
-import { RdctlExtensionTool } from "./rdctl/rdctl-extension.tool";
-import { RdctlVersionTool } from "./rdctl/rdctl-version.tool";
-
-import { getIntegrationService } from '../services/IntegrationService';
-
-const getIntegrationId = (toolName: string): string | null => {
-  if (toolName.startsWith('github_')) return 'github';
-  if (toolName.startsWith('calendar_')) return 'google_calendar';
-  if (toolName.startsWith('brave_')) return 'brave_search';
-  if (toolName.startsWith('slack_')) return 'slack';
-  return null;
-};
-
-const registerFilteredTools = async () => {
-  const integrationService = getIntegrationService();
-
-  const toolClasses = [
-    // Meta
-    AddObservationalMemoryTool,
-    BrowseToolsTool,
-    CreatePlanTool,
-    InstallSkillTool,
-    RemoveObservationalMemoryTool,
-    SetActionTool,
-    // Memory
-    ArticleCreateTool,
-    ArticleFindTool,
-    ArticleUpdateTool,
-    ArticleDeleteTool,
-    ArticleListTool,
-    ArticleSearchTool,
-    ArticleFindRelatedTool,
-    // Browser
-    BraveSearchTool,
-    DuckDuckGoSearchTool,
-    // Calendar
-    CalendarCreateTool,
-    CalendarListTool,
-    CalendarGetTool,
-    CalendarUpdateTool,
-    CalendarDeleteTool,
-    CalendarCancelTool,
-    CalendarListUpcomingTool,
-    // GitHub
-    GitHubGetIssuesTool,
-    GitHubGetIssueTool,
-    GitHubCommentOnIssueTool,
-    GitHubCreateFileTool,
-    GitHubReadFileTool,
-    GitHubListBranchesTool,
-    // Kubectl
-    KubectlGetTool,
-    KubectlDescribeTool,
-    KubectlLogsTool,
-    KubectlApplyTool,
-    KubectlDeleteTool,
-    KubectlExecTool,
-    KubectlPortForwardTool,
-    // Lima
-    LimaListTool,
-    LimaStartTool,
-    LimaStopTool,
-    LimaDeleteTool,
-    LimaCreateTool,
-    LimaShellTool,
-    // File system
-    FsLsTool,
-    FsCatTool,
-    FsPwdTool,
-    FsStatTool,
-    FsDuTool,
-    FsDfTool,
-    FsHeadTool,
-    FsTailTool,
-    FsFindTool,
-    FsGrepTool,
-    // Networking
-    NetworkingPingTool,
-    NetworkingDigTool,
-    NetworkingIfconfigTool,
-    // Docker
-    DockerPsTool,
-    DockerRunTool,
-    DockerBuildTool,
-    DockerPullTool,
-    DockerImagesTool,
-    DockerLogsTool,
-    DockerExecTool,
-    DockerStopTool,
-    DockerRmTool,
-    // Slack
-    SlackSendTool,
-    SlackUpdateTool,
-    SlackReactTool,
-    SlackUnreactTool,
-    SlackJoinTool,
-    SlackListTool,
-    SlackHistoryTool,
-    SlackThreadTool,
-    SlackUserTool,
-    // Database
-    PgQueryTool,
-    PgQueryOneTool,
-    PgQueryAllTool,
-    PgExecuteTool,
-    PgCountTool,
-    PgTransactionTool,
-    // Redis
-    RedisGetTool,
-    RedisSetTool,
-    RedisDelTool,
-    RedisIncrTool,
-    RedisDecrTool,
-    RedisExpireTool,
-    RedisTtlTool,
-    RedisHgetTool,
-    RedisHsetTool,
-    RedisHgetallTool,
-    RedisRpushTool,
-    RedisLpopTool,
-    // Rdctl
-    RdctlInfoTool,
-    RdctlStartTool,
-    RdctlShutdownTool,
-    RdctlShellTool,
-    RdctlSetTool,
-    RdctlListSettingsTool,
-    RdctlResetTool,
-    RdctlSnapshotTool,
-    RdctlExtensionTool,
-    RdctlVersionTool,
-  ];
-
-  const filteredTools = [];
-
-  for (const ToolClass of toolClasses) {
-    const toolInstance = new ToolClass();
-    const integrationId = getIntegrationId(toolInstance.name);
-    let shouldRegister = true;
-
-    if (integrationId) {
-      try {
-        const isConnected = await integrationService.getConnectionStatus(integrationId);
-        // Assuming IntegrationConnectionStatus has a 'connected' boolean property
-        shouldRegister = (isConnected as any).connected || Boolean(isConnected);
-      } catch (error) {
-        console.error(`Error checking connection for ${integrationId}:`, error);
-        shouldRegister = false;
-      }
-    }
-
-    if (shouldRegister) {
-      filteredTools.push(toolInstance);
-    }
-  }
-
-  toolRegistry.registerMany(filteredTools);
-};
-
-registerFilteredTools();
+// Register everything
+toolRegistry.registerMany([
+  new AddObservationalMemoryTool(),
+  new BrowseToolsTool(),
+  new CreatePlanTool(),
+  new InstallSkillTool(),
+  new RemoveObservationalMemoryTool(),
+  new SetActionTool(),
+  // Memory category tools
+  new ArticleFindTool(),
+  new ArticleSearchTool(),
+  new ArticleListTool(),
+  new ArticleCreateTool(),
+  new ArticleUpdateTool(),
+  new ArticleDeleteTool(),
+  new ArticleRelatedTool(),
+  // Database
+  new PostgresQueryTool,
+  new PostgresQueryOneTool,
+  new PostgresQueryAllTool,
+  new PostgresExecuteTool,
+  new PostgresCountTool,
+  new PostgresTransactionTool,
+  // ... add more
+]);
 
 // Export everything you need in the rest of your app
 export const tools = toolRegistry.getLLMTools();
