@@ -53,6 +53,34 @@ import { GmailSearchTool } from "./gmail/gmail-search.tool";
 import { GmailGetMessageTool } from "./gmail/gmail-get-message.tool";
 import { GmailGetThreadTool } from "./gmail/gmail-get-thread.tool";
 
+// Kubectl category tools
+import { KubectlGetTool } from "./kubectl/kubectl-get.tool";
+import { KubectlDescribeTool } from "./kubectl/kubectl-describe.tool";
+import { KubectlLogsTool } from "./kubectl/kubectl-logs.tool";
+import { KubectlApplyTool } from "./kubectl/kubectl-apply.tool";
+import { KubectlDeleteTool } from "./kubectl/kubectl-delete.tool";
+import { KubectlExecTool } from "./kubectl/kubectl-exec.tool";
+import { KubectlPortForwardTool } from "./kubectl/kubectl-port-forward.tool";
+
+// Lima category tools
+import { LimaListTool } from "./lima/lima-list.tool";
+import { LimaStartTool } from "./lima/lima-start.tool";
+import { LimaStopTool } from "./lima/lima-stop.tool";
+import { LimaDeleteTool } from "./lima/lima-delete.tool";
+import { LimaCreateTool } from "./lima/lima-create.tool";
+import { LimaShellTool } from "./lima/lima-shell.tool";
+
+// Slack category tools
+import { SlackSendTool } from "./slack/slack-send.tool";
+import { SlackUpdateTool } from "./slack/slack-update.tool";
+import { SlackReactTool } from "./slack/slack-react.tool";
+import { SlackUnreactTool } from "./slack/slack-unreact.tool";
+import { SlackJoinTool } from "./slack/slack-join.tool";
+import { SlackListTool } from "./slack/slack-list.tool";
+import { SlackHistoryTool } from "./slack/slack-history.tool";
+import { SlackThreadTool } from "./slack/slack-thread.tool";
+import { SlackUserTool } from "./slack/slack-user.tool";
+
 import { getIntegrationService } from '../services/IntegrationService';
 
 const getIntegrationId = (toolName: string): string | null => {
@@ -61,6 +89,7 @@ const getIntegrationId = (toolName: string): string | null => {
   if (toolName.startsWith('gmail_')) return 'gmail';
   if (toolName.startsWith('calendar_')) return 'google_calendar';
   if (toolName.startsWith('brave_')) return 'brave_search';
+  if (toolName.startsWith('slack_')) return 'slack';
   return null;
 };
 
@@ -113,6 +142,31 @@ const registerFilteredTools = async () => {
     GmailSearchTool,
     GmailGetMessageTool,
     GmailGetThreadTool,
+    // Kubectl
+    KubectlGetTool,
+    KubectlDescribeTool,
+    KubectlLogsTool,
+    KubectlApplyTool,
+    KubectlDeleteTool,
+    KubectlExecTool,
+    KubectlPortForwardTool,
+    // Lima
+    LimaListTool,
+    LimaStartTool,
+    LimaStopTool,
+    LimaDeleteTool,
+    LimaCreateTool,
+    LimaShellTool,
+    // Slack
+    SlackSendTool,
+    SlackUpdateTool,
+    SlackReactTool,
+    SlackUnreactTool,
+    SlackJoinTool,
+    SlackListTool,
+    SlackHistoryTool,
+    SlackThreadTool,
+    SlackUserTool,
   ];
 
   const filteredTools = [];
