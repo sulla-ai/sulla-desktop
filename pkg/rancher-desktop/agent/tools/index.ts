@@ -87,6 +87,17 @@ import { NetworkingPingTool } from "./networking/networking-ping.tool";
 import { NetworkingDigTool } from "./networking/networking-dig.tool";
 import { NetworkingIfconfigTool } from "./networking/networking-ifconfig.tool";
 
+// Docker category tools
+import { DockerPsTool } from "./docker/docker-ps.tool";
+import { DockerRunTool } from "./docker/docker-run.tool";
+import { DockerBuildTool } from "./docker/docker-build.tool";
+import { DockerPullTool } from "./docker/docker-pull.tool";
+import { DockerImagesTool } from "./docker/docker-images.tool";
+import { DockerLogsTool } from "./docker/docker-logs.tool";
+import { DockerExecTool } from "./docker/docker-exec.tool";
+import { DockerStopTool } from "./docker/docker-stop.tool";
+import { DockerRmTool } from "./docker/docker-rm.tool";
+
 // Slack category tools
 import { SlackSendTool } from "./slack/slack-send.tool";
 import { SlackUpdateTool } from "./slack/slack-update.tool";
@@ -223,6 +234,16 @@ const registerFilteredTools = async () => {
     NetworkingPingTool,
     NetworkingDigTool,
     NetworkingIfconfigTool,
+    // Docker
+    DockerPsTool,
+    DockerRunTool,
+    DockerBuildTool,
+    DockerPullTool,
+    DockerImagesTool,
+    DockerLogsTool,
+    DockerExecTool,
+    DockerStopTool,
+    DockerRmTool,
     // Slack
     SlackSendTool,
     SlackUpdateTool,
