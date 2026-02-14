@@ -1,7 +1,5 @@
 import { getToolRegistry } from './ToolRegistry';
-import { RdctlTool } from './RdctlTool';
 import { ExecTool } from './ExecTool';
-import { RedisTool } from './RedisTool';
 import { ToolListTool } from './ToolListTool';
 import { EmitChatImageTool } from './EmitChatImageTool';
 
@@ -20,9 +18,7 @@ export function registerDefaultTools(): void {
     }
   };
 
-  ensure(new RdctlTool());
   ensure(new ExecTool());
-  ensure(new RedisTool());
   ensure(new ToolListTool());
   ensure(new EmitChatImageTool());
   registered = true;
@@ -31,7 +27,5 @@ export function registerDefaultTools(): void {
 export { getToolRegistry } from './ToolRegistry';
 export { BaseTool } from './BaseTool';
 export { ExecTool } from './ExecTool';
-export { RedisTool } from './RedisTool';
-export { RdctlTool } from './RdctlTool';
 export { ToolListTool } from './ToolListTool';
 export { EmitChatImageTool } from './EmitChatImageTool';

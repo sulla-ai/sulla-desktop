@@ -103,6 +103,18 @@ import { RedisHgetallTool } from "./redis/redis-hgetall.tool";
 import { RedisRpushTool } from "./redis/redis-rpush.tool";
 import { RedisLpopTool } from "./redis/redis-lpop.tool";
 
+// Rdctl category tools
+import { RdctlInfoTool } from "./rdctl/rdctl-info.tool";
+import { RdctlStartTool } from "./rdctl/rdctl-start.tool";
+import { RdctlShutdownTool } from "./rdctl/rdctl-shutdown.tool";
+import { RdctlShellTool } from "./rdctl/rdctl-shell.tool";
+import { RdctlSetTool } from "./rdctl/rdctl-set.tool";
+import { RdctlListSettingsTool } from "./rdctl/rdctl-list-settings.tool";
+import { RdctlResetTool } from "./rdctl/rdctl-reset.tool";
+import { RdctlSnapshotTool } from "./rdctl/rdctl-snapshot.tool";
+import { RdctlExtensionTool } from "./rdctl/rdctl-extension.tool";
+import { RdctlVersionTool } from "./rdctl/rdctl-version.tool";
+
 import { getIntegrationService } from '../services/IntegrationService';
 
 const getIntegrationId = (toolName: string): string | null => {
@@ -209,6 +221,17 @@ const registerFilteredTools = async () => {
     RedisHgetallTool,
     RedisRpushTool,
     RedisLpopTool,
+    // Rdctl
+    RdctlInfoTool,
+    RdctlStartTool,
+    RdctlShutdownTool,
+    RdctlShellTool,
+    RdctlSetTool,
+    RdctlListSettingsTool,
+    RdctlResetTool,
+    RdctlSnapshotTool,
+    RdctlExtensionTool,
+    RdctlVersionTool,
   ];
 
   const filteredTools = [];
