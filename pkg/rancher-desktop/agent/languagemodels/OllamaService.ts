@@ -91,6 +91,30 @@ export class OllamaService extends BaseLanguageModel {
    * @override
    */
   protected async sendRawRequest(messages: ChatMessage[], options: any): Promise<any> {
+    const body = this.buildRequestBody(messages, options);
+    console.log('[OllamaService] Sending request to Ollama:', body);
+    
+    const res = await fetch(`${this.baseUrl}/api/chat`, this.buildFetchOptions(body, options.signal));
+    console.log('[OllamaService] Response from Ollama:', res);
+
+    if (!res.ok) {
+      throw new Error(`Ollama chat failed: ${res.status} ${res.statusText}`);
+    }
+
+    const responseText = await res.text();
+    console.log('[OllamaService] Raw response text:', responseText);
+    
+    try {
+      return JSON.parse(responseText);
+    } catch (e) {
+      throw new Error(`Failed to parse Ollama response as JSON: ${e}`);
+    }
+  }
+
+  /**
+   * Build the request body for Ollama /api/chat
+   */
+  private buildRequestBody(messages: ChatMessage[], options: any): Record<string, any> {
     const body: Record<string, any> = {
       model: options.model ?? this.model,
       messages,
@@ -106,16 +130,22 @@ export class OllamaService extends BaseLanguageModel {
       body.options = { ...(body.options ?? {}), num_predict: options.maxTokens };
     }
 
+    // Add tools when provided (Ollama supports OpenAI-compatible tool format)
+    if (options.tools?.length) {
+      body.tools = options.tools.map((tool: any) => ({
+        type: "function",
+        function: {
+          name: tool.name,
+          description: tool.description,
+          parameters: tool.schema ? tool.schema.shape : tool.function?.parameters,
+        }
+      }));
+    }
+
     // Force GPU usage for all layers if possible
     body.options = { ...(body.options ?? {}), num_gpu: 999, num_thread: 1 };
 
-    const res = await fetch(`${this.baseUrl}/api/chat`, this.buildFetchOptions(body, options.signal));
-
-    if (!res.ok) {
-      throw new Error(`Ollama chat failed: ${res.status} ${res.statusText}`);
-    }
-
-    return res.json();
+    return body;
   }
 
   /**
@@ -124,11 +154,63 @@ export class OllamaService extends BaseLanguageModel {
    */
   protected normalizeResponse(raw: any): NormalizedResponse {
     let content = raw?.message?.content ?? '';
+    let reasoning = '';
+    let toolCalls: Array<{ id?: string; name: string; args: any }> = [];
+
     let promptTokens = raw?.prompt_eval_count ?? 0;
     let completionTokens = raw?.eval_count ?? 0;
-
     const durationNs = raw?.total_duration ?? raw?.eval_duration ?? 0;
     const timeMs = Math.round(durationNs / 1_000_000);
+
+    // Ollama doesn't have finish_reason in the same way, but we can infer
+    let finishReason: string | undefined;
+    if (raw.done) {
+      finishReason = 'stop';
+    }
+
+    // Attempt to parse content as JSON for structured data
+    const parsedContent = this.parseJson(content);
+    
+    if (parsedContent && typeof parsedContent === 'object') {
+      // Extract reasoning if present
+      if (parsedContent.reasoning && typeof parsedContent.reasoning === 'string' && !reasoning) {
+        reasoning = parsedContent.reasoning;
+      }
+      
+      // Extract tool_calls if present
+      if (parsedContent.tool_calls && Array.isArray(parsedContent.tool_calls)) {
+        const extractedToolCalls = parsedContent.tool_calls.map((tc: any) => ({
+          id: tc.id,
+          name: tc.function?.name || tc.name,
+          args: tc.function?.arguments ? (() => {
+            try {
+              return typeof tc.function.arguments === 'string' 
+                ? JSON.parse(tc.function.arguments) 
+                : tc.function.arguments;
+            } catch {
+              return tc.function.arguments || {};
+            }
+          })() : tc.args || {},
+        }));
+        toolCalls.push(...extractedToolCalls);
+      }
+      
+      // Set content to the main message/response field
+      const { reasoning: _, tool_calls: __, content: mainContent, message, answer, response, ...remaining } = parsedContent;
+      if (mainContent && typeof mainContent === 'string') {
+        content = mainContent;
+      } else if (message && typeof message === 'string') {
+        content = message;
+      } else if (answer && typeof answer === 'string') {
+        content = answer;
+      } else if (response && typeof response === 'string') {
+        content = response;
+      } else if (Object.keys(remaining).length > 0) {
+        content = JSON.stringify(remaining);
+      } else {
+        content = JSON.stringify(parsedContent);
+      }
+    }
 
     return {
       content: content.trim(),
@@ -138,6 +220,10 @@ export class OllamaService extends BaseLanguageModel {
         prompt_tokens: promptTokens,
         completion_tokens: completionTokens,
         model: raw?.model,
+        tool_calls: toolCalls.length > 0 ? toolCalls : undefined,
+        finish_reason: this.normalizeFinishReason(finishReason),
+        reasoning: reasoning.trim() || undefined,
+        parsed_content: parsedContent,
       },
     };
   }

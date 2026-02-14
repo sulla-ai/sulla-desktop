@@ -1,46 +1,73 @@
 // src/tools/registry.ts
 import { BaseTool } from "./base";
-import type { StructuredTool } from "@langchain/core/tools";
+import { zodToJsonSchema } from "zod-to-json-schema";
 
-/**
- * Central registry — this is the single source of truth.
- * We keep both a flat list (for passing to LLM) and categories (for browsing).
- */
 export class ToolRegistry {
   private tools: BaseTool[] = [];
   private categories = new Map<string, BaseTool[]>();
 
   register(tool: BaseTool) {
     this.tools.push(tool);
-
     const cat = tool.metadata.category;
-    if (!this.categories.has(cat)) {
-      this.categories.set(cat, []);
-    }
+    if (!this.categories.has(cat)) this.categories.set(cat, []);
     this.categories.get(cat)!.push(tool);
   }
 
   registerMany(tools: BaseTool[]) {
-    tools.forEach((t) => this.register(t));
+    tools.forEach(t => this.register(t));
   }
 
-  getAllTools(): StructuredTool[] {
+  // THIS IS THE ONE YOU MUST USE FOR THE LLM
+  getLLMTools(): any[] {
+    return this.tools.map(tool => {
+      let jsonSchema = zodToJsonSchema(tool.schema, {
+        target: "jsonSchema7",      // better for tool calling than openApi3
+        $refStrategy: "none",
+        dateStrategy: "string",
+        pipeStrategy: "all",
+      }) as any;
+
+      // Brutal cleanup — kill everything that breaks models
+      delete jsonSchema.$schema;
+      delete jsonSchema.additionalProperties;
+      delete jsonSchema.definitions;
+      delete jsonSchema.$defs;
+
+      if (jsonSchema.properties) {
+        Object.values(jsonSchema.properties).forEach((p: any) => {
+          delete p.format;
+          if (p.default === null) delete p.default;
+          delete p.$schema;
+        });
+      }
+
+      return {
+        type: "function",
+        function: {
+          name: tool.name,
+          description: tool.description,
+          parameters: jsonSchema,
+        },
+      };
+    });
+  }
+
+  // Legacy (don't use this anymore for the LLM)
+  getAllTools() {
     return this.tools;
   }
 
-  getToolsByCategory(category: string): StructuredTool[] {
+  getToolsByCategory(category: string) {
     return this.categories.get(category) || [];
   }
 
-  getCategories(): string[] {
+  getCategories() {
     return Array.from(this.categories.keys());
   }
 
-  // For dynamic loading later (install_skill)
   addTool(tool: BaseTool) {
     this.register(tool);
   }
 }
 
-// Singleton instance
 export const toolRegistry = new ToolRegistry();

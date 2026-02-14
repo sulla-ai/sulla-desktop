@@ -121,7 +121,7 @@ export class RemoteModelService extends BaseLanguageModel {
         function: {
           name: tool.name,
           description: tool.description,
-          parameters: tool.schema.shape, // Zod schema → JSON schema
+          parameters: tool.schema ? tool.schema.shape : tool.function?.parameters,
         }
       }));
     }
@@ -143,7 +143,7 @@ export class RemoteModelService extends BaseLanguageModel {
         anthropicBody.tools = options.tools.map((tool: any) => ({
           name: tool.name,
           description: tool.description,
-          input_schema: tool.schema.shape, // Anthropic uses input_schema
+          input_schema: tool.schema ? tool.schema.shape : tool.function?.parameters,
         }));
       }
 

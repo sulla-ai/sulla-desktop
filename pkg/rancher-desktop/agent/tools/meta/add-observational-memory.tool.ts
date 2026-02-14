@@ -58,7 +58,7 @@ export class AddObservationalMemoryTool extends BaseTool {
     });
 
     // Save back to settings
-    await SullaSettingsModel.set('observationalMemory', memoryArray);
+    await SullaSettingsModel.set('observationalMemory', memoryArray, 'json');
 
     return { success: true, stored: input.content };
   }

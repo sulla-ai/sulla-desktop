@@ -27,6 +27,9 @@ const OLLAMA_MODELS = [
     name: 'qwen2:0.5b', displayName: 'Qwen2 0.5B', size: '377MB', minMemoryGB: 1, minCPUs: 1, description: 'Alibaba\'s compact Qwen2 model, very lightweight',
   },
   {
+    name: 'qwen3:0.6b', displayName: 'Qwen3 ASR 0.6B', size: '400MB', minMemoryGB: 1, minCPUs: 1, description: 'Alibaba\'s Qwen3 ASR model, optimized for speech recognition tasks',
+  },
+  {
     name: 'qwen2:1.5b', displayName: 'Qwen2 1.5B', size: '934MB', minMemoryGB: 2, minCPUs: 2, description: 'Alibaba\'s Qwen2 model, efficient for basic tasks',
   },
   {
