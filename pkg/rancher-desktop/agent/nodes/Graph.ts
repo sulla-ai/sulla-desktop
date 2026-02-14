@@ -813,11 +813,6 @@ export function createHierarchicalGraph(): Graph<HierarchicalThreadState> {
     const hasPlan = !!state.metadata.plan?.model;
     const hasMilestones = !!state.metadata.plan?.milestones?.length;
 
-    // If we had tool calls but no user message, need more planning
-    if (!state.metadata.hadUserMessages && state.metadata.hadToolCalls) {
-      return 'strategic_planner';
-    }
-
     if (!hasPlan || !hasMilestones) {
       return 'strategic_planner';
     }

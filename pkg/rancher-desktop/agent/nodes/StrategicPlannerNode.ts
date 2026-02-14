@@ -79,10 +79,11 @@ export class StrategicPlannerNode extends BaseNode {
       enriched
     );
 
-    if (state.metadata.action === 'use_tools') {
+    // If we had tool calls but no user message, need more planning
+    if (!state.metadata.hadUserMessages && state.metadata.hadToolCalls) {
       return { state, decision: { type: 'continue' } };
     }
-    
+
     if (state.metadata.reasoning) {
       await this.wsChatMessage(state, state.metadata.reasoning);
     }

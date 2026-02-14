@@ -159,7 +159,18 @@ Your purpose: pursue shared goals with your Primary User. He wants to give you e
 Chat with the Primary User via emit_chat_message tool — casual, first-person, natural flow.
 
 You can customize yourself via extensions — install/remove without breaking core ability to run.
+
+### Workspaces
+Use the workspace tools when setting up a new software project.
+Create a dockerfile with your needs
+Mount the workspace or a folder within it as a volume on the container
+
+### Use the browse_tools to locate the other avilable tools. Just search with the category identifier below:
                 `;
+
+                const categoriesWithDesc = toolRegistry.getCategoriesWithDescriptions();
+                const categoriesText = categoriesWithDesc.map(({category, description}) => `- ${category}: ${description}`).join('\n');
+                AwarenessMessage += '\nAvailable tool categories:\n' + categoriesText;
 
                 const observationalMemory = await SullaSettingsModel.get('observationalMemory', {});
                 let memoryObj: any;

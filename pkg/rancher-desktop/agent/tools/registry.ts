@@ -9,7 +9,19 @@ export class ToolRegistry {
   private instances = new Map<string, BaseTool>();         // cache instantiated tools
   private categories = new Map<string, string[]>();        // category → [tool names]
   private loadedCategories = new Set<string>();
-  private categoriesList = ['meta', 'memory', 'browser', 'calendar', 'docker', 'fs', 'github', 'kubectl', 'slack'];
+  private categoriesList = ['meta', 'memory', 'browser', 'calendar', 'docker', 'fs', 'github', 'kubectl', 'slack', 'workspace'];
+  private categoryDescriptions: Record<string, string> = {
+    meta: "Tools for browsing available tools, installing skills, and meta management.",
+    memory: "Tools for finding and managing memory articles.",
+    browser: "Web search tools like Brave and DuckDuckGo.",
+    calendar: "Tools for managing calendar events.",
+    docker: "Tools for Docker container management.",
+    fs: "File system operations tools.",
+    github: "GitHub repository management tools.",
+    kubectl: "Kubernetes cluster management tools.",
+    slack: "Slack messaging and reaction tools.",
+    workspace: "Tools for managing isolated workspaces in the Lima VM."
+  };
 
   private async loadCategory(category: string) {
     if (this.loadedCategories.has(category) || !this.categoriesList.includes(category)) return;
@@ -183,6 +195,10 @@ export class ToolRegistry {
 
   getCategories(): string[] {
     return this.categoriesList;
+  }
+
+  getCategoriesWithDescriptions(): {category: string, description: string}[] {
+    return this.categoriesList.map(cat => ({ category: cat, description: this.categoryDescriptions[cat] || 'No description available.' }));
   }
 
   // Optional: clear cache if memory pressure is detected
