@@ -4,9 +4,7 @@ import type { WebSocketMessageHandler } from '../services/WebSocketClientService
 import { getCurrentMode, getLocalService, getService } from '../languagemodels';
 import { parseJson } from '../services/JsonParseService';
 import { getWebSocketClientService } from '../services/WebSocketClientService';
-import { getToolRegistry } from '../tools/old/index';
 import { SullaSettingsModel } from '../database/models/SullaSettingsModel';
-import { AgentAwareness } from '../database/models/AgentAwareness';
 import { BaseLanguageModel, ChatMessage, NormalizedResponse } from '../languagemodels/BaseLanguageModel';
 import { abortIfSignalReceived, throwIfAborted } from '../services/AbortService';
 import { tools, toolRegistry } from '../tools';
@@ -959,17 +957,6 @@ Default: **do not call** unless trigger is unambiguously met.
             ? `Tool ${action} succeeded`
             : `Tool ${action} failed: ${result.error || 'unknown error'}`;
 
-        let toolHelpInfo = null;
-        if (!result.success) {
-            try {
-                const { getToolRegistry, registerDefaultTools } = await import('../tools/old/index');
-                registerDefaultTools();
-                const registry = getToolRegistry();
-                const tool = registry.get(action);
-                if (tool) toolHelpInfo = tool.getPlanningInstructions();
-            } catch { }
-        }
-
         const content = JSON.stringify(
             {
                 tool: action,
@@ -978,7 +965,6 @@ Default: **do not call** unless trigger is unambiguously met.
                 result: result.result && JSON.stringify(result.result).length < 5000
                     ? result.result
                     : '[truncated — see logs]',
-                helpInfo: toolHelpInfo,
                 toolCallId: result.toolCallId
             },
             null,
