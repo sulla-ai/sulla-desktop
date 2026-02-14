@@ -13,14 +13,14 @@ export class NetworkingIfconfigTool extends BaseTool {
   metadata = { category: "networking" };
 
   protected async _call(input: z.infer<this["schema"]>) {
-    const { interface, options } = input;
+    const { interface: iface, options } = input;
 
     const args = [];
     if (options) {
       args.push(...options.split(' '));
     }
-    if (interface) {
-      args.push(interface);
+    if (iface) {
+      args.push(iface);
     }
 
     try {

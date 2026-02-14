@@ -7,7 +7,6 @@ import { App, LogLevel } from '@slack/bolt';
 import type { AllMiddlewareArgs, SlackEventMiddlewareArgs } from '@slack/bolt';
 import type { ChatPostMessageResponse } from '@slack/web-api';
 import type { WebAPICallResult } from '@slack/web-api';
-import { SlackTool } from './SlackTool';
 import {
   WebSocketClientService,
   type WebSocketMessage,
@@ -19,9 +18,6 @@ import {
 } from '../../services/IntegrationService';
 import { incomingMessage } from './prompts/incoming_message';
 
-function getSlackInstructions(): string {
-  return new SlackTool().getPlanningInstructions();
-}
 
 const INTEGRATION_ID = 'slack';
 const TOKEN_PROPERTY = 'bot_token';
@@ -170,7 +166,7 @@ export class SlackClient {
         const factsText = facts.map(fact => `- ${fact}`).join('\n');
         
         // Create the complete message with facts + prompt
-        const fullMessage = `${factsText}\n\n${incomingMessage}\n\n${getSlackInstructions()}`;
+        const fullMessage = `${factsText}\n\n${incomingMessage}`;
         
         WS_SERVICE.send(SLACK_EVENTS_CHANNEL, {
           type: 'user_message',
