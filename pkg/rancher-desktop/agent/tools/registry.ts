@@ -8,6 +8,18 @@ export class ToolRegistry {
   private loaders = new Map<string, ToolLoader>();         // name → async factory
   private instances = new Map<string, BaseTool>();         // cache instantiated tools
   private categories = new Map<string, string[]>();        // category → [tool names]
+  private loadedCategories = new Set<string>();
+  private categoriesList = ['meta', 'memory', 'browser', 'calendar', 'docker', 'fs', 'github', 'kubectl', 'slack'];
+
+  private async loadCategory(category: string) {
+    if (this.loadedCategories.has(category) || !this.categoriesList.includes(category)) return;
+    try {
+      await import(`./${category}/index.ts`);
+      this.loadedCategories.add(category);
+    } catch (e) {
+      console.warn(`Failed to load category ${category}:`, e);
+    }
+  }
 
   /**
    * Register a lazy-loaded tool
@@ -68,6 +80,7 @@ export class ToolRegistry {
    * Get all tools in a category (loads them lazily)
    */
   async getToolsByCategory(category: string): Promise<BaseTool[]> {
+    await this.loadCategory(category);
     const names = this.categories.get(category) || [];
     return Promise.all(names.map(name => this.getTool(name)));
   }
@@ -116,6 +129,7 @@ export class ToolRegistry {
    */
   getLLMToolsForCategory(category: string): () => Promise<any[]> {
     return async () => {
+      await this.loadCategory(category);
       const names = this.categories.get(category) || [];
       return Promise.all(names.map(name => this.convertToLLM(name)));
     };
@@ -139,9 +153,16 @@ export class ToolRegistry {
   }
 
   /**
-   * Search tools by name/description (loads them lazily)
+   * Search tools by name/description (loads category if specified)
    */
   async searchTools(query?: string, category?: string): Promise<BaseTool[]> {
+    if (category) {
+      await this.loadCategory(category);
+    } else {
+      // Avoid loading all categories to prevent heap issues
+      return [];
+    }
+
     let names: string[] = [];
 
     if (category) {
@@ -161,7 +182,7 @@ export class ToolRegistry {
   }
 
   getCategories(): string[] {
-    return Array.from(this.categories.keys());
+    return this.categoriesList;
   }
 
   // Optional: clear cache if memory pressure is detected
