@@ -3,7 +3,7 @@ import { z } from "zod";
 import { runCommand } from "../util/CommandRunner";
 
 export class RdctlListSettingsTool extends BaseTool {
-  name = "rdctl_list_settings";
+  name = "sullactl_list_settings";
   description = "Lists the current settings.";
   schema = z.object({});
 

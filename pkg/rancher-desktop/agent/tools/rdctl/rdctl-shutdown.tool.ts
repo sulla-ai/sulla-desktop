@@ -3,7 +3,7 @@ import { z } from "zod";
 import { runCommand } from "../util/CommandRunner";
 
 export class RdctlShutdownTool extends BaseTool {
-  name = "rdctl_shutdown";
+  name = "sullactl_shutdown";
   description = "Shuts down the running Sulla Desktop application.";
   schema = z.object({});
 

@@ -3,7 +3,7 @@ import { z } from "zod";
 import { runCommand } from "../util/CommandRunner";
 
 export class RdctlInfoTool extends BaseTool {
-  name = "rdctl_info";
+  name = "sullactl_info";
   description = "Return information about Sulla Desktop.";
   schema = z.object({});
 

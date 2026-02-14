@@ -3,7 +3,7 @@ import { z } from "zod";
 import { runCommand } from "../util/CommandRunner";
 
 export class RdctlResetTool extends BaseTool {
-  name = "rdctl_reset";
+  name = "sullactl_reset";
   description = "Reset Sulla Desktop.";
   schema = z.object({});
 

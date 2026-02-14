@@ -3,7 +3,7 @@ import { z } from "zod";
 import { runCommand } from "../util/CommandRunner";
 
 export class RdctlStartTool extends BaseTool {
-  name = "rdctl_start";
+  name = "sullactl_start";
   description = "Start up Sulla Desktop, or update its settings.";
   schema = z.object({});
 

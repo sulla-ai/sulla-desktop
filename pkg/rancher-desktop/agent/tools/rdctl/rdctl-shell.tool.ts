@@ -3,7 +3,7 @@ import { z } from "zod";
 import { runCommand } from "../util/CommandRunner";
 
 export class RdctlShellTool extends BaseTool {
-  name = "rdctl_shell";
+  name = "sullactl_shell";
   description = "Run an interactive shell or a command in a Sulla Desktop-managed VM.";
   schema = z.object({
     command: z.string().optional().describe("Command to execute in the VM shell"),

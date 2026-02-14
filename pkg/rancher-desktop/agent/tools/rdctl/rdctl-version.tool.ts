@@ -3,7 +3,7 @@ import { z } from "zod";
 import { runCommand } from "../util/CommandRunner";
 
 export class RdctlVersionTool extends BaseTool {
-  name = "rdctl_version";
+  name = "sullactl_version";
   description = "Shows the CLI version.";
   schema = z.object({});
 

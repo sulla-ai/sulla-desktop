@@ -3,7 +3,7 @@ import { z } from "zod";
 import { runCommand } from "../util/CommandRunner";
 
 export class RdctlExtensionTool extends BaseTool {
-  name = "rdctl_extension";
+  name = "sullactl_extension";
   description = "Manage extensions.";
   schema = z.object({
     subcommand: z.string().describe("Extension subcommand, e.g., install, uninstall, list"),

@@ -3,7 +3,7 @@ import { z } from "zod";
 import { runCommand } from "../util/CommandRunner";
 
 export class RdctlSnapshotTool extends BaseTool {
-  name = "rdctl_snapshot";
+  name = "sullactl_snapshot";
   description = "Manage Sulla Desktop snapshots.";
   schema = z.object({
     subcommand: z.string().describe("Snapshot subcommand, e.g., list, create, delete"),

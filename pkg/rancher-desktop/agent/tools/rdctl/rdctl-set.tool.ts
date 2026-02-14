@@ -3,7 +3,7 @@ import { z } from "zod";
 import { runCommand } from "../util/CommandRunner";
 
 export class RdctlSetTool extends BaseTool {
-  name = "rdctl_set";
+  name = "sullactl_set";
   description = "Update selected fields in the Rancher Desktop UI and restart the backend.";
   schema = z.object({
     field: z.string().describe("The field to update"),
