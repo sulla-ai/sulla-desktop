@@ -70,6 +70,23 @@ import { LimaDeleteTool } from "./lima/lima-delete.tool";
 import { LimaCreateTool } from "./lima/lima-create.tool";
 import { LimaShellTool } from "./lima/lima-shell.tool";
 
+// File system category tools
+import { FsLsTool } from "./fs/fs-ls.tool";
+import { FsCatTool } from "./fs/fs-cat.tool";
+import { FsPwdTool } from "./fs/fs-pwd.tool";
+import { FsStatTool } from "./fs/fs-stat.tool";
+import { FsDuTool } from "./fs/fs-du.tool";
+import { FsDfTool } from "./fs/fs-df.tool";
+import { FsHeadTool } from "./fs/fs-head.tool";
+import { FsTailTool } from "./fs/fs-tail.tool";
+import { FsFindTool } from "./fs/fs-find.tool";
+import { FsGrepTool } from "./fs/fs-grep.tool";
+
+// Networking category tools
+import { NetworkingPingTool } from "./networking/networking-ping.tool";
+import { NetworkingDigTool } from "./networking/networking-dig.tool";
+import { NetworkingIfconfigTool } from "./networking/networking-ifconfig.tool";
+
 // Slack category tools
 import { SlackSendTool } from "./slack/slack-send.tool";
 import { SlackUpdateTool } from "./slack/slack-update.tool";
@@ -191,6 +208,21 @@ const registerFilteredTools = async () => {
     LimaDeleteTool,
     LimaCreateTool,
     LimaShellTool,
+    // File system
+    FsLsTool,
+    FsCatTool,
+    FsPwdTool,
+    FsStatTool,
+    FsDuTool,
+    FsDfTool,
+    FsHeadTool,
+    FsTailTool,
+    FsFindTool,
+    FsGrepTool,
+    // Networking
+    NetworkingPingTool,
+    NetworkingDigTool,
+    NetworkingIfconfigTool,
     // Slack
     SlackSendTool,
     SlackUpdateTool,
