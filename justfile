@@ -62,9 +62,7 @@ clean-hard:
 
 # Install dependencies and build the application for production
 build:
-    yarn install
-    yarn run postinstall
-    yarn build
+    NODE_OPTIONS="--max-old-space-size=12288" yarn build
 
 # Rebuild without wiping VM (preserves cached images)
 rebuild: clean build

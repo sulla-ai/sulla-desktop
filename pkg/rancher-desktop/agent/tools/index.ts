@@ -39,19 +39,6 @@ import { GitHubCreateFileTool } from "./github/github-create-file.tool";
 import { GitHubReadFileTool } from "./github/github-read-file.tool";
 import { GitHubListBranchesTool } from "./github/github-list-branches.tool";
 
-// GitLab category tools
-import { GitLabGetIssuesTool } from "./gitlab/gitlab-get-issues.tool";
-import { GitLabGetIssueTool } from "./gitlab/gitlab-get-issue.tool";
-import { GitLabCommentOnIssueTool } from "./gitlab/gitlab-comment-on-issue.tool";
-import { GitLabCreateFileTool } from "./gitlab/gitlab-create-file.tool";
-import { GitLabReadFileTool } from "./gitlab/gitlab-read-file.tool";
-
-// Gmail category tools
-import { GmailCreateDraftTool } from "./gmail/gmail-create-draft.tool";
-import { GmailSendMessageTool } from "./gmail/gmail-send-message.tool";
-import { GmailSearchTool } from "./gmail/gmail-search.tool";
-import { GmailGetMessageTool } from "./gmail/gmail-get-message.tool";
-import { GmailGetThreadTool } from "./gmail/gmail-get-thread.tool";
 
 // Kubectl category tools
 import { KubectlGetTool } from "./kubectl/kubectl-get.tool";
@@ -147,8 +134,6 @@ import { getIntegrationService } from '../services/IntegrationService';
 
 const getIntegrationId = (toolName: string): string | null => {
   if (toolName.startsWith('github_')) return 'github';
-  if (toolName.startsWith('gitlab_')) return 'gitlab';
-  if (toolName.startsWith('gmail_')) return 'gmail';
   if (toolName.startsWith('calendar_')) return 'google_calendar';
   if (toolName.startsWith('brave_')) return 'brave_search';
   if (toolName.startsWith('slack_')) return 'slack';
@@ -192,18 +177,6 @@ const registerFilteredTools = async () => {
     GitHubCreateFileTool,
     GitHubReadFileTool,
     GitHubListBranchesTool,
-    // GitLab
-    GitLabGetIssuesTool,
-    GitLabGetIssueTool,
-    GitLabCommentOnIssueTool,
-    GitLabCreateFileTool,
-    GitLabReadFileTool,
-    // Gmail
-    GmailCreateDraftTool,
-    GmailSendMessageTool,
-    GmailSearchTool,
-    GmailGetMessageTool,
-    GmailGetThreadTool,
     // Kubectl
     KubectlGetTool,
     KubectlDescribeTool,

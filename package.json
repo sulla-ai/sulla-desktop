@@ -56,7 +56,6 @@
   "main": "dist/app/background.js",
   "dependencies": {
     "@docker/extension-api-client-types": "0.4.2",
-    "@gitbeaker/node": "^35.8.1",
     "@hbilal_9/vue3-chat-scroll": "^0.0.4",
     "@kubernetes/client-node": "1.4.0",
     "@langchain/community": "^1.1.12",
@@ -95,7 +94,6 @@
     "express": "5.2.1",
     "floating-vue": "5.2.2",
     "fs-extra": "11.3.3",
-    "googleapis": "^171.4.0",
     "http-proxy-middleware": "3.0.5",
     "intl-messageformat": "11.1.1",
     "ioredis": "^5.9.2",
