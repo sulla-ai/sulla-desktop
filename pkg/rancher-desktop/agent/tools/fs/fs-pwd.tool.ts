@@ -7,7 +7,7 @@ export class FsPwdTool extends BaseTool {
   description = "Print the current working directory.";
   schema = z.object({});
 
-  metadata = { category: "file system" };
+  metadata = { category: "fs" };
 
   protected async _call(input: z.infer<this["schema"]>) {
     try {
@@ -26,4 +26,4 @@ export class FsPwdTool extends BaseTool {
 
 import { toolRegistry } from '../registry';
 
-toolRegistry.registerLazy('fs_pwd', async () => new FsPwdTool(), 'file system');
+toolRegistry.registerLazy('fs_pwd', async () => new FsPwdTool(), 'fs');

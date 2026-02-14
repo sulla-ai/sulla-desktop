@@ -9,7 +9,7 @@ export class FsDfTool extends BaseTool {
     options: z.string().optional().describe("Additional df options, e.g., '-h'"),
   });
 
-  metadata = { category: "file system" };
+  metadata = { category: "fs" };
 
   protected async _call(input: z.infer<this["schema"]>) {
     const { options } = input;
@@ -32,4 +32,4 @@ export class FsDfTool extends BaseTool {
 
 import { toolRegistry } from '../registry';
 
-toolRegistry.registerLazy('fs_df', async () => new FsDfTool(), 'file system');
+toolRegistry.registerLazy('fs_df', async () => new FsDfTool(), 'fs');

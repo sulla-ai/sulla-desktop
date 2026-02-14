@@ -10,7 +10,7 @@ export class FsLsTool extends BaseTool {
     options: z.string().optional().describe("Additional ls options, e.g., '-la'"),
   });
 
-  metadata = { category: "file system" };
+  metadata = { category: "fs" };
 
   protected async _call(input: z.infer<this["schema"]>) {
     const { path, options } = input;
@@ -35,4 +35,4 @@ export class FsLsTool extends BaseTool {
 
 import { toolRegistry } from '../registry';
 
-toolRegistry.registerLazy('fs_ls', async () => new FsLsTool(), 'file system');
+toolRegistry.registerLazy('fs_ls', async () => new FsLsTool(), 'fs');

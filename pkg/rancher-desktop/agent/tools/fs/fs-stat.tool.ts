@@ -10,7 +10,7 @@ export class FsStatTool extends BaseTool {
     options: z.string().optional().describe("Additional stat options"),
   });
 
-  metadata = { category: "file system" };
+  metadata = { category: "fs" };
 
   protected async _call(input: z.infer<this["schema"]>) {
     const { file, options } = input;
@@ -35,4 +35,4 @@ export class FsStatTool extends BaseTool {
 
 import { toolRegistry } from '../registry';
 
-toolRegistry.registerLazy('fs_stat', async () => new FsStatTool(), 'file system');
+toolRegistry.registerLazy('fs_stat', async () => new FsStatTool(), 'fs');

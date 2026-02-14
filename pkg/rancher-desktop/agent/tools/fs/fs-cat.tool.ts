@@ -9,7 +9,7 @@ export class FsCatTool extends BaseTool {
     file: z.string().describe("Path to the file to display"),
   });
 
-  metadata = { category: "file system" };
+  metadata = { category: "fs" };
 
   protected async _call(input: z.infer<this["schema"]>) {
     const { file } = input;
@@ -30,4 +30,4 @@ export class FsCatTool extends BaseTool {
 
 import { toolRegistry } from '../registry';
 
-toolRegistry.registerLazy('fs_cat', async () => new FsCatTool(), 'file system');
+toolRegistry.registerLazy('fs_cat', async () => new FsCatTool(), 'fs');

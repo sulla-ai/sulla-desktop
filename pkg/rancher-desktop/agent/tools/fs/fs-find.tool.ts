@@ -12,7 +12,7 @@ export class FsFindTool extends BaseTool {
     options: z.string().optional().describe("Additional find options"),
   });
 
-  metadata = { category: "file system" };
+  metadata = { category: "fs" };
 
   protected async _call(input: z.infer<this["schema"]>) {
     const { path, name, type, options } = input;
@@ -44,4 +44,4 @@ export class FsFindTool extends BaseTool {
 
 import { toolRegistry } from '../registry';
 
-toolRegistry.registerLazy('fs_find', async () => new FsFindTool(), 'file system');
+toolRegistry.registerLazy('fs_find', async () => new FsFindTool(), 'fs');

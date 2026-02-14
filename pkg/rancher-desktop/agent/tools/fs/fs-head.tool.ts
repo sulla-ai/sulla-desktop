@@ -10,7 +10,7 @@ export class FsHeadTool extends BaseTool {
     lines: z.number().optional().describe("Number of lines to display (default: 10)"),
   });
 
-  metadata = { category: "file system" };
+  metadata = { category: "fs" };
 
   protected async _call(input: z.infer<this["schema"]>) {
     const { file, lines = 10 } = input;
@@ -33,4 +33,4 @@ export class FsHeadTool extends BaseTool {
 
 import { toolRegistry } from '../registry';
 
-toolRegistry.registerLazy('fs_head', async () => new FsHeadTool(), 'file system');
+toolRegistry.registerLazy('fs_head', async () => new FsHeadTool(), 'fs');

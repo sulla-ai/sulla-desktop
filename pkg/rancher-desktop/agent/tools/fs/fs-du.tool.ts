@@ -10,7 +10,7 @@ export class FsDuTool extends BaseTool {
     options: z.string().optional().describe("Additional du options, e.g., '-h'"),
   });
 
-  metadata = { category: "file system" };
+  metadata = { category: "fs" };
 
   protected async _call(input: z.infer<this["schema"]>) {
     const { path, options } = input;
@@ -35,4 +35,4 @@ export class FsDuTool extends BaseTool {
 
 import { toolRegistry } from '../registry';
 
-toolRegistry.registerLazy('fs_du', async () => new FsDuTool(), 'file system');
+toolRegistry.registerLazy('fs_du', async () => new FsDuTool(), 'fs');

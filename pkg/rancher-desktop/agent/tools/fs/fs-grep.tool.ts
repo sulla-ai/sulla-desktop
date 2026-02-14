@@ -11,7 +11,7 @@ export class FsGrepTool extends BaseTool {
     options: z.string().optional().describe("Additional grep options, e.g., '-r -i'"),
   });
 
-  metadata = { category: "file system" };
+  metadata = { category: "fs" };
 
   protected async _call(input: z.infer<this["schema"]>) {
     const { pattern, file, options } = input;
@@ -41,4 +41,4 @@ export class FsGrepTool extends BaseTool {
 
 import { toolRegistry } from '../registry';
 
-toolRegistry.registerLazy('fs_grep', async () => new FsGrepTool(), 'file system');
+toolRegistry.registerLazy('fs_grep', async () => new FsGrepTool(), 'fs');
