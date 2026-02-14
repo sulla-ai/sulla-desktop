@@ -6,7 +6,7 @@ export class LimaCreateTool extends BaseTool {
   name = "lima_create";
   description = "Create a Lima virtual machine instance.";
   schema = z.object({
-    template: z.string().optional().describe("Template name or path to YAML file"),
+    template: z.string().optional().describe("Absolute path to YAML file"),
   });
 
   metadata = { category: "lima" };

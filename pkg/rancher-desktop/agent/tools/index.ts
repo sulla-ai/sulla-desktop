@@ -81,6 +81,14 @@ import { SlackHistoryTool } from "./slack/slack-history.tool";
 import { SlackThreadTool } from "./slack/slack-thread.tool";
 import { SlackUserTool } from "./slack/slack-user.tool";
 
+// Database category tools
+import { PgQueryTool } from "./pg/pg-query.tool";
+import { PgQueryOneTool } from "./pg/pg-queryone.tool";
+import { PgQueryAllTool } from "./pg/pg-queryall.tool";
+import { PgExecuteTool } from "./pg/pg-execute.tool";
+import { PgCountTool } from "./pg/pg-count.tool";
+import { PgTransactionTool } from "./pg/pg-transaction.tool";
+
 import { getIntegrationService } from '../services/IntegrationService';
 
 const getIntegrationId = (toolName: string): string | null => {
@@ -167,6 +175,13 @@ const registerFilteredTools = async () => {
     SlackHistoryTool,
     SlackThreadTool,
     SlackUserTool,
+    // Database
+    PgQueryTool,
+    PgQueryOneTool,
+    PgQueryAllTool,
+    PgExecuteTool,
+    PgCountTool,
+    PgTransactionTool,
   ];
 
   const filteredTools = [];
