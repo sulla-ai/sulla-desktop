@@ -19,6 +19,14 @@ import { ArticleUpdateTool } from "./memory/article-update.tool";
 import { ArticleDeleteTool } from "./memory/article-delete.tool";
 import { ArticleRelatedTool } from "./memory/article-related.tool";
 
+// Database category tools
+import { PostgresQueryTool } from "./postgres/postgres-query.tool";
+import { PostgresQueryOneTool } from "./postgres/postgres-queryone.tool";
+import { PostgresQueryAllTool } from "./postgres/postgres-queryall.tool";
+import { PostgresExecuteTool } from "./postgres/postgres-execute.tool";
+import { PostgresCountTool } from "./postgres/postgres-count.tool";
+import { PostgresTransactionTool } from "./postgres/postgres-transaction.tool";
+
 // Register everything
 toolRegistry.registerMany([
   new AddObservationalMemoryTool(),
@@ -35,6 +43,13 @@ toolRegistry.registerMany([
   new ArticleUpdateTool(),
   new ArticleDeleteTool(),
   new ArticleRelatedTool(),
+  // Database
+  new PostgresQueryTool,
+  new PostgresQueryOneTool,
+  new PostgresQueryAllTool,
+  new PostgresExecuteTool,
+  new PostgresCountTool,
+  new PostgresTransactionTool,
   // ... add more
 ]);
 

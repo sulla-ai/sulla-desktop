@@ -3,7 +3,6 @@ import { KubectlTool } from './KubectlTool';
 import { RdctlTool } from './RdctlTool';
 import { LimactlTool } from './LimactlTool';
 import { ExecTool } from './ExecTool';
-import { PgTool } from './PgTool';
 import { RedisTool } from './RedisTool';
 import { CalendarTool } from './CalendarTool';
 import { ToolListTool } from './ToolListTool';
@@ -30,7 +29,6 @@ export function registerDefaultTools(): void {
   ensure(new RdctlTool());
   ensure(new LimactlTool());
   ensure(new ExecTool());
-  ensure(new PgTool());
   ensure(new RedisTool());
   ensure(new CalendarTool());
   ensure(new ToolListTool());
