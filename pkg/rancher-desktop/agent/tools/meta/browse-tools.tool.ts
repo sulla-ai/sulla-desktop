@@ -13,10 +13,10 @@ export class BrowseToolsTool extends BaseTool {
 
   metadata = { category: "meta" };
 
-    protected async _call(input: z.infer<this["schema"]>) {
+      protected async _call(input: z.infer<this["schema"]>) {
     const { category, query } = input;
 
-    const tools = toolRegistry.searchTools(query, category);
+    const tools = await toolRegistry.searchTools(query, category);
 
     if (tools.length === 0) {
       return `No tools found${
@@ -28,8 +28,9 @@ export class BrowseToolsTool extends BaseTool {
     if (this.state) {
       (this.state as any).foundTools = tools;
       // Set LLM tools: meta + found
-      const metaLLMTools = toolRegistry.getLLMToolsFor(toolRegistry.getToolsByCategory("meta"));
-      const foundLLMTools = toolRegistry.getLLMToolsFor(tools);
+      const metaTools = await toolRegistry.getToolsByCategory("meta");
+      const metaLLMTools = await toolRegistry.getLLMToolsFor(metaTools);
+      const foundLLMTools = await toolRegistry.getLLMToolsFor(tools);
       (this.state as any).llmTools = [...metaLLMTools, ...foundLLMTools];
     }
 
@@ -42,3 +43,5 @@ export class BrowseToolsTool extends BaseTool {
     return output;
   }
 }
+
+toolRegistry.registerLazy('browse_tools', async () => new BrowseToolsTool(), 'meta');

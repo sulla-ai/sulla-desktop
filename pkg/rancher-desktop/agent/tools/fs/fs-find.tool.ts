@@ -41,3 +41,7 @@ export class FsFindTool extends BaseTool {
     }
   }
 }
+
+import { toolRegistry } from '../registry';
+
+toolRegistry.registerLazy('fs_find', async () => new FsFindTool(), 'file system');

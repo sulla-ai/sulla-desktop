@@ -21,3 +21,7 @@ export class SetActionTool extends BaseTool {
     return { success: true, message: `Action set to ${input.action}` };
   }
 }
+
+import { toolRegistry } from '../registry';
+
+toolRegistry.registerLazy('set_action', async () => new SetActionTool(), 'meta');

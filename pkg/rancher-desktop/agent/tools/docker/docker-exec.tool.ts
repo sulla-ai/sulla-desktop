@@ -30,3 +30,7 @@ export class DockerExecTool extends BaseTool {
     }
   }
 }
+
+import { toolRegistry } from '../registry';
+
+toolRegistry.registerLazy('docker_exec', async () => new DockerExecTool(), 'docker');

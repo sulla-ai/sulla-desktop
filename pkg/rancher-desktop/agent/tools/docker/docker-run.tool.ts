@@ -42,3 +42,7 @@ export class DockerRunTool extends BaseTool {
     }
   }
 }
+
+import { toolRegistry } from '../registry';
+
+toolRegistry.registerLazy('docker_run', async () => new DockerRunTool(), 'docker');

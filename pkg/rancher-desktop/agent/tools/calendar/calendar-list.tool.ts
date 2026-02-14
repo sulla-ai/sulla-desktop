@@ -22,3 +22,7 @@ export class CalendarListTool extends BaseTool {
     }
   }
 }
+
+import { toolRegistry } from '../registry';
+
+toolRegistry.registerLazy('calendar_list', async () => new CalendarListTool(), 'calendar');

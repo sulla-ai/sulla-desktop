@@ -36,3 +36,7 @@ export class DockerPsTool extends BaseTool {
     }
   }
 }
+
+import { toolRegistry } from '../registry';
+
+toolRegistry.registerLazy('docker_ps', async () => new DockerPsTool(), 'docker');

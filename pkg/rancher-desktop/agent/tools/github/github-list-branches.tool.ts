@@ -45,3 +45,7 @@ export class GitHubListBranchesTool extends BaseTool {
     }
   }
 }
+
+import { toolRegistry } from '../registry';
+
+toolRegistry.registerLazy('github_list_branches', async () => new GitHubListBranchesTool(), 'software_development');

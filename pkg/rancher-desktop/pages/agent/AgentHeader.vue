@@ -62,13 +62,6 @@
         >
           Integrations
         </router-link>
-        <router-link
-          to="/Automations"
-          class="text-sm font-semibold"
-          :class="route.path === '/Automations' ? 'text-[#0d0d0d] dark:text-white' : 'text-[#0d0d0d]/60 hover:text-[#0d0d0d] dark:text-white/60 dark:hover:text-white'"
-        >
-          Automations
-        </router-link>
       </nav>
     </div>
     <div class="relative flex basis-0 justify-end gap-6 sm:gap-8">

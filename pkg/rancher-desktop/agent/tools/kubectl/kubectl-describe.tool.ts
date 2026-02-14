@@ -35,3 +35,7 @@ export class KubectlDescribeTool extends BaseTool {
     }
   }
 }
+
+import { toolRegistry } from '../registry';
+
+toolRegistry.registerLazy('kubectl_describe', async () => new KubectlDescribeTool(), 'kubernetes');

@@ -47,3 +47,7 @@ export class GitHubCreateFileTool extends BaseTool {
     }
   }
 }
+
+import { toolRegistry } from '../registry';
+
+toolRegistry.registerLazy('github_create_file', async () => new GitHubCreateFileTool(), 'software_development');

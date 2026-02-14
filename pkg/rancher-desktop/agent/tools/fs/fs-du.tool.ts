@@ -32,3 +32,7 @@ export class FsDuTool extends BaseTool {
     }
   }
 }
+
+import { toolRegistry } from '../registry';
+
+toolRegistry.registerLazy('fs_du', async () => new FsDuTool(), 'file system');

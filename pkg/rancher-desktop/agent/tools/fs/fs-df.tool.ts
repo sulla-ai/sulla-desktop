@@ -29,3 +29,7 @@ export class FsDfTool extends BaseTool {
     }
   }
 }
+
+import { toolRegistry } from '../registry';
+
+toolRegistry.registerLazy('fs_df', async () => new FsDfTool(), 'file system');

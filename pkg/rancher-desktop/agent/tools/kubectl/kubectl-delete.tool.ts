@@ -45,3 +45,7 @@ export class KubectlDeleteTool extends BaseTool {
     }
   }
 }
+
+import { toolRegistry } from '../registry';
+
+toolRegistry.registerLazy('kubectl_delete', async () => new KubectlDeleteTool(), 'kubernetes');

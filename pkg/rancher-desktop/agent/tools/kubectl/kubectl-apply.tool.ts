@@ -39,3 +39,7 @@ export class KubectlApplyTool extends BaseTool {
     }
   }
 }
+
+import { toolRegistry } from '../registry';
+
+toolRegistry.registerLazy('kubectl_apply', async () => new KubectlApplyTool(), 'kubernetes');

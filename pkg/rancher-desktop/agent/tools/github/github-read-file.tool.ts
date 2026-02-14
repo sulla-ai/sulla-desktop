@@ -56,3 +56,7 @@ export class GitHubReadFileTool extends BaseTool {
     }
   }
 }
+
+import { toolRegistry } from '../registry';
+
+toolRegistry.registerLazy('github_read_file', async () => new GitHubReadFileTool(), 'software_development');

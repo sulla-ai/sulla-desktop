@@ -38,3 +38,7 @@ export class FsGrepTool extends BaseTool {
     }
   }
 }
+
+import { toolRegistry } from '../registry';
+
+toolRegistry.registerLazy('fs_grep', async () => new FsGrepTool(), 'file system');

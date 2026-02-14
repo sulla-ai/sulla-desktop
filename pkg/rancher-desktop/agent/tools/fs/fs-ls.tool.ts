@@ -32,3 +32,7 @@ export class FsLsTool extends BaseTool {
     }
   }
 }
+
+import { toolRegistry } from '../registry';
+
+toolRegistry.registerLazy('fs_ls', async () => new FsLsTool(), 'file system');

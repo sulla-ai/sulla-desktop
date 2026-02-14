@@ -23,3 +23,7 @@ export class FsPwdTool extends BaseTool {
     }
   }
 }
+
+import { toolRegistry } from '../registry';
+
+toolRegistry.registerLazy('fs_pwd', async () => new FsPwdTool(), 'file system');

@@ -30,3 +30,7 @@ export class FsTailTool extends BaseTool {
     }
   }
 }
+
+import { toolRegistry } from '../registry';
+
+toolRegistry.registerLazy('fs_tail', async () => new FsTailTool(), 'file system');

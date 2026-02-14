@@ -34,3 +34,7 @@ export class DockerRmTool extends BaseTool {
     }
   }
 }
+
+import { toolRegistry } from '../registry';
+
+toolRegistry.registerLazy('docker_rm', async () => new DockerRmTool(), 'docker');

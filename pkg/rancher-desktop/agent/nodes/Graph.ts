@@ -15,7 +15,7 @@ import { BaseNode } from './BaseNode';
 // ============================================================================
 
 const DEFAULT_WS_CHANNEL = 'dreaming-protocol';
-const MAX_CONSECTUIVE_LOOP = 1;
+const MAX_CONSECTUIVE_LOOP = 6;
 const MAX_MESSAGES_IN_THREAD = 120;
 
 const DEFAULT_MAX_ITERATIONS = 10;

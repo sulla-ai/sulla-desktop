@@ -28,3 +28,7 @@ export class SlackUserTool extends BaseTool {
     }
   }
 }
+
+import { toolRegistry } from '../registry';
+
+toolRegistry.registerLazy('slack_user', async () => new SlackUserTool(), 'slack');

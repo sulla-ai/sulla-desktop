@@ -46,3 +46,7 @@ export class GitHubCommentOnIssueTool extends BaseTool {
     }
   }
 }
+
+import { toolRegistry } from '../registry';
+
+toolRegistry.registerLazy('github_comment_on_issue', async () => new GitHubCommentOnIssueTool(), 'software_development');

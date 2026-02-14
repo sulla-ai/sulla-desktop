@@ -32,3 +32,7 @@ export class FsStatTool extends BaseTool {
     }
   }
 }
+
+import { toolRegistry } from '../registry';
+
+toolRegistry.registerLazy('fs_stat', async () => new FsStatTool(), 'file system');

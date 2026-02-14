@@ -27,3 +27,7 @@ export class DockerPullTool extends BaseTool {
     }
   }
 }
+
+import { toolRegistry } from '../registry';
+
+toolRegistry.registerLazy('docker_pull', async () => new DockerPullTool(), 'docker');

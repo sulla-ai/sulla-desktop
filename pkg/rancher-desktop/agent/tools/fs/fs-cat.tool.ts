@@ -27,3 +27,7 @@ export class FsCatTool extends BaseTool {
     }
   }
 }
+
+import { toolRegistry } from '../registry';
+
+toolRegistry.registerLazy('fs_cat', async () => new FsCatTool(), 'file system');

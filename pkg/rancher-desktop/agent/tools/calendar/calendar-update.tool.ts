@@ -29,3 +29,7 @@ export class CalendarUpdateTool extends BaseTool {
     }
   }
 }
+
+import { toolRegistry } from '../registry';
+
+toolRegistry.registerLazy('calendar_update', async () => new CalendarUpdateTool(), 'calendar');

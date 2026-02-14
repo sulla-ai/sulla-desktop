@@ -62,3 +62,7 @@ export class BraveSearchTool extends BaseTool {
     }
   }
 }
+
+import { toolRegistry } from '../registry';
+
+toolRegistry.registerLazy('brave_search', async () => new BraveSearchTool(), 'browser');

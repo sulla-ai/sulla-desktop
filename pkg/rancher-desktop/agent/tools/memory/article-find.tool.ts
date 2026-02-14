@@ -45,3 +45,7 @@ export class ArticleFindTool extends BaseTool {
     }
   }
 }
+
+import { toolRegistry } from '../registry';
+
+toolRegistry.registerLazy('article_find', async () => new ArticleFindTool(), 'memory');

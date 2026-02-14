@@ -25,3 +25,7 @@ export class CalendarListUpcomingTool extends BaseTool {
     }
   }
 }
+
+import { toolRegistry } from '../registry';
+
+toolRegistry.registerLazy('calendar_list_upcoming', async () => new CalendarListUpcomingTool(), 'calendar');

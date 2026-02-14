@@ -26,3 +26,7 @@ export class SlackUpdateTool extends BaseTool {
     }
   }
 }
+
+import { toolRegistry } from '../registry';
+
+toolRegistry.registerLazy('slack_update', async () => new SlackUpdateTool(), 'slack');

@@ -26,3 +26,7 @@ export class SlackUnreactTool extends BaseTool {
     }
   }
 }
+
+import { toolRegistry } from '../registry';
+
+toolRegistry.registerLazy('slack_unreact', async () => new SlackUnreactTool(), 'slack');

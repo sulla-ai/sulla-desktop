@@ -20,3 +20,7 @@ export class CalendarDeleteTool extends BaseTool {
     }
   }
 }
+
+import { toolRegistry } from '../registry';
+
+toolRegistry.registerLazy('calendar_delete', async () => new CalendarDeleteTool(), 'calendar');

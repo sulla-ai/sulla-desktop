@@ -27,3 +27,7 @@ export class DockerStopTool extends BaseTool {
     }
   }
 }
+
+import { toolRegistry } from '../registry';
+
+toolRegistry.registerLazy('docker_stop', async () => new DockerStopTool(), 'docker');

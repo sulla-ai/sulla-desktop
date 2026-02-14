@@ -1,62 +1,62 @@
 // src/tools/index.ts
-import { toolRegistry } from "./registry";
+import { toolRegistry } from './registry';
 
-// Import all your tools here (this is the only place you need to add new ones)
-// Meta category tools
-import { AddObservationalMemoryTool } from "./meta/add-observational-memory.tool";
-import { BrowseToolsTool } from "./meta/browse-tools.tool";
-import { CreatePlanTool } from "./meta/create-plan.tool";
-import { InstallSkillTool } from "./meta/install-skill.tool";
-import { RemoveObservationalMemoryTool } from "./meta/remove-observational-memory.tool";
-import { SetActionTool } from "./meta/set-action.tool";
+// Tool imports
+import './meta/set-action.tool';
+import './meta/browse-tools.tool';
+import './meta/install-skill.tool';
+import './memory/article-find.tool';
+import './browser/brave-search.tool';
+import './browser/duckduckgo-search.tool';
+import './calendar/calendar-cancel.tool';
+import './calendar/calendar-create.tool';
+import './calendar/calendar-delete.tool';
+import './calendar/calendar-get.tool';
+import './calendar/calendar-list-upcoming.tool';
+import './calendar/calendar-list.tool';
+import './calendar/calendar-update.tool';
+import './docker/docker-build.tool';
+import './docker/docker-exec.tool';
+import './docker/docker-images.tool';
+import './docker/docker-logs.tool';
+import './docker/docker-ps.tool';
+import './docker/docker-pull.tool';
+import './docker/docker-rm.tool';
+import './docker/docker-run.tool';
+import './docker/docker-stop.tool';
+import './fs/fs-cat.tool';
+import './fs/fs-df.tool';
+import './fs/fs-du.tool';
+import './fs/fs-find.tool';
+import './fs/fs-grep.tool';
+import './fs/fs-head.tool';
+import './fs/fs-ls.tool';
+import './fs/fs-pwd.tool';
+import './fs/fs-stat.tool';
+import './fs/fs-tail.tool';
+import './github/github-comment-on-issue.tool';
+import './github/github-create-file.tool';
+import './github/github-get-issue.tool';
+import './github/github-get-issues.tool';
+import './github/github-list-branches.tool';
+import './github/github-read-file.tool';
+import './kubectl/kubectl-apply.tool';
+import './kubectl/kubectl-delete.tool';
+import './kubectl/kubectl-describe.tool';
+import './slack/slack-thread.tool';
+import './slack/slack-unreact.tool';
+import './slack/slack-update.tool';
+import './slack/slack-user.tool';
 
-// Memory category tools
-import { ArticleFindTool } from "./memory/article-find.tool";
-import { ArticleSearchTool } from "./memory/article-search.tool";
-import { ArticleListTool } from "./memory/article-list.tool";
-import { ArticleCreateTool } from "./memory/article-create.tool";
-import { ArticleUpdateTool } from "./memory/article-update.tool";
-import { ArticleDeleteTool } from "./memory/article-delete.tool";
-import { ArticleRelatedTool } from "./memory/article-related.tool";
+// Export convenience helpers (now async!)
+export const getTool = (name: string) => toolRegistry.getTool(name);
+export const getToolsByCategory = (cat: string) => toolRegistry.getToolsByCategory(cat);
 
-// Database category tools
-import { PostgresQueryTool } from "./postgres/postgres-query.tool";
-import { PostgresQueryOneTool } from "./postgres/postgres-queryone.tool";
-import { PostgresQueryAllTool } from "./postgres/postgres-queryall.tool";
-import { PostgresExecuteTool } from "./postgres/postgres-execute.tool";
-import { PostgresCountTool } from "./postgres/postgres-count.tool";
-import { PostgresTransactionTool } from "./postgres/postgres-transaction.tool";
+// Primary tools export - meta category only
+export const tools = toolRegistry.getLLMToolsForCategory("meta");
 
-// Register everything
-toolRegistry.registerMany([
-  new AddObservationalMemoryTool(),
-  new BrowseToolsTool(),
-  new CreatePlanTool(),
-  new InstallSkillTool(),
-  new RemoveObservationalMemoryTool(),
-  new SetActionTool(),
-  // Memory category tools
-  new ArticleFindTool(),
-  new ArticleSearchTool(),
-  new ArticleListTool(),
-  new ArticleCreateTool(),
-  new ArticleUpdateTool(),
-  new ArticleDeleteTool(),
-  new ArticleRelatedTool(),
-  // Database
-  new PostgresQueryTool,
-  new PostgresQueryOneTool,
-  new PostgresQueryAllTool,
-  new PostgresExecuteTool,
-  new PostgresCountTool,
-  new PostgresTransactionTool,
-  // ... add more
-]);
+// For LangGraph agents – returns a function that loads on demand for all tools
+export const createAgentTools = toolRegistry.getAllLLMTools();
 
-// Export everything you need in the rest of your app
-export const tools = toolRegistry.getLLMTools();
-export const { getToolsByCategory, getCategories } = toolRegistry;
+// Export the registry itself for direct access
 export { toolRegistry };
-
-// Convenience for LangGraph agents
-export const createAgentTools = () => toolRegistry.getAllTools();

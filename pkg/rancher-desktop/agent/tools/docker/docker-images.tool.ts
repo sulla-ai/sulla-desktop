@@ -32,3 +32,7 @@ export class DockerImagesTool extends BaseTool {
     }
   }
 }
+
+import { toolRegistry } from '../registry';
+
+toolRegistry.registerLazy('docker_images', async () => new DockerImagesTool(), 'docker');

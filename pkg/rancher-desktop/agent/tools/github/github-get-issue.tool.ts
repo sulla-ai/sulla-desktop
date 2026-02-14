@@ -51,3 +51,7 @@ export class GitHubGetIssueTool extends BaseTool {
     }
   }
 }
+
+import { toolRegistry } from '../registry';
+
+toolRegistry.registerLazy('github_get_issue', async () => new GitHubGetIssueTool(), 'software_development');

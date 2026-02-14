@@ -37,3 +37,7 @@ export class DockerLogsTool extends BaseTool {
     }
   }
 }
+
+import { toolRegistry } from '../registry';
+
+toolRegistry.registerLazy('docker_logs', async () => new DockerLogsTool(), 'docker');

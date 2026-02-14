@@ -30,3 +30,7 @@ export class FsHeadTool extends BaseTool {
     }
   }
 }
+
+import { toolRegistry } from '../registry';
+
+toolRegistry.registerLazy('fs_head', async () => new FsHeadTool(), 'file system');

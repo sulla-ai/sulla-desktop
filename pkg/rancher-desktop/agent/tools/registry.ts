@@ -2,30 +2,87 @@
 import { BaseTool } from "./base";
 import { zodToJsonSchema } from "zod-to-json-schema";
 
+type ToolLoader = () => Promise<BaseTool>;
+
 export class ToolRegistry {
-  private tools: BaseTool[] = [];
-  private categories = new Map<string, BaseTool[]>();
+  private loaders = new Map<string, ToolLoader>();         // name → async factory
+  private instances = new Map<string, BaseTool>();         // cache instantiated tools
+  private categories = new Map<string, string[]>();        // category → [tool names]
 
-  register(tool: BaseTool) {
-    this.tools.push(tool);
-    const cat = tool.metadata.category;
-    if (!this.categories.has(cat)) this.categories.set(cat, []);
-    this.categories.get(cat)!.push(tool);
+  /**
+   * Register a lazy-loaded tool
+   */
+  registerLazy(name: string, loader: ToolLoader, category: string) {
+    if (this.loaders.has(name)) {
+      console.warn(`Tool ${name} already registered`);
+      return;
+    }
+
+    this.loaders.set(name, loader);
+
+    if (!this.categories.has(category)) {
+      this.categories.set(category, []);
+    }
+    this.categories.get(category)!.push(name);
   }
 
-  registerMany(tools: BaseTool[]) {
-    tools.forEach(t => this.register(t));
+  /**
+   * Add an already instantiated tool
+   */
+  addTool(tool: BaseTool) {
+    const name = tool.name;
+    const category = tool.metadata.category || 'misc';
+
+    if (this.instances.has(name)) {
+      console.warn(`Tool ${name} already added`);
+      return;
+    }
+
+    this.instances.set(name, tool);
+
+    if (!this.categories.has(category)) {
+      this.categories.set(category, []);
+    }
+    this.categories.get(category)!.push(name);
   }
 
-  // THIS IS THE ONE YOU MUST USE FOR THE LLM
-  private convertToLLM(tool: BaseTool): any {
+  /**
+   * Get or instantiate a tool (lazy)
+   */
+  async getTool(name: string): Promise<BaseTool> {
+    if (this.instances.has(name)) {
+      return this.instances.get(name)!;
+    }
+
+    const loader = this.loaders.get(name);
+    if (!loader) {
+      throw new Error(`Tool ${name} not registered`);
+    }
+
+    const tool = await loader();
+    this.instances.set(name, tool);
+    return tool;
+  }
+
+  /**
+   * Get all tools in a category (loads them lazily)
+   */
+  async getToolsByCategory(category: string): Promise<BaseTool[]> {
+    const names = this.categories.get(category) || [];
+    return Promise.all(names.map(name => this.getTool(name)));
+  }
+
+  /**
+   * Get LLM-compatible schema for a single tool
+   */
+  private convertToolToLLM(tool: BaseTool): any {
     let jsonSchema = zodToJsonSchema(tool.schema, {
       target: "jsonSchema7",
       $refStrategy: "none",
       pipeStrategy: "all",
     }) as any;
 
-    // Cleanup
+    // Cleanup (same as before)
     delete jsonSchema.$schema;
     delete jsonSchema.additionalProperties;
     delete jsonSchema.definitions;
@@ -48,46 +105,68 @@ export class ToolRegistry {
     };
   }
 
-  getLLMTools(): any[] {
-    return this.tools.map((tool) => this.convertToLLM(tool));
+  private async convertToLLM(name: string): Promise<any> {
+    const tool = await this.getTool(name);
+    return this.convertToolToLLM(tool);
   }
 
-  getLLMToolsFor(tools: BaseTool[]): any[] {
-    return tools.map((tool) => this.convertToLLM(tool));
+  /**
+   * Get LLM tools for a category (recommended for agents)
+   * Loads only the tools in that category
+   */
+  getLLMToolsForCategory(category: string): () => Promise<any[]> {
+    return async () => {
+      const names = this.categories.get(category) || [];
+      return Promise.all(names.map(name => this.convertToLLM(name)));
+    };
   }
 
-  // Legacy (don't use this anymore for the LLM)
-  getAllTools() {
-    return this.tools;
+  /**
+   * Get ALL LLM tools (loads everything – use sparingly)
+   */
+  getAllLLMTools(): () => Promise<any[]> {
+    return async () => {
+      const allNames = Array.from(this.loaders.keys());
+      return Promise.all(allNames.map(name => this.convertToLLM(name)));
+    };
   }
 
-  getToolsByCategory(category: string) {
-    return this.categories.get(category) || [];
+  /**
+   * Get LLM tools for a list of tools
+   */
+  getLLMToolsFor(tools: BaseTool[]): Promise<any[]> {
+    return Promise.all(tools.map(tool => this.convertToolToLLM(tool)));
   }
 
-  getCategories() {
+  /**
+   * Search tools by name/description (loads them lazily)
+   */
+  async searchTools(query?: string, category?: string): Promise<BaseTool[]> {
+    let names: string[] = [];
+
+    if (category) {
+      names = this.categories.get(category) || [];
+    } else {
+      names = Array.from(this.loaders.keys());
+    }
+
+    if (query) {
+      const q = query.toLowerCase();
+      names = names.filter(name =>
+        name.toLowerCase().includes(q)
+      );
+    }
+
+    return Promise.all(names.map(name => this.getTool(name)));
+  }
+
+  getCategories(): string[] {
     return Array.from(this.categories.keys());
   }
 
-  searchTools(query?: string, category?: string): BaseTool[] {
-    let tools: BaseTool[] = [];
-    if (category) {
-      tools = this.getToolsByCategory(category);
-    } else {
-      tools = this.getAllTools();
-    }
-    if (query) {
-      const q = query.toLowerCase();
-      tools = tools.filter(t =>
-        t.name.toLowerCase().includes(q) ||
-        t.description.toLowerCase().includes(q)
-      );
-    }
-    return tools;
-  }
-
-  addTool(tool: BaseTool) {
-    this.register(tool);
+  // Optional: clear cache if memory pressure is detected
+  clearCache() {
+    this.instances.clear();
   }
 }
 

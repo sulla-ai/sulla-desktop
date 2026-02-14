@@ -356,7 +356,8 @@ Default: **do not call** unless trigger is unambiguously met.
         throwIfAborted(state, 'Chat operation aborted');
         
         // Build dynamic LLM tools: meta category + found tools (set by browse_tools if found)
-        const llmTools = (state as any).llmTools || toolRegistry.getLLMToolsFor(toolRegistry.getToolsByCategory("meta"));
+        const metaLLMTools = await toolRegistry.getLLMToolsFor(await toolRegistry.getToolsByCategory("meta"));
+        const llmTools = (state as any).llmTools || metaLLMTools;
 
         console.log('[BaseNode] tools:', tools);
         try {
@@ -865,8 +866,62 @@ Default: **do not call** unless trigger is unambiguously met.
                 continue;
             }
 
-            const tool = toolRegistry.getAllTools().find((t: BaseTool) => t.name === toolName);
-            if (!tool) {
+            try {
+                const tool = await toolRegistry.getTool(toolName);
+                
+                // Emit tool call event before execution
+                await this.emitToolCallEvent(state, toolRunId, toolName, args);
+
+                try {
+                    // Inject WebSocket capabilities into the tool
+                    if (tool instanceof BaseTool) {
+                        tool.setState(state);
+
+                        tool.sendChatMessage = (content: string, kind = "progress") => 
+                        this.wsChatMessage(state, content, "assistant", kind);
+                        
+                        tool.emitProgress = async (data: any) => {
+                            await this.dispatchToWebSocket(state.metadata.wsChannel || DEFAULT_WS_CHANNEL, {
+                                type: "progress_update",
+                                data: { ...data, kind: 'progress' },
+                                timestamp: Date.now()
+                            });
+                        };
+                    }
+
+                    const result = await tool.invoke(args);
+
+                    // Emit tool result event on success
+                    await this.emitToolResultEvent(state, toolRunId, true, undefined, result);
+
+                    await this.appendToolResultMessage(state, toolName, {
+                        toolName,
+                        success: true,
+                        result,
+                        toolCallId: toolRunId
+                    });
+
+                    results.push({
+                        toolName,
+                        success: true,
+                        result,
+                        error: undefined
+                    });
+                } catch (err: any) {
+                    const error = err.message || String(err);
+                    
+                    // Emit tool result event on error
+                    await this.emitToolResultEvent(state, toolRunId, false, error);
+                    
+                    await this.appendToolResultMessage(state, toolName, {
+                        toolName,
+                        success: false,
+                        error,
+                        toolCallId: toolRunId
+                    });
+                    results.push({ toolName, success: false, error });
+                }
+            } catch {
                 await this.emitToolCallEvent(state, toolRunId, toolName, args);
                 await this.emitToolResultEvent(state, toolRunId, false, `Unknown tool: ${toolName}`);
                 
@@ -878,59 +933,6 @@ Default: **do not call** unless trigger is unambiguously met.
                 });
                 results.push({ toolName, success: false, error: 'Unknown tool' });
                 continue;
-            }
-
-            // Emit tool call event before execution
-            await this.emitToolCallEvent(state, toolRunId, toolName, args);
-
-            try {
-                // Inject WebSocket capabilities into the tool
-                if (tool instanceof BaseTool) {
-                    tool.setState(state);
-
-                    tool.sendChatMessage = (content: string, kind = "progress") => 
-                    this.wsChatMessage(state, content, "assistant", kind);
-                    
-                    tool.emitProgress = async (data: any) => {
-                        await this.dispatchToWebSocket(state.metadata.wsChannel || DEFAULT_WS_CHANNEL, {
-                            type: "progress_update",
-                            data: { ...data, kind: 'progress' },
-                            timestamp: Date.now()
-                        });
-                    };
-                }
-
-                const result = await tool.invoke(args);
-
-                // Emit tool result event on success
-                await this.emitToolResultEvent(state, toolRunId, true, undefined, result);
-
-                await this.appendToolResultMessage(state, toolName, {
-                    toolName,
-                    success: true,
-                    result,
-                    toolCallId: toolRunId
-                });
-
-                results.push({
-                    toolName,
-                    success: true,
-                    result,
-                    error: undefined
-                });
-            } catch (err: any) {
-                const error = err.message || String(err);
-                
-                // Emit tool result event on error
-                await this.emitToolResultEvent(state, toolRunId, false, error);
-                
-                await this.appendToolResultMessage(state, toolName, {
-                    toolName,
-                    success: false,
-                    error,
-                    toolCallId: toolRunId
-                });
-                results.push({ toolName, success: false, error });
             }
         }
 

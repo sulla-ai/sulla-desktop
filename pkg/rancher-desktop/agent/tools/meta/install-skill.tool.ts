@@ -55,3 +55,5 @@ export class InstallSkillTool extends BaseTool {
     }
   }
 }
+
+toolRegistry.registerLazy('install_skill', async () => new InstallSkillTool(), 'meta');

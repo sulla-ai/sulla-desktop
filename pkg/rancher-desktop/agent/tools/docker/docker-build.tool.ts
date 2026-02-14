@@ -35,3 +35,7 @@ export class DockerBuildTool extends BaseTool {
     }
   }
 }
+
+import { toolRegistry } from '../registry';
+
+toolRegistry.registerLazy('docker_build', async () => new DockerBuildTool(), 'docker');

@@ -42,3 +42,7 @@ export class DuckDuckGoSearchTool extends BaseTool {
     }
   }
 }
+
+import { toolRegistry } from '../registry';
+
+toolRegistry.registerLazy('duckduckgo_search', async () => new DuckDuckGoSearchTool(), 'browser');
