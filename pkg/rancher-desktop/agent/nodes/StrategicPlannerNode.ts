@@ -64,6 +64,7 @@ export class StrategicPlannerNode extends BaseNode {
     }
 
     const enriched = await this.enrichPrompt(STRATEGIC_PLAN_PROMPT, state, {
+      includeToolSetAction: true,
       includeSoul: true,
       includeAwareness: true,
       includeMemory: true,

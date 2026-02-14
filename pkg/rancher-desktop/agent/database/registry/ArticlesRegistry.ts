@@ -26,6 +26,9 @@ export interface ArticleListItem {
   order?: string;
   locked?: boolean;
   excerpt: string;
+  related_slugs?: string;
+  mentions?: string;
+  related_entities?: string;
 }
 
 export interface ArticleWithContent extends ArticleListItem {
@@ -369,7 +372,10 @@ export class ArticlesRegistry {
       author: attrs.author,
       order: attrs.order,
       locked: attrs.locked,
-      excerpt: attrs.document ? this.createExcerpt(attrs.document) : ''
+      excerpt: attrs.document ? this.createExcerpt(attrs.document) : '',
+      related_slugs: attrs.related_slugs,
+      mentions: attrs.mentions,
+      related_entities: attrs.related_entities,
     };
   }
 

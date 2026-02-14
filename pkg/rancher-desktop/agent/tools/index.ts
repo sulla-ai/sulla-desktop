@@ -9,6 +9,14 @@ import { InstallSkillTool } from "./meta/install-skill.tool";
 import { RemoveObservationalMemoryTool } from "./meta/remove-observational-memory.tool";
 import { SetActionTool } from "./meta/set-action.tool";
 
+// Memory category tools
+import { ArticleCreateTool } from "./memory/article-create.tool";
+import { ArticleFindTool } from "./memory/article-find.tool";
+import { ArticleUpdateTool } from "./memory/article-update.tool";
+import { ArticleDeleteTool } from "./memory/article-delete.tool";
+import { ArticleListTool } from "./memory/article-list.tool";
+import { ArticleSearchTool } from "./memory/article-search.tool";
+
 // Register everything
 toolRegistry.registerMany([
   new AddObservationalMemoryTool(),
@@ -17,6 +25,13 @@ toolRegistry.registerMany([
   new InstallSkillTool(),
   new RemoveObservationalMemoryTool(),
   new SetActionTool(),
+  // Memory category tools
+  new ArticleCreateTool(),
+  new ArticleFindTool(),
+  new ArticleUpdateTool(),
+  new ArticleDeleteTool(),
+  new ArticleListTool(),
+  new ArticleSearchTool(),
   // ... add more
 ]);
 

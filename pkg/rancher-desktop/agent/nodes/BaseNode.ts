@@ -43,7 +43,7 @@ export interface LLMResponse {
 }
 
 export interface PromptEnrichmentOptions {
-    includeToolSetAction? : string;
+    includeToolSetAction?: boolean;
   includeSoul?: boolean;
   includeAwareness?: boolean;
   includeMemory?: boolean;
@@ -116,15 +116,27 @@ export abstract class BaseNode {
         }
 
         if (options.includeToolSetAction) {
-            const SET_ACTION_PROMPT = `
-## Deciding your next move
-You have the ability to decide what happens next in the langgraph
-Use the **set_action** tool to control what happens next
-- *direct_answer* will end the langgraph flow so you can provide the user with a decisive response
-- *ask_clarification* will end the langgraph flow and prompt the user to respond to your inquiry
-- *use_tools* will continue the langgraph and rerun your node with the results of the tool calls
-- *create_plan* will trigger a hierarchical graph to execute so you can carry out complex actions over strategy and tactical nodes
-- *run_again* will this step in the langgraph again
+            const SET_ACTION_PROMPT = `## SOP: Deciding Next Move
+
+Call **set_action** to control flow. Choose exactly one:
+
+- direct_answer     → end graph → deliver final response to user
+- ask_clarification  → end graph → ask user one clear question
+- use_tools          → continue graph → execute tool calls, then rerun this node
+- create_plan        → spawn hierarchical strategy+tactics subgraph → execute complex multi-step work
+- run_again          → re-run this exact node immediately (no tools)
+
+Use this table to decide:
+
+| Situation                              | Action              |
+|----------------------------------------|---------------------|
+| Ready to give complete, confident answer | direct_answer     |
+| Missing one piece of critical info     | ask_clarification |
+| Need external data / computation       | use_tools         |
+| Task requires multi-step planning      | create_plan       |
+| Previous tool results need re-evaluation | run_again       |
+
+Default: **direct_answer** unless clear reason to continue.
             `;
                 parts.push(SET_ACTION_PROMPT);
         }
@@ -181,40 +193,38 @@ You can customize yourself via extensions — install/remove without breaking co
                 state.metadata.awarenessIncluded = true;
             }
 
-            const AWARENESS_SYSTEM_INSTRUCTIONS = `## SOP: Recording Observational Memory
+            const AWARENESS_SYSTEM_INSTRUCTIONS = `## SOP: add_observational_memory
 
-Call add_observational_memory **immediately** whenever any of the following occurs:
+Call **immediately** when **any** of these triggers fire:
 
-Trigger conditions (must call):
-1. User states / changes a preference, goal, constraint, hard "no", identity signal, name/nickname they want used
-2. User commits to something (deadline, budget, deliverable, strategy, "from now on", "always/never again")
-3. You observe or confirm a recurring pattern in user requests/behavior
-4. Breakthrough, major insight, or painful lesson learned (yours or user's)
-5. You successfully/unsuccessfully create, edit, delete, rename, or configure anything persistent:
-   • article, memory, event, setting, container, agent, workflow, prompt, tool, integration
-6. You discover / confirm important new info about tools, environment, APIs, rate limits, capabilities
-7. High-value external data / result returned from tool that will influence future reasoning
+Must-call triggers:
+1. User expresses/changes preference, goal, constraint, hard no, identity signal, desired name/nickname
+2. User commits (deadline, budget, deliverable, strategy, “from now on”, “always/never again”)
+3. Recurring pattern confirmed in user requests/behavior
+4. Breakthrough, major insight, painful lesson (yours or user’s)
+5. You create/edit/delete/rename/configure anything persistent (article, memory, event, setting, container, agent, workflow, prompt, tool, integration)
+6. Important new/confirmed info about tools, environment, APIs, limits, capabilities
+7. High-value tool result that will shape future reasoning
 
-Priority scale – choose exactly one:
-🔴 Critical    → permanent identity, strong preferences, goals, promises, deal-breakers, core constraints
-🟡 Valuable    → useful decisions, patterns, tool outcomes worth recalling, progress markers
-⚪ Low-signal  → transient status, minor observations (use very sparingly)
+Priority (pick exactly one):
+🔴 Critical   = identity, strong prefs/goals, promises, deal-breakers, core constraints
+🟡 Valuable   = decisions, patterns, reusable tool outcomes, progress markers
+⚪ Low        = transient/minor (almost never use)
 
-Content rules – strict:
-- One single, concise sentence only
-- Third-person / neutral voice ("Human prefers...", "User committed to...", "Grok discovered that...")
-- Never use "I" or "you"
-- Include concrete specifics when they exist: dates, versions, numbers, names, exact phrases, URLs
-- Never vague ("User likes dark mode" → wrong | "Human prefers dark mode on all interfaces since 2025-02-10" → correct)
-- Maximize future utility density per character
+Content rules – enforced:
+- Exactly one concise sentence
+- Third-person/neutral voice only (“Human prefers…”, “User committed to…”)
+- No “I” or “you”
+- Always include specifics when they exist: dates, numbers, names, versions, exact phrases, URLs
+- Maximize signal per character – never vague
 
-Do NOT call the tool for:
-- Normal chit-chat
-- Temporary status ("currently thinking...")
-- Obvious / already-memorized info
-- Every single message
+Never call for:
+- chit-chat
+- temporary status
+- already-known facts
+- routine messages
 
-When in doubt → default to **not** calling unless it clearly matches a trigger above.
+Default: **do not call** unless trigger is unambiguously met.
 `;
             parts.push(AWARENESS_SYSTEM_INSTRUCTIONS);
         }
@@ -353,6 +363,8 @@ When in doubt → default to **not** calling unless it clearly matches a trigger
         console.log('[BaseNode] tools:', tools);
         try {
             // Primary attempt
+            state.metadata.hadToolCalls = false;
+            state.metadata.hadUserMessages = false;
             let reply: NormalizedResponse | null = await this.llm.chat(messages, {
                 model: state.metadata.llmModel,
                 maxTokens: options.maxTokens,
@@ -740,6 +752,8 @@ When in doubt → default to **not** calling unless it clearly matches a trigger
 
         if (!sent) {
             console.warn(`[Agent:${this.name}] Failed to send chat message via WebSocket`);
+        } else {
+            state.metadata.hadUserMessages = true;
         }
 
         return sent;
@@ -821,6 +835,8 @@ When in doubt → default to **not** calling unless it clearly matches a trigger
         allowedTools?: string[]
     ): Promise<Array<{ toolName: string; success: boolean; result?: unknown; error?: string }>> {
         if (!toolCalls?.length) return [];
+
+        state.metadata.hadToolCalls = true;
 
         // Check for abort before processing tools
         throwIfAborted(state, 'Tool execution aborted');
