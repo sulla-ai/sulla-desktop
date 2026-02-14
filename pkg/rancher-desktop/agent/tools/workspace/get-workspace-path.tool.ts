@@ -9,8 +9,8 @@ export class GetWorkspacePathTool extends BaseTool {
     name: z.string().describe('The name of the workspace.'),
   });
 
-  async invoke(args: any) {
-    const { name } = args;
+  protected async _call(input: z.infer<this['schema']>) {
+    const { name } = input;
     return { success: true, path: `/workspaces/${name}` };
   }
 }

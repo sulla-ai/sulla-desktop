@@ -15,7 +15,7 @@ export class ViewWorkspaceFilesTool extends BaseTool {
   protected async _call(input: z.infer<this['schema']>) {
     const { name } = input;
     const limaHome = path.join(os.homedir(), 'Library/Application Support/rancher-desktop/lima');
-    const limactlPath = path.join(process.cwd(), '../../resources/darwin/lima/bin/limactl');
+    const limactlPath = path.join(__dirname, '../../../resources/darwin/lima/bin/limactl');
     try {
       const output = execSync(`${limactlPath} shell 0 -- ls -la /workspaces/${name}`, {
         env: { ...process.env, LIMA_HOME: limaHome },
