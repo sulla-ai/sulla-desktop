@@ -1,7 +1,5 @@
 import { getToolRegistry } from './ToolRegistry';
-import { KubectlTool } from './KubectlTool';
 import { RdctlTool } from './RdctlTool';
-import { LimactlTool } from './LimactlTool';
 import { ExecTool } from './ExecTool';
 import { PgTool } from './PgTool';
 import { RedisTool } from './RedisTool';
@@ -24,9 +22,7 @@ export function registerDefaultTools(): void {
     }
   };
 
-  ensure(new KubectlTool());
   ensure(new RdctlTool());
-  ensure(new LimactlTool());
   ensure(new ExecTool());
   ensure(new PgTool());
   ensure(new RedisTool());
@@ -38,8 +34,6 @@ export function registerDefaultTools(): void {
 
 export { getToolRegistry } from './ToolRegistry';
 export { BaseTool } from './BaseTool';
-export { KubectlTool } from './KubectlTool';
-export { LimactlTool } from './LimactlTool';
 export { ExecTool } from './ExecTool';
 export { PgTool } from './PgTool';
 export { RedisTool } from './RedisTool';
