@@ -89,6 +89,20 @@ import { PgExecuteTool } from "./pg/pg-execute.tool";
 import { PgCountTool } from "./pg/pg-count.tool";
 import { PgTransactionTool } from "./pg/pg-transaction.tool";
 
+// Redis category tools
+import { RedisGetTool } from "./redis/redis-get.tool";
+import { RedisSetTool } from "./redis/redis-set.tool";
+import { RedisDelTool } from "./redis/redis-del.tool";
+import { RedisIncrTool } from "./redis/redis-incr.tool";
+import { RedisDecrTool } from "./redis/redis-decr.tool";
+import { RedisExpireTool } from "./redis/redis-expire.tool";
+import { RedisTtlTool } from "./redis/redis-ttl.tool";
+import { RedisHgetTool } from "./redis/redis-hget.tool";
+import { RedisHsetTool } from "./redis/redis-hset.tool";
+import { RedisHgetallTool } from "./redis/redis-hgetall.tool";
+import { RedisRpushTool } from "./redis/redis-rpush.tool";
+import { RedisLpopTool } from "./redis/redis-lpop.tool";
+
 import { getIntegrationService } from '../services/IntegrationService';
 
 const getIntegrationId = (toolName: string): string | null => {
@@ -182,6 +196,19 @@ const registerFilteredTools = async () => {
     PgExecuteTool,
     PgCountTool,
     PgTransactionTool,
+    // Redis
+    RedisGetTool,
+    RedisSetTool,
+    RedisDelTool,
+    RedisIncrTool,
+    RedisDecrTool,
+    RedisExpireTool,
+    RedisTtlTool,
+    RedisHgetTool,
+    RedisHsetTool,
+    RedisHgetallTool,
+    RedisRpushTool,
+    RedisLpopTool,
   ];
 
   const filteredTools = [];
