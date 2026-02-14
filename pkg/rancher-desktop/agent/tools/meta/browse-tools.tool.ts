@@ -13,29 +13,24 @@ export class BrowseToolsTool extends BaseTool {
 
   metadata = { category: "meta" };
 
-  protected async _call(input: z.infer<this["schema"]>) {
+    protected async _call(input: z.infer<this["schema"]>) {
     const { category, query } = input;
 
-    let tools: StructuredTool[] = [];
-
-    if (category) {
-      tools = toolRegistry.getToolsByCategory(category);
-    } else {
-      tools = toolRegistry.getAllTools();
-    }
-
-    if (query) {
-      const q = query.toLowerCase();
-      tools = tools.filter(t =>
-        t.name.toLowerCase().includes(q) ||
-        t.description.toLowerCase().includes(q)
-      );
-    }
+    const tools = toolRegistry.searchTools(query, category);
 
     if (tools.length === 0) {
       return `No tools found${
         category ? ` in category "${category}"` : ""
       }${query ? ` matching "${query}"` : ""}.\n\nAvailable categories: ${toolRegistry.getCategories().join(", ")}`;
+    }
+
+    // Attach found tools to state for LLM access
+    if (this.state) {
+      (this.state as any).foundTools = tools;
+      // Set LLM tools: meta + found
+      const metaLLMTools = toolRegistry.getLLMToolsFor(toolRegistry.getToolsByCategory("meta"));
+      const foundLLMTools = toolRegistry.getLLMToolsFor(tools);
+      (this.state as any).llmTools = [...metaLLMTools, ...foundLLMTools];
     }
 
     let output = `**Tools${category ? ` in "${category}"` : ""}${query ? ` matching "${query}"` : ""}:**\n\n`;

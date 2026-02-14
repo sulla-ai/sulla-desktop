@@ -132,14 +132,7 @@ export class OllamaService extends BaseLanguageModel {
 
     // Add tools when provided (Ollama supports OpenAI-compatible tool format)
     if (options.tools?.length) {
-      body.tools = options.tools.map((tool: any) => ({
-        type: "function",
-        function: {
-          name: tool.name,
-          description: tool.description,
-          parameters: tool.schema ? tool.schema.shape : tool.function?.parameters,
-        }
-      }));
+      body.tools = options.tools;
     }
 
     // Force GPU usage for all layers if possible

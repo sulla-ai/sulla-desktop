@@ -72,8 +72,8 @@ export class RemoteModelService extends BaseLanguageModel {
           await new Promise(r => setTimeout(r, Math.pow(2, attempt - 1) * 1000));
         }
 
+        console.log('[RemoteService:sendRawRequest] body:', body);
         const payload = this.buildFetchOptions(body, options?.signal);
-        console.log('[RemoteService] Payload:', payload);
         const res = await fetch(url, payload);
 
         if (!res.ok) {
@@ -116,14 +116,7 @@ export class RemoteModelService extends BaseLanguageModel {
 
     // Add tools when provided (OpenAI / Grok / most compatible)
     if (options.tools?.length) {
-      baseBody.tools = options.tools.map((tool: any) => ({
-        type: "function",
-        function: {
-          name: tool.name,
-          description: tool.description,
-          parameters: tool.schema ? tool.schema.shape : tool.function?.parameters,
-        }
-      }));
+      baseBody.tools = options.tools;
     }
 
     if (options.format === 'json') {
@@ -140,11 +133,7 @@ export class RemoteModelService extends BaseLanguageModel {
       };
 
       if (options.tools?.length) {
-        anthropicBody.tools = options.tools.map((tool: any) => ({
-          name: tool.name,
-          description: tool.description,
-          input_schema: tool.schema ? tool.schema.shape : tool.function?.parameters,
-        }));
+        anthropicBody.tools = options.tools;
       }
 
       return anthropicBody;

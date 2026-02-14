@@ -69,7 +69,7 @@ class WebSocketConnection {
       url: config.url,
       channel: config.channel || '',
       reconnectInterval: 4000,
-      maxReconnectAttempts: 12,
+      maxReconnectAttempts: 1200,
       ackTimeout: 9000,
       maxMessageAgeMs: 240_000,
     };

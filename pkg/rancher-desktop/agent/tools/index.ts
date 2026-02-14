@@ -23,6 +23,7 @@ toolRegistry.registerMany([
 // Export everything you need in the rest of your app
 export const tools = toolRegistry.getLLMTools();
 export const { getToolsByCategory, getCategories } = toolRegistry;
+export { toolRegistry };
 
 // Convenience for LangGraph agents
 export const createAgentTools = () => toolRegistry.getAllTools();

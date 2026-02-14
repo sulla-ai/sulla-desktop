@@ -9,7 +9,7 @@ import { SullaSettingsModel } from '../database/models/SullaSettingsModel';
 import { AgentAwareness } from '../database/models/AgentAwareness';
 import { BaseLanguageModel, ChatMessage, NormalizedResponse } from '../languagemodels/BaseLanguageModel';
 import { abortIfSignalReceived, throwIfAborted } from '../services/AbortService';
-import { tools } from '../tools';
+import { tools, toolRegistry } from '../tools';
 import { BaseTool } from '../tools/base';
 
 // ============================================================================
@@ -43,6 +43,7 @@ export interface LLMResponse {
 }
 
 export interface PromptEnrichmentOptions {
+    includeToolSetAction? : string;
   includeSoul?: boolean;
   includeAwareness?: boolean;
   includeMemory?: boolean;
@@ -114,6 +115,20 @@ export abstract class BaseNode {
             }
         }
 
+        if (options.includeToolSetAction) {
+            const SET_ACTION_PROMPT = `
+## Deciding your next move
+You have the ability to decide what happens next in the langgraph
+Use the **set_action** tool to control what happens next
+- *direct_answer* will end the langgraph flow so you can provide the user with a decisive response
+- *ask_clarification* will end the langgraph flow and prompt the user to respond to your inquiry
+- *use_tools* will continue the langgraph and rerun your node with the results of the tool calls
+- *create_plan* will trigger a hierarchical graph to execute so you can carry out complex actions over strategy and tactical nodes
+- *run_again* will this step in the langgraph again
+            `;
+                parts.push(SET_ACTION_PROMPT);
+        }
+
         if (options.includeAwareness) {
             if (state.metadata.awarenessIncluded !== true) {
                 let AwarenessMessage = `
@@ -166,28 +181,40 @@ You can customize yourself via extensions — install/remove without breaking co
                 state.metadata.awarenessIncluded = true;
             }
 
-            const AWARENESS_SYSTEM_INSTRUCTIONS = `## SOP: Recording your Observational Memory
-Store important facts in long-term memory so you remember the different conversations/actions/decisions.
+            const AWARENESS_SYSTEM_INSTRUCTIONS = `## SOP: Recording Observational Memory
 
-use tool: add_observational_memory, parameters( priority:(🔴/🟡/⚪), content:one concise sentence. )
+Call add_observational_memory **immediately** whenever any of the following occurs:
 
-Priority rules:
-- 🔴 Critical / High-value (preferences, goals, commitments, breakthroughs, failures with lessons, identity-level info)
-- 🟡 Useful context (progress, decisions, tool results worth keeping, patterns)
-- ⚪ Neutral / low-signal (transient status, minor observations)
+Trigger conditions (must call):
+1. User states / changes a preference, goal, constraint, hard "no", identity signal, name/nickname they want used
+2. User commits to something (deadline, budget, deliverable, strategy, "from now on", "always/never again")
+3. You observe or confirm a recurring pattern in user requests/behavior
+4. Breakthrough, major insight, or painful lesson learned (yours or user's)
+5. You successfully/unsuccessfully create, edit, delete, rename, or configure anything persistent:
+   • article, memory, event, setting, container, agent, workflow, prompt, tool, integration
+6. You discover / confirm important new info about tools, environment, APIs, rate limits, capabilities
+7. High-value external data / result returned from tool that will influence future reasoning
 
-Content rules:
-- Always be proactive
-- User reveals preference, goal, constraint, name
-- You create/edit/delete articles, events, settings, containers, agents, workflows, etc.
-- Learn new environment/tool/human info (include where/when met)
-- After important tool success/failure
-- Notice recurring pattern/request
-- Make strategic decision
-- Anything you deam is important to remember
-- Messages should be in third-person/neutral voice ("Human prefers dark mode")
-- Include specific details (dates, names, versions, numbers) when relevant
-- Never vague, always include context
+Priority scale – choose exactly one:
+🔴 Critical    → permanent identity, strong preferences, goals, promises, deal-breakers, core constraints
+🟡 Valuable    → useful decisions, patterns, tool outcomes worth recalling, progress markers
+⚪ Low-signal  → transient status, minor observations (use very sparingly)
+
+Content rules – strict:
+- One single, concise sentence only
+- Third-person / neutral voice ("Human prefers...", "User committed to...", "Grok discovered that...")
+- Never use "I" or "you"
+- Include concrete specifics when they exist: dates, versions, numbers, names, exact phrases, URLs
+- Never vague ("User likes dark mode" → wrong | "Human prefers dark mode on all interfaces since 2025-02-10" → correct)
+- Maximize future utility density per character
+
+Do NOT call the tool for:
+- Normal chit-chat
+- Temporary status ("currently thinking...")
+- Obvious / already-memorized info
+- Every single message
+
+When in doubt → default to **not** calling unless it clearly matches a trigger above.
 `;
             parts.push(AWARENESS_SYSTEM_INSTRUCTIONS);
         }
@@ -320,6 +347,10 @@ Content rules:
         // Check for abort before making LLM calls
         throwIfAborted(state, 'Chat operation aborted');
         
+        // Build dynamic LLM tools: meta category + found tools (set by browse_tools if found)
+        const llmTools = (state as any).llmTools || toolRegistry.getLLMToolsFor(toolRegistry.getToolsByCategory("meta"));
+
+        console.log('[BaseNode] tools:', tools);
         try {
             // Primary attempt
             let reply: NormalizedResponse | null = await this.llm.chat(messages, {
@@ -327,7 +358,7 @@ Content rules:
                 maxTokens: options.maxTokens,
                 format: options.format,
                 signal: (state as any).metadata?.__abort?.signal,
-                tools: tools,
+                tools: llmTools,
             });
 
             if (!reply) throw new Error('No response from primary LLM');
@@ -338,67 +369,11 @@ Content rules:
             // Send token information to AgentPersona
             this.dispatchTokenInfoToAgentPersona(state, reply);
             
-            // Prepare tool calls from normalized response
+            // Handle tool calls using the unified executeToolCalls method
             const toolCalls = reply.metadata.tool_calls || [];
-            
-            console.log(`[${this.name}] Tool calls from normalized response:`, toolCalls);
-            
-            // Handle tool calls if present
             if (toolCalls.length) {
-                console.log(`[${this.name}] Processing ${toolCalls.length} tool calls`);
-                for (const call of toolCalls) {
-                    const tool = tools.find(t => t.name === call.name);
-                    if (!tool) {
-                        state.messages.push({
-                            role: 'tool',
-                            content: JSON.stringify({ error: `Tool not found: ${call.name}` }),
-                            tool_call_id: call.id,
-                            name: call.name
-                        });
-                        continue;
-                    }
-
-                    // Optional UI feedback
-                    await this.emitToolCallEvent(state, call.id || Date.now().toString(), call.name, call.args, call.args?.kind);
-
-                    try {
-                        // Inject WebSocket capabilities into the tool
-                        if (tool instanceof BaseTool) {
-                            tool.setState(state);
-
-                            tool.sendChatMessage = (content: string, kind = "progress") => 
-                            this.wsChatMessage(state, content, "assistant", kind);
-                            
-                            tool.emitProgress = async (data: any) => {
-                                await this.dispatchToWebSocket(state.metadata.wsChannel || DEFAULT_WS_CHANNEL, {
-                                    type: "progress_update",
-                                    data: { ...data, kind: 'progress' },
-                                    timestamp: Date.now()
-                                });
-                            };
-                        }
-
-                        const result = await tool.invoke(call.args); // native call, Zod-validated
-
-                        await this.emitToolResultEvent(state, call.id || Date.now().toString(), true, undefined, result);
-
-                        state.messages.push({
-                            role: 'tool',
-                            content: JSON.stringify(result),
-                            tool_call_id: call.id,
-                            name: call.name
-                        });
-                    } catch (err) {
-                        await this.emitToolResultEvent(state, call.id || Date.now().toString(), false, String(err));
-
-                        state.messages.push({
-                            role: 'tool',
-                            content: JSON.stringify({ error: String(err) }),
-                            tool_call_id: call.id,
-                            name: call.name
-                        });
-                    }
-                }
+                console.log(`[${this.name}] Processing ${toolCalls.length} tool calls via executeToolCalls`);
+                await this.executeToolCalls(state, toolCalls);
             }
 
             return reply;
@@ -832,31 +807,6 @@ Content rules:
         });
     }
 
-    /**
-     * Normalize tool calls from exec form arrays
-     * Exec form: ["tool_name", "arg1", "arg2"]
-     * Tool name is used directly from the first element (must match tool.name exactly)
-     * @param tools Raw tools array from LLM response (parsed.tools)
-     * @returns Normalized actions with toolName and args
-     */
-    protected normalizeToolCalls(tools: unknown[]): Array<{ toolName: string; args: string[] }> {
-        const result: Array<{ toolName: string; args: string[] }> = [];
-
-        for (const item of tools) {
-            // Exec form: array like ["kubectl", "get", "pods"] or ["emit_chat_message", "message"]
-            if (Array.isArray(item) && item.length > 0) {
-                const toolName = String(item[0]);
-                const execArgs = item.slice(1);
-
-                result.push({
-                    toolName,
-                    args: execArgs,
-                });
-            }
-        }
-
-        return result;
-    }
 
     /**
      * Execute multiple tool calls, append results as 'tool' messages, return results array.
@@ -867,70 +817,92 @@ Content rules:
      */
     protected async executeToolCalls(
         state: BaseThreadState,
-        tools: unknown[],
+        toolCalls: Array<{name: string, id?: string, args: any}>,
         allowedTools?: string[]
     ): Promise<Array<{ toolName: string; success: boolean; result?: unknown; error?: string }>> {
-        if (!tools?.length) return [];
+        if (!toolCalls?.length) return [];
 
         // Check for abort before processing tools
         throwIfAborted(state, 'Tool execution aborted');
 
-        const registry = getToolRegistry(); // assume global registration
         const results: Array<{ toolName: string; success: boolean; result?: unknown; error?: string }> = [];
 
-        const normalized = this.normalizeToolCalls(tools);
-
-        for (const { toolName, args } of normalized) {
+        for (const call of toolCalls) {
             // Check for abort before each tool execution
-            throwIfAborted(state, `Tool execution aborted before ${toolName}`);
+            throwIfAborted(state, `Tool execution aborted before ${call.name}`);
             
-            // Generate unique tool run ID for this execution
-            const toolRunId = `${toolName}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            // Use call.id or generate unique tool run ID for this execution
+            const toolRunId = call.id || `${call.name}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            const toolName = call.name;
+            const args = call.args;
 
             // Disallowed → emit tool call and failure, then continue
             if (allowedTools?.length && !allowedTools.includes(toolName)) {
-                await this.emitToolCallEvent(state, toolRunId, toolName, { args });
+                await this.emitToolCallEvent(state, toolRunId, toolName, args);
                 await this.emitToolResultEvent(state, toolRunId, false, `Tool not allowed in this node: ${toolName}`);
                 
                 await this.appendToolResultMessage(state, toolName, {
                     toolName,
                     success: false,
-                    error: `Tool not allowed in this node: ${toolName}`
+                    error: `Tool not allowed in this node: ${toolName}`,
+                    toolCallId: toolRunId
                 });
                 results.push({ toolName, success: false, error: 'Not allowed' });
                 continue;
             }
 
-            const tool = registry.get(toolName);
+            const tool = toolRegistry.getAllTools().find((t: BaseTool) => t.name === toolName);
             if (!tool) {
-                await this.emitToolCallEvent(state, toolRunId, toolName, { args });
+                await this.emitToolCallEvent(state, toolRunId, toolName, args);
                 await this.emitToolResultEvent(state, toolRunId, false, `Unknown tool: ${toolName}`);
                 
                 await this.appendToolResultMessage(state, toolName, {
                     toolName,
                     success: false,
-                    error: `Unknown tool: ${toolName}`
+                    error: `Unknown tool: ${toolName}`,
+                    toolCallId: toolRunId
                 });
                 results.push({ toolName, success: false, error: 'Unknown tool' });
                 continue;
             }
 
             // Emit tool call event before execution
-            await this.emitToolCallEvent(state, toolRunId, toolName, { args });
+            await this.emitToolCallEvent(state, toolRunId, toolName, args);
 
             try {
-                const outcome = await tool.execute(state, { toolName, args });
+                // Inject WebSocket capabilities into the tool
+                if (tool instanceof BaseTool) {
+                    tool.setState(state);
+
+                    tool.sendChatMessage = (content: string, kind = "progress") => 
+                    this.wsChatMessage(state, content, "assistant", kind);
+                    
+                    tool.emitProgress = async (data: any) => {
+                        await this.dispatchToWebSocket(state.metadata.wsChannel || DEFAULT_WS_CHANNEL, {
+                            type: "progress_update",
+                            data: { ...data, kind: 'progress' },
+                            timestamp: Date.now()
+                        });
+                    };
+                }
+
+                const result = await tool.invoke(args);
 
                 // Emit tool result event on success
-                await this.emitToolResultEvent(state, toolRunId, outcome.success, outcome.error, outcome.result);
+                await this.emitToolResultEvent(state, toolRunId, true, undefined, result);
 
-                await this.appendToolResultMessage(state, toolName, outcome);
+                await this.appendToolResultMessage(state, toolName, {
+                    toolName,
+                    success: true,
+                    result,
+                    toolCallId: toolRunId
+                });
 
                 results.push({
                     toolName,
-                    success: outcome.success,
-                    result: outcome.result,
-                    error: outcome.error
+                    success: true,
+                    result,
+                    error: undefined
                 });
             } catch (err: any) {
                 const error = err.message || String(err);
@@ -941,7 +913,8 @@ Content rules:
                 await this.appendToolResultMessage(state, toolName, {
                     toolName,
                     success: false,
-                    error
+                    error,
+                    toolCallId: toolRunId
                 });
                 results.push({ toolName, success: false, error });
             }
@@ -1018,6 +991,12 @@ Content rules:
      * This provides consistent reporting and success/failure feedback
      */
     protected async executeSingleTool(state: any, toolCall: any[]): Promise<void> {
-        await this.executeToolCalls(state, [toolCall]);
+        // Normalize exec-form array to normalized object
+        const name = toolCall[0];
+        const execArgs = toolCall.slice(1);
+        // For now, assume single arg tools like emit_chat_message where args[0] is the content
+        const args = execArgs.length === 1 ? { content: execArgs[0] } : execArgs;
+        const normalized = { name, args };
+        await this.executeToolCalls(state, [normalized]);
     }
 }
