@@ -1,4 +1,4 @@
-import { BaseLanguageModel, type ChatMessage, type NormalizedResponse, type RemoteProviderConfig } from './BaseLanguageModel';
+import { BaseLanguageModel, type ChatMessage, type NormalizedResponse, type RemoteProviderConfig, FinishReason } from './BaseLanguageModel';
 import { getOllamaService } from './OllamaService';
 
 /**
@@ -13,7 +13,7 @@ import { getOllamaService } from './OllamaService';
  * @extends BaseLanguageModel
  */
 export class RemoteModelService extends BaseLanguageModel {
-  private config: RemoteProviderConfig;
+  protected config: RemoteProviderConfig;
   private retryCount = 3;
   private defaultTimeoutMs = 60_000;
 
@@ -73,6 +73,7 @@ export class RemoteModelService extends BaseLanguageModel {
         }
 
         const payload = this.buildFetchOptions(body, options?.signal);
+        console.log('[RemoteService] Payload:', payload);
         const res = await fetch(url, payload);
 
         if (!res.ok) {
@@ -113,22 +114,43 @@ export class RemoteModelService extends BaseLanguageModel {
       baseBody.max_tokens = options.maxTokens;
     }
 
+    // Add tools when provided (OpenAI / Grok / most compatible)
+    if (options.tools?.length) {
+      baseBody.tools = options.tools.map((tool: any) => ({
+        type: "function",
+        function: {
+          name: tool.name,
+          description: tool.description,
+          parameters: tool.schema.shape, // Zod schema → JSON schema
+        }
+      }));
+    }
+
     if (options.format === 'json') {
-      // OpenAI-style
       baseBody.response_format = { type: 'json_object' };
     }
 
-    // Anthropic needs different shape
+    // Anthropic shape (uses tools array differently)
     if (this.config.id === 'anthropic') {
-      return {
+      const anthropicBody: any = {
         model: this.model,
         max_tokens: options.maxTokens ?? 1024,
         messages: messages.map(m => ({ role: m.role === 'system' ? 'user' : m.role, content: m.content })),
         system: messages.find(m => m.role === 'system')?.content,
       };
+
+      if (options.tools?.length) {
+        anthropicBody.tools = options.tools.map((tool: any) => ({
+          name: tool.name,
+          description: tool.description,
+          input_schema: tool.schema.shape, // Anthropic uses input_schema
+        }));
+      }
+
+      return anthropicBody;
     }
 
-    // Google Gemini needs different structure
+    // Google (no native tools yet — skip or use extensions if needed)
     if (this.config.id === 'google') {
       return {
         contents: messages.map(m => ({
@@ -142,39 +164,6 @@ export class RemoteModelService extends BaseLanguageModel {
     return baseBody;
   }
 
-  /**
-   * Normalize response across providers.
-   * @override
-   */
-  protected normalizeResponse(raw: any): NormalizedResponse {
-    // Already has OpenAI-style fallback in base class
-    // Add provider-specific extraction if needed
-    let content = '';
-    let usage: any = {};
-
-    if (this.config.id === 'anthropic') {
-      content = raw.content?.[0]?.text ?? '';
-      usage = raw.usage ?? {};
-    } else if (this.config.id === 'google') {
-      content = raw.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
-      usage = raw.usageMetadata ?? {};
-    } else {
-      // OpenAI-compatible default
-      content = raw.choices?.[0]?.message?.content ?? '';
-      usage = raw.usage ?? {};
-    }
-
-    return {
-      content: content.trim(),
-      metadata: {
-        tokens_used: (usage.total_tokens ?? usage.output_tokens ?? 0) + (usage.prompt_tokens ?? usage.input_tokens ?? 0),
-        time_spent: 0, // overridden by wall-clock in chat()
-        prompt_tokens: usage.prompt_tokens ?? usage.input_tokens ?? 0,
-        completion_tokens: usage.completion_tokens ?? usage.output_tokens ?? 0,
-        model: this.model,
-      },
-    };
-  }
 }
 
 // Factory helper

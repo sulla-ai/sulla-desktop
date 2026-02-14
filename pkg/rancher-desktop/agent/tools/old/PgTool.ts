@@ -2,10 +2,10 @@
 // Exec-form tool for PostgreSQL operations via PostgresClient
 // Mirrors ChromaTool structure
 
-import type { ThreadState, ToolResult } from '../types';
+import type { ThreadState, ToolResult } from '../../types';
 import { BaseTool } from './BaseTool';
 import type { ToolContext } from './BaseTool';
-import { postgresClient } from '../database/PostgresClient'; // adjust path
+import { postgresClient } from '../../database/PostgresClient'; // adjust path
 
 export class PgTool extends BaseTool {
   override readonly name = 'pg';

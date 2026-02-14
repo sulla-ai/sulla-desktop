@@ -141,6 +141,7 @@ async function buildOverlordState(wsChannel: string, prompt: string): Promise<Ov
       metadata:  { source: 'system' },
     }],
     metadata: {
+      action: 'direct_answer',
       threadId,
       wsChannel: wsChannel,
       cycleComplete: false,
@@ -209,6 +210,7 @@ async function buildHierarchicalState(wsChannel: string, threadId?: string): Pro
   return {
     messages: [],
     metadata: {
+      action: 'direct_answer',
       threadId: id,
       wsChannel: wsChannel,
       
@@ -264,6 +266,7 @@ async function buildSimpleState(wsChannel: string, threadId?: string): Promise<B
   return {
     messages: [],
     metadata: {
+      action: 'direct_answer',
       threadId: id,
       wsChannel: wsChannel,
       

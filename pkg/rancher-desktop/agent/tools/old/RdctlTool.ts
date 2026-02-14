@@ -1,7 +1,7 @@
-import type { ThreadState, ToolResult } from '../types';
+import type { ThreadState, ToolResult } from '../../types';
 import { BaseTool } from './BaseTool';
 import type { ToolContext } from './BaseTool';
-import { runCommand } from './util/CommandRunner';
+import { runCommand } from '../util/CommandRunner';
 
 export class RdctlTool extends BaseTool {
   override readonly name = 'rdctl';

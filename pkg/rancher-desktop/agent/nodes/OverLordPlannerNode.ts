@@ -3,7 +3,7 @@
 // Decides: trigger hierarchical graph, continue looping, or end
 
 import type { OverlordThreadState, NodeResult } from './Graph';
-import { BaseNode,JSON_ONLY_RESPONSE_INSTRUCTIONS, TOOLS_RESPONSE_JSON, MEMORY_RESPONSE_JSON } from './BaseNode';
+import { BaseNode,JSON_ONLY_RESPONSE_INSTRUCTIONS, TOOLS_RESPONSE_JSON } from './BaseNode';
 import { SullaSettingsModel } from '../database/models/SullaSettingsModel';
 import { heartbeatPrompt } from '../prompts/heartbeat';
 
@@ -50,7 +50,6 @@ ${JSON_ONLY_RESPONSE_INSTRUCTIONS}
   "action": "review_and_plan" | "work_on_memory_article" | "use_tools" | "continue" | "end" | "direct_answer" | "ask_clarification",  // default is "run_again"
   "instructions_prompt": "Detailed instructions for the chosen action (especially important for trigger_* actions)",
   ${TOOLS_RESPONSE_JSON}
-  ${MEMORY_RESPONSE_JSON}
 }`;
 
 /**
@@ -119,18 +118,13 @@ export class OverLordPlannerNode extends BaseNode {
 
     const llmResponse = await this.chat(
       state,
-      enriched,
-      { format: 'json' }
+      enriched
     );
 
     console.log('[OverLordPlannerNode] LLM response:', llmResponse);
 
     if (!llmResponse) {
       return { state, decision: { type: 'continue' } };
-    }
-
-    if (llmResponse.observational_memory) {
-      await this.executeSingleTool(state, ["observational_memory", llmResponse.observational_memory]);
     }
 
     const data = llmResponse as { action: string; reason?: string };

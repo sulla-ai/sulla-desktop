@@ -120,7 +120,7 @@ export class TacticalPlannerNode extends BaseNode {
       includeKnowledgebasePlan: false,
     });
 
-    const llmResponse = await this.chat(state, enriched, { format: 'json' });
+    const llmResponse = await this.chat(state, enriched);
     if (!llmResponse) {
       return { state, decision: { type: 'next' } };
     }

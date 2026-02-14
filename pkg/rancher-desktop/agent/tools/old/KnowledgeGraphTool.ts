@@ -1,7 +1,7 @@
-import type { ThreadState, ToolResult } from '../types';
+import type { ThreadState, ToolResult } from '../../types';
 import { BaseTool } from './BaseTool';
 import type { ToolContext } from './BaseTool';
-import { articlesRegistry } from '../database/registry/ArticlesRegistry';
+import { articlesRegistry } from '../../database/registry/ArticlesRegistry';
 
 export class KnowledgeGraphTool extends BaseTool {
   override readonly name = 'knowledge-graph';

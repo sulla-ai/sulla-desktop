@@ -1,10 +1,9 @@
 // ArticleTool.ts
 // Exec-form tool for interacting with knowledgebase_articles via Article model
-
-import type { ThreadState, ToolResult } from '../types';
+import type { ThreadState, ToolResult } from '../../types';
 import { BaseTool } from './BaseTool';
 import type { ToolContext } from './BaseTool';
-import { Article } from '../database/models/Article';
+import { Article } from '../../database/models/Article';
 
 export class ArticleTool extends BaseTool {
   override readonly name = 'article';

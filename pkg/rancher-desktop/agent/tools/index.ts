@@ -1,64 +1,28 @@
-import { getToolRegistry } from './ToolRegistry';
-import { KnowledgeGraphTool } from './KnowledgeGraphTool';
-import { KubectlTool } from './KubectlTool';
-import { RdctlTool } from './RdctlTool';
-import { LimactlTool } from './LimactlTool';
-import { ExecTool } from './ExecTool';
-import { PgTool } from './PgTool';
-import { RedisTool } from './RedisTool';
-import { CalendarTool } from './CalendarTool';
-import { ToolListTool } from './ToolListTool';
-import { EmitChatMessageTool } from './EmitChatMessageTool';
-import { EmitChatImageTool } from './EmitChatImageTool';
-import { SlackTool } from '../integrations/slack/SlackTool';
-import { N8nTool } from './N8nTool';
-import { ObservationalMemoryTool } from './ObservationalMemoryTool';
+// src/tools/index.ts
+import { toolRegistry } from "./registry";
 
-let registered = false;
+// Import all your tools here (this is the only place you need to add new ones)
+import { AddObservationalMemoryTool } from "./meta/add-observational-memory.tool";
+import { BrowseToolsTool } from "./meta/browse-tools.tool";
+import { CreatePlanTool } from "./meta/create-plan.tool";
+import { InstallSkillTool } from "./meta/install-skill.tool";
+import { RemoveObservationalMemoryTool } from "./meta/remove-observational-memory.tool";
+import { SetActionTool } from "./meta/set-action.tool";
 
-export function registerDefaultTools(): void {
-  const registry = getToolRegistry();
+// Register everything
+toolRegistry.registerMany([
+  new AddObservationalMemoryTool(),
+  new BrowseToolsTool(),
+  new CreatePlanTool(),
+  new InstallSkillTool(),
+  new RemoveObservationalMemoryTool(),
+  new SetActionTool(),
+  // ... add more
+]);
 
-  const ensure = (tool: any) => {
-    const name = String(tool?.name || '');
-    if (!name) {
-      return;
-    }
-    if (!registry.get(name)) {
-      registry.register(tool);
-    }
-  };
+// Export everything you need in the rest of your app
+export const tools = toolRegistry.getAllTools();
+export const { getToolsByCategory, getCategories } = toolRegistry;
 
-  ensure(new KnowledgeGraphTool());
-  ensure(new KubectlTool());
-  ensure(new RdctlTool());
-  ensure(new LimactlTool());
-  ensure(new ExecTool());
-  ensure(new PgTool());
-  ensure(new RedisTool());
-  ensure(new CalendarTool());
-  ensure(new ToolListTool());
-  ensure(new EmitChatMessageTool());
-  ensure(new EmitChatImageTool());
-  ensure(new SlackTool());
-  ensure(new N8nTool());
-  ensure(new ObservationalMemoryTool());
-  registered = true;
-}
-
-export { ObservationalMemoryTool } from './ObservationalMemoryTool';
-export { getToolRegistry } from './ToolRegistry';
-export { BaseTool } from './BaseTool';
-export { KnowledgeGraphTool } from './KnowledgeGraphTool';
-export { KubectlTool } from './KubectlTool';
-export { LimactlTool } from './LimactlTool';
-export { ExecTool } from './ExecTool';
-export { PgTool } from './PgTool';
-export { RedisTool } from './RedisTool';
-export { CalendarTool } from './CalendarTool';
-export { RdctlTool } from './RdctlTool';
-export { ToolListTool } from './ToolListTool';
-export { EmitChatMessageTool } from './EmitChatMessageTool';
-export { EmitChatImageTool } from './EmitChatImageTool';
-export { SlackTool } from '../integrations/slack/SlackTool';
-export { N8nTool } from './N8nTool';
+// Convenience for LangGraph agents
+export const createAgentTools = () => toolRegistry.getAllTools();

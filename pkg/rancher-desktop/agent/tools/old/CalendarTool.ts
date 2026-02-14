@@ -1,10 +1,9 @@
 // CalendarTool.ts
-// Exec-form tool for calendar operations — now delegates to CalendarClient
 
-import type { ThreadState, ToolResult } from '../types';
+import type { ThreadState, ToolResult } from '../../types';
 import { BaseTool } from './BaseTool';
 import type { ToolContext } from './BaseTool';
-import { calendarClient } from '../services/CalendarClient';
+import { calendarClient } from '../../services/CalendarClient';
 
 export class CalendarTool extends BaseTool {
   override readonly name = 'calendar';

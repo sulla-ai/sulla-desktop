@@ -1842,9 +1842,6 @@ export default class LimaBackend extends events.EventEmitter implements VMBacken
   async start(config_: BackendSettings): Promise<void> {
     this.cfg = config_;
 
-    // Emit event when main process starts up (for detecting restarts)
-    ipcMain.emit('sulla-main-started');
-    
     const config = this.cfg = clone(config_);
     let kubernetesVersion: semver.SemVer | undefined;
     let isDowngrade = false;
@@ -1853,7 +1850,12 @@ export default class LimaBackend extends events.EventEmitter implements VMBacken
     this.currentAction = Action.STARTING;
     this.#adminAccess = config_.application.adminAccess ?? true;
     this.#containerEngineClient = undefined;
+    
     await this.progressTracker.action('Starting Backend', 10, async() => {
+
+      // Emit event when main process starts up (for detecting restarts)
+      ipcMain.emit('sulla-main-started');
+      
       try {
         this.progressTracker.numeric('Starting Backend', 0, 100);
         this.ensureArchitectureMatch();

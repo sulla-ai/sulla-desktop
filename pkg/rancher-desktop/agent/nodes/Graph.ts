@@ -15,7 +15,7 @@ import { BaseNode } from './BaseNode';
 // ============================================================================
 
 const DEFAULT_WS_CHANNEL = 'dreaming-protocol';
-const MAX_CONSECTUIVE_LOOP = 12;
+const MAX_CONSECTUIVE_LOOP = 1;
 const MAX_MESSAGES_IN_THREAD = 120;
 
 const DEFAULT_MAX_ITERATIONS = 10;
@@ -81,8 +81,11 @@ export interface BaseThreadState {
   prompt?: string;
 
   metadata: {
+    action: 'direct_answer' | 'ask_clarification' | 'use_tools' | 'create_plan' | 'run_again';
     threadId: string;
     wsChannel: string;
+
+    reasoning?: string;
 
     llmModel: string;
     llmLocal: boolean;
@@ -119,6 +122,10 @@ export interface BaseThreadState {
 
     // parent graph return
     returnTo: string | null;
+
+    awarenessIncluded?: boolean;
+    datetimeIncluded?: boolean;
+    
   };
 }
 
@@ -582,6 +589,7 @@ export async function createInitialThreadState<T extends BaseThreadState>(
   const llmLocal = mode === 'local';
   
   const baseMetadata: BaseThreadState['metadata'] = {
+      action: 'direct_answer',  // Default action for initial state
       threadId: overrides.threadId ?? nextThreadId(),
       wsChannel: overrides.wsChannel ?? DEFAULT_WS_CHANNEL,
       llmModel,

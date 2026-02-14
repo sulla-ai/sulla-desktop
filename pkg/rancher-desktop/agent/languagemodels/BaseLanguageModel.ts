@@ -1,6 +1,16 @@
 // ILLMService - Common interface for all LLM services (local and remote)
 // This allows the agent to use either Ollama or remote APIs interchangeably
 
+import { tools } from "@langchain/openai";
+import { z } from "zod";
+
+export enum FinishReason {
+  Stop = 'stop',
+  ToolCalls = 'tool_calls',
+  Length = 'length',
+  ContentFilter = 'content_filter',
+}
+
 export interface ChatMessage {
   role: 'user' | 'assistant' | 'system' | 'tool';
   content: string;
@@ -20,6 +30,10 @@ export interface NormalizedResponse {
     prompt_tokens?: number;
     completion_tokens?: number;
     model?: string;
+    tool_calls?: Array<{ id?: string; name: string; args: any }>;
+    finish_reason?: FinishReason;
+    reasoning?: string;
+    parsed_content?: any;
   };
 }
 
@@ -96,6 +110,7 @@ export interface LLMConfig {
  * @see {@link LLMConfig} - Constructor config shapes
  */
 export abstract class BaseLanguageModel {
+  protected config: LLMConfig | RemoteProviderConfig;
   protected model: string;
   protected baseUrl: string;
   protected apiKey?: string;
@@ -103,6 +118,7 @@ export abstract class BaseLanguageModel {
   protected isHealthy = false;
 
   constructor(config: LLMConfig | RemoteProviderConfig) {
+    this.config = config;
     if ('mode' in config) {
       // Local config (Ollama)
       this.model = config.localModel;
@@ -160,6 +176,7 @@ export abstract class BaseLanguageModel {
       temperature?: number;
       signal?: AbortSignal;
       timeoutSeconds?: number;
+      tools?: any;
     } = {}
   ): Promise<NormalizedResponse | null> {
     const startTime = performance.now();
@@ -171,6 +188,7 @@ export abstract class BaseLanguageModel {
       const rawResponse = await this.sendRawRequest(messages, {
         ...options,
         model: effectiveModel,
+        tools: options.tools,
       });
 
       if (!rawResponse) {
@@ -213,51 +231,192 @@ export abstract class BaseLanguageModel {
   // ─────────────────────────────────────────────────────────────
 
   /**
-   * Normalizes any LLM response into a consistent shape
+   * Safely convert raw finish reason string to FinishReason enum
+   */
+  protected normalizeFinishReason(rawReason: string | undefined): FinishReason | undefined {
+    if (!rawReason) return undefined;
+    
+    // Check if the raw reason matches any enum value
+    for (const reason of Object.values(FinishReason)) {
+      if (reason === rawReason) {
+        return reason as FinishReason;
+      }
+    }
+    
+    // If no match, return undefined or log a warning
+    console.warn(`Unknown finish reason: ${rawReason}`);
+    return undefined;
+  }
+
+  /**
+   * Safely parse JSON content from LLM responses using zod validation
+   * Returns parsed object if valid JSON with expected structure, null otherwise
+   */
+  protected parseJson<T = any>(raw: string | null | undefined, schema?: z.ZodSchema<T>): T | null {
+    // If it's already an object, return it as-is
+    if (typeof raw === 'object' && raw !== null) {
+      return schema ? schema.safeParse(raw).data ?? null : raw as T;
+    }
+    if (!raw || typeof raw !== 'string') return null;
+
+    try {
+      const parsed = JSON.parse(raw);
+      return schema ? schema.safeParse(parsed).data ?? null : parsed;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Normalize response across providers.
+   * @override
    */
   protected normalizeResponse(raw: any): NormalizedResponse {
+    console.log(`[RemoteService] Raw response:`, JSON.stringify(raw, null, 2));
+
     let content = '';
-    let promptTokens = 0;
-    let completionTokens = 0;
-    let totalTokens = 0;
+    let reasoning = '';
+    let toolCalls: Array<{ id?: string; name: string; args: any }> = [];
+    let finishReason: string | undefined;
+    let usage = raw.usage ?? {};
 
-    // OpenAI / xAI / Groq / Mistral / Together / Fireworks
-    if (raw.choices?.[0]?.message?.content) {
-      content = raw.choices[0].message.content;
-      totalTokens = raw.usage?.total_tokens ?? 0;
-      promptTokens = raw.usage?.prompt_tokens ?? 0;
-      completionTokens = raw.usage?.completion_tokens ?? 0;
-    }
-    // Ollama /api/chat (non-stream)
-    else if (raw.message?.content) {
-      content = raw.message.content;
-      promptTokens = raw.prompt_eval_count ?? 0;
-      completionTokens = raw.eval_count ?? 0;
-      totalTokens = promptTokens + completionTokens;
-    }
-    // Anthropic
-    else if (raw.content?.[0]?.text) {
-      content = raw.content[0].text;
-      promptTokens = raw.usage?.input_tokens ?? 0;
-      completionTokens = raw.usage?.output_tokens ?? 0;
-      totalTokens = promptTokens + completionTokens;
-    }
-    // Generic fallback
-    else if (typeof raw === 'string') {
-      content = raw;
-    } else if (raw.content) {
-      content = String(raw.content);
-    } else if (raw.text) {
-      content = String(raw.text);
+    // ─────────────────────────────────────────────────────────────
+    // 1. Extract finish_reason (varies by provider)
+    // ─────────────────────────────────────────────────────────────
+    if ('id' in this.config && this.config.id === 'anthropic') {
+      finishReason = raw.stop_reason;
+    } else if ('id' in this.config && this.config.id === 'google') {
+      finishReason = raw.candidates?.[0]?.finishReason;
+    } else {
+      // OpenAI / Grok / most compatible
+      finishReason = raw.choices?.[0]?.finish_reason;
     }
 
+    // ─────────────────────────────────────────────────────────────
+    // 2. Extract content + reasoning (many models bury this)
+    // ─────────────────────────────────────────────────────────────
+    if ('id' in this.config && this.config.id === 'anthropic') {
+      // Claude can return array of content blocks
+      const blocks = raw.content || [];
+      content = blocks
+        .filter((b: any) => b.type === 'text')
+        .map((b: any) => b.text)
+        .join('\n');
+
+      reasoning = blocks
+        .filter((b: any) => b.type === 'thinking' || b.type === 'reasoning')
+        .map((b: any) => b.text)
+        .join('\n');
+    } else if ('id' in this.config && this.config.id === 'google') {
+      content = raw.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+    } else {
+      // Grok / OpenAI style
+      content = raw.choices?.[0]?.message?.content?.message ?? raw.choices?.[0]?.message?.content ?? '';
+
+      // Some models (o1, Grok thinking, Claude) put reasoning in a separate field
+      reasoning = raw.choices?.[0]?.message?.content?.reasoning 
+              || raw.choices?.[0]?.message?.reasoning 
+              || raw.reasoning 
+              || '';
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // 2.5. Attempt to parse content as JSON for structured data
+    // ─────────────────────────────────────────────────────────────
+    const parsedContent = this.parseJson(content);
+    
+    // If content was JSON with structured fields, extract them
+    if (parsedContent && typeof parsedContent === 'object') {
+      // Extract reasoning if present and not already set
+      if (parsedContent.reasoning && typeof parsedContent.reasoning === 'string' && !reasoning) {
+        reasoning = parsedContent.reasoning;
+      }
+      
+      // Extract tool_calls if present (merge with existing)
+      if (parsedContent.tool_calls && Array.isArray(parsedContent.tool_calls)) {
+        const extractedToolCalls = parsedContent.tool_calls.map((tc: any) => ({
+          id: tc.id,
+          name: tc.function?.name || tc.name,
+          args: tc.function?.arguments ? (() => {
+            try {
+              return typeof tc.function.arguments === 'string' 
+                ? JSON.parse(tc.function.arguments) 
+                : tc.function.arguments;
+            } catch {
+              return tc.function.arguments || {};
+            }
+          })() : tc.args || {},
+        }));
+        toolCalls.push(...extractedToolCalls);
+      }
+      
+      // Set content to the main message/response field or stringify remaining object
+      const { reasoning: _, tool_calls: __, content: mainContent, message, answer, response, ...remaining } = parsedContent;
+      if (mainContent && typeof mainContent === 'string') {
+        content = mainContent;
+      } else if (message && typeof message === 'string') {
+        content = message;
+      } else if (answer && typeof answer === 'string') {
+        content = answer;
+      } else if (response && typeof response === 'string') {
+        content = response;
+      } else if (Object.keys(remaining).length > 0) {
+        // If there are other fields, stringify them as content
+        content = JSON.stringify(remaining);
+      } else {
+        // Fallback to original content if nothing else
+        content = JSON.stringify(parsedContent);
+      }
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // 3. Extract tool_calls (most fragile part)
+    // ─────────────────────────────────────────────────────────────
+    if ('id' in this.config && this.config.id === 'anthropic') {
+      if (raw.content?.some((b: any) => b.type === 'tool_use')) {
+        toolCalls = raw.content
+          .filter((b: any) => b.type === 'tool_use')
+          .map((b: any) => ({
+            id: b.id,
+            name: b.name,
+            args: b.input || {},
+          }));
+      }
+    } else {
+      // OpenAI / Grok / most providers
+      const message = raw.choices?.[0]?.message;
+      const toolCallsArray = message?.tool_calls || message?.content?.tool_calls;
+      if (toolCallsArray) {
+        toolCalls = toolCallsArray.map((tc: any) => ({
+          id: tc.id,
+          name: tc.function?.name,
+          args: (() => {
+            try {
+              return JSON.parse(tc.function?.arguments || '{}');
+            } catch {
+              return tc.function?.arguments || {};
+            }
+          })()
+        }));
+      }
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // 4. Final normalized shape
+    // ─────────────────────────────────────────────────────────────
     return {
       content: content.trim(),
       metadata: {
-        tokens_used: totalTokens || completionTokens,
-        time_spent: 0,                    // will be overridden in chat()
-        prompt_tokens: promptTokens,
-        completion_tokens: completionTokens,
+        tokens_used: (usage.total_tokens ?? usage.output_tokens ?? 0) + 
+                    (usage.prompt_tokens ?? usage.input_tokens ?? 0),
+        time_spent: 0,
+        prompt_tokens: usage.prompt_tokens ?? usage.input_tokens ?? 0,
+        completion_tokens: usage.completion_tokens ?? usage.output_tokens ?? 0,
+        model: this.model,
+        tool_calls: toolCalls.length > 0 ? toolCalls : undefined,
+        finish_reason: this.normalizeFinishReason(finishReason),
+        reasoning: reasoning.trim() || undefined,   // ← extra safety net
+        parsed_content: parsedContent,
       },
     };
   }

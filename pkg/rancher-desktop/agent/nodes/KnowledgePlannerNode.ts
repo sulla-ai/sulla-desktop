@@ -107,8 +107,7 @@ export class KnowledgePlannerNode extends BaseNode {
 
     const llmResponse = await this.chat(
       state,
-      enriched,
-      { format: 'json' }
+      enriched
     );
 
     if (!llmResponse) {

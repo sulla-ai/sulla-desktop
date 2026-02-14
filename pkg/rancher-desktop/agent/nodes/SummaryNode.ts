@@ -100,8 +100,7 @@ export class SummaryNode extends BaseNode {
 
     const llmResponse = await this.chat(
       state,
-      enriched,
-      { format: 'json' }
+      enriched
     );
 
     if (!llmResponse) {

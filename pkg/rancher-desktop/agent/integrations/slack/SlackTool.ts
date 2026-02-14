@@ -2,8 +2,8 @@
 // Bridge tool to call the LLM (your internal agent/LLM) from within agent reasoning
 
 import type { ThreadState, ToolResult } from '../../types';
-import { BaseTool } from '../../tools/BaseTool';
-import type { ToolContext } from '../../tools/BaseTool';
+import { BaseTool } from '../../tools/old/BaseTool';
+import type { ToolContext } from '../../tools/old/BaseTool';
 import { registry } from '..';
 import type { SlackClient } from './SlackClient';
 

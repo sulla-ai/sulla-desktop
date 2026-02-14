@@ -3193,6 +3193,59 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@langchain/langgraph-checkpoint@npm:^1.0.0":
+  version: 1.0.0
+  resolution: "@langchain/langgraph-checkpoint@npm:1.0.0"
+  dependencies:
+    uuid: "npm:^10.0.0"
+  peerDependencies:
+    "@langchain/core": ^1.0.1
+  checksum: 10c0/180e37751d8c0ee706ad377d393bb32b3c00e9ddfbbf27fc30ee3d838363db181fbbbc75147c287abafcbf1e7aed6bc3f57f9a6dfe4c585c1aebd05e0961e069
+  languageName: node
+  linkType: hard
+
+"@langchain/langgraph-sdk@npm:~1.6.0":
+  version: 1.6.2
+  resolution: "@langchain/langgraph-sdk@npm:1.6.2"
+  dependencies:
+    "@types/json-schema": "npm:^7.0.15"
+    p-queue: "npm:^9.0.1"
+    p-retry: "npm:^7.1.1"
+    uuid: "npm:^13.0.0"
+  peerDependencies:
+    "@langchain/core": ^1.1.16
+    react: ^18 || ^19
+    react-dom: ^18 || ^19
+  peerDependenciesMeta:
+    "@langchain/core":
+      optional: true
+    react:
+      optional: true
+    react-dom:
+      optional: true
+  checksum: 10c0/bd1ce41039f831a467753550467e00c317de916526be3f6277e4b8874dd7f1ca0ad5107ea5ef23502a1eed98cbb1d29719931b319aecbe9dc4986b22bbb34657
+  languageName: node
+  linkType: hard
+
+"@langchain/langgraph@npm:^1.1.4":
+  version: 1.1.4
+  resolution: "@langchain/langgraph@npm:1.1.4"
+  dependencies:
+    "@langchain/langgraph-checkpoint": "npm:^1.0.0"
+    "@langchain/langgraph-sdk": "npm:~1.6.0"
+    "@standard-schema/spec": "npm:1.1.0"
+    uuid: "npm:^10.0.0"
+  peerDependencies:
+    "@langchain/core": ^1.1.16
+    zod: ^3.25.32 || ^4.2.0
+    zod-to-json-schema: ^3.x
+  peerDependenciesMeta:
+    zod-to-json-schema:
+      optional: true
+  checksum: 10c0/6d4881245efc92902276665bb41852342ba000a551e1b5ed31356cb2f2ac607b4a748c21875b29a8bdc326dc20897b3ae8286d62c5f8ebaf26ed050b3427b60c
+  languageName: node
+  linkType: hard
+
 "@langchain/ollama@npm:^1.2.1":
   version: 1.2.2
   resolution: "@langchain/ollama@npm:1.2.2"
@@ -4389,6 +4442,13 @@ __metadata:
   version: 1.0.2
   resolution: "@soda/get-current-script@npm:1.0.2"
   checksum: 10c0/f073459aa472ec2e0bc6e393586201334e9cddbe663e39b6ec4ca555e34412b1fd892f288b89e3b8f368bd78b2634ee5d7b58a6bd2843d5c10e64b53c6a9b2fb
+  languageName: node
+  linkType: hard
+
+"@standard-schema/spec@npm:1.1.0":
+  version: 1.1.0
+  resolution: "@standard-schema/spec@npm:1.1.0"
+  checksum: 10c0/d90f55acde4b2deb983529c87e8025fa693de1a5e8b49ecc6eb84d1fd96328add0e03d7d551442156c7432fd78165b2c26ff561b970a9a881f046abb78d6a526
   languageName: node
   linkType: hard
 
@@ -12145,6 +12205,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"is-network-error@npm:^1.1.0":
+  version: 1.3.0
+  resolution: "is-network-error@npm:1.3.0"
+  checksum: 10c0/3e85a69e957988db66d5af5412efdd531a5a63e150d1bdd5647cfd4dc54fd89b1dbdd472621f8915233c3176ba1e6922afa8a51a9e363ba4693edf96a294f898
+  languageName: node
+  linkType: hard
+
 "is-number@npm:^7.0.0":
   version: 7.0.0
   resolution: "is-number@npm:7.0.0"
@@ -15127,6 +15194,16 @@ __metadata:
   languageName: node
   linkType: hard
 
+"p-queue@npm:^9.0.1":
+  version: 9.1.0
+  resolution: "p-queue@npm:9.1.0"
+  dependencies:
+    eventemitter3: "npm:^5.0.1"
+    p-timeout: "npm:^7.0.0"
+  checksum: 10c0/f6bb4644997c20cbbf68c0c88208283697c6c9b1e1879f2073791b1ffcb2d2eb0a9fe35c9631e0c74bd6562ef159b87b418d48df7e7b30e5ddb4d99055bb5c92
+  languageName: node
+  linkType: hard
+
 "p-retry@npm:^4, p-retry@npm:^4.5.0":
   version: 4.6.2
   resolution: "p-retry@npm:4.6.2"
@@ -15137,12 +15214,28 @@ __metadata:
   languageName: node
   linkType: hard
 
+"p-retry@npm:^7.1.1":
+  version: 7.1.1
+  resolution: "p-retry@npm:7.1.1"
+  dependencies:
+    is-network-error: "npm:^1.1.0"
+  checksum: 10c0/d72fb15dace25b8bf72c97a13c8a630ad1deb4667e708955e8806ee38f1d70e9611598ebe57bd9677349256e024a5599292f99aabb203143e0e13f1735e30818
+  languageName: node
+  linkType: hard
+
 "p-timeout@npm:^3.2.0":
   version: 3.2.0
   resolution: "p-timeout@npm:3.2.0"
   dependencies:
     p-finally: "npm:^1.0.0"
   checksum: 10c0/524b393711a6ba8e1d48137c5924749f29c93d70b671e6db761afa784726572ca06149c715632da8f70c090073afb2af1c05730303f915604fd38ee207b70a61
+  languageName: node
+  linkType: hard
+
+"p-timeout@npm:^7.0.0":
+  version: 7.0.1
+  resolution: "p-timeout@npm:7.0.1"
+  checksum: 10c0/87d96529d1096d506607218dba6f9ec077c6dbedd0c2e2788c748e33bcd05faae8a81009fd9d22ec0b3c95fc83f4717306baba223f6e464737d8b99294c3e863
   languageName: node
   linkType: hard
 
@@ -15531,15 +15624,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"playwright-core@npm:1.58.2":
-  version: 1.58.2
-  resolution: "playwright-core@npm:1.58.2"
-  bin:
-    playwright-core: cli.js
-  checksum: 10c0/5aa15b2b764e6ffe738293a09081a6f7023847a0dbf4cd05fe10eed2e25450d321baf7482f938f2d2eb330291e197fa23e57b29a5b552b89927ceb791266225b
-  languageName: node
-  linkType: hard
-
 "playwright@npm:1.57.0":
   version: 1.57.0
   resolution: "playwright@npm:1.57.0"
@@ -15552,21 +15636,6 @@ __metadata:
   bin:
     playwright: cli.js
   checksum: 10c0/ab03c99a67b835bdea9059f516ad3b6e42c21025f9adaa161a4ef6bc7ca716dcba476d287140bb240d06126eb23f889a8933b8f5f1f1a56b80659d92d1358899
-  languageName: node
-  linkType: hard
-
-"playwright@npm:^1.58.2":
-  version: 1.58.2
-  resolution: "playwright@npm:1.58.2"
-  dependencies:
-    fsevents: "npm:2.3.2"
-    playwright-core: "npm:1.58.2"
-  dependenciesMeta:
-    fsevents:
-      optional: true
-  bin:
-    playwright: cli.js
-  checksum: 10c0/d060d9b7cc124bd8b5dffebaab5e84f6b34654a553758fe7b19cc598dfbee93f6ecfbdc1832b40a6380ae04eade86ef3285ba03aa0b136799e83402246dc0727
   languageName: node
   linkType: hard
 
@@ -16335,6 +16404,7 @@ __metadata:
     "@kubernetes/client-node": "npm:1.4.0"
     "@langchain/community": "npm:^1.1.12"
     "@langchain/core": "npm:^1.1.19"
+    "@langchain/langgraph": "npm:^1.1.4"
     "@langchain/ollama": "npm:^1.2.1"
     "@langchain/openai": "npm:^1.2.5"
     "@napi-rs/xattr": "npm:^1.0.3"
@@ -16442,7 +16512,6 @@ __metadata:
     node-schedule: "npm:^2.1.1"
     octokit: "npm:5.0.5"
     pg: "npm:^8.17.2"
-    playwright: "npm:^1.58.2"
     plist: "npm:3.1.0"
     posix-node: "npm:0.12.0"
     preact: "npm:^10.28.2"
@@ -16471,6 +16540,7 @@ __metadata:
     webpack: "npm:5.100.2"
     which: "npm:6.0.0"
     yaml: "npm:2.8.2"
+    zod: "npm:^4.3.6"
   peerDependencies:
     "@babel/core": "*"
     "@browserbasehq/stagehand": "*"
@@ -19010,6 +19080,15 @@ __metadata:
   languageName: node
   linkType: hard
 
+"uuid@npm:^13.0.0":
+  version: 13.0.0
+  resolution: "uuid@npm:13.0.0"
+  bin:
+    uuid: dist-node/bin/uuid
+  checksum: 10c0/950e4c18d57fef6c69675344f5700a08af21e26b9eff2bf2180427564297368c538ea11ac9fb2e6528b17fc3966a9fd2c5049361b0b63c7d654f3c550c9b3d67
+  languageName: node
+  linkType: hard
+
 "uuid@npm:^8.3.2":
   version: 8.3.2
   resolution: "uuid@npm:8.3.2"
@@ -19865,7 +19944,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"zod@npm:^3.25.76 || ^4":
+"zod@npm:^3.25.76 || ^4, zod@npm:^4.3.6":
   version: 4.3.6
   resolution: "zod@npm:4.3.6"
   checksum: 10c0/860d25a81ab41d33aa25f8d0d07b091a04acb426e605f396227a796e9e800c44723ed96d0f53a512b57be3d1520f45bf69c0cb3b378a232a00787a2609625307

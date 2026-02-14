@@ -1,7 +1,8 @@
-import type { ThreadState, ToolResult } from '../types';
+
+import type { ThreadState, ToolResult } from '../../types';
 import { BaseTool } from './BaseTool';
 import type { ToolContext } from './BaseTool';
-import { getWebSocketClientService } from '../services/WebSocketClientService';
+import { getWebSocketClientService } from '../../services/WebSocketClientService';
 
 export class EmitChatMessageTool extends BaseTool {
   override readonly name = 'emit_chat_message';

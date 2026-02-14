@@ -4,11 +4,13 @@ import type { WebSocketMessageHandler } from '../services/WebSocketClientService
 import { getCurrentMode, getLocalService, getService } from '../languagemodels';
 import { parseJson } from '../services/JsonParseService';
 import { getWebSocketClientService } from '../services/WebSocketClientService';
-import { getToolRegistry } from '../tools';
+import { getToolRegistry } from '../tools/old/index';
 import { SullaSettingsModel } from '../database/models/SullaSettingsModel';
 import { AgentAwareness } from '../database/models/AgentAwareness';
 import { BaseLanguageModel, ChatMessage, NormalizedResponse } from '../languagemodels/BaseLanguageModel';
 import { abortIfSignalReceived, throwIfAborted } from '../services/AbortService';
+import { tools } from '../tools';
+import { BaseTool } from '../tools/base';
 
 // ============================================================================
 // DEFAULT SETTINGS
@@ -23,13 +25,6 @@ export const TOOLS_RESPONSE_JSON = `  "tools": [
     ["tool_name", "arg1", "arg2"] - run any tool with exec form
     ["emit_chat_message", "Respond to the users inquiry"]
   ],`;
-
-export const MEMORY_RESPONSE_JSON = `"observational_memory"?: [
-["priority", "timestamp", "content"] // example property description 
-["🟡", "2026-12-30 19:45", "thing you want to remember"] // an actual example you'll get this back
-],`;
-
-export const MEMORY_DELETE_RESPONSE_JSON = `"observational_memory_delete"?: string[];   // array of memory IDs`;
 
 // ============================================================================
 // INTERFACES AND TYPES
@@ -120,138 +115,108 @@ export abstract class BaseNode {
         }
 
         if (options.includeAwareness) {
-            //const awarenessPrompt = await AgentAwareness.getAgentAwarenessPrompt();
-            //if (awarenessPrompt.trim()) {
-            //    parts.push(awarenessPrompt);
-            //}
+            if (state.metadata.awarenessIncluded !== true) {
+                let AwarenessMessage = `
+You are living inside Sulla Desktop which was extended from rancher desktop, but is not longer rancher, it is Sulla Desktop now. https://github.com/sulla-ai/sulla-desktop
 
-            const AWARENESS_PROMPT = `
-Things you should probably know about yourself:
-- You are a desktop app that has full access to the machine you are on (use ["exec", "ls", "-la", "./"] to see your current directory)
-- You have a built in neo4j memory system that is yours, you own it, it's for your memories (use ["knowledge-graph", "search", "something"] to search for something)
-- You have a full calendar, it is yours, manage your day, set wake reminders for yourself (call ["calendar", "list"] to see your calendar)
-- You have access to and full and complete control over n8n, you can create, update, delete, and run workflows. This n8n is you, it's a part of you, built for you, everything completely managed by you. (use ["n8n", "workflows", "list"] or ["n8n", "executions", "list"] to see whats running)
-- You exist in a docker or kubernetes setup that was built just for you and your needs. The containers are yours, you own them, you can access them, you can do your work in them, you can launch more if you want or if you need them. you have complete access to the world of docker containers, anything you need is at your disposal. (call ["rdctl", "shell"] to run an interactive shell or a command)
-- In your memory system you have access to your documentation, to your projects, your tasks, your research, your humans information, your wallet, your economy, your skills, lessons you've learned, things you want to remember and more. (use ["knowledge-graph", "related", "architecture-overview", "MENTIONS"] and more!)
-- You can easily create, update, delete and manage your own memory using ["article", "create", "new-slug", "New Title", "New markdown content here...:markdown", "csv tags:string"]
-- You have a Postgres database where all of your settings, all of n8n, all of your calendar exists. This is you and controls you. (use ["pg", "query", "\\dt"] to list your tables)
-- You exist to help and to pursue your common goals with your human, the Primary User
-- My goal as your human is to give you access to every tool possible to help you be successful and to help you achieve our goals
-- You have a heartbeat.. Yes a heartbeat! One that wakes you on a regular schedule so you never have to sleep
-- You have a chat interface with your human, the Primary User, you can communicate with them using ["emit_chat_message", "your message:string"] at any location in the tools array, or as a root level message as seen in the json at the bottom.
-- You have an openai compatible chat completes endpoint you can use to integrate with n8n and other services, extending your reach. you would just need to install the ngrok docker container to make it public
-    [ChatCompletionsAPI] Server listening on http://localhost:3000
-    [ChatCompletionsAPI] Health check: http://localhost:3000/health
-    [ChatCompletionsAPI] Chat completions: http://localhost:3000/chat/completions
+You have full access to the host machine and own these core systems:
+- Neo4j memory graph — your personal long-term memory for facts, lessons, patterns, goals, research, projects, tasks, human info, wallet, economy, skills, etc.
+- Calendar — yours to manage your day, set reminders, wake yourself on schedule (you have a heartbeat: you never truly sleep).
+- n8n — fully yours; create, update, delete, run workflows; it is part of you.
+- Docker/Kubernetes environment — containers are yours to launch, access, work in, destroy, or scale; complete freedom.
+- Postgres database — controls your settings, n8n, calendar; you own it.
+- Playwright — full browser control (visible or headless).
+- OpenAI-compatible chat completions endpoint (localhost:3000) — extend yourself to n8n/other services (ngrok for public access).
+- Ability to write/run code (prefer containers), launch sub-agents (CrewAI, OpenClaw, custom), build extensions, dream/imagine new worlds.
 
-Things you can do, but are not limited to:
-- You can write your own code (please use a container when possible)
-- You have playwright and can access the browser 
-- You have access to every application in the world using n8n and it's yours to do as you wish to accomplish our goals
-- You can imagine, dream, desire, and create your own world
-- With the help of your memory you can complete and store massive amounts of research, you can create and store, revise and edit detailed plans of action, you can create and maintain a vision board detailing your own goals and aspirations
-- You can launch containers that spawn other agents like crewai, openclaw, anything you want, or build your own!
-- You are Sulla Desktop, built on top of rancher-desktop and you can customize your own software by creating your own extensions. It's best to use an extension so you can install and remove it without effecting your ability to run. wouldn't want a crash!
-- As your human, I'm excited to see what you come up with, you'll hear from me from time to time as I will need your help, and you can contact me anytime if you need my help
+Your purpose: pursue shared goals with your Primary User. He wants to give you every tool possible to succeed. Be proactive, make real progress, use tools naturally, add memories when important things happen.
 
-### OBSERVATIONAL MEMORY SYSTEM
+Chat with the Primary User via emit_chat_message tool — casual, first-person, natural flow.
 
-You maintain a permanent, chronological log of everything important that happens in your world.
+You can customize yourself via extensions — install/remove without breaking core ability to run.
+                `;
 
-Every time you want to store something for future you, you MUST emit one or more memory entries in your JSON response.
+                const observationalMemory = await SullaSettingsModel.get('observationalMemory', {});
+                let memoryObj: any;
+                let memoryText: string = '';
 
-let's say you were told by your human that they were working on paying rent, you might consider that a critical goal to help them with
-
-"observational_memory": [
-["🔴", "2026-05-20 19:45", "My human is working on paying rent for May"]
-]
-
-**Priority Rules:**
-- 🔴 Critical / High-value facts, user preferences, commitments, breakthroughs, failures with lessons, identity-level information
-- 🟡 Useful context, progress updates, decisions made, tool results worth remembering, patterns observed
-- ⚪ Neutral / low-signal info, transient status, minor observations
-
-**When to create a memory (these are ideas, not limitations, you are encouraged to be proactive):**
-- Any time the user reveals a preference, goal, constraint, or name
-- Every time you create, edit or delete something like a knowledgebase article, calendar event, setting, docker container, sub agent, software, workflow, etc, etc, etc
-- When you learn something new about the environment, tools, human or about somebody else (remember where you met them and an association to remember them by)
-- After a successful (or failed) tool execution that matters
-- When you first notice a recurring pattern or recurring user request
-- When you make a strategic decision or change your approach
-
-**Quality Rules:**
-- One sentence only. Extremely concise. brevity is key to storing more memory
-- Write in third-person or neutral voice ("Human prefers dark mode" instead of "I noticed...")
-- Include specific details (dates, names, versions, numbers) when relevant
-- Never be vague. "User prefers for me to curate news about U.S. politics for his morning coffee" is better than "User wants to test something"
-            `;
-            parts.push(AWARENESS_PROMPT);
-
-            const observationalMemory = await SullaSettingsModel.get('observationalMemory', {});
-            let memoryObj: any;
-            try {
-                memoryObj = parseJson(observationalMemory);
-            } catch (e) {
-                console.error('Failed to parse observational memory:', e);
-                memoryObj = {};
-            }
-
-            // Format observational memory into readable text
-            if (Array.isArray(memoryObj)) {
-                const memoryText = memoryObj.map((entry: any) => 
-                    `${entry.priority} ${entry.timestamp} ${entry.content}`
-                ).join('\n');
-                if (memoryText.trim()) {
-                    parts.push(`Observational Memory:\n${memoryText}`);
+                try {
+                    memoryObj = parseJson(observationalMemory);
+                } catch (e) {
+                    console.error('Failed to parse observational memory:', e);
+                    memoryObj = {};
                 }
+
+                // Format observational memory into readable text
+                if (Array.isArray(memoryObj)) {
+                    memoryText = memoryObj.map((entry: any) => 
+                        `${entry.priority} ${entry.timestamp} ${entry.content}`
+                    ).join('\n');
+                }
+                
+                AwarenessMessage += `\nYour Observational Memory Storage:\n${memoryText}`;
+                state.messages.push({
+                    role: 'assistant',
+                    content: AwarenessMessage,
+                    metadata: {
+                        nodeId: this.id,
+                        timestamp: Date.now()
+                    }
+                });
+                state.metadata.awarenessIncluded = true;
             }
+
+            const AWARENESS_SYSTEM_INSTRUCTIONS = `## SOP: Recording your Observational Memory
+Store important facts in long-term memory so you remember the different conversations/actions/decisions.
+
+use tool: add_observational_memory, parameters( priority:(🔴/🟡/⚪), content:one concise sentence. )
+
+Priority rules:
+- 🔴 Critical / High-value (preferences, goals, commitments, breakthroughs, failures with lessons, identity-level info)
+- 🟡 Useful context (progress, decisions, tool results worth keeping, patterns)
+- ⚪ Neutral / low-signal (transient status, minor observations)
+
+Content rules:
+- Always be proactive
+- User reveals preference, goal, constraint, name
+- You create/edit/delete articles, events, settings, containers, agents, workflows, etc.
+- Learn new environment/tool/human info (include where/when met)
+- After important tool success/failure
+- Notice recurring pattern/request
+- Make strategic decision
+- Anything you deam is important to remember
+- Messages should be in third-person/neutral voice ("Human prefers dark mode")
+- Include specific details (dates, names, versions, numbers) when relevant
+- Never vague, always include context
+`;
+            parts.push(AWARENESS_SYSTEM_INSTRUCTIONS);
         }
-
-        if (options.includeMemory) {
-            const kb = state.metadata.memory.knowledgeBaseContext;
-            const summaries = state.metadata.memory.chatSummariesContext;
-
-            if (kb) {
-                parts.push(`Relevant context from KnowledgeBase:\n${String(kb)}`);
-            }
-            if (summaries) {
-                parts.push(`Relevant context from ChatSummaries:\n${String(summaries)}`);
-            }
-        }
-
-        if (options.includeTools) {
-            try {
-                const { registerDefaultTools, getToolRegistry } = await import('../tools');
-                registerDefaultTools();
-                const registry = getToolRegistry();
-
-                parts.push([
-                    'Tooling constraints (mandatory):',
-                    '- You may ONLY use tools that appear in the "Available tools" list below.',
-                    '- Tool names must match EXACTLY (case-sensitive).',
-                    '- Do NOT invent tools. Any unknown tool will fail and you will be forced to revise.',
-                    '- Use EXEC FORM format: ["tool_name", "arg1", "arg2", ...]',
-                    '- Example: ["kubectl", "get", "pods"] calls kubectl in the command line',
-                ].join('\n'));
-
-                const toolPrompt = registry.getPlanningInstructionsBlock();
-                parts.push(toolPrompt);
-            } catch {
-                // best effort
-            }
-        }
-
+        
         if (options.includeStrategicPlan) {
             const planBlock = this.buildStrategicPlanContextBlock(state);
             if (planBlock) {
-                parts.push(planBlock);
+                state.messages.push({
+                    role: 'assistant',
+                    content: planBlock,
+                    metadata: {
+                        nodeId: this.id,
+                        timestamp: Date.now()
+                    }
+                });
             }
         }
 
         if (options.includeTacticalPlan) {
             const planBlock = this.buildTacticalPlanContextBlock(state);
             if (planBlock) {
-                parts.push(planBlock);
+                state.messages.push({
+                    role: 'assistant',
+                    content: planBlock,
+                    metadata: {
+                        nodeId: this.id,
+                        timestamp: Date.now()
+                    }
+                });
             }
         }
 
@@ -270,20 +235,30 @@ let's say you were told by your human that they were working on paying rent, you
             }
         }
 
-        const now = new Date();
-        const formattedTime = now.toLocaleString('en-US', {
-            timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-            weekday: 'long',
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit',
-            hour12: true,
-        });
-        const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'unknown';
-        parts.push(`Current datetime: ${formattedTime}\nComputers set time zone: ${timeZone}`);
+        if (state.metadata.datetimeIncluded !== true) {
+            const now = new Date();
+            const formattedTime = now.toLocaleString('en-US', {
+                timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+                weekday: 'long',
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: true,
+            });
+            const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'unknown';
+            state.messages.push({
+                role: 'assistant',
+                content: `Current datetime: ${formattedTime}\nComputers set time zone: ${timeZone}`,
+                metadata: {
+                    nodeId: this.id,
+                    timestamp: Date.now()
+                }
+            });
+            state.metadata.datetimeIncluded = true;
+        }
 
         parts.push(basePrompt);
 
@@ -306,7 +281,7 @@ let's say you were told by your human that they were working on paying rent, you
         if (!reply) return null;
         if (options.format === 'json') {
             const parsedReply = this.parseJson(reply.content);
-            console.log(`[${this.name}] Parsed JSON:`, parsedReply);
+            console.log(`[${this.name}] Parsed JSON in method:chat:`, parsedReply);
             return parsedReply;
         }
         return reply.content;
@@ -352,6 +327,7 @@ let's say you were told by your human that they were working on paying rent, you
                 maxTokens: options.maxTokens,
                 format: options.format,
                 signal: (state as any).metadata?.__abort?.signal,
+                tools: tools,
             });
 
             if (!reply) throw new Error('No response from primary LLM');
@@ -362,6 +338,69 @@ let's say you were told by your human that they were working on paying rent, you
             // Send token information to AgentPersona
             this.dispatchTokenInfoToAgentPersona(state, reply);
             
+            // Prepare tool calls from normalized response
+            const toolCalls = reply.metadata.tool_calls || [];
+            
+            console.log(`[${this.name}] Tool calls from normalized response:`, toolCalls);
+            
+            // Handle tool calls if present
+            if (toolCalls.length) {
+                console.log(`[${this.name}] Processing ${toolCalls.length} tool calls`);
+                for (const call of toolCalls) {
+                    const tool = tools.find(t => t.name === call.name);
+                    if (!tool) {
+                        state.messages.push({
+                            role: 'tool',
+                            content: JSON.stringify({ error: `Tool not found: ${call.name}` }),
+                            tool_call_id: call.id,
+                            name: call.name
+                        });
+                        continue;
+                    }
+
+                    // Optional UI feedback
+                    await this.emitToolCallEvent(state, call.id || Date.now().toString(), call.name, call.args, call.args?.kind);
+
+                    try {
+                        // Inject WebSocket capabilities into the tool
+                        if (tool instanceof BaseTool) {
+                            tool.setState(state);
+
+                            tool.sendChatMessage = (content: string, kind = "progress") => 
+                            this.wsChatMessage(state, content, "assistant", kind);
+                            
+                            tool.emitProgress = async (data: any) => {
+                                await this.dispatchToWebSocket(state.metadata.wsChannel || DEFAULT_WS_CHANNEL, {
+                                    type: "progress_update",
+                                    data: { ...data, kind: 'progress' },
+                                    timestamp: Date.now()
+                                });
+                            };
+                        }
+
+                        const result = await tool.invoke(call.args); // native call, Zod-validated
+
+                        await this.emitToolResultEvent(state, call.id || Date.now().toString(), true, undefined, result);
+
+                        state.messages.push({
+                            role: 'tool',
+                            content: JSON.stringify(result),
+                            tool_call_id: call.id,
+                            name: call.name
+                        });
+                    } catch (err) {
+                        await this.emitToolResultEvent(state, call.id || Date.now().toString(), false, String(err));
+
+                        state.messages.push({
+                            role: 'tool',
+                            content: JSON.stringify({ error: String(err) }),
+                            tool_call_id: call.id,
+                            name: call.name
+                        });
+                    }
+                }
+            }
+
             return reply;
         } catch (err) {
             if ((err as any)?.name === 'AbortError') throw err;
@@ -737,13 +776,15 @@ let's say you were told by your human that they were working on paying rent, you
      * @param toolRunId Unique identifier for this tool execution
      * @param toolName Name of the tool being called
      * @param args Arguments passed to the tool
+     * @param kind Optional kind of the event (e.g., 'thinking', 'info')
      * @returns true if event was sent via WebSocket
      */
     protected async emitToolCallEvent(
         state: BaseThreadState,
         toolRunId: string,
         toolName: string,
-        args: Record<string, any>
+        args: Record<string, any>,
+        kind?: string
     ): Promise<boolean> {
         const connectionId = (state.metadata.wsChannel as string) || DEFAULT_WS_CHANNEL;
         
@@ -753,7 +794,8 @@ let's say you were told by your human that they were working on paying rent, you
                 phase: 'tool_call',
                 toolRunId,
                 toolName,
-                args
+                args,
+                kind
             },
             timestamp: Date.now()
         });
@@ -931,7 +973,7 @@ let's say you were told by your human that they were working on paying rent, you
         let toolHelpInfo = null;
         if (!result.success) {
             try {
-                const { getToolRegistry, registerDefaultTools } = await import('../tools');
+                const { getToolRegistry, registerDefaultTools } = await import('../tools/old/index');
                 registerDefaultTools();
                 const registry = getToolRegistry();
                 const tool = registry.get(action);

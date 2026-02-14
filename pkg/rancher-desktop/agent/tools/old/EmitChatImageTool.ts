@@ -1,7 +1,8 @@
-import type { ThreadState, ToolResult } from '../types';
+
+import type { ThreadState, ToolResult } from '../../types';
 import { BaseTool } from './BaseTool';
 import type { ToolContext } from './BaseTool';
-import { getWebSocketClientService } from '../services/WebSocketClientService';
+import { getWebSocketClientService } from '@pkg/agent/services/WebSocketClientService';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';

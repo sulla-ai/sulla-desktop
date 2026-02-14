@@ -1,4 +1,4 @@
-import type { ThreadState, ToolResult } from '../types';
+import type { ThreadState, ToolResult } from '../../types';
 
 export interface ToolContext {
   toolName: string;

@@ -121,7 +121,7 @@ export class MemoryNode extends BaseNode {
       includeKnowledgebasePlan: false,
     });
 
-    const responseJSON = await this.chat(state, enriched, { format: 'json' });
+    const responseJSON = await this.chat(state, enriched);
 
     const raw = responseJSON;
     let queries: string[] = [];
