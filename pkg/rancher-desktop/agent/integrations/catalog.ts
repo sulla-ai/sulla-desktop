@@ -2038,178 +2038,6 @@ export const integrations: Record<string, Integration> = {
     ]
   },
 
-  google_calendar: {
-    id: 'google_calendar',
-    sort: 13,
-    beta: false,
-    comingSoon: true,
-    name: 'Google Calendar',
-    description: 'Organize your schedule and never miss an important meeting. Manage your calendar, schedule events, set reminders, and keep track of all your appointments in one unified system.',
-    category: 'Productivity',
-    icon: 'google_calendar.avif',
-    connected: false,
-    version: '1.0.0',
-    lastUpdated: '2025-02-08 21:00:00',
-    developer: 'Jonathon Byrdziak & Alan Carvalho',
-    formGuide: 'Get your API credentials from Google Cloud Console. Go to APIs & Services > Credentials > Create Credentials > OAuth 2.0 Client ID.',
-    installationGuide: {
-      title: 'Google Calendar API Setup Guide',
-      description: 'Configure Google Calendar API for schedule management and automation (10-15 minutes)',
-      steps: [
-        {
-          title: 'Create Google Cloud Project',
-          content: `1. Go to https://console.cloud.google.com
-2. Create a new project or select existing one
-3. Name your project (e.g., "Sulla Calendar Integration")
-4. Enable billing if required for your usage level
-5. Note your Project ID for API configuration`
-        },
-        {
-          title: 'Enable Calendar APIs',
-          content: `1. In Google Cloud Console, go to "APIs & Services" > "Library"
-2. Search for and enable "Google Calendar API"
-3. Also enable "Calendar Settings API" if needed
-4. Review quota limits and pricing for your usage
-5. Wait for APIs to be fully enabled (usually immediate)`
-        },
-        {
-          title: 'Configure OAuth Consent Screen',
-          content: `1. Go to "APIs & Services" > "OAuth consent screen"
-2. Choose "External" user type
-3. Fill in application information:
-   - App name, user support email, developer contact
-   - Application logo and homepage URL
-   - Scopes for Calendar access
-4. Add test users for development phase
-5. Submit and wait for verification if needed`
-        },
-        {
-          title: 'Create OAuth Credentials',
-          content: `1. Go to "APIs & Services" > "Credentials"
-2. Click "Create Credentials" > "OAuth 2.0 Client ID"
-3. Choose "Web application" type
-4. Add authorized redirect URIs for your application
-5. Download JSON file with client credentials`
-        },
-        {
-          title: 'Set Up Calendar Sharing',
-          content: `1. Configure calendar access permissions
-2. Test with a shared calendar for development
-3. Set up calendar webhooks for real-time updates
-4. Configure timezone and event reminder settings
-5. Test event creation and modification`
-        },
-        {
-          title: 'Test Your Integration',
-          content: `1. Test OAuth flow with test user account
-2. Test basic API calls: list events, create event
-3. Test recurring events and event updates
-4. Test calendar sharing and permissions
-5. Monitor usage in Google Cloud Console`
-        }
-      ],
-      importantNotes: [
-        'Google Calendar API has daily quotas based on requests per user',
-        'Free tier includes 1 million requests per day per project',
-        'Calendar sharing requires proper permission management',
-        'Event notifications require webhook setup for real-time updates',
-        'Timezone handling is critical for accurate scheduling'
-      ]
-    },
-    media: [
-    ],
-    features: [
-      {
-        title: 'Event Management',
-        description: 'Create, update, and delete calendar events with attendees'
-      },
-      {
-        title: 'Calendar Sharing',
-        description: 'Share calendars and manage access permissions'
-      },
-      {
-        title: 'Recurring Events',
-        description: 'Set up and manage recurring meetings and appointments'
-      },
-      {
-        title: 'Real-time Sync',
-        description: 'Receive instant updates when calendars change'
-      }
-    ],
-    guideLinks: [
-      {
-        title: 'Google Calendar API Documentation',
-        description: 'Complete reference for Google Calendar API',
-        url: 'https://developers.google.com/calendar/api'
-      },
-      {
-        title: 'Google Cloud Console',
-        description: 'Manage API credentials and quotas',
-        url: 'https://console.cloud.google.com'
-      },
-      {
-        title: 'Calendar Integration Guide',
-        description: 'Best practices for calendar integrations',
-        url: 'https://developers.google.com/calendar/overview'
-      }
-    ],
-    properties: [
-      {
-        key: 'client_id',
-        title: 'OAuth Client ID',
-        hint: 'Your Google Cloud OAuth client ID',
-        type: 'text',
-        required: true,
-        placeholder: '',
-        validation: {
-          minLength: 20
-        }
-      },
-      {
-        key: 'client_secret',
-        title: 'OAuth Client Secret',
-        hint: 'Your Google Cloud OAuth client secret',
-        type: 'password',
-        required: true,
-        placeholder: '',
-        validation: {
-          minLength: 20
-        }
-      },
-      {
-        key: 'calendar_id',
-        title: 'Default Calendar ID',
-        hint: 'Primary calendar ID for quick access (optional)',
-        type: 'text',
-        required: false,
-        placeholder: 'primary',
-        validation: {
-          minLength: 5
-        }
-      },
-      {
-        key: 'webhook_url',
-        title: 'Webhook URL',
-        hint: 'URL for receiving calendar notifications (optional)',
-        type: 'url',
-        required: false,
-        placeholder: 'https://yourdomain.com/calendar-webhook'
-      },
-      {
-        key: 'redirect_uri',
-        title: 'Redirect URI',
-        hint: 'OAuth 2.0 redirect URI for desktop app authentication',
-        type: 'text',
-        required: true,
-        placeholder: 'http://localhost:3000/callback',
-        validation: {
-          pattern: '^https?://localhost:[0-9]+/.+|^urn:ietf:wg:oauth:2.0:oob$',
-          minLength: 10
-        }
-      }
-    ]
-  },
-
   google_docs: {
     id: 'google_docs',
     sort: 14,
@@ -2732,6 +2560,417 @@ export const integrations: Record<string, Integration> = {
         validation: {
           pattern: '^https?://localhost:[0-9]+/.+|^urn:ietf:wg:oauth:2.0:oob$',
           minLength: 10
+        }
+      }
+    ]
+  },
+
+  github: {
+    id: 'github',
+    sort: 13,
+    beta: false,
+    comingSoon: false,
+    name: 'GitHub',
+    description: 'Version control and collaboration platform for software development. Manage repositories, issues, pull requests, and automate your development workflow with powerful integrations.',
+    category: 'Developer Tools',
+    icon: 'github.svg',
+    connected: false,
+    version: '1.0.0',
+    lastUpdated: '2026-02-14 00:00:00',
+    developer: 'Jonathon Byrdziak & Alan Carvalho',
+    formGuide: 'Create a personal access token at github.com/settings/tokens. Select the scopes needed for your automation tasks.',
+    installationGuide: {
+      title: 'GitHub Personal Access Token Setup Guide',
+      description: 'Create a GitHub token for API access (2-3 minutes)',
+      steps: [
+        {
+          title: 'Go to GitHub Settings',
+          content: `1. Go to https://github.com/settings/tokens
+2. Click "Generate new token (classic)"
+3. Give your token a descriptive name
+4. Select the appropriate scopes for your needs`
+        },
+        {
+          title: 'Configure Token Scopes',
+          content: `Select these scopes based on your needs:
+• repo - Full control of private repositories
+• public_repo - Access public repositories
+• read:org - Read org and team membership
+• write:repo_hook - Manage repository hooks
+• read:user - Read user profile data`
+        },
+        {
+          title: 'Generate and Save Token',
+          content: `1. Click "Generate token"
+2. Copy the token immediately (you won't see it again)
+3. Store it securely in your Sulla configuration
+4. Test the token with a simple API call`
+        }
+      ],
+      importantNotes: [
+        'Keep your token secure - anyone with the token has access to your repositories',
+        'Use the minimum required scopes for security',
+        'Tokens can be regenerated if compromised',
+        'GitHub tokens expire after 1 year by default'
+      ]
+    },
+    features: [
+      {
+        title: 'Repository Management',
+        description: 'Create, manage, and automate repository operations'
+      },
+      {
+        title: 'Issue Tracking',
+        description: 'Manage issues, labels, and project boards'
+      },
+      {
+        title: 'Pull Request Workflow',
+        description: 'Handle code reviews and merge requests'
+      },
+      {
+        title: 'Webhook Integration',
+        description: 'Receive real-time notifications for repository events'
+      }
+    ],
+    guideLinks: [
+      {
+        title: 'GitHub Developer Documentation',
+        description: 'Complete API reference and guides',
+        url: 'https://docs.github.com/en/rest'
+      },
+      {
+        title: 'Personal Access Tokens',
+        description: 'Learn about GitHub authentication',
+        url: 'https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/creating-a-personal-access-token'
+      }
+    ],
+    properties: [
+      {
+        key: 'token',
+        title: 'GitHub Token',
+        hint: 'Your GitHub personal access token',
+        type: 'password',
+        required: true,
+        placeholder: '',
+        validation: {
+          pattern: '^ghp_[a-zA-Z0-9]{36}$',
+          minLength: 40,
+          maxLength: 40
+        }
+      }
+    ]
+  },
+
+  gitlab: {
+    id: 'gitlab',
+    sort: 14,
+    beta: false,
+    comingSoon: false,
+    name: 'GitLab',
+    description: 'Complete DevOps platform with version control, CI/CD, and project management. Automate your development lifecycle and manage code repositories with powerful collaboration tools.',
+    category: 'Developer Tools',
+    icon: 'gitlab.svg',
+    connected: false,
+    version: '1.0.0',
+    lastUpdated: '2026-02-14 00:00:00',
+    developer: 'Jonathon Byrdziak & Alan Carvalho',
+    formGuide: 'Create a personal access token at gitlab.com/-/profile/personal_access_tokens. Select the scopes needed for your automation tasks.',
+    installationGuide: {
+      title: 'GitLab Personal Access Token Setup Guide',
+      description: 'Create a GitLab token for API access (2-3 minutes)',
+      steps: [
+        {
+          title: 'Access GitLab Settings',
+          content: `1. Go to https://gitlab.com/-/profile/personal_access_tokens
+2. Click "Create a personal access token"
+3. Give your token a descriptive name
+4. Select the appropriate scopes`
+        },
+        {
+          title: 'Configure Token Scopes',
+          content: `Select these scopes based on your needs:
+• api - Full access to API
+• read_api - Read-only access to API
+• read_repository - Read repository contents
+• write_repository - Write to repositories
+• read_user - Read user information`
+        },
+        {
+          title: 'Generate and Save Token',
+          content: `1. Click "Create personal access token"
+2. Copy the token immediately
+3. Store it securely in your Sulla configuration
+4. Test the token with a simple API call`
+        }
+      ],
+      importantNotes: [
+        'Keep your token secure - it provides full access to your GitLab account',
+        'Use the minimum required scopes for security',
+        'Tokens can be regenerated if compromised',
+        'GitLab tokens can have custom expiration dates'
+      ]
+    },
+    features: [
+      {
+        title: 'Repository Management',
+        description: 'Create and manage Git repositories with advanced features'
+      },
+      {
+        title: 'CI/CD Pipelines',
+        description: 'Automate testing and deployment workflows'
+      },
+      {
+        title: 'Issue & Merge Request Management',
+        description: 'Track issues and manage code reviews'
+      },
+      {
+        title: 'Container Registry',
+        description: 'Store and manage Docker container images'
+      }
+    ],
+    guideLinks: [
+      {
+        title: 'GitLab API Documentation',
+        description: 'Complete API reference and guides',
+        url: 'https://docs.gitlab.com/ee/api/'
+      },
+      {
+        title: 'Personal Access Tokens',
+        description: 'Learn about GitLab authentication',
+        url: 'https://docs.gitlab.com/ee/user/profile/personal_access_tokens.html'
+      }
+    ],
+    properties: [
+      {
+        key: 'token',
+        title: 'GitLab Token',
+        hint: 'Your GitLab personal access token',
+        type: 'password',
+        required: true,
+        placeholder: '',
+        validation: {
+          pattern: '^glpat-[a-zA-Z0-9_-]{20,}$',
+          minLength: 26
+        }
+      }
+    ]
+  },
+
+  google_calendar: {
+    id: 'google_calendar',
+    sort: 15,
+    beta: false,
+    comingSoon: false,
+    name: 'Google Calendar',
+    description: 'Manage your schedule and appointments with Google Calendar integration. Create events, check availability, sync calendars, and automate your time management.',
+    category: 'Productivity',
+    icon: 'google-calendar.svg',
+    connected: false,
+    version: '1.0.0',
+    lastUpdated: '2026-02-14 00:00:00',
+    developer: 'Jonathon Byrdziak & Alan Carvalho',
+    formGuide: 'Create OAuth 2.0 credentials at Google Cloud Console. Go to APIs & Services > Credentials > Create Credentials > OAuth 2.0 Client ID.',
+    installationGuide: {
+      title: 'Google Calendar API Setup Guide',
+      description: 'Configure Google Calendar API for calendar management (10-15 minutes)',
+      steps: [
+        {
+          title: 'Create Google Cloud Project',
+          content: `1. Go to https://console.cloud.google.com
+2. Create a new project or select existing one
+3. Name your project (e.g., "Sulla Calendar Integration")
+4. Enable billing if required for your usage level`
+        },
+        {
+          title: 'Enable Calendar API',
+          content: `1. In Google Cloud Console, go to "APIs & Services" > "Library"
+2. Search for and enable "Google Calendar API"
+3. Review quota limits for your usage`
+        },
+        {
+          title: 'Configure OAuth Consent Screen',
+          content: `1. Go to "APIs & Services" > "OAuth consent screen"
+2. Choose "External" user type
+3. Fill in application information and scopes`
+        },
+        {
+          title: 'Create OAuth Credentials',
+          content: `1. Go to "APIs & Services" > "Credentials"
+2. Click "Create Credentials" > "OAuth 2.0 Client ID"
+3. Choose "Desktop application" type
+4. Download the credentials JSON file`
+        },
+        {
+          title: 'Configure in Sulla',
+          content: `1. Extract client_id and client_secret from the JSON
+2. Add your calendar integration credentials
+3. Test the connection with a simple calendar read`
+        }
+      ],
+      importantNotes: [
+        'OAuth 2.0 requires user consent for calendar access',
+        'Keep client credentials secure',
+        'Calendar API has daily quotas based on complexity',
+        'Free tier includes reasonable usage limits'
+      ]
+    },
+    features: [
+      {
+        title: 'Event Management',
+        description: 'Create, update, and delete calendar events'
+      },
+      {
+        title: 'Calendar Sync',
+        description: 'Sync multiple calendars and manage availability'
+      },
+      {
+        title: 'Meeting Scheduling',
+        description: 'Automate meeting creation and attendee management'
+      },
+      {
+        title: 'Reminder System',
+        description: 'Set up automated reminders and notifications'
+      }
+    ],
+    guideLinks: [
+      {
+        title: 'Google Calendar API Documentation',
+        description: 'Complete API reference for Calendar integration',
+        url: 'https://developers.google.com/calendar/api'
+      },
+      {
+        title: 'OAuth 2.0 Setup Guide',
+        description: 'Learn about Google authentication',
+        url: 'https://developers.google.com/identity/protocols/oauth2'
+      }
+    ],
+    properties: [
+      {
+        key: 'client_id',
+        title: 'Client ID',
+        hint: 'Your Google OAuth 2.0 client ID',
+        type: 'text',
+        required: true,
+        placeholder: '',
+        validation: {
+          pattern: '^[0-9]+-[a-zA-Z0-9]+\\.apps\\.googleusercontent\\.com$',
+          minLength: 20
+        }
+      },
+      {
+        key: 'client_secret',
+        title: 'Client Secret',
+        hint: 'Your Google OAuth 2.0 client secret',
+        type: 'password',
+        required: true,
+        placeholder: '',
+        validation: {
+          minLength: 24
+        }
+      },
+      {
+        key: 'redirect_uri',
+        title: 'Redirect URI',
+        hint: 'OAuth 2.0 redirect URI for desktop app authentication',
+        type: 'text',
+        required: true,
+        placeholder: 'http://localhost:3000/callback',
+        validation: {
+          pattern: '^https?://localhost:[0-9]+/.+|^urn:ietf:wg:oauth:2.0:oob$',
+          minLength: 10
+        }
+      }
+    ]
+  },
+
+  brave_search: {
+    id: 'brave_search',
+    sort: 16,
+    beta: false,
+    comingSoon: false,
+    name: 'Brave Search',
+    description: 'Privacy-focused web search engine powered by independent index. Get comprehensive search results without tracking or personalized ads.',
+    category: 'Search',
+    icon: 'brave.svg',
+    connected: false,
+    version: '1.0.0',
+    lastUpdated: '2026-02-14 00:00:00',
+    developer: 'Jonathon Byrdziak & Alan Carvalho',
+    formGuide: 'Get your API key from Brave Search API dashboard. Go to search.brave.com/api.',
+    installationGuide: {
+      title: 'Brave Search API Setup Guide',
+      description: 'Get your Brave Search API key (1-2 minutes)',
+      steps: [
+        {
+          title: 'Visit Brave Search API',
+          content: `1. Go to https://search.brave.com/api
+2. Click "Get API Key" or "Sign Up"
+3. Complete the registration process
+4. Verify your email address`
+        },
+        {
+          title: 'Generate API Key',
+          content: `1. Log into your Brave Search dashboard
+2. Navigate to API Keys section
+3. Click "Create New API Key"
+4. Select your plan (free tier available)
+5. Copy your API key`
+        },
+        {
+          title: 'Configure in Sulla',
+          content: `1. Add your Brave Search API key
+2. Test the connection with a simple search query
+3. Adjust rate limits based on your plan`
+        }
+      ],
+      importantNotes: [
+        'Brave Search offers generous free tier limits',
+        'API key provides access to search results only',
+        'No personal data collection or tracking',
+        'Results are based on independent web index'
+      ]
+    },
+    features: [
+      {
+        title: 'Privacy-Focused Search',
+        description: 'Search the web without tracking or personalized results'
+      },
+      {
+        title: 'Comprehensive Results',
+        description: 'Get web pages, images, videos, and news results'
+      },
+      {
+        title: 'Independent Index',
+        description: 'Results based on Brave\'s own web crawling technology'
+      },
+      {
+        title: 'Fast Response Times',
+        description: 'Quick search results with low latency'
+      }
+    ],
+    guideLinks: [
+      {
+        title: 'Brave Search API Documentation',
+        description: 'Complete API reference and usage guides',
+        url: 'https://api.search.brave.com/'
+      },
+      {
+        title: 'Brave Search Website',
+        description: 'Learn about Brave Search features and privacy',
+        url: 'https://search.brave.com/'
+      }
+    ],
+    properties: [
+      {
+        key: 'api_key',
+        title: 'API Key',
+        hint: 'Your Brave Search API key',
+        type: 'password',
+        required: true,
+        placeholder: '',
+        validation: {
+          pattern: '^BRAVE_[a-zA-Z0-9_-]{30,}$',
+          minLength: 36
         }
       }
     ]
