@@ -503,7 +503,7 @@ export class Graph<TState = HierarchicalThreadState> {
  * Builds minimal sub-state, runs sub-graph, merges results back.
  * Returns control to overlord_planner.
  */
-class SubgraphTriggerNode implements GraphNode<OverlordThreadState> {
+export class SubgraphTriggerNode implements GraphNode<OverlordThreadState> {
   id = 'subgraph_trigger';
   name = 'Subgraph Trigger';
 
@@ -650,7 +650,7 @@ export function nextThreadId(): string {
   return `thread_${Date.now()}_${++threadCounter}`;
 }
 
-class ContextTrimmerNode extends BaseNode {
+export class ContextTrimmerNode extends BaseNode {
   constructor() {
     super('context_trimmer', 'Context Trimmer');
   }

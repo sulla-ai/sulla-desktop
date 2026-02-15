@@ -14,3 +14,5 @@ export { KnowledgeCriticNode } from './KnowledgeCriticNode';
 export { KnowledgeWriterNode } from './KnowledgeWriterNode';
 export { SummaryNode } from './SummaryNode';
 export { SimpleNode } from './SimpleNode';
+export { ContextTrimmerNode } from './Graph';
+export { SubgraphTriggerNode } from './Graph';
