@@ -987,7 +987,8 @@ export function createHierarchicalGraph(): Graph<HierarchicalThreadState> {
 export function createOverlordGraph(): Graph<OverlordThreadState> {
   const {
     ContextTrimmerNode,
-    OverLordPlannerNode
+    OverLordPlannerNode,
+    SubgraphTriggerNode
   } = require('.');
 
   // Create lightweight heartbeat graph with only core nodes
