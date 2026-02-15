@@ -2222,18 +2222,29 @@ export default class LimaBackend extends events.EventEmitter implements VMBacken
     try {
       await this.progressTracker.action('Checking for existing containers', 60, async () => {
         const existingContainers = await this.execCommand({ capture: true, root: true }, 'docker', 'ps', '-aq', '--filter', 'name=sulla_');
-        if (existingContainers.trim()) {
+        const containerIds = existingContainers.trim().split('\n').map(id => id.trim()).filter(id => id && /^[a-f0-9]{12,64}$/i.test(id));
+        if (containerIds.length > 0) {
           await this.progressTracker.action('Stopping existing containers', 61, async () => {
-            await this.execCommand({ root: true }, 'docker', 'stop', ...existingContainers.trim().split('\n'));
+            await this.execCommand({ root: true }, 'docker', 'stop', ...containerIds);
           });
           await this.progressTracker.action('Cleaning containers', 62, async () => {
-            await this.execCommand({ root: true }, 'docker', 'rm', ...existingContainers.trim().split('\n'));
+            await this.execCommand({ root: true }, 'docker', 'rm', ...containerIds);
           });
         }
       });
     } catch (error) {
       console.warn('[Sulla] Failed to clean up existing containers:', error);
     }
+
+    await this.progressTracker.action('Verifying compose file', 62.5, async () => {
+      try {
+        await this.execCommand({ root: true }, 'test', '-f', '/tmp/sulla-docker-compose.yml');
+        console.log('[Sulla] Compose file verified at /tmp/sulla-docker-compose.yml');
+      } catch {
+        console.warn('[Sulla] Compose file not found at /tmp/sulla-docker-compose.yml');
+        throw new Error('Compose file verification failed');
+      }
+    });
 
     await this.progressTracker.action('Deploying new containers', 63, async () => {
       await this.execCommand({ root: true }, 'docker-compose', '-f', '/tmp/sulla-docker-compose.yml', '-p', 'sulla', 'up', '-d');

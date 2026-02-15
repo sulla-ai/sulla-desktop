@@ -160,6 +160,7 @@ class WebSocketConnection {
     this.heartbeatTimer = this.reconnectTimer = null;
     this.ws?.close();
     this.ws = null;
+    this.subscribed.clear();
   }
 
   private scheduleReconnect() {
@@ -342,4 +343,4 @@ export class WebSocketClientService {
   }
 }
 
-export const getWebSocketClientService = () => new WebSocketClientService();
+export const getWebSocketClientService = () => WebSocketClientService.getInstance();

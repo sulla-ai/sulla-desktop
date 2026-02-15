@@ -32,14 +32,10 @@ spec:
         imagePullPolicy: IfNotPresent
         args: ["serve"]
         env:
-        - name: OLLAMA_NUM_GPU_LAYERS
-          value: "999"
         - name: OLLAMA_KEEP_ALIVE
-          value: "-1"
-        - name: OLLAMA_NUM_THREAD
-          value: "4"
+          value: "999999999"
         - name: OLLAMA_MAX_LOADED_MODELS
-          value: "1"
+          value: "3"
         ports:
         - containerPort: 11434
         volumeMounts:
