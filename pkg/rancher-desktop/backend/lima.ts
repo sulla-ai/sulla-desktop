@@ -2146,7 +2146,7 @@ export default class LimaBackend extends events.EventEmitter implements VMBacken
     await this.progressTracker.action('Waiting for Sulla services to be ready', 180, async () => {
       this.progressTracker.numeric('Waiting for Sulla services to be ready', 40, 100);
       await this.waitForSullaDockerServices();
-      this.progressTracker.numeric('Sulla services ready', 60, 100);
+      this.progressTracker.numeric('Sulla services ready', 64, 100);
     });
 
     // Pull and load Ollama model
@@ -2220,17 +2220,24 @@ export default class LimaBackend extends events.EventEmitter implements VMBacken
   private async applySullaCompose(): Promise<void> {
     // Clean up any existing sulla containers to prevent name conflicts
     try {
-      const existingContainers = await this.execCommand({ capture: true, root: true }, 'docker', 'ps', '-aq', '--filter', 'name=sulla_');
-      if (existingContainers.trim()) {
-        console.log('[Sulla] Stopping existing sulla containers before starting new ones');
-        await this.execCommand({ root: true }, 'docker', 'stop', ...existingContainers.trim().split('\n'));
-        await this.execCommand({ root: true }, 'docker', 'rm', ...existingContainers.trim().split('\n'));
-      }
+      await this.progressTracker.action('Checking for existing containers', 60, async () => {
+        const existingContainers = await this.execCommand({ capture: true, root: true }, 'docker', 'ps', '-aq', '--filter', 'name=sulla_');
+        if (existingContainers.trim()) {
+          await this.progressTracker.action('Stopping existing containers', 61, async () => {
+            await this.execCommand({ root: true }, 'docker', 'stop', ...existingContainers.trim().split('\n'));
+          });
+          await this.progressTracker.action('Cleaning containers', 62, async () => {
+            await this.execCommand({ root: true }, 'docker', 'rm', ...existingContainers.trim().split('\n'));
+          });
+        }
+      });
     } catch (error) {
       console.warn('[Sulla] Failed to clean up existing containers:', error);
     }
 
-    await this.execCommand({ root: true }, 'docker-compose', '-f', '/tmp/sulla-docker-compose.yml', '-p', 'sulla', 'up', '-d');
+    await this.progressTracker.action('Deploying new containers', 63, async () => {
+      await this.execCommand({ root: true }, 'docker-compose', '-f', '/tmp/sulla-docker-compose.yml', '-p', 'sulla', 'up', '-d');
+    });
   }
 
   /**

@@ -51,7 +51,7 @@ clean-hard:
     rm -rf resources/cert-manager*
     rm -rf resources/darwin/lima
     rm -rf resources/darwin/_output
-    rm -f resources/darwin/alpine-lima-*.iso
+    rm -f  resources/darwin/alpine-lima-*.iso
     rm -rf resources/host/
     rm -rf resources/preload.js*
     rm -rf resources/rancher-dashboard/
@@ -64,11 +64,14 @@ clean-hard:
 build:
     NODE_OPTIONS="--max-old-space-size=12288" yarn build
 
+install:
+    yarn install
+
 # Rebuild without wiping VM (preserves cached images)
 rebuild: clean build
 
 # Full rebuild - wipes everything including VM and cached images
-rebuild-hard: clean-hard build
+rebuild-hard: clean-hard install build
 
 # Start the development server (runs in foreground)
 start:

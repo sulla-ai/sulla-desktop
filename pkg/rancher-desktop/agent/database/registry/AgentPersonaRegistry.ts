@@ -77,7 +77,7 @@ export class AgentPersonaRegistry {
         temperature: 0.2,
         messages: [],
         loading: false,
-      },
+      },/*
       {
         isRunning: true,
         agentId: 'tasker',
@@ -90,7 +90,7 @@ export class AgentPersonaRegistry {
         temperature: 0.2,
         messages: [],
         loading: false,
-      },
+      },*/
     ],
     activeAgentId: 'chat-controller',
   });
