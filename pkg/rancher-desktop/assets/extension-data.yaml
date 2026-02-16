@@ -42,7 +42,7 @@
       "url":"https://raw.githubusercontent.com/rancherlabs/application-collection-extension/refs/heads/main/assets/05_workload-details.png"}    ]'
     com.suse.apps.main-package: nodejs-24
     com.suse.bci.micro.authors: https://github.com/SUSE/bci/discussions
-    com.suse.bci.micro.created: 2025-12-11T11:54:43.169877214Z
+    com.suse.bci.micro.created: 2025-12-11T12:04:59.245528360Z
     com.suse.bci.micro.description: A micro environment for containers based on the
       SUSE Linux Enterprise Base Container Image.
     com.suse.bci.micro.disturl: obs://build.suse.de/SUSE:SLE-15-SP7:Update:CR/containers/a53d17097cf3a907bf42b29b24882459-micro-image
@@ -67,9 +67,9 @@
     io.artifacthub.package.readme-url: ""
     org.openbuildservice.disturl: obs://build.suse.de/Devel:Orchid:Containers/containers/103eb70d1e78f2fd8ec1baa2fc66d3c2-nodejs-24
     org.opencontainers.image.authors: ""
-    org.opencontainers.image.base.digest: sha256:7d103f4317c8c7eae4d0126d34c8b7a92769b44764a526a63325f0ca24150092
+    org.opencontainers.image.base.digest: sha256:3d4f144f36be7a1595db65c77b92fc4b6277c46efccb2d408a8b618fc9cc90f7
     org.opencontainers.image.base.name: registry.suse.com/bci/bci-micro:15.7-52.6
-    org.opencontainers.image.created: 2025-12-12T14:06:19.962587777Z
+    org.opencontainers.image.created: 2025-12-12T14:02:42.477594640Z
     org.opencontainers.image.description: Integrate the Application Collection into your development lifecycle
     org.opencontainers.image.ref.name: 24.12.0-5.27
     org.opencontainers.image.source: ""
@@ -521,3 +521,31 @@
   short_description: Convenient way to access InterSystems Container Registry,
     public and private images of such products as IRIS and IRIS for Health and
     many others in one place.
+- slug: docker.io/alancarvalho/voice-ai
+  version: 0.0.1
+  containerd_compatible: true
+  labels:
+    com.docker.desktop.extension.api.version: 0.0.1
+    com.docker.desktop.extension.icon: https://raw.githubusercontent.com/sulla-ai/sulla-desktop/main/pkg/rancher-desktop/assets/images/voice-ai-logo.svg
+    com.docker.extension.additional-urls: ""
+    com.docker.extension.categories: development,utility-tools
+    com.docker.extension.changelog: <p>### Added  <ul><li>Voice AI
+      functionality</li></ul></p><p>### Changed<ul><li>Updated
+      UI</li></ul></p><p>### Fixed<ul><li>Metadata fixes</li></ul></p>
+    com.docker.extension.detailed-description: Extension provides Voice AI functionality for Rancher Desktop
+    com.docker.extension.publisher-url: https://github.com/sulla-ai/voice-ai
+    com.docker.extension.screenshots: ""
+    dev.chainguard.image.title: Voice AI
+    dev.chainguard.package.main: ""
+    maintainer: NGINX Docker Maintainers <docker-maint@nginx.com>
+    org.opencontainers.image.authors: Sulla Team
+    org.opencontainers.image.created: 2024-02-16T16:00:00Z
+    org.opencontainers.image.description: Extension provides Voice AI functionality for Rancher Desktop
+    org.opencontainers.image.source: https://github.com/sulla-ai/voice-ai
+    org.opencontainers.image.title: Voice AI by Sulla
+    org.opencontainers.image.url: https://hub.docker.com/r/alancarvalho/voice-ai
+    org.opencontainers.image.vendor: Sulla
+  title: Voice AI by Sulla
+  logo: https://raw.githubusercontent.com/sulla-ai/sulla-desktop/main/pkg/rancher-desktop/assets/images/voice-ai-logo.svg
+  publisher: Sulla
+  short_description: Extension provides Voice AI functionality for Rancher Desktop
