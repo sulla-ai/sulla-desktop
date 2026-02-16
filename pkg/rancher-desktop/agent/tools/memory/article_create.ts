@@ -30,7 +30,7 @@ export class ArticleCreateWorker extends BaseTool {
         return `Article with slug "${slug}" already exists.`;
       }
 
-      const article = Article.create({
+      const article = await Article.create({
         slug,
         title,
         document: content,

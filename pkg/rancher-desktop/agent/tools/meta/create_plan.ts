@@ -24,7 +24,7 @@ export class CreatePlanWorker extends BaseTool {
 
     // Create todo items for each milestone
     for (const milestone of input.milestones) {
-      const todo = AgentPlanTodo.create({
+      const todo = await AgentPlanTodo.create({
         planId: plan.id,
         milestoneId: milestone.id,
         title: milestone.title,

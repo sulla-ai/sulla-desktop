@@ -379,7 +379,10 @@ function scrollToHeading(id: string): void {
 const renderedContent = computed(() => {
   if (!activePage.value?.document) return '<p class="text-slate-500">No content available.</p>';
 
-  const markdown = activePage.value.document;
+  let markdown = activePage.value.document;
+
+  // Parse literal \n escape sequences to actual newlines
+  markdown = markdown.replace(/\\n/g, '\n');
 
   const renderer = new marked.Renderer();
   renderer.heading = ({ tokens, depth }) => {
