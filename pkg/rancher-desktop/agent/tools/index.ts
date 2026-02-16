@@ -16,6 +16,7 @@ import { rdctlToolRegistrations } from './rdctl';
 import { redisToolRegistrations } from './redis';
 import { slackToolRegistrations } from './slack';
 import { workspaceToolRegistrations } from './workspace';
+import { integrationToolRegistrations } from './integrations';
 
 // Combine all registrations and register them
 const allRegistrations = [
@@ -24,6 +25,7 @@ const allRegistrations = [
   ...calendarToolRegistrations,
   ...dockerToolRegistrations,
   ...githubToolRegistrations,
+  ...integrationToolRegistrations,
   ...kubectlToolRegistrations,
   ...limaToolRegistrations,
   ...memoryToolRegistrations,

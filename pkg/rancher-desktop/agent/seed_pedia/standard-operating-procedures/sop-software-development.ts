@@ -9,7 +9,7 @@ tags:
   - coding
   - vibe-coding
 order: 5
-locked: false
+locked: true
 author: seed
 created_at: 2026-02-02T03:00:00Z
 updated_at: 2026-02-02T03:00:00Z

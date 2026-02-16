@@ -6,6 +6,10 @@
 
       <rd-fieldset legend-text="User Account" class="mb-6">
         <div class="mb-4">
+          <label for="primaryUserName" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Primary User Name:</label>
+          <input id="primaryUserName" type="text" v-model="primaryUserName" class="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" placeholder="Enter your name (optional)">
+        </div>
+        <div class="mb-4">
           <label for="email" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Email:</label>
           <input id="email" type="email" v-model="sullaEmail" class="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" placeholder="Enter email">
         </div>
@@ -44,6 +48,7 @@ const emit = defineEmits<{
 // Reactive data for sullaEmail
 const sullaEmail = ref('');
 const sullaPassword = ref('');
+const primaryUserName = ref('');
 const sullaSubscribeToUpdates = ref(true);
 
 // Email validation regex
@@ -67,6 +72,10 @@ onMounted(async () => {
   // Load sullaSubscribeToUpdates from SullaSettingsModel
   const loadedSubscribe = await SullaSettingsModel.get('sullaSubscribeToUpdates');
   sullaSubscribeToUpdates.value = loadedSubscribe !== null ? loadedSubscribe : true;
+
+  // Load primaryUserName from SullaSettingsModel
+  const loadedPrimaryUserName = await SullaSettingsModel.get('primaryUserName');
+  primaryUserName.value = loadedPrimaryUserName || '';
 });
 
 const handleNext = async () => {
@@ -84,6 +93,7 @@ const handleNext = async () => {
 
 
   // Save to SullaSettingsModel
+  await SullaSettingsModel.set('primaryUserName', primaryUserName.value, 'string');
   await SullaSettingsModel.set('sullaEmail', sullaEmail.value, 'string');
   await SullaSettingsModel.set('sullaPassword', sullaPassword.value, 'string');
   await SullaSettingsModel.set('sullaSubscribeToUpdates', sullaSubscribeToUpdates.value, 'boolean');

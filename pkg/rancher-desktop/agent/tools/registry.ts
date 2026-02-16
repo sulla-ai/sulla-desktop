@@ -26,7 +26,7 @@ export class ToolRegistry {
   private descriptions = new Map<string, string>();
   private categoriesList = [
     'meta', 'memory', 'browser', 'calendar', 'docker', 'fs', 'github',
-    'kubectl', 'n8n', 'slack', 'workspace', 'redis', 'pg', 'rdctl', 'lima'
+    'integrations', 'kubectl', 'n8n', 'slack', 'workspace', 'redis', 'pg', 'rdctl', 'lima'
   ];
 
   private categoryDescriptions: Record<string, string> = {
@@ -44,6 +44,7 @@ export class ToolRegistry {
     redis: "Redis key/value store operations.",
     pg: "PostgreSQL database queries and transactions.",
     rdctl: "Sulla Desktop / rdctl management commands.",
+    integrations: "Tools for checking integration status and retrieving integration credentials.",
     lima: "Lima VM instance management."
   };
 
