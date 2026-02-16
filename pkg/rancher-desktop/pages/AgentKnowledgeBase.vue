@@ -222,32 +222,6 @@
                 class="prose max-w-none prose-slate dark:text-slate-400 dark:prose-invert prose-headings:scroll-mt-28 prose-headings:font-display prose-headings:font-normal lg:prose-headings:scroll-mt-34 prose-lead:text-slate-500 dark:prose-lead:text-slate-400 prose-a:font-semibold dark:prose-a:text-sky-400 dark:[--tw-prose-background:var(--color-slate-900)] prose-a:no-underline prose-a:shadow-[inset_0_-2px_0_0_var(--tw-prose-background,#fff),inset_0_calc(-1*(var(--tw-prose-underline-size,4px)+2px))_0_0_var(--tw-prose-underline,var(--color-sky-300))] prose-a:hover:[--tw-prose-underline-size:6px] dark:prose-a:shadow-[inset_0_calc(-1*var(--tw-prose-underline-size,2px))_0_0_var(--tw-prose-underline,var(--color-sky-800))] dark:prose-a:hover:[--tw-prose-underline-size:6px] prose-pre:rounded-xl prose-pre:bg-slate-900 prose-pre:shadow-lg dark:prose-pre:bg-slate-800/60 dark:prose-pre:shadow-none dark:prose-pre:ring-1 dark:prose-pre:ring-slate-300/10 dark:prose-hr:border-slate-800"
                 v-html="renderedContent"></div>
 
-              <!-- Related Articles at bottom of article -->
-              <div v-if="relatedArticles.length > 0" class="mt-12 border-t border-slate-200 pt-8 dark:border-slate-800">
-                <h2 class="font-display text-sm font-medium text-slate-900 dark:text-white mb-4">Related Articles</h2>
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div
-                    v-for="article in relatedArticles"
-                    :key="article.slug"
-                    @click="selectPage(article.slug)"
-                    class="group flex items-start gap-3 rounded-lg p-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer"
-                  >
-                    <div class="flex-shrink-0 mt-0.5 w-8 h-8 rounded-md bg-sky-100 dark:bg-sky-900/30 flex items-center justify-center">
-                      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-sky-600 dark:text-sky-400" viewBox="0 0 20 20" fill="currentColor">
-                        <path fill-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clip-rule="evenodd" />
-                      </svg>
-                    </div>
-                    <div class="min-w-0 flex-1">
-                      <p class="text-sm font-medium text-slate-900 dark:text-white group-hover:text-sky-600 dark:group-hover:text-sky-400 truncate">{{ article.title }}</p>
-                      <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                        {{ article.tags && article.tags[0] ? article.tags[0] : 'Article' }}
-                        <span v-if="article.updated_at" class="ml-1">&middot; {{ new Date(article.updated_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) }}</span>
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
               <dl v-if="prevPage || nextPage" class="mt-12 flex border-t border-slate-200 pt-6 dark:border-slate-800">
                 <div v-if="prevPage">
                   <dt class="font-display text-sm font-medium text-slate-900 dark:text-white">Previous</dt>
@@ -281,6 +255,7 @@
                 </div>
               </dl>
             </article>
+
             <article v-else-if="loadingPage" class="py-16 text-center text-slate-500 dark:text-slate-400">
               Loading...
             </article>
@@ -347,16 +322,16 @@
                 <h3 class="font-display text-sm font-medium text-slate-900 dark:text-white mb-3">Related Articles</h3>
                 <ul class="space-y-2">
                   <li v-for="article in relatedArticles.slice(0, 5)" :key="article.slug">
-                    <a
-                      href="#"
-                      class="block text-sm text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200 transition-colors"
-                      @click.prevent="selectPage(article.slug)"
+                    <button
+                      type="button"
+                      class="w-full text-left text-sm text-slate-600 hover:text-slate-900 hover:bg-slate-50 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-slate-800 rounded transition-colors cursor-pointer"
+                      @click="selectPage(article.slug)"
                     >
                       <div class="font-medium">{{ article.title }}</div>
                       <div class="text-xs text-slate-500 dark:text-slate-500 mt-1">
                         {{ article.tags && article.tags[0] ? article.tags[0] : 'Article' }}
                       </div>
-                    </a>
+                    </button>
                   </li>
                 </ul>
               </div>
@@ -556,7 +531,7 @@ const relatedArticles = computed(() => {
     return article.tags && article.tags.some(tag => 
       activePage.value?.tags?.includes(tag)
     );
-  }).slice(0, 5); // Limit to 5 related articles
+  }).slice(0, 5);
 });
 
 const nav = ref<{ tag: string; pages: ArticleListItem[] }[]>([]);
