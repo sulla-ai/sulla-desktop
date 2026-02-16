@@ -20,8 +20,6 @@ export class Article extends VectorBaseModel {
     'mentions',             // new: array of slugs/entities mentioned
     'related_entities',     // new: array of entity IDs/names
     'document',
-    'created_at',
-    'updated_at',
   ];
 
   protected readonly required = [
@@ -42,4 +40,13 @@ export class Article extends VectorBaseModel {
     mentions: [],
     related_entities: [],
   };
+
+  async save(): Promise<void> {
+    // Set timestamps
+    this.attributes.created_at = this.attributes.created_at || new Date().toISOString();
+    this.attributes.updated_at = new Date().toISOString();
+
+    // Call parent save
+    await super.save();
+  }
 }
