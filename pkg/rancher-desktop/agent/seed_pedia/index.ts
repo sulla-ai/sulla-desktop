@@ -9,7 +9,9 @@ import { architectureOverview } from './Introduction/architecture-overview';
 import { dockerBasics } from './Introduction/docker-basics';
 import { gettingStarted } from './Introduction/gettingstarted';
 import { kubernetesBasics } from './Introduction/kubernetes-basics';
+
 import { sopSoftwareDevelopment } from './standard-operating-procedures/sop-software-development';
+import { sopN8nWorkflowCreation } from './standard-operating-procedures/sop-n8n-workflow-creation';
 
 export const seedPedia = {
   architectureOverview,
@@ -23,5 +25,7 @@ export const seedPedia = {
   toolsAndCapabilities,
   troubleshooting,
   welcome,
+
   sopSoftwareDevelopment,
+  sopN8nWorkflowCreation,
 };

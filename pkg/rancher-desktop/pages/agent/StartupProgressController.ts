@@ -194,7 +194,8 @@ export class StartupProgressController {
       this.state.startupPhase.value = 'ready';
       this.state.progressDescription.value = 'System ready!';
       this.state.systemReady.value = true;
-      this.state.showOverlay.value = false; // Hide overlay when ready
+      // Refresh the page instead of hiding overlay
+      window.location.reload();
 
       // Mark that we've seen the startup splash in this session
       sessionStorage.setItem('sulla-startup-splash-seen', 'true');

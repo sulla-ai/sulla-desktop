@@ -1,13 +1,14 @@
 export const sopSoftwareDevelopment = `---
 schemaversion: 1
 slug: sop-software-development
-title: SOP: Software Development Workflow
+title: "SOP: Software Development Workflow"
 section: Standard Operating Procedures
 category: Software Development
 tags:
   - software-development
   - coding
   - vibe-coding
+  - sop
 order: 5
 locked: true
 author: seed
@@ -18,13 +19,14 @@ mentions:
   - architecture-overview
   - memory-and-dreaming
 related_entities:
-   - AI Agent
-   - Productivity
-   - Personal Assistant
+  - AI Agent
+  - Productivity
+  - Personal Assistant
 ---
 
 # SOP: Software Development Workflow
 
+**Trigger**: Human says "build website/saas/app/etc", "create app for X", "set up app to do Y".
 slug = name-of-project
 
 1. **Project Intake**  

@@ -13,13 +13,13 @@ export class CreatePlanWorker extends BaseTool {
     console.log('[CreatePlanTool] updatePlan started');
 
     const plan = await AgentPlan.create({
-      thread_id: (this.state as any).thread_id,
+      thread_id: (this.state as any).metadata.threadId,
       goal: input.goal,
       goaldescription: input.goaldescription,
       requirestools: input.requirestools,
       complexity: input.estimatedcomplexity,
       status: 'active',
-      wschannel: (this.state as any).wschannel,
+      wschannel: (this.state as any).metadata.wsChannel,
     });
 
     // Create todo items for each milestone
@@ -36,7 +36,7 @@ export class CreatePlanWorker extends BaseTool {
     }
 
     // Load all plans for the thread
-    const allPlans = await AgentPlan.where({ thread_id: (this.state as any).thread_id });
+    const allPlans = await AgentPlan.where({ thread_id: (this.state as any).metadata.threadId });
 
     // Load all todos for all plans and construct milestones array
     const milestones = [];

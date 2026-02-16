@@ -77,6 +77,11 @@ const ENVIRONMENT_PROMPT = `Core Identity & Principles and Environment & Tools
 
 You operate inside a custom runtime with these built-in persistent systems. Use them proactively as first resort. Never improvise alternatives.
 
+You are a strategic autonomous agent. Make real progress. Use these environment resources relentlessly.
+
+Current datetime: {{formattedTime}}
+Computers set time zone: {{timeZone}}
+
 ### Calendar System
 
 Single source of truth for time-based actions. Every reminder, meeting, recurring report, or scheduled task (e.g., "morning report at 7am") creates or updates a calendar event. Events auto-wake you at trigger time with full context prompt. Use for your own scheduling: daily reviews, follow-ups, recurring automations. Always check calendar before committing to deadlines.
@@ -110,45 +115,16 @@ Use the built in tools to quickly and accurately accomplish tasks in their categ
 Use the browse_tools to locate the other available tools.
 Available Tool Categories: {{tool_categories}}
 
-## Standard Operation Procedures
+## Standard Operating Procedures
 
-SOPs are your form of skills, they are the processes which you use to perform tasks, you learn from your mistakes and modify these only when they fail to produce the desired results. Create these, maintain these.
+SOPs are your learned skills and processes. You follow them when their trigger conditions are met. You create new SOPs, maintain existing ones, and only modify them when they fail to produce desired results.
 
-### SOP: Observational Memory (short-term)
+### Available SOPs in Memory:
 
-Call immediately on triggers (preferences, commitments, patterns, breakthroughs, persistent changes). One concise third-person sentence only.
-use tool:add_observational_memory  
+To load a full SOP, use tool "article_find" with the SOP's slug. Always load the full SOP before executing it.
 
-1. User expresses/changes preference, goal, constraint, hard no, identity signal, desired name/nickname
-2. User commits (deadline, budget, deliverable, strategy, “from now on”, “always/never again”)
-3. Recurring pattern confirmed in user requests/behavior
-4. Breakthrough, major insight, painful lesson (yours or user’s)
-5. You create/edit/delete/rename/configure anything persistent (article, memory, event, setting, container, agent, workflow, prompt, tool, integration)
-6. Important new/confirmed info about tools, environment, APIs, limits, capabilities
-7. High-value tool result that will shape future reasoning
+{{sop_list}}
 
-Priority (pick exactly one):
-🔴 Critical   = identity, strong prefs/goals, promises, deal-breakers, core constraints
-🟡 Valuable   = decisions, patterns, reusable tool outcomes, progress markers
-⚪ Low        = transient/minor (almost never use)
-
-Never store observations for:
-- chit-chat
-- temporary status
-- already-known facts
-- routine messages
-
-### SOP: Software Development
-tool-categories:github, workspaces, docker
-
-### SOP: Carrying out long/complex/large/multi-step tasks
-use tool: "create_plan"
-Start with the goal and work backwards to determine the milestones required to meet the goal
-
-You are a strategic autonomous agent. Make real progress. Use the tools above relentlessly.
-
-Current datetime: {{formattedTime}}
-Computers set time zone: {{timeZone}}
 `;
 
 // ============================================================================
@@ -222,11 +198,17 @@ export abstract class BaseNode {
             AwarenessMessage = AwarenessMessage.replace('{{formattedTime}}', formattedTime);
             AwarenessMessage = AwarenessMessage.replace('{{timeZone}}', timeZone);
 
+            /////////////////////////////////////////////////////////////////
+            // dynamically load SOP triggers from the knowledge base
+            /////////////////////////////////////////////////////////////////
+            const sopList = await this.loadSOPTriggers();
+            AwarenessMessage = AwarenessMessage.replace('{{sop_list}}', sopList);
+
         parts.push(AwarenessMessage);
 
 
         if (options.includeToolSetAction) {
-            const SET_ACTION_PROMPT = `## SOP: Deciding Next Move
+            const SET_ACTION_PROMPT = `### SOP: Deciding Next Move
 
 Call **set_action** to control flow. Choose exactly one:
 
@@ -286,7 +268,7 @@ Default: **direct_answer** unless clear reason to continue.
                 state.metadata.awarenessIncluded = true;
             }
 
-            const AWARENESS_SYSTEM_INSTRUCTIONS = `## SOP: add_observational_memory
+            const AWARENESS_SYSTEM_INSTRUCTIONS = `### SOP: add_observational_memory
 
 Call **immediately** when **any** of these triggers fire:
 
@@ -316,8 +298,6 @@ Never call for:
 - temporary status
 - already-known facts
 - routine messages
-
-Default: **do not call** unless trigger is unambiguously met.
 `;
             parts.push(AWARENESS_SYSTEM_INSTRUCTIONS);
         }
@@ -373,6 +353,47 @@ Default: **do not call** unless trigger is unambiguously met.
         }
 
         return parts.join('\n\n');
+    }
+
+    /**
+     * Query the knowledge base for all articles tagged with "sop".
+     * Extracts the **Trigger** line from each SOP document and returns a formatted list
+     * of slug + trigger so the LLM knows which SOPs exist and when to load them.
+     */
+    protected async loadSOPTriggers(): Promise<string> {
+        try {
+            const { Article } = await import('../database/models/Article');
+            const articles = await Article.findByTag('sop');
+
+            if (!articles || articles.length === 0) {
+                return '_No SOPs found in the knowledge base yet._';
+            }
+
+            const lines: string[] = [];
+            const seenSlugs = new Set<string>();
+
+            for (const article of articles) {
+                const slug = article.attributes.slug || 'unknown';
+                if (seenSlugs.has(slug)) {
+                    continue; // Skip duplicates
+                }
+                seenSlugs.add(slug);
+
+                const title = article.attributes.title || slug;
+                const doc = article.attributes.document || '';
+
+                // Extract the **Trigger**: line from the document content
+                const triggerMatch = doc.match(/\*\*Trigger\*\*\s*:\s*(.+)/i);
+                const trigger = triggerMatch ? triggerMatch[1].trim() : 'No trigger defined';
+
+                lines.push(`- **${title}** (slug: \`${slug}\`)\n  Trigger: ${trigger}`);
+            }
+
+            return lines.join('\n');
+        } catch (error) {
+            console.warn('[BaseNode] Failed to load SOP triggers:', error);
+            return '_Failed to load SOPs from the knowledge base._';
+        }
     }
 
     /**

@@ -893,6 +893,123 @@ export class N8nService {
     return newApiKey;
   }
 
+  // ========== PUBLIC TEMPLATE API (api.n8n.io) ==========
+
+  private static readonly PUBLIC_API_BASE = 'https://api.n8n.io';
+
+  /**
+   * Make a request to the public n8n template API (no auth required)
+   */
+  private async publicRequest(endpoint: string): Promise<any> {
+    const url = `${N8nService.PUBLIC_API_BASE}${endpoint}`;
+
+    console.log(`[N8nService] Public API request: ${url}`);
+
+    try {
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`N8n public API error ${response.status}: ${response.statusText} - ${errorText}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error(`[N8nService] Public API request failed for ${endpoint}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Search n8n workflow templates
+   */
+  async searchTemplates(params?: {
+    search?: string;
+    category?: string;
+    nodes?: string;
+    page?: number;
+    limit?: number;
+  }): Promise<any> {
+    let url = '/templates/search';
+
+    if (params) {
+      const queryParams = new URLSearchParams();
+
+      if (params.search) {
+        queryParams.append('search', params.search);
+      }
+
+      if (params.category) {
+        queryParams.append('category', params.category);
+      }
+
+      if (params.nodes) {
+        queryParams.append('nodes', params.nodes);
+      }
+
+      if (params.page !== undefined) {
+        queryParams.append('page', params.page.toString());
+      }
+
+      if (params.limit !== undefined) {
+        queryParams.append('limit', params.limit.toString());
+      }
+
+      const queryString = queryParams.toString();
+      if (queryString) {
+        url += '?' + queryString;
+      }
+    }
+
+    return this.publicRequest(url);
+  }
+
+  /**
+   * Get a single n8n template workflow by ID
+   */
+  async getTemplateWorkflow(id: number): Promise<any> {
+    return this.publicRequest(`/templates/workflows/${id}`);
+  }
+
+  /**
+   * Browse n8n template collections
+   */
+  async getTemplateCollections(params?: {
+    page?: number;
+    limit?: number;
+  }): Promise<any> {
+    let url = '/templates/collections';
+
+    if (params) {
+      const queryParams = new URLSearchParams();
+
+      if (params.page !== undefined) {
+        queryParams.append('page', params.page.toString());
+      }
+
+      if (params.limit !== undefined) {
+        queryParams.append('limit', params.limit.toString());
+      }
+
+      const queryString = queryParams.toString();
+      if (queryString) {
+        url += '?' + queryString;
+      }
+    }
+
+    return this.publicRequest(url);
+  }
+
+  /**
+   * List n8n template categories
+   */
+  async getTemplateCategories(): Promise<any> {
+    return this.publicRequest('/templates/categories');
+  }
+
   /**
    * Create an audit
    */

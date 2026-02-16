@@ -11,7 +11,7 @@ import { initialize as n8nUserSeeder } from './N8nUserSeeder';
 
 export const seedersRegistry = [
   {
-    name: 'knowledgebase-seeder',
+    name: 'knowledgebase-seeder-v4',
     run: knowledgeBaseSeeder,
   },
   {

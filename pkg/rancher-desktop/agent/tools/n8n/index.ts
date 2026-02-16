@@ -15,6 +15,10 @@ import { getVariablesRegistration } from './get_variables';
 import { getTagsRegistration } from './get_tags';
 import { activateWorkflowRegistration } from './activate_workflow';
 import { deactivateWorkflowRegistration } from './deactivate_workflow';
+import { searchTemplatesRegistration } from './search_templates';
+import { getTemplateWorkflowRegistration } from './get_template_workflow';
+import { getTemplateCollectionsRegistration } from './get_template_collections';
+import { getTemplateCategoriesRegistration } from './get_template_categories';
 
 // Export all n8n tool registrations as an array
 export const n8nToolRegistrations = [
@@ -34,4 +38,8 @@ export const n8nToolRegistrations = [
   getTagsRegistration,
   activateWorkflowRegistration,
   deactivateWorkflowRegistration,
+  searchTemplatesRegistration,
+  getTemplateWorkflowRegistration,
+  getTemplateCollectionsRegistration,
+  getTemplateCategoriesRegistration,
 ];
