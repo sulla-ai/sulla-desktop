@@ -695,9 +695,11 @@ const loading = computed<boolean>(() => {
   return agent.loading;
 });
 
-const handleModelChanged = (event: Electron.IpcRendererEvent, data: { model: string; type: 'local' } | { model: string; type: 'remote'; provider: string }) => {
+const handleModelChanged = async (event: Electron.IpcRendererEvent, data: { model: string; type: 'local' } | { model: string; type: 'remote'; provider: string }) => {
   modelName.value = data.model;
   modelMode.value = data.type;
+  // Reload model selector so its internal remote refs stay in sync
+  await modelSelector.start();
 };
 
 // Track expanded tool cards
@@ -817,9 +819,13 @@ onMounted(async () => {
 
   // Listen for model changes from other windows
   ipcRenderer.on('model-changed', handleModelChanged);
+
+  // Load settings eagerly — SullaSettingsModel has a disk fallback even before Redis/PG are ready
+  await settingsController.start();
+  await modelSelector.start();
 });
 
-// Watch for system readiness to initialize heavy components
+// Re-sync settings when system is fully ready (bootstrap may have updated values)
 watch(systemReady, async (ready) => {
   if (ready) {
     await settingsController.start();
