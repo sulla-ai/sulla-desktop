@@ -67,6 +67,27 @@ export class ToolRegistry {
     entries.forEach(e => this.register(e.name, e.description, e.category, e.loader));
   }
 
+  registerAllRegistrations(registrations: ToolRegistration[]) {
+    const entries = registrations.map((reg, index) => {
+      const entry = {
+        name: reg.name,
+        description: reg.description,
+        category: reg.category,
+        loader: async () => {
+          const instance = new reg.workerClass();
+          instance.schemaDef = reg.schemaDef;
+          instance.name = reg.name;
+          instance.description = reg.description;
+          instance.metadata.category = reg.category;
+          return instance;
+        },
+      };
+      return entry;
+    });
+    console.log(`Registering ${entries.length} entries`);
+    this.registerAll(entries);
+  }
+
   async getTool(name: string): Promise<any> {
     if (this.instances.has(name)) return this.instances.get(name)!;
     const loader = this.loaders.get(name);
@@ -81,11 +102,16 @@ export class ToolRegistry {
     return Promise.all(names.map(name => this.getTool(name)));
   }
 
-  async convertToolToLLM(name: string): Promise<any> {
-    const tool = await this.getTool(name);
+  async convertToolToLLM(toolOrName: string | any): Promise<any> {
+    let tool: any;
+    if (typeof toolOrName === 'string') {
+      tool = await this.getTool(toolOrName);
+    } else {
+      tool = toolOrName;
+    }
 
-    if (this.llmSchemaCache.has(name)) {
-      return this.llmSchemaCache.get(name);
+    if (this.llmSchemaCache.has(tool.name)) {
+      return this.llmSchemaCache.get(tool.name);
     }
 
     // Use the tool's own jsonSchema getter (from BaseTool)
@@ -100,7 +126,7 @@ export class ToolRegistry {
       },
     };
 
-    this.llmSchemaCache.set(name, formatted);
+    this.llmSchemaCache.set(tool.name, formatted);
     return formatted;
   }
 

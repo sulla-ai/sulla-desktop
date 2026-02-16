@@ -35,23 +35,8 @@ const allRegistrations = [
   ...workspaceToolRegistrations,
 ];
 
-// Convert ToolRegistration[] to ToolEntry[] by adding loaders
-const allEntries = allRegistrations.map(reg => ({
-  name: reg.name,
-  description: reg.description,
-  category: reg.category,
-  loader: async () => {
-    const instance = new reg.workerClass();
-    instance.schemaDef = reg.schemaDef;
-    instance.name = reg.name;
-    instance.description = reg.description;
-    instance.metadata.category = reg.category;
-    return instance;
-  },
-}));
-
 // Register all tools with the registry
-toolRegistry.registerAll(allEntries);
+toolRegistry.registerAllRegistrations(allRegistrations);
 
 // Export convenience helpers (now async!)
 export const getTool = (name: string) => toolRegistry.getTool(name);
