@@ -401,14 +401,35 @@ const loadEvents = async () => {
   try {
     const events = await CalendarEvent.getAllEvents();
     const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    const scheduleXEvents = events.map((e: any) => ({
-      id: e.id,
-      title: e.title,
-      start: Temporal.Instant.from(e.start_time).toZonedDateTimeISO(timezone),
-      end: Temporal.Instant.from(e.end_time).toZonedDateTimeISO(timezone),
-      description: e.description,
-      location: e.location,
-    }));
+    const scheduleXEvents = events.map((e: any) => {
+      // Handle both ISO strings and PostgreSQL timestamp format
+      const parseTimestamp = (timestamp: string) => {
+        try {
+          // First try ISO format (what UI creates)
+          return Temporal.Instant.from(timestamp);
+        } catch {
+          try {
+            // Fallback to PostgreSQL timestamp format (what n8n might create)
+            // Convert "2026-02-16 16:00:00+00" to "2026-02-16T16:00:00+00"
+            const isoString = timestamp.replace(' ', 'T');
+            return Temporal.Instant.from(isoString);
+          } catch {
+            console.warn(`[AgentCalendar] Unable to parse timestamp: ${timestamp}`);
+            // Fallback to current time to prevent crashes
+            return Temporal.Now.instant();
+          }
+        }
+      };
+
+      return {
+        id: e.id,
+        title: e.title,
+        start: parseTimestamp(e.start_time).toZonedDateTimeISO(timezone),
+        end: parseTimestamp(e.end_time).toZonedDateTimeISO(timezone),
+        description: e.description,
+        location: e.location,
+      };
+    });
     eventsService.set(scheduleXEvents);
     console.log(`[AgentCalendar] Loaded ${scheduleXEvents.length} events`);
   } catch (err) {
