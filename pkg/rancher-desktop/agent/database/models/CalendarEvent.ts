@@ -34,6 +34,14 @@ export class CalendarEvent extends BaseModel<CalendarEventAttributes> {
     'status'
   ];
   protected guarded = ['id', 'created_at', 'updated_at'];
+  protected casts = {
+    start_time: 'string',
+    end_time: 'string',
+    created_at: 'string',
+    updated_at: 'string',
+    all_day: 'boolean',
+    people: 'array'
+  };
 
   // Static helpers
   static async getAllEvents(): Promise<CalendarEvent[]> {

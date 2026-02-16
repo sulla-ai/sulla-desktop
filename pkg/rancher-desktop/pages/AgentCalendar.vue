@@ -400,8 +400,11 @@ const calendar = createCalendar({
 const loadEvents = async () => {
   try {
     const events = await CalendarEvent.getAllEvents();
+    console.log('[AgentCalendar] Raw events from database:', events);
+    console.log('[AgentCalendar] First event attributes:', events[0]?.attributes);
     const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
     const scheduleXEvents = events.map((e: any) => {
+      console.log('[AgentCalendar] Processing event:', e.id, 'timestamps:', e.start_time, e.end_time);
       // Handle both ISO strings and PostgreSQL timestamp format
       const parseTimestamp = (timestamp: string) => {
         try {
