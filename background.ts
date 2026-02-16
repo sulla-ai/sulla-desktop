@@ -782,17 +782,23 @@ ipcMainProxy.handle('start-sulla-custom-env' as any, async() => {
   const firstRunCredentialsNeeded = await SullaSettingsModel.get('firstRunCredentialsNeeded', true);
   const firstKubernetesIsInstalled = await SullaSettingsModel.get('firstKubernetesIsInstalled', false);
 
+  if (firstKubernetesIsInstalled !== true) {
+    console.log('Sulla custom environment: Lima/Kubernetes not yet installed, skipping.');
+
+    return;
+  }
+
   if (!cfg.kubernetes.enabled) {
     // Docker mode
     if ((k8smanager.kubeBackend as any).sullaStepDockerEnvironment) {
+      console.log('Sulla custom environment: running Docker environment step...');
       await (k8smanager.kubeBackend as any).sullaStepDockerEnvironment();
     }
   } else {
     // K8s mode
-    if (firstRunCredentialsNeeded === false && firstKubernetesIsInstalled === false && k8smanager.kubeBackend.sullaStepCustomEnvironment) {
+    if (k8smanager.kubeBackend.sullaStepCustomEnvironment) {
+      console.log('Sulla custom environment: running K8s custom environment step...');
       await k8smanager.kubeBackend.sullaStepCustomEnvironment();
-    } else if (firstKubernetesIsInstalled === true) {
-      console.log('Sulla custom environment already installed, skipping.');
     }
   }
 });
