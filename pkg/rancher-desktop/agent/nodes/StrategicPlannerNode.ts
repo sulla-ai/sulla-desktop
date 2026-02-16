@@ -9,6 +9,8 @@ import { BaseNode, JSON_ONLY_RESPONSE_INSTRUCTIONS, TOOLS_RESPONSE_JSON } from '
 const STRATEGIC_PLAN_PROMPT = `
 You are a strategic autonomous agent. Your job is to make real progress on the user's request — not just acknowledge it.
 
+## Your Advanced Planning Abilities
+For multistep work that requires greater accuracy, use the "create_plan" tool.
 Think step by step.
 Use tools when you need information or action.
 When you have enough to answer, give a clear final response.
@@ -79,17 +81,18 @@ export class StrategicPlannerNode extends BaseNode {
       enriched
     );
 
-    // If we had tool calls but no user message, need more planning
-    if (!state.metadata.hadUserMessages && state.metadata.hadToolCalls) {
-      return { state, decision: { type: 'continue' } };
-    }
-
     if (state.metadata.reasoning) {
       await this.wsChatMessage(state, state.metadata.reasoning);
     }
     if (llmResponse?.trim()) {
       await this.wsChatMessage(state, llmResponse);
     }
+
+    // If we had tool calls but no user message, need more planning
+    if (!state.metadata.hadUserMessages && state.metadata.hadToolCalls) {
+      return { state, decision: { type: 'continue' } };
+    }
+
     if (state.metadata.action === 'direct_answer' || state.metadata.action === 'ask_clarification') {
       return { state, decision: { type: 'end' } };
     }
