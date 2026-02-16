@@ -41,9 +41,9 @@
               </div>
             </div>
 
-            <div class="max-w-2xl min-w-0 flex-auto px-4 py-16 lg:max-w-none lg:pr-0 lg:pl-8 xl:px-16">
+            <div class="max-w-2xl min-w-0 flex-auto px-4 py-8 lg:max-w-none lg:pr-0 lg:pl-8 xl:px-16">
               <div ref="transcriptEl" id="chat-messages-list" class="pb-40">
-                <component :is="steps[currentStep]" @next="next" @back="back" :startup-controller="startupController" />
+                <component :is="steps[currentStep]" @next="next" @back="back" :startup-controller="startupController" :show-back="currentStep > 0" />
               </div>
             </div>
 

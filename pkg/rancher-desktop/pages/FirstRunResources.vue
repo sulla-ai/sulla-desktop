@@ -46,15 +46,30 @@
 
       <div class="mt-10"></div>
 
-      <div class="mb-4">
-        <label class="flex items-center">
-          <input type="checkbox" v-model="enableKubernetes" @change="onKubernetesChange" class="mr-2">
-          Enable Kubernetes Mode (requires more resources)
-        </label>
-      </div>
+      <button type="button" @click="isOptionsOpen = !isOptionsOpen" class="w-full text-left p-2 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors text-sm font-medium">
+        Options {{ isOptionsOpen ? '▲' : '▼' }}
+      </button>
+
+      <Transition name="slide">
+        <div v-show="isOptionsOpen" class="mt-2 overflow-hidden">
+          <div class="mb-4">
+            <label class="flex items-center">
+              <input type="checkbox" v-model="enableTelemetry" @change="onTelemetryChange" class="mr-2">
+              <span class="text-sm">Allow collection of anonymous statistics to help us improve Sulla Desktop</span>
+            </label>
+          </div>
+
+          <div class="mb-4">
+            <label class="flex items-center">
+              <input type="checkbox" v-model="enableKubernetes" @change="onKubernetesChange" class="mr-2">
+              <span class="text-sm">Enable Kubernetes Mode (requires more resources)</span>
+            </label>
+          </div>
+        </div>
+      </Transition>
 
       <div class="flex justify-end">
-        <button type="button" @click="$emit('back')" class="px-6 py-2 text-gray-500 rounded-md hover:bg-gray-200 cursor-pointer">Back</button>
+        <button v-if="showBack" type="button" @click="$emit('back')" class="px-6 py-2 text-gray-500 rounded-md hover:bg-gray-200 cursor-pointer">Back</button>
         <button type="submit" class="px-6 py-2 text-white rounded-md transition-colors font-medium hover:opacity-90" :style="{ backgroundColor: '#30a5e9' }" :disabled="!sullaModel || settings!.virtualMachine.memoryInGB <= 4 || settings!.virtualMachine.numberCPUs <= 2">Next</button>
       </div>
     </form>
@@ -81,14 +96,25 @@ const emit = defineEmits<{
   back: [];
 }>();
 
+const props = defineProps<{
+  showBack?: boolean;
+}>();
+
 // Reactive ref for sullaModel
 const sullaModel = ref<string>('');
+
+// Reactive ref for telemetry
+const enableTelemetry = ref(false);
 
 // Reactive ref for kubernetes mode
 const enableKubernetes = ref(false);
 
+// Reactive ref for options accordion
+const isOptionsOpen = ref(false);
+
 // Set defaults
 settings.value.application.pathManagementStrategy = PathManagementStrategy.RcFiles;
+settings.value.application.telemetry = { enabled: true };
 settings.value.kubernetes.enabled = false;
 
 onMounted(async () => {
@@ -99,11 +125,12 @@ onMounted(async () => {
     settings.value.kubernetes.enabled = false;
 
     // Set checkbox state from loaded settings
+    enableTelemetry.value = settings.value.application.telemetry.enabled;
     enableKubernetes.value = settings.value.kubernetes.enabled;
 
     // Save the initial settings
     commitChanges({
-      application: { pathManagementStrategy: PathManagementStrategy.RcFiles },
+      application: { pathManagementStrategy: PathManagementStrategy.RcFiles, telemetry: { enabled: enableTelemetry.value } },
       kubernetes: { enabled: enableKubernetes.value },
     });
   });
@@ -224,6 +251,12 @@ const autoSelectBestModel = () => {
 const onKubernetesChange = async () => {
   await commitChanges({
     kubernetes: { enabled: enableKubernetes.value },
+  });
+};
+
+const onTelemetryChange = async () => {
+  await commitChanges({
+    application: { telemetry: { enabled: enableTelemetry.value } },
   });
 };
 
@@ -350,5 +383,23 @@ button:hover {
 input:hover, select:hover {
   border-color: #374151; /* darker gray border */
   background-color: #f3f4f6; /* slightly darker background */
+}
+
+/* Slide transition for accordion */
+.slide-enter-active,
+.slide-leave-active {
+  transition: all 0.3s ease;
+}
+
+.slide-enter-from,
+.slide-leave-to {
+  opacity: 0;
+  max-height: 0;
+}
+
+.slide-enter-to,
+.slide-leave-from {
+  opacity: 1;
+  max-height: 200px;
 }
 </style>

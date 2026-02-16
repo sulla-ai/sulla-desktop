@@ -2081,7 +2081,7 @@ export default class LimaBackend extends events.EventEmitter implements VMBacken
       this.progressTracker.numeric('Docker mode enabled, deploying Sulla via Docker Compose', 99, 100);
 
       if (firstRunCredentialsNeeded === false && this.sullaStepDockerEnvironment) {
-        await this.sullaStepDockerEnvironment();  
+        await this.sullaStepDockerEnvironment();
       }
     }
     
