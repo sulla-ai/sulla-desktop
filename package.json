@@ -110,6 +110,7 @@
     "node-forge": "1.3.3",
     "node-schedule": "^2.1.1",
     "pg": "^8.17.2",
+    "posthog-node": "^5.24.15",
     "preact": "^10.28.2",
     "proxy-agent": "^6.5.0",
     "rancher-icons": "https://github.com/rancher/icons#v2.0.21",

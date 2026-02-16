@@ -1,5 +1,6 @@
 <template>
   <div>
+    <PostHogTracker page-name="Images" />
     <RouterView />
     <Images
       class="content"
@@ -26,6 +27,7 @@ import { State as K8sState } from '@pkg/backend/backend';
 import Images from '@pkg/components/Images.vue';
 import { defaultSettings } from '@pkg/config/settings';
 import { ipcRenderer } from '@pkg/utils/ipcRenderer';
+import PostHogTracker from '@pkg/components/PostHogTracker.vue';
 
 const ImageMangerStates = Object.freeze({
   UNREADY: 'IMAGE_MANAGER_UNREADY',
@@ -33,7 +35,7 @@ const ImageMangerStates = Object.freeze({
 });
 
 export default {
-  components: { Images },
+  components: { Images, PostHogTracker },
   data() {
     return {
       settings:           defaultSettings,

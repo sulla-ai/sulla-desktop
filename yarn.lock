@@ -4099,6 +4099,15 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@posthog/core@npm:1.22.0":
+  version: 1.22.0
+  resolution: "@posthog/core@npm:1.22.0"
+  dependencies:
+    cross-spawn: "npm:^7.0.6"
+  checksum: 10c0/deb4ffefb02801917522466cfe5077ea3cd721734a4166e23e3dc16274e9ca121a40541c905dedd36e880d36057b6cb01f33cde818658f05b6819807b1363aaf
+  languageName: node
+  linkType: hard
+
 "@preact/signals-core@npm:^1.13.0":
   version: 1.13.0
   resolution: "@preact/signals-core@npm:1.13.0"
@@ -16154,6 +16163,15 @@ __metadata:
   languageName: node
   linkType: hard
 
+"posthog-node@npm:^5.24.15":
+  version: 5.24.15
+  resolution: "posthog-node@npm:5.24.15"
+  dependencies:
+    "@posthog/core": "npm:1.22.0"
+  checksum: 10c0/84dcb09f0a0252a4d95c1dc3ed5705df9c032985d2d4e8f8dcdf88566a7085d6937a729f0c8c27f31e38a31e3a1309d0ff131cabe92ce97f404a14174bf4c39d
+  languageName: node
+  linkType: hard
+
 "preact@npm:^10.28.2":
   version: 10.28.3
   resolution: "preact@npm:10.28.3"
@@ -16664,6 +16682,7 @@ __metadata:
     pg: "npm:^8.17.2"
     plist: "npm:3.1.0"
     posix-node: "npm:0.12.0"
+    posthog-node: "npm:^5.24.15"
     preact: "npm:^10.28.2"
     proxy-agent: "npm:^6.5.0"
     ps-tree: "npm:1.2.0"

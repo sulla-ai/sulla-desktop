@@ -1,5 +1,6 @@
 <template>
   <div class="min-h-screen overflow-y-auto bg-white text-[#0d0d0d] dark:bg-slate-900 dark:text-neutral-50 font-sans" :class="{ dark: isDark }">
+    <PostHogTracker page-name="AgentAutomations" />
     <div class="flex min-h-screen flex-col">
       <AgentHeader :is-dark="isDark" :toggle-theme="toggleTheme" />
 
@@ -175,6 +176,7 @@
 <script setup lang="ts">
 import AgentHeader from './agent/AgentHeader.vue';
 import { onMounted, ref } from 'vue';
+import PostHogTracker from '@pkg/components/PostHogTracker.vue';
 
 const THEME_STORAGE_KEY = 'agentTheme';
 const isDark = ref(false);

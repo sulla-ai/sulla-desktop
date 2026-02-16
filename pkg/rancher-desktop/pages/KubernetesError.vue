@@ -1,5 +1,6 @@
 <template>
   <div class="container">
+    <PostHogTracker page-name="KubernetesError" />
     <div class="page-body">
       <div class="error-header">
         <img
@@ -62,10 +63,12 @@ import os from 'os';
 import { defineComponent } from 'vue';
 
 import { ipcRenderer } from '@pkg/utils/ipcRenderer';
+import PostHogTracker from '@pkg/components/PostHogTracker.vue';
 
 export default defineComponent({
   name:   'kubernetes-error-dialog',
   layout: 'dialog',
+  components: { PostHogTracker },
   data() {
     return {
       titlePart:          '',

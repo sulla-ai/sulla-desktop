@@ -1,5 +1,6 @@
 <template>
   <div class="h-screen overflow-hidden bg-white text-[#0d0d0d] dark:bg-slate-900 dark:text-neutral-50 font-sans" :class="{ dark: isDark }">
+    <PostHogTracker page-name="Agent" />
     <div class="flex h-screen flex-col">
 
       <AgentHeader :is-dark="isDark" :toggle-theme="toggleTheme" />
@@ -563,6 +564,7 @@
 <script setup lang="ts">
 import AgentHeader from './agent/AgentHeader.vue';
 import AgentPersonaLibrary from './agent/personas/AgentPersonaLibrary.vue';
+import PostHogTracker from '@pkg/components/PostHogTracker.vue';
 
 import { ref, onMounted, onUnmounted, computed, nextTick, watch } from 'vue';
 import DOMPurify from 'dompurify';

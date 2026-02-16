@@ -1,5 +1,6 @@
 <template>
   <div class="container">
+    <PostHogTracker page-name="UnmetPrerequisites" />
     <h2>{{ t('unmetPrerequisites.title') }}</h2>
     <p>{{ t('unmetPrerequisites.message') }}</p>
     <ul>
@@ -24,6 +25,7 @@ import { defineComponent } from 'vue';
 import { ipcRenderer } from '@pkg/utils/ipcRenderer';
 import type { WSLVersionInfo } from '@pkg/utils/wslVersion';
 import type { reqMessageId } from '@pkg/window';
+import PostHogTracker from '@pkg/components/PostHogTracker.vue';
 
 function describeReason(reasonId: Exclude<reqMessageId, 'win32-kernel'>): string;
 function describeReason(reasonId: 'win32-kernel', version: WSLVersionInfo): string;
@@ -52,6 +54,7 @@ function describeReason(reasonId: reqMessageId, ...extras: any[]): string {
 export default defineComponent({
   name:   'unmet-prerequisites-dialog',
   layout: 'dialog',
+  components: { PostHogTracker },
   data() {
     return {
       reason:   '',

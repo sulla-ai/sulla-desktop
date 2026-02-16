@@ -1,5 +1,6 @@
 <template>
   <div>
+    <PostHogTracker page-name="DenyRoot" />
     <h2>
       Cannot run as Root
     </h2>
@@ -23,10 +24,12 @@
 import { defineComponent } from 'vue';
 
 import { ipcRenderer } from '@pkg/utils/ipcRenderer';
+import PostHogTracker from '@pkg/components/PostHogTracker.vue';
 
 export default defineComponent({
   name:   'page-deny-root',
   layout: 'dialog',
+  components: { PostHogTracker },
   mounted() {
     ipcRenderer.send('dialog/ready');
   },

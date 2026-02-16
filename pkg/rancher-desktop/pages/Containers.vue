@@ -1,5 +1,6 @@
 <template>
   <div class="containers">
+    <PostHogTracker page-name="Containers" />
     <banner
       v-if="errorMessage"
       color="error"
@@ -143,6 +144,7 @@ import { mapGetters } from 'vuex';
 import SortableTable from '@pkg/components/SortableTable';
 import { mapTypedGetters, mapTypedState } from '@pkg/entry/store';
 import { ipcRenderer } from '@pkg/utils/ipcRenderer';
+import PostHogTracker from '@pkg/components/PostHogTracker.vue';
 
 /**
  * @import { Container } from '@pk/store/containers'
@@ -170,7 +172,7 @@ import { ipcRenderer } from '@pkg/utils/ipcRenderer';
 export default defineComponent({
   name:       'Containers',
   title:      'Containers',
-  components: { SortableTable, BadgeState, Banner },
+  components: { SortableTable, BadgeState, Banner, PostHogTracker },
   data() {
     return {
       /** @type import('@pkg/config/settings').Settings | undefined */

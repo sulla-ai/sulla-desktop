@@ -22,11 +22,11 @@ export default defineComponent({
   data() {
     return {
       sudoAllowedTooltip: `
-        If checked, Rancher Desktop will attempt to acquire administrative
+        If checked, Sulla Desktop will attempt to acquire administrative
         credentials ("sudo access") when starting for some operations.  This
         allows for enhanced functionality, including bridged networking and
         default docker socket support.  Changes will only be applied next time
-        Rancher Desktop starts.
+        Sulla Desktop starts.
       `,
       automaticUpdates: true,
       statistics:       false,
@@ -81,7 +81,7 @@ export default defineComponent({
       legend-text="Statistics"
     >
       <rd-checkbox
-        label="Allow collection of anonymous statistics to help us improve Rancher Desktop"
+        label="Allow collection of anonymous statistics to help us improve Sulla Desktop"
         :value="preferences.application.telemetry.enabled"
         :is-locked="isPreferenceLocked('application.telemetry.enabled')"
         @update:value="onChange('application.telemetry.enabled', $event)"

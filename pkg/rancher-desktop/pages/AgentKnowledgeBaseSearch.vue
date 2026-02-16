@@ -1,6 +1,7 @@
 <template>
   <div class="min-h-screen bg-white text-[#0d0d0d] dark:bg-slate-900 dark:text-neutral-50 font-sans"
     :class="{ dark: isDark }">
+    <PostHogTracker page-name="AgentKnowledgeBaseSearch" />
     <div class="flex min-h-screen flex-col">
       <AgentHeader :is-dark="isDark" :toggle-theme="toggleTheme" />
 
@@ -312,10 +313,11 @@
 </template>
 
 <script setup lang="ts">
-import KnowledgeGraph from './KnowledgeGraph.vue';
 import AgentHeader from './agent/AgentHeader.vue';
+import KnowledgeGraph from './KnowledgeGraph.vue';
+import PostHogTracker from '@pkg/components/PostHogTracker.vue';
+import { onMounted, ref, watch, computed } from 'vue';
 import { articlesRegistry } from '../agent/database/registry/ArticlesRegistry';
-import { computed, onMounted, ref, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import DOMPurify from 'dompurify';
 import { marked } from 'marked';

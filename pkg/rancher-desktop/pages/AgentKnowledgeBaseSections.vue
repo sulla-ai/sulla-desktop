@@ -1,6 +1,7 @@
 <template>
   <div class="min-h-screen bg-white text-[#0d0d0d] dark:bg-slate-900 dark:text-neutral-50 font-sans"
     :class="{ dark: isDark }">
+    <PostHogTracker page-name="AgentKnowledgeBaseSections" />
     <div class="flex min-h-screen flex-col">
       <AgentHeader :is-dark="isDark" :toggle-theme="toggleTheme" />
 
@@ -240,10 +241,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
 import AgentHeader from './agent/AgentHeader.vue';
-
-const THEME_STORAGE_KEY = 'agentTheme';
+import { onMounted, ref, computed } from 'vue';
+import PostHogTracker from '@pkg/components/PostHogTracker.vue';
 const isDark = ref(false);
 
 const splashUrl = new URL('./assets/splash.png', import.meta.url).toString();

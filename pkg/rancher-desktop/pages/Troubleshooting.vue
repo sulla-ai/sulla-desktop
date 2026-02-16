@@ -1,5 +1,6 @@
 <template>
   <div class="troubleshooting">
+    <PostHogTracker page-name="Troubleshooting" />
     <div class="troubleshooting-items">
       <troubleshooting-line-item>
         <template #title>
@@ -90,11 +91,12 @@ import TroubleshootingLineItem from '@pkg/components/TroubleshootingLineItem.vue
 import RdCheckbox from '@pkg/components/form/RdCheckbox.vue';
 import { defaultSettings } from '@pkg/config/settings';
 import { ipcRenderer } from '@pkg/utils/ipcRenderer';
+import PostHogTracker from '@pkg/components/PostHogTracker.vue';
 
 export default {
   name:       'Troubleshooting',
   title:      'Troubleshooting',
-  components: { TroubleshootingLineItem, RdCheckbox },
+  components: { TroubleshootingLineItem, RdCheckbox, PostHogTracker },
   data:       () => ({
     state:           ipcRenderer.sendSync('k8s-state'),
     settings:        defaultSettings,

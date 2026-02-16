@@ -1,5 +1,6 @@
 <template>
   <div class="min-h-screen overflow-y-auto bg-white text-[#0d0d0d] dark:bg-slate-900 dark:text-neutral-50 font-sans" :class="{ dark: isDark }">
+    <PostHogTracker page-name="AgentCalendar" />
     <div class="flex min-h-screen flex-col">
       <AgentHeader :is-dark="isDark" :toggle-theme="toggleTheme" />
 
@@ -267,8 +268,8 @@
 
 <script setup lang="ts">
 import AgentHeader from './agent/AgentHeader.vue';
-
-import { ref, onMounted, watch } from 'vue';
+import PostHogTracker from '@pkg/components/PostHogTracker.vue';
+import { onMounted, ref } from 'vue';
 import { ScheduleXCalendar } from '@schedule-x/vue';
 import { createCalendar, createViewMonthGrid, createViewMonthAgenda, createViewWeek, createViewDay } from '@schedule-x/calendar';
 import { createEventsServicePlugin } from '@schedule-x/events-service';

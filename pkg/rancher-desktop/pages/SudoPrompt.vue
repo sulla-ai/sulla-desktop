@@ -5,6 +5,7 @@
 
 <template>
   <div class="contents">
+    <PostHogTracker page-name="SudoPrompt" />
     <h2>{{ t('sudoPrompt.title') }}</h2>
     <p>{{ t('sudoPrompt.message', { }, true) }}</p>
     <ul class="reasons">
@@ -50,6 +51,7 @@ import { Checkbox } from '@rancher/components';
 import { defineComponent } from 'vue';
 
 import { ipcRenderer } from '@pkg/utils/ipcRenderer';
+import PostHogTracker from '@pkg/components/PostHogTracker.vue';
 
 type SudoReason = 'networking' | 'docker-socket';
 
@@ -72,7 +74,7 @@ const SUDO_REASON_DESCRIPTION: Record<SudoReason, { title: string, description: 
 
 export default defineComponent({
   name:       'sudo-prompt-dialog',
-  components: { Checkbox },
+  components: { Checkbox, PostHogTracker },
   layout:     'dialog',
   data() {
     return {

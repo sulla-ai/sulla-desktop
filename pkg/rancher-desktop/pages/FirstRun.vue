@@ -1,5 +1,6 @@
 <template>
   <div class="h-screen overflow-hidden bg-white text-[#0d0d0d] dark:bg-slate-900 dark:text-neutral-50 font-sans" :class="{ dark: isDark }">
+    <PostHogTracker page-name="FirstRun" />
     <div class="flex h-screen flex-col">
 
       <SimpleHeader :is-dark="isDark" :toggle-theme="toggleTheme" :on-stop="stopApp"/>
@@ -63,6 +64,7 @@
 import { ref, provide, onMounted, computed } from 'vue';
 import { ipcRenderer } from '@pkg/utils/ipcRenderer';
 import { defaultSettings, Settings } from '@pkg/config/settings';
+import PostHogTracker from '@pkg/components/PostHogTracker.vue';
 
 import FirstRunResources from './FirstRunResources.vue';
 import FirstRunWelcome from './FirstRunWelcome.vue';

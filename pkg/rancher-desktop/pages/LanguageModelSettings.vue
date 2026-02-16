@@ -11,6 +11,7 @@ import { N8nService } from '../agent/services/N8nService';
 import { SullaSettingsModel } from '../agent/database/models/SullaSettingsModel';
 import { randomUUID } from 'crypto';
 import { REMOTE_PROVIDERS } from '../shared/remoteProviders';
+import PostHogTracker from '@pkg/components/PostHogTracker.vue';
 
 // Nav items for the Language Model Settings sidebar
 const navItems = [
@@ -1242,6 +1243,7 @@ export default defineComponent({
 
 <template>
   <div class="lm-settings">
+    <PostHogTracker page-name="LanguageModelSettings" />
     <!-- Header -->
     <div class="lm-header">
       <h1>Language Model Settings</h1>

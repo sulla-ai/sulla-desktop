@@ -3257,19 +3257,17 @@ setup:
   confirmPassword: Confirm New Password
   useRandom: Use a randomly generated password
   useManual: Set a specific password to use
-  defaultPasswordError: It looks like this is your first time visiting the Rancher UI, but the local admin account password is already set to something unique. Log in with that account below to continue the setup process.
+  defaultPasswordError: It looks like this is your first time visiting the Sulla UI, but the local admin account password is already set to something unique. Log in with that account below to continue the setup process.
   telemetry:
-    label: Allow collection of anonymous statistics to help us improve Rancher
+    label: Allow collection of anonymous statistics to help us improve Sulla
     tip:  'Sulla Labs would like to collect a bit of anonymized information
           about the configuration of your installation to help make Rio better.
           Your data will not be shared with anyone else, and no information about
-          what specific resources or endpoints you are deploying is included.
-          Once enabled you can view exactly what data will be sent at <code>/v1-telemetry</code>.
-          <a href="https://rancher.com/docs/rancher/v2.x/en/faq/telemetry/" target="_blank" rel="noopener noreferrer nofollow">More Info</a>'
-  eula: I agree to the <a href="https://rancher.com/eula" target="_blank" rel="noopener noreferrer nofollow">terms and conditions</a> for using Rancher.
+          what specific resources or endpoints you are deploying is included.'
+  eula: I agree to the <a href="https://sulladesktop.com/eula" target="_blank" rel="noopener noreferrer nofollow">terms and conditions</a> for using Sulla.
   serverUrl:
     label: Server URL
-    tip:  What URL should be used for this Rancher installation? All the nodes in your clusters will need to be able to reach this. You can skip setting this for now, and update it later in General Settings>Advanced Settings.
+    tip:  What URL should be used for this Sulla installation? All the nodes in your clusters will need to be able to reach this. You can skip setting this for now, and update it later in General Settings>Advanced Settings.
     skip: Skip
 
 sortableTable:
@@ -4725,14 +4723,14 @@ branding:
   directoryName: Brand Asset Directory Name
   logos:
     label: Logo
-    tip: 'Upload a logo to replace the Rancher logo in the top-level navigation header. Image height should be 21 pixels with a max width of 200 pixels. Max file size is 20KB'
+    tip: 'Upload a logo to replace the Sulla logo in the top-level navigation header. Image height should be 21 pixels with a max width of 200 pixels. Max file size is 20KB'
     lightPreview: Light Theme Preview
     darkPreview: Dark Theme Preview
     uploadLight: Upload Light Logo
     uploadDark: Upload Dark Logo
     useCustom: Use a Custom Logo
   options:
-    default: Default Rancher Theme
+    default: Default Sulla Theme
     suse: SUSE Theme
     custom: Define a Custom Theme
   uiPL:
@@ -4890,7 +4888,7 @@ troubleshooting:
         checkboxLabel: Keep cached Kubernetes images
         ok: Factory Reset
         cancel: Cancel
-  needHelp: 'Still having problems? Start a discussion in the <b>#sulla-desktop</b> channel on the <a href="https://github.com/sulla-ai/desktop/discussions">Rancher Users Slack</a> or <a href="https://github.com/rancher-sandbox/rancher-desktop/issues">Report an Issue</a>.'
+  needHelp: 'Still having problems? Start a discussion in the <b>#sulla-desktop</b> channel on the <a href="https://github.com/sulla-ai/desktop/discussions">Sulla Users Slack</a>.'
 
 ##############################
 ### Diagnostics Page
