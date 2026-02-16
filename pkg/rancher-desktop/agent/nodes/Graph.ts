@@ -387,6 +387,9 @@ export class Graph<TState = HierarchicalThreadState> {
 
         state = result.state;
 
+        // Check abort immediately after node execution
+        throwIfAborted(state, 'Graph execution aborted');
+
         // yield to event loop
         await new Promise(r => setTimeout(r, 0));
 

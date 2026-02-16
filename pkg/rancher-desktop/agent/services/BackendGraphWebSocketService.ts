@@ -122,6 +122,11 @@ export class BackendGraphWebSocketService {
       BACKEND_CHANNEL_ID
     ) as { graph: any; state: OverlordThreadState };
 
+    // Create a fresh AbortService for this run and wire it into state
+    const abort = new AbortService();
+    this.activeAbort = abort;
+    state.metadata.options.abort = abort;
+
     try {
 
       // === NEW: Notify AgentPersonaService about the threadId ===

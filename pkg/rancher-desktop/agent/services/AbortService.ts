@@ -104,9 +104,10 @@ export function abortIfSignalReceived(signal?: AbortSignal): boolean {
 export function throwIfAborted(stateOrSignal?: any | AbortSignal, message?: string): void {
   let signal: AbortSignal | undefined;
   
-  // If it's a state object, extract the abort signal
+  // If it's a state object, extract the abort signal from options.abort
   if (stateOrSignal && typeof stateOrSignal === 'object' && stateOrSignal.metadata) {
-    signal = stateOrSignal.metadata?.__abort?.signal;
+    const abort = stateOrSignal.metadata?.options?.abort;
+    signal = abort?.signal;
   } else {
     // Assume it's already an AbortSignal
     signal = stateOrSignal;

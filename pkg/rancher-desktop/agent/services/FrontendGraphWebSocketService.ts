@@ -78,6 +78,11 @@ export class FrontendGraphWebSocketService {
     // Get or create persistent graph for this thread - do this outside try/catch
     const { graph, state } = await GraphRegistry.getOrCreate(channelId, threadId) as { graph: any; state: HierarchicalThreadState };
 
+    // Create a fresh AbortService for this run and wire it into state
+    const abort = new AbortService();
+    this.activeAbort = abort;
+    state.metadata.options.abort = abort;
+
     try {
 
       // === NEW: Notify AgentPersonaService about the threadId ===

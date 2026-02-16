@@ -100,6 +100,7 @@ export class ChatInterface {
     const personaService = this.registry.getActivePersonaService();
     if (personaService) {
       personaService.emitStopSignal(personaService.state.agentId);
+      personaService.graphRunning.value = false;
       this.registry.setLoading(personaService.state.agentId, false);
     }
   }
