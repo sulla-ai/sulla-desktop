@@ -59,19 +59,19 @@ export class SullaSettingsModel extends BaseModel<SettingsAttributes> {
       switch(cast) {
         case 'string':
         case 'slug':
-          return value.replace(/^"|"$/g, '');
+          return value;
         case 'number':
-          return Number(value.replace(/^"|"$/g, ''));
+          return Number(value);
         case 'boolean':
-          const cleaned = value.replace(/^"|"$/g, '').toLowerCase();
+          const cleaned = value.toLowerCase();
           const truthyValues = ['true', '1', 'yes', 'on'];
           return truthyValues.includes(cleaned);
         case 'array':
         case 'json':
           return JSON.parse(value);
         default:
-          // For uncast values, return as string (don't try to parse as JSON)
-          return value.replace(/^"|"$/g, '').replace(/\\n/g, '\n').replace(/\\"/g, '"');
+          // For uncast values, return as-is
+          return value;
       }
     } catch (err) {
       console.error('Error casting value:', err);
@@ -167,7 +167,7 @@ export class SullaSettingsModel extends BaseModel<SettingsAttributes> {
     for (const setting of all) {
       const property = setting.attributes.property as string;
       const value = setting.attributes.value;
-      pipeline.hset('sulla_settings', property, JSON.stringify(value));
+      pipeline.hset('sulla_settings', property, String(value));
     }
     await pipeline.exec();
   }
