@@ -381,7 +381,8 @@ Default: **do not call** unless trigger is unambiguously met.
           llmTools = await toolRegistry.getLLMToolsFor(await toolRegistry.getToolsByCategory("meta"));
         }
 
-        console.log('[BaseNode] tools:', tools);
+        const systemMessage = messages.find(msg => msg.role === 'system');
+        console.log('[BaseNode] prompt:', systemMessage ? systemMessage.content : 'No system message');
         try {
             // Primary attempt
             state.metadata.hadToolCalls = false;

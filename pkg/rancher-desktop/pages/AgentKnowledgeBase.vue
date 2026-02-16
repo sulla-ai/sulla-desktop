@@ -120,17 +120,28 @@
                   <li v-for="group in nav" :key="group.tag">
                     <h2 class="font-display font-medium text-slate-900 dark:text-white">{{ group.tag }}</h2>
                     <ul role="list" class="mt-2 space-y-2 border-l-2 border-slate-100 lg:mt-4 lg:space-y-4 lg:border-slate-200 dark:border-slate-800">
-                      <li v-for="p in group.pages" :key="p.slug" class="relative">
-                        <a
-                          href="#"
-                          class="block w-full pl-3.5 before:pointer-events-none before:absolute before:top-1/2 before:-left-1 before:h-1.5 before:w-1.5 before:-translate-y-1/2 before:rounded-full"
-                          :class="activeSlug === p.slug
-                            ? 'font-semibold text-sky-500 before:bg-sky-500'
-                            : 'text-slate-500 before:hidden before:bg-slate-300 hover:text-slate-600 hover:before:block dark:text-slate-400 dark:before:bg-slate-700 dark:hover:text-slate-300'"
-                          @click.prevent="selectPage(p.slug)"
-                        >
-                          {{ p.title }}
-                        </a>
+                      <li v-for="p in group.pages" :key="p.slug" class="relative group/nav">
+                        <div class="flex items-center">
+                          <a
+                            href="#"
+                            class="block w-full pl-3.5 before:pointer-events-none before:absolute before:top-1/2 before:-left-1 before:h-1.5 before:w-1.5 before:-translate-y-1/2 before:rounded-full"
+                            :class="activeSlug === p.slug
+                              ? 'font-semibold text-sky-500 before:bg-sky-500'
+                              : 'text-slate-500 before:hidden before:bg-slate-300 hover:text-slate-600 hover:before:block dark:text-slate-400 dark:before:bg-slate-700 dark:hover:text-slate-300'"
+                            @click.prevent="selectPage(p.slug)"
+                          >
+                            {{ p.title }}
+                          </a>
+                          <router-link
+                            :to="{ name: 'AgentKnowledgeBaseEdit', params: { slug: p.slug } }"
+                            class="ml-1 flex-shrink-0 opacity-0 group-hover/nav:opacity-100 transition-opacity text-slate-400 hover:text-sky-500"
+                            title="Edit article"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+                              <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                            </svg>
+                          </router-link>
+                        </div>
                       </li>
                     </ul>
                   </li>
@@ -144,7 +155,19 @@
               <div v-for="article in paginatedResults" :key="article.slug" class="blog-post border-b border-slate-200 pb-6 dark:border-slate-700">
                 <h2 class="text-2xl font-bold text-slate-900 dark:text-white">{{ article.title }}</h2>
                 <p class="text-slate-600 dark:text-slate-300 mt-2">{{ article.excerpt }}</p>
-                <button @click="selectPage(article.slug)" class="mt-4 px-4 py-2 bg-sky-500 text-white rounded hover:bg-sky-600">Read more</button>
+                <div class="mt-4 flex items-center gap-3">
+                  <button @click="selectPage(article.slug)" class="px-4 py-2 bg-sky-500 text-white rounded hover:bg-sky-600">Read more</button>
+                  <router-link
+                    :to="{ name: 'AgentKnowledgeBaseEdit', params: { slug: article.slug } }"
+                    class="inline-flex items-center gap-1 px-3 py-2 text-sm text-slate-500 hover:text-sky-500 rounded border border-slate-300 hover:border-sky-500 dark:border-slate-600 dark:text-slate-400 dark:hover:text-sky-400 dark:hover:border-sky-400 transition-colors"
+                    title="Edit article"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                      <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                    </svg>
+                    Edit
+                  </router-link>
+                </div>
               </div>
               <div class="flex justify-between items-center mt-8" v-if="searchResults.length > pageSize">
                 <button @click="page = Math.max(1, page - 1)" :disabled="page <= 1" class="px-4 py-2 bg-gray-300 dark:bg-gray-700 rounded disabled:opacity-50">Previous</button>
@@ -157,7 +180,19 @@
               <div v-for="article in paginatedResults" :key="article.slug" class="blog-post border-b border-slate-200 pb-6 dark:border-slate-700">
                 <h2 class="text-2xl font-bold text-slate-900 dark:text-white">{{ article.title }}</h2>
                 <p class="text-slate-600 dark:text-slate-300 mt-2">{{ article.excerpt }}</p>
-                <button @click="selectPage(article.slug)" class="mt-4 px-4 py-2 bg-sky-500 text-white rounded hover:bg-sky-600">Read more</button>
+                <div class="mt-4 flex items-center gap-3">
+                  <button @click="selectPage(article.slug)" class="px-4 py-2 bg-sky-500 text-white rounded hover:bg-sky-600">Read more</button>
+                  <router-link
+                    :to="{ name: 'AgentKnowledgeBaseEdit', params: { slug: article.slug } }"
+                    class="inline-flex items-center gap-1 px-3 py-2 text-sm text-slate-500 hover:text-sky-500 rounded border border-slate-300 hover:border-sky-500 dark:border-slate-600 dark:text-slate-400 dark:hover:text-sky-400 dark:hover:border-sky-400 transition-colors"
+                    title="Edit article"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                      <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                    </svg>
+                    Edit
+                  </router-link>
+                </div>
               </div>
               <div class="flex justify-between items-center mt-8" v-if="filteredPages.length > pageSize">
                 <button @click="page = Math.max(1, page - 1)" :disabled="page <= 1" class="px-4 py-2 bg-gray-300 dark:bg-gray-700 rounded disabled:opacity-50">Previous</button>
@@ -168,12 +203,50 @@
             <article v-else-if="activePage">
               <header class="mb-9 space-y-1">
                 <p class="font-display text-sm font-medium text-sky-500">{{ (activePage.tags && activePage.tags[0]) || 'Memory' }}</p>
-                <h1 class="font-display text-3xl tracking-tight text-slate-900 dark:text-white">{{ activePage.title }}</h1>
+                <div class="flex items-center gap-3">
+                  <h1 class="font-display text-3xl tracking-tight text-slate-900 dark:text-white">{{ activePage.title }}</h1>
+                  <router-link
+                    :to="{ name: 'AgentKnowledgeBaseEdit', params: { slug: activePage.slug } }"
+                    class="inline-flex items-center gap-1 px-2.5 py-1.5 text-sm text-slate-400 hover:text-sky-500 rounded border border-slate-300 hover:border-sky-500 dark:border-slate-600 dark:hover:border-sky-400 transition-colors"
+                    title="Edit article"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                      <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                    </svg>
+                    Edit
+                  </router-link>
+                </div>
               </header>
               <div
                 ref="articleContentEl"
                 class="prose max-w-none prose-slate dark:text-slate-400 dark:prose-invert prose-headings:scroll-mt-28 prose-headings:font-display prose-headings:font-normal lg:prose-headings:scroll-mt-34 prose-lead:text-slate-500 dark:prose-lead:text-slate-400 prose-a:font-semibold dark:prose-a:text-sky-400 dark:[--tw-prose-background:var(--color-slate-900)] prose-a:no-underline prose-a:shadow-[inset_0_-2px_0_0_var(--tw-prose-background,#fff),inset_0_calc(-1*(var(--tw-prose-underline-size,4px)+2px))_0_0_var(--tw-prose-underline,var(--color-sky-300))] prose-a:hover:[--tw-prose-underline-size:6px] dark:prose-a:shadow-[inset_0_calc(-1*var(--tw-prose-underline-size,2px))_0_0_var(--tw-prose-underline,var(--color-sky-800))] dark:prose-a:hover:[--tw-prose-underline-size:6px] prose-pre:rounded-xl prose-pre:bg-slate-900 prose-pre:shadow-lg dark:prose-pre:bg-slate-800/60 dark:prose-pre:shadow-none dark:prose-pre:ring-1 dark:prose-pre:ring-slate-300/10 dark:prose-hr:border-slate-800"
                 v-html="renderedContent"></div>
+
+              <!-- Related Articles at bottom of article -->
+              <div v-if="relatedArticles.length > 0" class="mt-12 border-t border-slate-200 pt-8 dark:border-slate-800">
+                <h2 class="font-display text-sm font-medium text-slate-900 dark:text-white mb-4">Related Articles</h2>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div
+                    v-for="article in relatedArticles"
+                    :key="article.slug"
+                    @click="selectPage(article.slug)"
+                    class="group flex items-start gap-3 rounded-lg p-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer"
+                  >
+                    <div class="flex-shrink-0 mt-0.5 w-8 h-8 rounded-md bg-sky-100 dark:bg-sky-900/30 flex items-center justify-center">
+                      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-sky-600 dark:text-sky-400" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clip-rule="evenodd" />
+                      </svg>
+                    </div>
+                    <div class="min-w-0 flex-1">
+                      <p class="text-sm font-medium text-slate-900 dark:text-white group-hover:text-sky-600 dark:group-hover:text-sky-400 truncate">{{ article.title }}</p>
+                      <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                        {{ article.tags && article.tags[0] ? article.tags[0] : 'Article' }}
+                        <span v-if="article.updated_at" class="ml-1">&middot; {{ new Date(article.updated_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) }}</span>
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
 
               <dl v-if="prevPage || nextPage" class="mt-12 flex border-t border-slate-200 pt-6 dark:border-slate-800">
                 <div v-if="prevPage">
@@ -577,5 +650,29 @@ function toggleTheme() {
 <style scoped>
 .dark .banner-dark-min-height {
   min-height: 600px;
+}
+
+/* Dark mode scrollbars for all scrollable areas */
+.dark ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.dark ::-webkit-scrollbar-track {
+  background: #1e293b;
+  border-radius: 4px;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: #475569;
+  border-radius: 4px;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}
+
+.dark ::-webkit-scrollbar-corner {
+  background: #1e293b;
 }
 </style>
