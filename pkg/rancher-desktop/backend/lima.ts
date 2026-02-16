@@ -321,7 +321,7 @@ export default class LimaBackend extends events.EventEmitter implements VMBacken
   protected activeVersion: semver.SemVer | null = null;
 
   /** Whether we can prompt the user for administrative access - this setting persists in the config. */
-  #adminAccess = true;
+  #adminAccess = false;
 
   /** A transient property that prevents prompting via modal UI elements. */
   #noModalDialogs = false;
@@ -1848,7 +1848,7 @@ export default class LimaBackend extends events.EventEmitter implements VMBacken
 
     await this.setState(State.STARTING);
     this.currentAction = Action.STARTING;
-    this.#adminAccess = config_.application.adminAccess ?? true;
+    this.#adminAccess = config_.application.adminAccess ?? false;
     this.#containerEngineClient = undefined;
     
     await this.progressTracker.action('Starting Backend', 10, async() => {
