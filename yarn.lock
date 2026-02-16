@@ -7208,14 +7208,14 @@ __metadata:
   linkType: hard
 
 "ajv@npm:^8.0.0, ajv@npm:^8.9.0":
-  version: 8.17.1
-  resolution: "ajv@npm:8.17.1"
+  version: 8.18.0
+  resolution: "ajv@npm:8.18.0"
   dependencies:
     fast-deep-equal: "npm:^3.1.3"
     fast-uri: "npm:^3.0.1"
     json-schema-traverse: "npm:^1.0.0"
     require-from-string: "npm:^2.0.2"
-  checksum: 10c0/ec3ba10a573c6b60f94639ffc53526275917a2df6810e4ab5a6b959d87459f9ef3f00d5e7865b82677cb7d21590355b34da14d1d0b9c32d75f95a187e76fff35
+  checksum: 10c0/e7517c426173513a07391be951879932bdf3348feaebd2199f5b901c20f99d60db8cd1591502d4d551dc82f594e82a05c4fe1c70139b15b8937f7afeaed9532f
   languageName: node
   linkType: hard
 
@@ -8260,9 +8260,9 @@ __metadata:
   linkType: hard
 
 "caniuse-lite@npm:^1.0.0, caniuse-lite@npm:^1.0.30001759, caniuse-lite@npm:^1.0.30001766":
-  version: 1.0.30001769
-  resolution: "caniuse-lite@npm:1.0.30001769"
-  checksum: 10c0/161b8c30ab967371807d45d361f0d5bc06e38ef2dbf811493d70cd97c21e1522f5b91fd944c419a00047ee09c931ca64627f125a9ffa7a17a9fdff8dad9765b0
+  version: 1.0.30001770
+  resolution: "caniuse-lite@npm:1.0.30001770"
+  checksum: 10c0/02d15a8b723af65318cb4d888a52bb090076898da7b0de99e8676d537f8d1d2ae4797e81518e1e30cbfe84c33b048c322e8bfafc5b23cfee8defb0d2bf271149
   languageName: node
   linkType: hard
 
@@ -8383,68 +8383,6 @@ __metadata:
   version: 3.0.0
   resolution: "chownr@npm:3.0.0"
   checksum: 10c0/43925b87700f7e3893296c8e9c56cc58f926411cce3a6e5898136daaf08f08b9a8eb76d37d3267e707d0dcc17aed2e2ebdf5848c0c3ce95cf910a919935c1b10
-  languageName: node
-  linkType: hard
-
-"chromadb-js-bindings-darwin-arm64@npm:^1.3.0":
-  version: 1.3.0
-  resolution: "chromadb-js-bindings-darwin-arm64@npm:1.3.0"
-  conditions: os=darwin & cpu=arm64
-  languageName: node
-  linkType: hard
-
-"chromadb-js-bindings-darwin-x64@npm:^1.3.0":
-  version: 1.3.0
-  resolution: "chromadb-js-bindings-darwin-x64@npm:1.3.0"
-  conditions: os=darwin & cpu=x64
-  languageName: node
-  linkType: hard
-
-"chromadb-js-bindings-linux-arm64-gnu@npm:^1.3.0":
-  version: 1.3.0
-  resolution: "chromadb-js-bindings-linux-arm64-gnu@npm:1.3.0"
-  conditions: os=linux & cpu=arm64 & libc=glibc
-  languageName: node
-  linkType: hard
-
-"chromadb-js-bindings-linux-x64-gnu@npm:^1.3.0":
-  version: 1.3.0
-  resolution: "chromadb-js-bindings-linux-x64-gnu@npm:1.3.0"
-  conditions: os=linux & cpu=x64 & libc=glibc
-  languageName: node
-  linkType: hard
-
-"chromadb-js-bindings-win32-x64-msvc@npm:^1.3.0":
-  version: 1.3.0
-  resolution: "chromadb-js-bindings-win32-x64-msvc@npm:1.3.0"
-  conditions: os=win32 & cpu=x64
-  languageName: node
-  linkType: hard
-
-"chromadb@npm:^3.2.2":
-  version: 3.3.0
-  resolution: "chromadb@npm:3.3.0"
-  dependencies:
-    chromadb-js-bindings-darwin-arm64: "npm:^1.3.0"
-    chromadb-js-bindings-darwin-x64: "npm:^1.3.0"
-    chromadb-js-bindings-linux-arm64-gnu: "npm:^1.3.0"
-    chromadb-js-bindings-linux-x64-gnu: "npm:^1.3.0"
-    chromadb-js-bindings-win32-x64-msvc: "npm:^1.3.0"
-    semver: "npm:^7.7.1"
-  dependenciesMeta:
-    chromadb-js-bindings-darwin-arm64:
-      optional: true
-    chromadb-js-bindings-darwin-x64:
-      optional: true
-    chromadb-js-bindings-linux-arm64-gnu:
-      optional: true
-    chromadb-js-bindings-linux-x64-gnu:
-      optional: true
-    chromadb-js-bindings-win32-x64-msvc:
-      optional: true
-  bin:
-    chroma: dist/cli.mjs
-  checksum: 10c0/d1a23fa4afd6088a7eefc1c17507fb4c3969249d176738856125d1cc0668b2a4148a3bf003b9e6bc147aa2ecc5a2c7199f460f38421bd4004b21f3ce7bb7cdb5
   languageName: node
   linkType: hard
 
@@ -10418,8 +10356,8 @@ __metadata:
   linkType: hard
 
 "eslint-plugin-n@npm:^17.16.2":
-  version: 17.23.2
-  resolution: "eslint-plugin-n@npm:17.23.2"
+  version: 17.24.0
+  resolution: "eslint-plugin-n@npm:17.24.0"
   dependencies:
     "@eslint-community/eslint-utils": "npm:^4.5.0"
     enhanced-resolve: "npm:^5.17.1"
@@ -10432,7 +10370,7 @@ __metadata:
     ts-declaration-location: "npm:^1.0.6"
   peerDependencies:
     eslint: ">=8.23.0"
-  checksum: 10c0/3808dad65628bc2dd74ebb9e7a255398f87ca348b4970307898b422bfe2302764d518f6a70d891b1fc45b08ea99ccf5ea4b3cd2d1f21f872bb60a4cdbfb22b68
+  checksum: 10c0/65b6c9ccd4d69296df9bdc0517bdbbc71e5f1ec065e80623c49148ff7813829bd3568154a016fefc06749476f3fdadc0e1afa61a15695893a3ca3da161c9fe86
   languageName: node
   linkType: hard
 
@@ -16550,7 +16488,16 @@ __metadata:
   languageName: node
   linkType: hard
 
-"qs@npm:^6.14.0, qs@npm:^6.14.1, qs@npm:~6.14.0":
+"qs@npm:^6.14.0, qs@npm:^6.14.1":
+  version: 6.15.0
+  resolution: "qs@npm:6.15.0"
+  dependencies:
+    side-channel: "npm:^1.1.0"
+  checksum: 10c0/ff341078a78a991d8a48b4524d52949211447b4b1ad907f489cac0770cbc346a28e47304455c0320e5fb000f8762d64b03331e3b71865f663bf351bcba8cdb4b
+  languageName: node
+  linkType: hard
+
+"qs@npm:~6.14.0":
   version: 6.14.2
   resolution: "qs@npm:6.14.2"
   dependencies:
@@ -16667,7 +16614,6 @@ __metadata:
     babel-loader: "npm:10.0.0"
     bcryptjs: "npm:^3.0.3"
     best-effort-json-parser: "npm:^1.2.1"
-    chromadb: "npm:^3.2.2"
     cookie-universal: "npm:2.2.2"
     cors: "npm:^2.8.5"
     cross-env: "npm:10.1.0"
@@ -16744,7 +16690,6 @@ __metadata:
     webpack: "npm:5.100.2"
     which: "npm:6.0.0"
     yaml: "npm:2.8.2"
-    zod: "npm:3.23.8"
     zod-to-json-schema: "npm:3.23.5"
   peerDependencies:
     "@babel/core": "*"
@@ -19662,9 +19607,9 @@ __metadata:
   linkType: hard
 
 "webpack-sources@npm:^3.3.3":
-  version: 3.3.3
-  resolution: "webpack-sources@npm:3.3.3"
-  checksum: 10c0/ab732f6933b513ba4d505130418995ddef6df988421fccf3289e53583c6a39e205c4a0739cee98950964552d3006604912679c736031337fb4a9d78d8576ed40
+  version: 3.3.4
+  resolution: "webpack-sources@npm:3.3.4"
+  checksum: 10c0/94a42508531338eb41939cf1d48a4a8a6db97f3a47e5453cff2133a68d3169ca779d4bcbe9dfed072ce16611959eba1e16f085bc2dc56714e1a1c1783fd661a3
   languageName: node
   linkType: hard
 
@@ -20171,13 +20116,6 @@ __metadata:
   peerDependencies:
     zod: ^3.23.3
   checksum: 10c0/bf50455f446c96b9a161476347ebab6e3bcae7fdf1376ce0b74248e79db733590164476dac2fc481a921868f705fefdcafd223a98203a700b3f01ba1cda6aa90
-  languageName: node
-  linkType: hard
-
-"zod@npm:3.23.8":
-  version: 3.23.8
-  resolution: "zod@npm:3.23.8"
-  checksum: 10c0/8f14c87d6b1b53c944c25ce7a28616896319d95bc46a9660fe441adc0ed0a81253b02b5abdaeffedbeb23bdd25a0bf1c29d2c12dd919aef6447652dd295e3e69
   languageName: node
   linkType: hard
 

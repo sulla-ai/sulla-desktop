@@ -1,6 +1,6 @@
 // SummaryNode.ts
 // Terminal node: extracts ruthless facts-only summary from thread
-// Persists to Chroma conversation_summaries collection
+// Persists to memory conversation_summaries collection
 // No routing — always ends graph
 
 import type { BaseThreadState, NodeResult } from './Graph';
@@ -43,7 +43,7 @@ ${JSON_ONLY_RESPONSE_INSTRUCTIONS}
  * Purpose:
  *   - Final node in any graph
  *   - Generates concise, facts-only thread summary
- *   - Stores in Chroma conversation_summaries collection
+ *   - Stores in memory conversation_summaries collection
  *   - Emits formatted summary to UI via WS
  *
  * Key Design Decisions (2025 refactor):
@@ -59,7 +59,7 @@ ${JSON_ONLY_RESPONSE_INSTRUCTIONS}
  *   - state.threadId valid
  *
  * Output mutations:
- *   - New Summary record in Chroma
+ *   - New Summary record in memory
  *   - WS message with formatted summary
  *
  * @extends BaseNode

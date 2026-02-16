@@ -1,4 +1,11 @@
-// Kubernetes category tools
-import './kubectl-apply.tool';
-import './kubectl-delete.tool';
-import './kubectl-describe.tool';
+// Import all kubectl tool registrations
+import { kubectlApplyRegistration } from './kubectl_apply';
+import { kubectlDeleteRegistration } from './kubectl_delete';
+import { kubectlDescribeRegistration } from './kubectl_describe';
+
+// Export all kubectl tool registrations as an array
+export const kubectlToolRegistrations = [
+  kubectlApplyRegistration,
+  kubectlDeleteRegistration,
+  kubectlDescribeRegistration,
+];

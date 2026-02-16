@@ -136,11 +136,11 @@ apply-yaml:
     resources/darwin/lima/bin/limactl shell 0 -- \
     sudo k3s kubectl apply -f /Users/jonathonbyrdziak/Sites/sulla/sulla-desktop/pkg/rancher-desktop/assets/sulla-deployments.yaml -n sulla
 
-ping-chroma:
-    @echo "Pinging Chroma health endpoint..."
+ping-memory:
+    @echo "Pinging memory health endpoint..."
     LIMA_HOME=~/Library/Application\ Support/rancher-desktop/lima \
     resources/darwin/lima/bin/limactl shell 0 -- \
-    curl -s -m 5 http://localhost:30115/api/v2/heartbeat || echo "Chroma unreachable (timeout or 410)"
+    curl -s -m 5 http://localhost:30115/api/v2/heartbeat || echo "memory unreachable (timeout or 410)"
 
 # Port-forward PostgreSQL to localhost:5432 for external access (e.g., pgAdmin, DBeaver)
 # Connection: host=localhost, port=5432, user=sulla, password=sulla_dev_password, database=sulla

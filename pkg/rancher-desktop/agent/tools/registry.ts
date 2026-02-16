@@ -1,15 +1,34 @@
 // src/tools/registry.ts
-import { BaseTool } from "./base";
-import { zodToJsonSchema } from "zod-to-json-schema";
 
-type ToolLoader = () => Promise<BaseTool>;
+type ToolLoader = () => Promise<any>;
+
+export interface ToolEntry {
+  name: string;
+  description: string;
+  category: string;
+  loader: ToolLoader;
+}
+
+export interface ToolRegistration {
+  name: string;
+  description: string;
+  category: string;
+  schemaDef: any;
+  workerClass: new () => any;
+}
 
 export class ToolRegistry {
-  private loaders = new Map<string, ToolLoader>();         // name → async factory
-  private instances = new Map<string, BaseTool>();         // cache instantiated tools
-  private categories = new Map<string, string[]>();        // category → [tool names]
-  private loadedCategories = new Set<string>();
-  private categoriesList = ['meta', 'memory', 'browser', 'calendar', 'docker', 'fs', 'github', 'kubectl', 'slack', 'workspace'];
+  private static registrations = new Map<string, ToolRegistration>();
+  private loaders = new Map<string, ToolLoader>();
+  private instances = new Map<string, any>();
+  private llmSchemaCache = new Map<string, any>();           // NEW: cache converted schemas
+  private categories = new Map<string, string[]>();
+  private descriptions = new Map<string, string>();
+  private categoriesList = [
+    'meta', 'memory', 'browser', 'calendar', 'docker', 'fs', 'github',
+    'kubectl', 'n8n', 'slack', 'workspace', 'redis', 'pg', 'rdctl', 'lima'
+  ];
+
   private categoryDescriptions: Record<string, string> = {
     meta: "Tools for browsing available tools, installing skills, and meta management.",
     memory: "Tools for finding and managing memory articles.",
@@ -19,177 +38,115 @@ export class ToolRegistry {
     fs: "File system operations tools.",
     github: "GitHub repository management tools.",
     kubectl: "Kubernetes cluster management tools.",
+    n8n: "Tools for managing n8n workflows, executions, credentials, tags, variables, and data tables.",
     slack: "Slack messaging and reaction tools.",
-    workspace: "Tools for managing isolated workspaces in the Lima VM."
+    workspace: "Tools for managing isolated workspaces in the Lima VM.",
+    redis: "Redis key/value store operations.",
+    pg: "PostgreSQL database queries and transactions.",
+    rdctl: "Sulla Desktop / rdctl management commands.",
+    lima: "Lima VM instance management."
   };
 
-  private async loadCategory(category: string) {
-    if (this.loadedCategories.has(category) || !this.categoriesList.includes(category)) return;
-    try {
-      await import(`./${category}/index.ts`);
-      this.loadedCategories.add(category);
-    } catch (e) {
-      console.warn(`Failed to load category ${category}:`, e);
-    }
+  static register(registration: ToolRegistration) {
+    this.registrations.set(registration.name, registration);
   }
 
-  /**
-   * Register a lazy-loaded tool
-   */
-  registerLazy(name: string, loader: ToolLoader, category: string) {
-    if (this.loaders.has(name)) {
-      console.warn(`Tool ${name} already registered`);
-      return;
-    }
+  static getRegistrations(): Map<string, ToolRegistration> {
+    return this.registrations;
+  }
 
+  register(name: string, description: string, category: string, loader: ToolLoader) {
+    if (this.loaders.has(name)) return;
     this.loaders.set(name, loader);
-
-    if (!this.categories.has(category)) {
-      this.categories.set(category, []);
-    }
+    this.descriptions.set(name, description);
+    if (!this.categories.has(category)) this.categories.set(category, []);
     this.categories.get(category)!.push(name);
   }
 
-  /**
-   * Add an already instantiated tool
-   */
-  addTool(tool: BaseTool) {
-    const name = tool.name;
-    const category = tool.metadata.category || 'misc';
-
-    if (this.instances.has(name)) {
-      console.warn(`Tool ${name} already added`);
-      return;
-    }
-
-    this.instances.set(name, tool);
-
-    if (!this.categories.has(category)) {
-      this.categories.set(category, []);
-    }
-    this.categories.get(category)!.push(name);
+  registerAll(entries: ToolEntry[]) {
+    entries.forEach(e => this.register(e.name, e.description, e.category, e.loader));
   }
 
-  /**
-   * Get or instantiate a tool (lazy)
-   */
-  async getTool(name: string): Promise<BaseTool> {
-    if (this.instances.has(name)) {
-      return this.instances.get(name)!;
-    }
-
+  async getTool(name: string): Promise<any> {
+    if (this.instances.has(name)) return this.instances.get(name)!;
     const loader = this.loaders.get(name);
-    if (!loader) {
-      throw new Error(`Tool ${name} not registered`);
-    }
-
+    if (!loader) throw new Error(`Tool ${name} not registered`);
     const tool = await loader();
     this.instances.set(name, tool);
     return tool;
   }
 
-  /**
-   * Get all tools in a category (loads them lazily)
-   */
-  async getToolsByCategory(category: string): Promise<BaseTool[]> {
-    await this.loadCategory(category);
+  async getToolsByCategory(category: string): Promise<any[]> {
     const names = this.categories.get(category) || [];
     return Promise.all(names.map(name => this.getTool(name)));
   }
 
-  /**
-   * Get LLM-compatible schema for a single tool
-   */
-  private convertToolToLLM(tool: BaseTool): any {
-    let jsonSchema = zodToJsonSchema(tool.schema, {
-      target: "jsonSchema7",
-      $refStrategy: "none",
-      pipeStrategy: "all",
-    }) as any;
+  async convertToolToLLM(name: string): Promise<any> {
+    const tool = await this.getTool(name);
 
-    // Cleanup (same as before)
-    delete jsonSchema.$schema;
-    delete jsonSchema.additionalProperties;
-    delete jsonSchema.definitions;
-    delete jsonSchema.$defs;
-
-    if (jsonSchema.properties) {
-      Object.values(jsonSchema.properties).forEach((p: any) => {
-        delete p.format;
-        if (p.default === null) delete p.default;
-      });
+    if (this.llmSchemaCache.has(name)) {
+      return this.llmSchemaCache.get(name);
     }
 
-    return {
+    // Use the tool's own jsonSchema getter (from BaseTool)
+    const parameters = tool.jsonSchema;
+
+    const formatted = {
       type: "function",
       function: {
         name: tool.name,
         description: tool.description,
-        parameters: jsonSchema,
+        parameters,
       },
     };
+
+    this.llmSchemaCache.set(name, formatted);
+    return formatted;
   }
 
-  private async convertToLLM(name: string): Promise<any> {
-    const tool = await this.getTool(name);
-    return this.convertToolToLLM(tool);
-  }
-
-  /**
-   * Get LLM tools for a category (recommended for agents)
-   * Loads only the tools in that category
-   */
   getLLMToolsForCategory(category: string): () => Promise<any[]> {
     return async () => {
-      await this.loadCategory(category);
       const names = this.categories.get(category) || [];
-      return Promise.all(names.map(name => this.convertToLLM(name)));
+      return Promise.all(names.map(name => this.convertToolToLLM(name)));
     };
   }
 
-  /**
-   * Get ALL LLM tools (loads everything – use sparingly)
-   */
   getAllLLMTools(): () => Promise<any[]> {
     return async () => {
+      if (this.loaders.size > 40) {
+        console.warn(`Loading ${this.loaders.size} tools — prefer category filtering`);
+      }
       const allNames = Array.from(this.loaders.keys());
-      return Promise.all(allNames.map(name => this.convertToLLM(name)));
+      return Promise.all(allNames.map(name => this.convertToolToLLM(name)));
     };
   }
 
-  /**
-   * Get LLM tools for a list of tools
-   */
-  getLLMToolsFor(tools: BaseTool[]): Promise<any[]> {
+  // For browse_tools — cheap metadata only, no loading instances or schemas
+  getCategoryToolMetadata(category: string): () => Promise<Array<{ name: string; description: string; category: string }>> {
+    return async () => {
+      const names = this.categories.get(category) || [];
+      return names.map(name => ({
+        name,
+        description: this.descriptions.get(name) || '',
+        category,
+      }));
+    };
+  }
+
+  async getLLMToolsFor(tools: any[]): Promise<any[]> {
     return Promise.all(tools.map(tool => this.convertToolToLLM(tool)));
   }
 
-  /**
-   * Search tools by name/description (loads category if specified)
-   */
-  async searchTools(query?: string, category?: string): Promise<BaseTool[]> {
-    if (category) {
-      await this.loadCategory(category);
-    } else {
-      // Avoid loading all categories to prevent heap issues
-      return [];
-    }
-
-    let names: string[] = [];
-
-    if (category) {
-      names = this.categories.get(category) || [];
-    } else {
-      names = Array.from(this.loaders.keys());
-    }
-
+  async searchTools(query?: string, category?: string): Promise<any[]> {
+    let names: string[] = this.categories.get(category || '') || [];
     if (query) {
       const q = query.toLowerCase();
-      names = names.filter(name =>
-        name.toLowerCase().includes(q)
-      );
+      names = names.filter(name => {
+        if (name.toLowerCase().includes(q)) return true;
+        const desc = this.descriptions.get(name);
+        return desc && desc.toLowerCase().includes(q);
+      });
     }
-
     return Promise.all(names.map(name => this.getTool(name)));
   }
 
@@ -197,13 +154,16 @@ export class ToolRegistry {
     return this.categoriesList;
   }
 
-  getCategoriesWithDescriptions(): {category: string, description: string}[] {
-    return this.categoriesList.map(cat => ({ category: cat, description: this.categoryDescriptions[cat] || 'No description available.' }));
+  getCategoriesWithDescriptions(): { category: string; description: string }[] {
+    return this.categoriesList.map(cat => ({
+      category: cat,
+      description: this.categoryDescriptions[cat] || 'No description available.',
+    }));
   }
 
-  // Optional: clear cache if memory pressure is detected
   clearCache() {
     this.instances.clear();
+    this.llmSchemaCache.clear();
   }
 }
 

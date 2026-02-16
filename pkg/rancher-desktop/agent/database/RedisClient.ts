@@ -1,6 +1,6 @@
 // RedisClient.ts
 // Singleton wrapper around ioredis for clean, consistent access
-// Mirrors ChromaClient/PostgresClient structure
+// Mirrors memoryClient/PostgresClient structure
 
 import Redis, { Pipeline, ChainableCommander } from 'ioredis';
 

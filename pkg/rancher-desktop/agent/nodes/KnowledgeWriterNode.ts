@@ -8,14 +8,14 @@ import { Article } from '../database/models/Article';
  * Knowledge Writer Node
  *
  * Purpose:
- *   - Terminal node: persists final KB article draft to Chroma
+ *   - Terminal node: persists final KB article draft to memory
  *   - Upserts document + metadata into knowledgebase_articles collection
  *   - Uses slug as document ID
  *   - Sets kbStatus = 'published' on success
  *
  * Key Design Decisions (2025 refactor):
  *   - Removed AgentLog / console.log / error tracking bloat
- *   - Direct Chroma upsert via getChromaService()
+ *   - Direct memory upsert via getmemoryService()
  *   - Clean metadata normalization (no NaN/undefined)
  *   - Neutral decision — always 'end'
  *   - WS feedback only on success
@@ -24,12 +24,12 @@ import { Article } from '../database/models/Article';
  * Input expectations:
  *   - state.metadata.kbFinalContent ← JSON string from executor
  *   - state.metadata.kbArticleSchema ← {slug, title, ...}
- *   - Chroma service available
+ *   - memory service available
  *
  * Output mutations:
- *   - Chroma: upsert document in knowledgebase_articles
+ *   - memory: upsert document in knowledgebase_articles
  *   - state.metadata.kbStatus = 'published' on success
- *   - state.metadata.kbArticleId ← Chroma document ID (slug)
+ *   - state.metadata.kbArticleId ← memory document ID (slug)
  *
  * @extends BaseNode
  */

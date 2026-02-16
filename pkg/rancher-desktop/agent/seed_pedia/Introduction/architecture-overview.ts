@@ -10,7 +10,7 @@ tags:
   - electron
   - vue
   - neo4j
-  - chroma
+  - memory
   - langgraph
 order: 10
 locked: true
@@ -27,7 +27,7 @@ related_entities:
   - Electron
   - Vue.js
   - Neo4j
-  - ChromaDB
+  - memoryDB
   - LangGraph
   - Node.js
   - TypeScript

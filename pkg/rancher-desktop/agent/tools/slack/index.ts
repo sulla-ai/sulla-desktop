@@ -1,5 +1,13 @@
-// Slack category tools
-import './slack-thread.tool';
-import './slack-unreact.tool';
-import './slack-update.tool';
-import './slack-user.tool';
+// Import all slack tool registrations
+import { slackThreadRegistration } from './slack_thread';
+import { slackUnreactRegistration } from './slack_unreact';
+import { slackUpdateRegistration } from './slack_update';
+import { slackUserRegistration } from './slack_user';
+
+// Export all slack tool registrations as an array
+export const slackToolRegistrations = [
+  slackThreadRegistration,
+  slackUnreactRegistration,
+  slackUpdateRegistration,
+  slackUserRegistration,
+];

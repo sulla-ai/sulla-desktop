@@ -76,7 +76,7 @@ export class Summary extends VectorBaseModel {
       related_slugs: relatedSlugs || [],
       mentions: mentions || [],
       related_entities: relatedEntities || [],
-      // Removed conversationId - not stored in Chroma metadata
+      // Removed conversationId - not stored in memory metadata
     });
 
     await summary.save();

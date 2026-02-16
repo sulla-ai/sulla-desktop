@@ -68,7 +68,7 @@ ${JSON_ONLY_RESPONSE_INSTRUCTIONS}
  * Purpose:
  *   - Early graph entry point: retrieves relevant past conversation summaries
  *   - Generates 1–4 tight search queries via LLM
- *   - Performs semantic search against conversation_summaries Chroma collection
+ *   - Performs semantic search against conversation_summaries memory collection
  *   - Attaches formatted context to state.metadata.memory
  *
  * Key Design Decisions (2025 refactor):

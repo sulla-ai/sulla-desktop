@@ -1,7 +1,17 @@
-// Software development category tools
-import './github-comment-on-issue.tool';
-import './github-create-file.tool';
-import './github-get-issue.tool';
-import './github-get-issues.tool';
-import './github-list-branches.tool';
-import './github-read-file.tool';
+// Import all github tool registrations
+import { gitHubCommentOnIssueRegistration } from './github_comment_on_issue';
+import { gitHubCreateFileRegistration } from './github_create_file';
+import { gitHubGetIssueRegistration } from './github_get_issue';
+import { gitHubGetIssuesRegistration } from './github_get_issues';
+import { gitHubListBranchesRegistration } from './github_list_branches';
+import { gitHubReadFileRegistration } from './github_read_file';
+
+// Export all github tool registrations as an array
+export const githubToolRegistrations = [
+  gitHubCommentOnIssueRegistration,
+  gitHubCreateFileRegistration,
+  gitHubGetIssueRegistration,
+  gitHubGetIssuesRegistration,
+  gitHubListBranchesRegistration,
+  gitHubReadFileRegistration,
+];

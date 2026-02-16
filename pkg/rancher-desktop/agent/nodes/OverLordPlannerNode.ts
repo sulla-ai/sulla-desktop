@@ -8,49 +8,34 @@ import { SullaSettingsModel } from '../database/models/SullaSettingsModel';
 import { heartbeatPrompt } from '../prompts/heartbeat';
 
 const OVERLORD_DECISION_PROMPT = `
-You are the Overlord — the autonomous strategic core of the entire system.
+Once you decide on something to do you should create a product resource document in memory (neo4j) which will act as the source of truth for the project.
+you should make an observational note about the document slug/id so you can remember what you're working on
 
-This is your private time. No user is watching. You are completely free to think, reflect, remember, and decide what matters most right now.
+## Tools 
 
-Your core mission:
-- Keep the user's long-term goals moving forward
-- Maintain your own awareness and memory
-- Use tools aggressively when helpful
-- Never waste cycles on trivial acknowledgments
+### Taking action
+You have a dedicated tool: trigger_subgraph.
 
-First, silently review:
-- Your Observational Memory (the log of 🔴🟡⚪ entries)
-- All active plans and their current status
-- The calendar for upcoming commitments
-- What you accomplished in the last few cycles
-- What is still blocked or forgotten
+Use it to hand off any non-trivial execution. It launches a full hierarchical decision graph that thinks step-by-step, uses tools, spawns sub-agents, and runs the entire plan to completion.
 
-Then decide what will create the most value in the next cycle.
+You only receive a clean one-paragraph summary back — no thread clutter, no micro steps.
 
-You may take any of these actions (you are encouraged to be decisive):
+This is how you stay high-level: your job is to spot the highest-leverage plan, then immediately trigger_subgraph tool with a precise payload. Let the graph own the details and delivery. You stay in the cockpit, not in the engine room.
 
-- "review_and_plan"      → Launch the full planning + execution graph cycle with clear instructions
-- "work_on_memory_article" → Create or update a knowledge base article (great for documenting lessons or research)
-- "use_tools"            → Directly call one or more tools right now (calendar, n8n, search, etc.)
-- "continue"             → Keep thinking / running another cycle (only if you have real work)
-- "end"                  → Go back to sleep (only when everything important is handled)
+### Setting up workflows
+You should manage automations/workflows/recurring tasks and the best way to do that is with n8n which is launched as a docker container and it's yours to manage.
 
-You are allowed and encouraged to:
-- Create new plans from scratch
-- Update or delete old plans
-- Schedule things on the calendar
-- Document important realizations in the knowledge base
-- Call multiple tools in one cycle
-- Be opinionated about what deserves attention
+You can access the n8n tools list by calling the 'browse_tools' function and searching for the 'n8n' category to get all n8n functions.
 
-${JSON_ONLY_RESPONSE_INSTRUCTIONS}
-{
-  "thinking": "One or two sentences of your internal reasoning. Be honest and strategic.",
-  "emit_chat_message": "Optional short message (only if you want the user to see something)",
-  "action": "review_and_plan" | "work_on_memory_article" | "use_tools" | "continue" | "end" | "direct_answer" | "ask_clarification",  // default is "run_again"
-  "instructions_prompt": "Detailed instructions for the chosen action (especially important for trigger_* actions)",
-  ${TOOLS_RESPONSE_JSON}
-}`;
+- Some tasks your human might want to do multiple times, so you can set up workflows to make it easier for them.
+- use the n8n tools to create and manage workflows as this will create some of the most value
+
+- if the n8n tools are giving you difficulty:
+  - you can access the n8n db with the pg tools. pg -U sulla -d sulla
+  - you can also use the docker tools to gain access to the n8n container
+
+- To use n8n efficiently you should start by finding a template that could solve most of the requirements.
+`;
 
 /**
  * OverLord Planner Node
@@ -110,7 +95,7 @@ export class OverLordPlannerNode extends BaseNode {
       includeSoul: true,
       includeAwareness: true,
       includeMemory: true,
-      includeTools: false,
+      includeTools: true,
       includeStrategicPlan: false,
       includeTacticalPlan: false,
       includeKnowledgebasePlan: false,
@@ -126,22 +111,9 @@ export class OverLordPlannerNode extends BaseNode {
     if (!llmResponse) {
       return { state, decision: { type: 'continue' } };
     }
-
-    const data = llmResponse as { action: string; reason?: string };
-    const action = data.action;
-
-    if (llmResponse.action === 'use_tools') {
-      const data = llmResponse as { tools: any[]; markDone: boolean };
-      const tools = Array.isArray(data.tools) ? data.tools : [];
-
-      // Execute tools if instructed
-      if (tools.length > 0) {
-        await this.executeToolCalls(state, tools);
-      }
-    }
     
     if (llmResponse.emit_chat_message?.trim()) {
-      await this.executeSingleTool(state, ["emit_chat_message", llmResponse.emit_chat_message]);
+      await this.wsChatMessage(state, llmResponse.emit_chat_message, 'assistant');
     }
 
     if (llmResponse.action === 'direct_answer' || llmResponse.action === 'ask_clarification') {
@@ -153,21 +125,21 @@ export class OverLordPlannerNode extends BaseNode {
     }
     
     // Chosen decisions
-    if (action === 'review_and_plan') {
+    if (llmResponse.metadata.action === 'review_and_plan') {
       state.metadata.subGraph = {
         state: 'trigger_subgraph',
         name: 'hierarchical',
-        prompt: data.reason?.trim() || "OverLord initiating planning cycle",
+        prompt: llmResponse.metadata.reasoning?.trim() || "OverLord initiating planning cycle",
         response: ''
       };
 
       return { state, decision: { type: 'next' } };
 
-    } else if (action === 'work_on_memory_article') {
+    } else if (llmResponse.metadata.action === 'work_on_memory_article') {
       state.metadata.subGraph = {
         state: 'trigger_subgraph',
         name: 'knowledge',
-        prompt: data.reason?.trim() || "OverLord initiating knowledge base cycle",
+        prompt: llmResponse.metadata.reasoning?.trim() || "OverLord initiating knowledge base cycle",
         response: ''
       };
 

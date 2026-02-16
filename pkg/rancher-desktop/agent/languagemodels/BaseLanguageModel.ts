@@ -2,7 +2,6 @@
 // This allows the agent to use either Ollama or remote APIs interchangeably
 
 import { tools } from "@langchain/openai";
-import { z } from "zod";
 
 export enum FinishReason {
   Stop = 'stop',
@@ -249,19 +248,19 @@ export abstract class BaseLanguageModel {
   }
 
   /**
-   * Safely parse JSON content from LLM responses using zod validation
-   * Returns parsed object if valid JSON with expected structure, null otherwise
+   * Safely parse JSON content from LLM responses
+   * Returns parsed object if valid JSON, null otherwise
    */
-  protected parseJson<T = any>(raw: string | null | undefined, schema?: z.ZodSchema<T>): T | null {
+  protected parseJson<T = any>(raw: string | null | undefined): T | null {
     // If it's already an object, return it as-is
     if (typeof raw === 'object' && raw !== null) {
-      return schema ? schema.safeParse(raw).data ?? null : raw as T;
+      return raw as T;
     }
     if (!raw || typeof raw !== 'string') return null;
 
     try {
       const parsed = JSON.parse(raw);
-      return schema ? schema.safeParse(parsed).data ?? null : parsed;
+      return parsed;
     } catch {
       return null;
     }
