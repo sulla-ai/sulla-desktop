@@ -367,8 +367,17 @@ Default: **do not call** unless trigger is unambiguously met.
         throwIfAborted(state, 'Chat operation aborted');
         
         // Build dynamic LLM tools: meta category + found tools (set by browse_tools if found)
-        const metaLLMTools = await toolRegistry.getLLMToolsFor(await toolRegistry.getToolsByCategory("meta"));
-        const llmTools = (state as any).llmTools || metaLLMTools;
+        let llmTools = (state as any).llmTools;
+        if (!llmTools && state.foundTools?.length) {
+          // Fallback: convert foundTools to LLM format if llmTools wasn't set
+          const metaLLMTools = await toolRegistry.getLLMToolsFor(await toolRegistry.getToolsByCategory("meta"));
+          const foundLLMTools = await Promise.all(state.foundTools.map((tool: any) => toolRegistry.convertToolToLLM(tool.name)));
+          llmTools = [...metaLLMTools, ...foundLLMTools];
+        }
+        if (!llmTools) {
+          // Final fallback to just meta tools
+          llmTools = await toolRegistry.getLLMToolsFor(await toolRegistry.getToolsByCategory("meta"));
+        }
 
         console.log('[BaseNode] tools:', tools);
         try {

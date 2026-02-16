@@ -21,12 +21,22 @@ export class BrowseToolsWorker extends BaseTool {
 
     // Attach found tools to state for LLM access
     if (this.state) {
-      (this.state as any).foundTools = tools;
-      // Set LLM tools: meta + found (convert to LLM format)
-      (this.state as any).llmTools = [
-        ...(await toolRegistry.getLLMToolsForCategory("meta")()),
-        ...await Promise.all(tools.map(tool => toolRegistry.convertToolToLLM(tool.name))),
-      ];
+      // Accumulate found tools (append to existing)
+      const existingFoundTools = (this.state as any).foundTools || [];
+      (this.state as any).foundTools = [...existingFoundTools, ...tools];
+
+      // Accumulate LLM tools: ensure meta tools are included + append new found tools (avoid duplicates)
+      const existingLLMTools = (this.state as any).llmTools || [];
+      const metaTools = await toolRegistry.getLLMToolsForCategory("meta")();
+      const newLLMTools = await Promise.all(tools.map(tool => toolRegistry.convertToolToLLM(tool.name)));
+      
+      // Combine all tools, avoiding duplicates by function name
+      const allTools = [...metaTools, ...existingLLMTools, ...newLLMTools];
+      const uniqueTools = allTools.filter((tool, index, arr) => 
+        arr.findIndex(t => t.function?.name === tool.function?.name) === index
+      );
+      
+      (this.state as any).llmTools = uniqueTools;
     }
 
     return {

@@ -80,6 +80,9 @@ export interface BaseThreadState {
   // for simple node
   prompt?: string;
 
+  // Tools found by browse_tools calls (accumulates across multiple calls)
+  foundTools?: any[];
+
   metadata: {
     action: 'direct_answer' | 'ask_clarification' | 'use_tools' | 'create_plan' | 'run_again';
     threadId: string;
