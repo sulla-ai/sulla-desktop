@@ -6,50 +6,10 @@
       <AgentHeader :is-dark="isDark" :toggle-theme="toggleTheme" />
 
     <!-- Loading overlay while system boots -->
-    <div
-      v-if="showOverlay"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-white/10 backdrop-blur-sm"
-    >
-      <div class="w-full max-w-lg rounded-2xl border border-black/10 bg-white/85 p-6 shadow-2xl dark:border-white/10 dark:bg-neutral-900/70">
-        <div class="text-4xl leading-none mb-3">
-          ⚙️
-        </div>
-        <h2 class="text-xl font-semibold tracking-tight">Starting Sulla...</h2>
-        <p class="mt-2 text-sm text-neutral-600 dark:text-neutral-300">
-          {{ progressDescription || 'Initializing system...' }}
-        </p>
-        
-        <!-- Model download progress -->
-        <div
-          v-if="modelDownloading"
-          class="mt-4 rounded-xl border border-black/10 bg-black/5 p-4 dark:border-white/10 dark:bg-white/5"
-        >
-          <p class="text-sm text-neutral-800 dark:text-neutral-200">
-            📦 Downloading: <strong>{{ modelName }}</strong>
-          </p>
-          <p class="mt-2 text-sm text-neutral-600 dark:text-neutral-400">
-            {{ modelDownloadStatus }}
-          </p>
-        </div>
-        
-        <!-- K8s progress bar -->
-        <div
-          v-if="progressMax > 0"
-          class="mt-4 h-2 w-full overflow-hidden rounded-full bg-black/10 dark:bg-white/10"
-        >
-          <div
-            class="h-full rounded-full bg-black/30 dark:bg-white/30"
-            :style="{ width: (progressCurrent / progressMax * 100) + '%' }"
-          />
-        </div>
-        <div
-          v-else
-          class="mt-4 h-2 w-full overflow-hidden rounded-full bg-black/10 dark:bg-white/10"
-        >
-          <div class="h-full w-1/3 animate-pulse rounded-full bg-black/25 dark:bg-white/25" />
-        </div>
-      </div>
-    </div>
+    <StartupOverlay
+      @overlay-visible="showOverlay = $event"
+      @system-ready="systemReady = $event"
+    />
 
     <!-- Main agent interface -->
     <div ref="chatScrollContainer" id="chat-scroll-container" class="flex min-h-0 flex-1 overflow-y-auto" :class="{ 'blur-sm pointer-events-none select-none': showOverlay }">
@@ -562,6 +522,7 @@
 </template>
 
 <script setup lang="ts">
+import StartupOverlay from './agent/StartupOverlay.vue';
 import AgentHeader from './agent/AgentHeader.vue';
 import AgentPersonaLibrary from './agent/personas/AgentPersonaLibrary.vue';
 import PostHogTracker from '@pkg/components/PostHogTracker.vue';
@@ -574,7 +535,6 @@ import {
   getResponseHandler,
 } from '@pkg/agent';
 import type { AgentResponse } from '@pkg/agent/types';
-import { StartupProgressController } from './agent/StartupProgressController';
 import { AgentSettingsController } from './agent/AgentSettingsController';
 import { ChatInterface } from './agent/ChatInterface';
 import { FrontendGraphWebSocketService } from '@pkg/agent/services/FrontendGraphWebSocketService';
@@ -684,21 +644,10 @@ function updateComposerLayout(): void {
 const sensory = getSensory();
 const responseHandler = getResponseHandler();
 
-const startupState = StartupProgressController.createState();
-const {
-  systemReady,
-  progressCurrent,
-  progressMax,
-  progressDescription,
-  startupPhase,
-  showOverlay,
-  modelDownloading,
-  modelName,
-  modelDownloadStatus,
-  modelMode,
-} = startupState;
-
-const startupProgress = new StartupProgressController(startupState);
+const showOverlay = ref(false);
+const modelName = ref('');
+const modelMode = ref<'local' | 'remote'>('local');
+const systemReady = ref(false);
 
 const settingsController = new AgentSettingsController(
   {
@@ -866,18 +815,19 @@ onMounted(async () => {
     isDark.value = window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false;
   }
 
-  startupProgress.start();
-
-  await settingsController.start();
-
-  await modelSelector.start();
-
   // Listen for model changes from other windows
   ipcRenderer.on('model-changed', handleModelChanged);
 });
 
+// Watch for system readiness to initialize heavy components
+watch(systemReady, async (ready) => {
+  if (ready) {
+    await settingsController.start();
+    await modelSelector.start();
+  }
+});
+
 onUnmounted(() => {
-  startupProgress.dispose();
   modelSelector.dispose();
   // Stop listening on each agent's persona service
   registry.state.agents.forEach((agent: { agentId: string }) => {

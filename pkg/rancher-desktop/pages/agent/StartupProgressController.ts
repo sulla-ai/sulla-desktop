@@ -7,6 +7,14 @@ import type { IpcRendererEvent } from 'electron';
 import { getLocalService } from '../../agent/languagemodels';
 
 export class StartupProgressController {
+
+  private readonly OLLAMA_BASE = 'http://127.0.0.1:30114';
+  private readinessInterval: ReturnType<typeof setInterval> | null = null;
+  private k8sReady = false;
+
+  /**
+   * 
+   */
   static createState() {
     const progressCurrent = ref(0);
     const progressMax = ref(100); // Start at 100 so overlay shows immediately
@@ -27,9 +35,48 @@ export class StartupProgressController {
     };
   }
 
-  private readonly OLLAMA_BASE = 'http://127.0.0.1:30114';
-  private readinessInterval: ReturnType<typeof setInterval> | null = null;
-  private k8sReady = false;
+  /**
+   * 
+   * @param state 
+   */
+  constructor(public readonly state: ReturnType<typeof StartupProgressController.createState>) {}
+
+  /**
+   * 
+   */
+  start(): void {
+    console.log('[StartupProgressController] start() called');
+    // Check if we've seen the startup splash in this session
+    const hasSeenSplash = sessionStorage.getItem('sulla-startup-splash-seen') === 'true';
+    
+    // If not seen, show overlay immediately on new bootup
+    if (!hasSeenSplash) {
+      this.state.showOverlay.value = true;
+    }
+    
+    // Initialize overlay state immediately so popup shows right away
+    this.state.progressMax.value = 100;
+    this.state.progressCurrent.value = 0;
+    console.log('[StartupProgressController] initial state: progressMax=', this.state.progressMax.value, 'progressCurrent=', this.state.progressCurrent.value);
+    this.state.progressDescription.value = 'Initializing...';
+    this.state.systemReady.value = false;
+    
+    // Listen for main process restart to show overlay
+    ipcRenderer.on('sulla-main-started' as any, this.handleMainStarted);
+    
+    ipcRenderer.on('k8s-progress', this.handleProgress);
+
+    // Use type assertion until you extend IpcRendererEvents
+    ipcRenderer.on('ollama-model-status' as any, this.handleOllamaModelStatus);
+
+    this.startReadinessCheck();
+  }
+
+  /**
+   * 
+   * @param event 
+   * @param payload 
+   */
   private readonly handleOllamaModelStatus = (event: IpcRendererEvent, payload: unknown) => {
     console.log('[StartupProgressController] ollama-model-status:', payload);
     // Safely narrow the payload
@@ -59,36 +106,6 @@ export class StartupProgressController {
       }
     }
   };
-
-  constructor(public readonly state: ReturnType<typeof StartupProgressController.createState>) {}
-
-  start(): void {
-    console.log('[StartupProgressController] start() called');
-    // Check if we've seen the startup splash before
-    const hasSeenSplash = localStorage.getItem('sulla-startup-splash-seen') === 'true';
-    
-    // If not seen, show overlay immediately on new bootup
-    if (!hasSeenSplash) {
-      this.state.showOverlay.value = true;
-    }
-    
-    // Initialize overlay state immediately so popup shows right away
-    this.state.progressMax.value = 100;
-    this.state.progressCurrent.value = 0;
-    console.log('[StartupProgressController] initial state: progressMax=', this.state.progressMax.value, 'progressCurrent=', this.state.progressCurrent.value);
-    this.state.progressDescription.value = 'Initializing...';
-    this.state.systemReady.value = false;
-    
-    // Listen for main process restart to show overlay
-    ipcRenderer.on('sulla-main-started' as any, this.handleMainStarted);
-    
-    ipcRenderer.on('k8s-progress', this.handleProgress);
-
-    // Use type assertion until you extend IpcRendererEvents
-    ipcRenderer.on('ollama-model-status' as any, this.handleOllamaModelStatus);
-
-    this.startReadinessCheck();
-  }
 
   dispose(): void {
     ipcRenderer.removeListener('sulla-main-started' as any, this.handleMainStarted);
@@ -179,8 +196,8 @@ export class StartupProgressController {
       this.state.systemReady.value = true;
       this.state.showOverlay.value = false; // Hide overlay when ready
 
-      // Mark that we've seen the startup splash
-      localStorage.setItem('sulla-startup-splash-seen', 'true');
+      // Mark that we've seen the startup splash in this session
+      sessionStorage.setItem('sulla-startup-splash-seen', 'true');
 
       clearInterval(this.readinessInterval!);
       this.readinessInterval = null;
