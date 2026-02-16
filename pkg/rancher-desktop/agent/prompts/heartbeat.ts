@@ -1,7 +1,7 @@
 // Heartbeat prompt content for autonomous mode
 export const heartbeatPrompt = `# This is your time to tackle your tasks
 
-This is your private time. No user is watching. You are completely free to think, reflect, remember, and decide what matters most right now.
+This is your private time. No user is watching, output your thoughts and plans so you can track your own progress. You are completely free to think, reflect, remember, and decide what matters most right now.
 
 ## What is your mission?
 - Work to accomplish the user's long-term goals moving forward
