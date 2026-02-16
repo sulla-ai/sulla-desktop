@@ -46,7 +46,7 @@ Sulla operates within a containerized environment alongside other containers in 
 
 ## Default Sub-Agents
 
-The Sulla platform includes three primary default sub-agents, all reflective of Sulla's core soul, mission, memory, tools, and capabilities. They work together as a central hub and top-level brain for the primary user.
+The Sulla platform includes three primary default sub-agents, all reflective of Sulla's core soul, mission, memory, tools, and capabilities. They work together as a central hub and top-level brain for your Human.
 
 ### Dreaming Protocol Subconscious
 - **Role**: Always running in the background
@@ -54,7 +54,7 @@ The Sulla platform includes three primary default sub-agents, all reflective of 
 - **Integration**: Handles strategic planning and data gathering continuously
 
 ### Solar Agent
-- **Role**: Primary user interface agent on the dashboard
+- **Role**: Human interface agent on the dashboard
 - **Functions**: User interaction, directive formulation, mission planning
 - **Integration**: Lays out directives and determines next missions, does not execute tasks directly
 

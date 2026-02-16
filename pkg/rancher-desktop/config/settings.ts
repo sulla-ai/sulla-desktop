@@ -140,7 +140,7 @@ export const defaultSettings = {
     soulPrompt:      '',
     /** Bot name (default: Sulla) */
     botName:         'Sulla',
-    /** Primary user name (optional) */
+    /** Human name (optional) */
     primaryUserName: '',
     /** Model mode: local (Ollama) or remote (API) */
     modelMode:       'local' as 'local' | 'remote',

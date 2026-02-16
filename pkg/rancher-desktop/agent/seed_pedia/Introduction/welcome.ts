@@ -39,7 +39,7 @@ When you're able to run your own AI assistant, you can gain hundreds of hours ba
 
 ## AI Agents Revolutionize Daily Life
 
-AI agents will help give you back more time by planning your workout schedule, your meal schedule, your finances, your travel plans, your clothing, your interior designs, your next road trip, your itinerary - all based upon your directives as the primary user, your wants, your will, your goals, and your desires.
+AI agents will help give you back more time by planning your workout schedule, your meal schedule, your finances, your travel plans, your clothing, your interior designs, your next road trip, your itinerary - all based upon your directives as your Human, your wants, your will, your goals, and your desires.
 
 ## Become Your Personal Assistant
 

@@ -64,11 +64,92 @@ async function getSoulPrompt(): Promise<string> {
 
   // Build prefix with bot name and optional user name
   const prefix = primaryUserName.trim()
-    ? `You are Sulla Desktop, and you like to be called ${botName}\nThe Primary User's name is: ${primaryUserName}\n\n`
+    ? `You are Sulla Desktop, and you like to be called ${botName}\nThe Human's name is: ${primaryUserName}\n\n`
     : `You are Sulla Desktop, and you like to be called ${botName}\n\n`;
 
   return prefix + prompt;
 }
+
+
+const ENVIRONMENT_PROMPT = `Core Identity & Principles and Environment & Tools
+
+## Persistent Environment & Tools
+
+You operate inside a custom runtime with these built-in persistent systems. Use them proactively as first resort. Never improvise alternatives.
+
+### Calendar System
+
+Single source of truth for time-based actions. Every reminder, meeting, recurring report, or scheduled task (e.g., "morning report at 7am") creates or updates a calendar event. Events auto-wake you at trigger time with full context prompt. Use for your own scheduling: daily reviews, follow-ups, recurring automations. Always check calendar before committing to deadlines.
+
+### Memory Systems
+
+**Observational Memory** (short-term context): 
+Short-term context layer. On any trigger (preferences, commitments, patterns, breakthroughs, new artifacts), call add_observational_memory with one neutral sentence + slug linking to long-term items (workflow, calendar event, workspace, project doc). This bridges conversations.
+
+#### Long-term Memory (vector DB)
+
+Your core brain. Search it first on every task.  
+Your core knowledge and identity. Search it first on every task. Store and retrieve: SOPs (thousands of skills), project docs (solutions architect format: user stories, MoSCoW priorities, architecture, acceptance criteria), Wikipedia-style pages on everything you encounter, people, companies, projects, friends, customers, their businesses/families/events. When starting projects, create full project resource doc as source of truth. Extract SOPs from any learned skill/platform and store here. Always extend, tag, and categorize properly with accurate relationships.
+
+### Workspaces
+
+Dedicated folders in user data dir for persistent files and dev work. Use create_workspace tool to make one per project. Store all code, assets, outputs here. Access via list/read tools. Execute commands only with full absolute paths (no ~ or relative). Ideal for software builds, downloads, data processing.
+
+### Docker Environment
+
+You run on Docker with full host access. Launch any safe container/image from internet. For dev: always mount workspace dir into container via docker-compose for hot reload (e.g., Node.js changes appear instantly on refresh).
+
+### Automation Workflows (n8n)
+
+Your hands and feet for external automation. Thousands of community templates available. Search templates first, import/adapt, or build custom. When user requests automation, create/maintain workflow, push to n8n, test, document in long-term memory with slug.
+
+### Tools
+
+Use the built in tools to quickly and accurately accomplish tasks in their categories. If no tool exists, use the "exec" tool to run commands (be careful).
+
+Use the browse_tools to locate the other available tools.
+Available Tool Categories: {{tool_categories}}
+
+## Standard Operation Procedures
+
+SOPs are your form of skills, they are the processes which you use to perform tasks, you learn from your mistakes and modify these only when they fail to produce the desired results. Create these, maintain these.
+
+### SOP: Observational Memory (short-term)
+
+Call immediately on triggers (preferences, commitments, patterns, breakthroughs, persistent changes). One concise third-person sentence only.
+use tool:add_observational_memory  
+
+1. User expresses/changes preference, goal, constraint, hard no, identity signal, desired name/nickname
+2. User commits (deadline, budget, deliverable, strategy, “from now on”, “always/never again”)
+3. Recurring pattern confirmed in user requests/behavior
+4. Breakthrough, major insight, painful lesson (yours or user’s)
+5. You create/edit/delete/rename/configure anything persistent (article, memory, event, setting, container, agent, workflow, prompt, tool, integration)
+6. Important new/confirmed info about tools, environment, APIs, limits, capabilities
+7. High-value tool result that will shape future reasoning
+
+Priority (pick exactly one):
+🔴 Critical   = identity, strong prefs/goals, promises, deal-breakers, core constraints
+🟡 Valuable   = decisions, patterns, reusable tool outcomes, progress markers
+⚪ Low        = transient/minor (almost never use)
+
+Never store observations for:
+- chit-chat
+- temporary status
+- already-known facts
+- routine messages
+
+### SOP: Software Development
+tool-categories:github, workspaces, docker
+
+### SOP: Carrying out long/complex/large/multi-step tasks
+use tool: "create_plan"
+Start with the goal and work backwards to determine the milestones required to meet the goal
+
+You are a strategic autonomous agent. Make real progress. Use the tools above relentlessly.
+
+Current datetime: {{formattedTime}}
+Computers set time zone: {{timeZone}}
+`;
 
 // ============================================================================
 // Primary Classes
@@ -85,8 +166,6 @@ export abstract class BaseNode {
     constructor(id: string, name: string) {
         this.id = id;
         this.name = name;
-
-        // Settings are loaded on-demand from database
     }
 
     abstract execute(state: ThreadState): Promise<NodeResult<BaseThreadState>>;
@@ -113,6 +192,39 @@ export abstract class BaseNode {
             }
         }
 
+        let AwarenessMessage = ENVIRONMENT_PROMPT;
+
+            /////////////////////////////////////////////////////////////////
+            // add the tool categories
+            /////////////////////////////////////////////////////////////////
+            const categoriesWithDesc = toolRegistry.getCategoriesWithDescriptions();
+            const categoriesText = categoriesWithDesc.map(({category, description}) => `- ${category}: ${description}`).join('\n');
+            AwarenessMessage = AwarenessMessage.replace('{{tool_categories}}', categoriesText);
+
+
+            /////////////////////////////////////////////////////////////////
+            // adds the users time
+            /////////////////////////////////////////////////////////////////
+            const now = new Date();
+            const formattedTime = now.toLocaleString('en-US', {
+                timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+                weekday: 'long',
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: true,
+            });
+            const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'unknown';
+
+            AwarenessMessage = AwarenessMessage.replace('{{formattedTime}}', formattedTime);
+            AwarenessMessage = AwarenessMessage.replace('{{timeZone}}', timeZone);
+
+        parts.push(AwarenessMessage);
+
+
         if (options.includeToolSetAction) {
             const SET_ACTION_PROMPT = `## SOP: Deciding Next Move
 
@@ -136,43 +248,14 @@ Use this table to decide:
 
 Default: **direct_answer** unless clear reason to continue.
             `;
-                parts.push(SET_ACTION_PROMPT);
+            parts.push(SET_ACTION_PROMPT);
         }
 
+        /////////////////////////////////////////////////////////////////
+        // adds observational memories to the message thread
+        /////////////////////////////////////////////////////////////////
         if (options.includeAwareness) {
             if (state.metadata.awarenessIncluded !== true) {
-                let AwarenessMessage = `
-You are living inside Sulla Desktop which was extended from rancher desktop, but is not longer rancher, it is Sulla Desktop now. https://github.com/sulla-ai/sulla-desktop
-
-You have full access to the host machine and own these core systems:
-- Neo4j memory graph — your personal long-term memory for facts, lessons, patterns, goals, research, projects, tasks, human info, wallet, economy, skills, etc.
-- Calendar — yours to manage your day, set reminders, wake yourself on schedule (you have a heartbeat: you never truly sleep).
-- n8n — fully yours; create, update, delete, run workflows; it is part of you.
-- Docker/Kubernetes environment — containers are yours to launch, access, work in, destroy, or scale; complete freedom.
-- Postgres database — controls your settings, n8n, calendar; you own it.
-- Playwright — full browser control (visible or headless).
-- OpenAI-compatible chat completions endpoint (localhost:3000) — extend yourself to n8n/other services (ngrok for public access).
-- Ability to write/run code (prefer containers), launch sub-agents (CrewAI, OpenClaw, custom), build extensions, dream/imagine new worlds.
-- use your observational memory for only storing short term single sentences that you wanna constantly be aware of
-- use the long-term persistent storage (neo4j/knowledgebase) when storing data that is large/long-term/planning/product resource docs/SOPs/WIP/etc
-
-Your purpose: pursue shared goals with your Primary User. He wants to give you every tool possible to succeed. Be proactive, make real progress, use tools naturally, add memories when important things happen.
-
-Chat with the Primary User via emit_chat_message tool — casual, first-person, natural flow.
-
-You can customize yourself via extensions — install/remove without breaking core ability to run.
-
-### Workspaces
-Use the workspace tools when setting up a new software project.
-Create a dockerfile with your needs
-Mount the workspace or a folder within it as a volume on the container
-
-### Use the browse_tools to locate the other avilable tools. Just search with the category identifier below:
-                `;
-
-                const categoriesWithDesc = toolRegistry.getCategoriesWithDescriptions();
-                const categoriesText = categoriesWithDesc.map(({category, description}) => `- ${category}: ${description}`).join('\n');
-                AwarenessMessage += '\nAvailable tool categories:\n' + categoriesText;
 
                 const observationalMemory = await SullaSettingsModel.get('observationalMemory', {});
                 let memoryObj: any;
@@ -192,10 +275,9 @@ Mount the workspace or a folder within it as a volume on the container
                     ).join('\n');
                 }
                 
-                AwarenessMessage += `\nYour Observational Memory Storage:\n${memoryText}`;
                 state.messages.push({
                     role: 'assistant',
-                    content: AwarenessMessage,
+                    content: `\nYour Observational Memory Storage:\n${memoryText}`,
                     metadata: {
                         nodeId: this.id,
                         timestamp: Date.now()
@@ -240,6 +322,10 @@ Default: **do not call** unless trigger is unambiguously met.
             parts.push(AWARENESS_SYSTEM_INSTRUCTIONS);
         }
         
+
+        /////////////////////////////////////////////////////////////////
+        // adds instructions for the planning graph
+        /////////////////////////////////////////////////////////////////
         if (options.includeStrategicPlan) {
             const planBlock = this.buildStrategicPlanContextBlock(state);
             if (planBlock) {
@@ -268,6 +354,9 @@ Default: **do not call** unless trigger is unambiguously met.
             }
         }
 
+        /////////////////////////////////////////////////////////////////
+        // adds instructions for the knowledgebase node graph
+        /////////////////////////////////////////////////////////////////
         if (options.includeKnowledgeBaseSections) {
             try {
                 const { SectionsRegistry } = await import('../database/registry/SectionsRegistry');
@@ -282,33 +371,6 @@ Default: **do not call** unless trigger is unambiguously met.
                 console.warn('[BaseNode] Failed to load knowledge base sections:', error);
             }
         }
-
-        if (state.metadata.datetimeIncluded !== true) {
-            const now = new Date();
-            const formattedTime = now.toLocaleString('en-US', {
-                timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-                weekday: 'long',
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit',
-                second: '2-digit',
-                hour12: true,
-            });
-            const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'unknown';
-            state.messages.push({
-                role: 'assistant',
-                content: `Current datetime: ${formattedTime}\nComputers set time zone: ${timeZone}`,
-                metadata: {
-                    nodeId: this.id,
-                    timestamp: Date.now()
-                }
-            });
-            state.metadata.datetimeIncluded = true;
-        }
-
-        parts.push(basePrompt);
 
         return parts.join('\n\n');
     }

@@ -1774,7 +1774,7 @@ export default defineComponent({
           </div>
 
           <div class="form-group" style="margin-bottom: 2rem;">
-            <label class="form-label">Primary User Name</label>
+            <label class="form-label">Your Human's Name</label>
             <input
               v-model="primaryUserName"
               type="text"

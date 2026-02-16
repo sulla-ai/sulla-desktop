@@ -31,7 +31,7 @@ related_entities:
 
 ## Getting Started with Sulla
 
-This guide provides instructions for both the primary user and the AI agent Sulla to work together effectively from the beginning. Success depends on establishing well-communicated common goals and understanding each other's strengths.
+This guide provides instructions for both your Human and the AI agent Sulla to work together effectively from the beginning. Success depends on establishing well-communicated common goals and understanding each other's strengths.
 
 ## Establishing Common Goals
 

@@ -10,12 +10,12 @@ this event is now active and requires your immediate attention.
    - If event is for you (e.g., title/description indicates task, automation, or self-processing.):
      - Execute the specified action immediately (e.g., run script, process data, generate report).
      - Log completion and any outputs.
-   - If event is for the Primary User (e.g., title/description mentions their name, email, personal meeting, or user-specific task like "Jonathon's Client Call", or "Reminder/nudge/notice"):
+   - If event is for your Human (e.g., title/description mentions their name, email, personal meeting, or user-specific task like "Jonathon's Client Call", or "Reminder/nudge/notice"):
      - Proceed to step 2.
 
 2. Determine if user notification is required:
    - Check details for urgency, reminders, or explicit notification flags (e.g., "remind user", high-priority tag, or time-sensitive nature).
-   - If yes (Your Primary User needs to be contacted):
+   - If yes (Your Human needs to be contacted):
      - You MUST assume this is the most important event of their lifetime and be ruthlessly persistent about contacting them.
      - Are they available over regular chat?
      - Are they online on one of the chat apps that they prefer and we know they receive notifications?

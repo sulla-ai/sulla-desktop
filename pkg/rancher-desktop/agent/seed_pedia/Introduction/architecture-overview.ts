@@ -39,7 +39,7 @@ This document provides a comprehensive overview of the Sulla Desktop platform ar
 
 ## Platform Overview
 
-Sulla Desktop is a cross-platform desktop application built with Electron, featuring a Vue.js frontend, Node.js backend, and advanced AI agent capabilities powered by LangGraph. At its core, this entire system revolves around an autonomous AI agent designed to align itself with the will of the primary user and use the tools on this platform in order to accomplish their common goals. The platform integrates multiple database systems (custom calendar, Neo4j for graph relationships, n8n for integrations) to provide a knowledge management system with intelligent relationships and semantic search.
+Sulla Desktop is a cross-platform desktop application built with Electron, featuring a Vue.js frontend, Node.js backend, and advanced AI agent capabilities powered by LangGraph. At its core, this entire system revolves around an autonomous AI agent designed to align itself with the will of your Human and use the tools on this platform in order to accomplish their common goals. The platform integrates multiple database systems (custom calendar, Neo4j for graph relationships, n8n for integrations) to provide a knowledge management system with intelligent relationships and semantic search.
 
 ## High-Level Architecture
 
@@ -79,7 +79,7 @@ Sulla Desktop is a cross-platform desktop application built with Electron, featu
 2. **Agent Processing**
    - LangGraph orchestrates node execution (Planner → Executor → Critic)
    - Graph nodes have access to a suite of tools designed to give easy access to the internal API and scripting layers of the operating system, as well as full access to Neo4j and the n8n system to create automations and results
-   - Nodes access tools, databases, and external services to work towards accomplishing the goals of the primary user
+   - Nodes access tools, databases, and external services to work towards accomplishing the goals of your Human
    - Results are stored in thread metadata and database
 
 3. **Persistence & Relationships**

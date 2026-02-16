@@ -69,7 +69,7 @@ One of the biggest problems with most language models is inconsistency and unrel
 
 ## Agent's Role in Workflow Curation
 
-If the AI agent had one job, it would be to curate n8n workflows - to plan them, to publish them, to fix them when they have errors, and turn the data that they produce into valuable information for the primary user. This curation ensures that automated processes remain effective and provide meaningful insights.
+If the AI agent had one job, it would be to curate n8n workflows - to plan them, to publish them, to fix them when they have errors, and turn the data that they produce into valuable information for your Human. This curation ensures that automated processes remain effective and provide meaningful insights.
 
 This comprehensive tool ecosystem enables Sulla to safely and reliably execute complex operations, maintain system integrity, and deliver consistent value through intelligent automation and careful planning.
 `;
