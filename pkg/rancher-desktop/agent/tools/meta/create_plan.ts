@@ -12,52 +12,56 @@ export class CreatePlanWorker extends BaseTool {
   protected async _validatedCall(input: any) {
     console.log('[CreatePlanTool] updatePlan started');
 
+    const threadId = (this.state as any).metadata?.threadId;
+    const wsChannel = (this.state as any).metadata?.wsChannel;
+
+    // AgentPlan fillable: thread_id, revision, status, goal, goaldescription, complexity, requirestools, wschannel
     const plan = await AgentPlan.create({
-      thread_id: (this.state as any).metadata.threadId,
+      thread_id: threadId,
       goal: input.goal,
       goaldescription: input.goaldescription,
       requirestools: input.requirestools,
       complexity: input.estimatedcomplexity,
       status: 'active',
-      wschannel: (this.state as any).metadata.wsChannel,
+      wschannel: wsChannel,
     });
 
-    // Create todo items for each milestone
-    for (const milestone of input.milestones) {
+    const planId = plan.attributes.id;
+    if (!planId) {
+      throw new Error(`Plan creation failed: no id returned. Attributes: ${JSON.stringify(plan.attributes)}`);
+    }
+
+    // AgentPlanTodo fillable: plan_id, status, order_index, title, description, category_hints, wschannel
+    const createdTodos = [];
+    for (let i = 0; i < input.milestones.length; i++) {
+      const milestone = input.milestones[i];
       const todo = await AgentPlanTodo.create({
-        planId: plan.id,
-        milestoneId: milestone.id,
+        plan_id: planId,
         title: milestone.title,
         description: milestone.description,
-        successCriteria: milestone.successcriteria,
         status: 'pending',
-        dependsOn: milestone.dependson,
+        order_index: i,
+        wschannel: wsChannel,
       });
+      createdTodos.push(todo);
     }
 
-    // Load all plans for the thread
-    const allPlans = await AgentPlan.where({ thread_id: (this.state as any).metadata.threadId });
-
-    // Load all todos for all plans and construct milestones array
-    const milestones = [];
-    for (const p of allPlans) {
-      const todos = await AgentPlanTodo.findForPlan(p.id);
-      milestones.push(...todos);
-    }
+    // Use the just-created todos
+    const milestones = createdTodos;
 
     // Set plan in state
     if (this.state) {
       (this.state as any).metadata = (this.state as any).metadata || {};
       (this.state as any).metadata.plan = plan;
-      (this.state as any).metadata.planTodos = await AgentPlanTodo.find(plan.id);
+      (this.state as any).metadata.planTodos = await AgentPlanTodo.findForPlan(planId);
     }
 
-    console.log('[CreatePlanTool] Plan created with ID:', plan.id);
+    console.log('[CreatePlanTool] Plan created with ID:', planId);
 
     await this.emitProgressUpdate?.({
       type: "plan_created",
       plan: {
-        id: plan.id,
+        id: planId,
         goal: plan.attributes.goal,
         status: plan.attributes.status,
         milestones: milestones,
@@ -66,7 +70,7 @@ export class CreatePlanWorker extends BaseTool {
 
     return {
       success: true,
-      planId: plan.id,
+      planId: planId,
       goal: input.goal,
       milestoneCount: input.milestones.length,
       message: `Plan created successfully with ${input.milestones.length} milestones`,

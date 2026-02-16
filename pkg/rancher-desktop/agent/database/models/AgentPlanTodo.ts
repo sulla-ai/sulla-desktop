@@ -45,7 +45,7 @@ export interface AgentPlanTodoInterface {
 export class AgentPlanTodo extends BaseModel<PlanTodoAttributes> implements AgentPlanTodoInterface {
   protected tableName = 'agent_plan_todos';
   protected primaryKey = 'id';
-  protected fillable = ['plan_id', 'status', 'order_index', 'title', 'description', 'category_hints','wschannel'];
+  protected fillable = ['plan_id', 'status', 'order_index', 'title', 'description', 'category_hints', 'wschannel'];
 
   // Interface properties
   get id(): string {

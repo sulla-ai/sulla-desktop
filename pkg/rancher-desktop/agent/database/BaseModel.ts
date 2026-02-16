@@ -232,7 +232,9 @@ export abstract class BaseModel<T extends ModelAttributes = ModelAttributes> {
         params.push(conditions[k]);
         return `"${k}" = $${i + 1}`;
       });
-      query += ` WHERE ${clauses.join(' AND ')}`;
+      if (clauses.length > 0) {
+        query += ` WHERE ${clauses.join(' AND ')}`;
+      }
     }
 
     const rows = await postgresClient.queryAll(query, params);
