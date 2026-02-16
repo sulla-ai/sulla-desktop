@@ -64,6 +64,14 @@ export class StartupProgressController {
 
   start(): void {
     console.log('[StartupProgressController] start() called');
+    // Check if we've seen the startup splash before
+    const hasSeenSplash = localStorage.getItem('sulla-startup-splash-seen') === 'true';
+    
+    // If not seen, show overlay immediately on new bootup
+    if (!hasSeenSplash) {
+      this.state.showOverlay.value = true;
+    }
+    
     // Initialize overlay state immediately so popup shows right away
     this.state.progressMax.value = 100;
     this.state.progressCurrent.value = 0;
@@ -170,6 +178,9 @@ export class StartupProgressController {
       this.state.progressDescription.value = 'System ready!';
       this.state.systemReady.value = true;
       this.state.showOverlay.value = false; // Hide overlay when ready
+
+      // Mark that we've seen the startup splash
+      localStorage.setItem('sulla-startup-splash-seen', 'true');
 
       clearInterval(this.readinessInterval!);
       this.readinessInterval = null;
