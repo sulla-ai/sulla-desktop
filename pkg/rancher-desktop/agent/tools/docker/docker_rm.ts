@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration } from "../base";
+import { BaseTool, ToolRegistration, ToolResponse } from "../base";
 import { runCommand } from "../util/CommandRunner";
 
 /**
@@ -8,7 +8,7 @@ export class DockerRmWorker extends BaseTool {
   name: string = '';
   description: string = '';
   schemaDef: any = {};
-  protected async _validatedCall(input: any) {
+  protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { container, force } = input;
 
     const args = ['rm'];
@@ -21,12 +21,21 @@ export class DockerRmWorker extends BaseTool {
       const res = await runCommand('docker', args, { timeoutMs: 30000, maxOutputChars: 160_000 });
 
       if (res.exitCode !== 0) {
-        return `Error: ${res.stderr || res.stdout}`;
+        return {
+          successBoolean: false,
+          responseString: `Error removing docker container: ${res.stderr || res.stdout}`
+        };
       }
 
-      return res.stdout;
+      return {
+        successBoolean: true,
+        responseString: `Container removed successfully. Container: ${container}${force ? ' (force)' : ''}`
+      };
     } catch (error) {
-      return `Error executing docker rm: ${(error as Error).message}`;
+      return {
+        successBoolean: false,
+        responseString: `Error executing docker rm: ${(error as Error).message}`
+      };
     }
   }
 }

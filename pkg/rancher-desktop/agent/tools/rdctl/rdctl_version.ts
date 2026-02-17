@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration } from "../base";
+import { BaseTool, ToolRegistration, ToolResponse } from "../base";
 import { runCommand } from "../util/CommandRunner";
 
 /**
@@ -8,17 +8,26 @@ export class RdctlVersionWorker extends BaseTool {
   name: string = '';
   description: string = '';
   schemaDef: any = {};
-  protected async _validatedCall(input: any) {
+  protected async _validatedCall(input: any): Promise<ToolResponse> {
     try {
       const res = await runCommand('rdctl', ['version'], { timeoutMs: 60_000, maxOutputChars: 160_000 });
 
       if (res.exitCode !== 0) {
-        return `Error: ${res.stderr || res.stdout}`;
+        return {
+          successBoolean: false,
+          responseString: `Error getting rdctl version: ${res.stderr || res.stdout}`
+        };
       }
 
-      return res.stdout;
+      return {
+        successBoolean: true,
+        responseString: `CLI Version:\n${res.stdout}`
+      };
     } catch (error) {
-      return `Error executing rdctl version: ${(error as Error).message}`;
+      return {
+        successBoolean: false,
+        responseString: `Error executing rdctl version: ${(error as Error).message}`
+      };
     }
   }
 }

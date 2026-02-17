@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration } from "../base";
+import { BaseTool, ToolRegistration, ToolResponse } from "../base";
 import { runCommand } from "../util/CommandRunner";
 
 /**
@@ -8,7 +8,7 @@ export class LimaDeleteWorker extends BaseTool {
   name: string = '';
   description: string = '';
   schemaDef: any = {};
-  protected async _validatedCall(input: any) {
+  protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { instance, force } = input;
 
     const args = ['delete', instance];
@@ -21,12 +21,23 @@ export class LimaDeleteWorker extends BaseTool {
       const res = await runCommand('limactl', args, { timeoutMs: 120_000, maxOutputChars: 160_000 });
 
       if (res.exitCode !== 0) {
-        return `Error: ${res.stderr || res.stdout}`;
+        return {
+          successBoolean: false,
+          responseString: `Error deleting Lima VM: ${res.stderr || res.stdout}`
+        };
       }
 
-      return res.stdout;
+      const responseString = `Lima VM ${instance} deleted${force ? ' (force)' : ''}\nOutput:\n${res.stdout}`;
+
+      return {
+        successBoolean: true,
+        responseString
+      };
     } catch (error) {
-      return `Error executing limactl delete: ${(error as Error).message}`;
+      return {
+        successBoolean: false,
+        responseString: `Error executing limactl delete: ${(error as Error).message}`
+      };
     }
   }
 }

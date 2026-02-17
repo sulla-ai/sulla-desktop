@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration } from "../base";
+import { BaseTool, ToolRegistration, ToolResponse } from "../base";
 import { redisClient } from "../../database/RedisClient";
 
 /**
@@ -8,14 +8,21 @@ export class RedisRpushWorker extends BaseTool {
   name: string = '';
   description: string = '';
   schemaDef: any = {};
-  protected async _validatedCall(input: any) {
+  protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { key, values } = input;
 
     try {
       const length = await redisClient.rpush(key, ...values);
-      return length;
+
+      return {
+        successBoolean: true,
+        responseString: `Redis RPUSH ${key}: appended ${values.length} values, new length is ${length}`
+      };
     } catch (error) {
-      return `Error appending to Redis list: ${(error as Error).message}`;
+      return {
+        successBoolean: false,
+        responseString: `Error appending to Redis list: ${(error as Error).message}`
+      };
     }
   }
 }

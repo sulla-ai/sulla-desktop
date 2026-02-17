@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration } from '../base';
+import { BaseTool, ToolRegistration, ToolResponse } from '../base';
 
 /**
  * Get Workspace Path Tool - Worker class for execution
@@ -8,9 +8,12 @@ export class GetWorkspacePathWorker extends BaseTool {
   description: string = '';
   schemaDef: any = {};
 
-  protected async _validatedCall(input: any) {
+  protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { name } = input;
-    return { success: true, path: `/workspaces/${name}` };
+    return {
+      successBoolean: true,
+      responseString: `Workspace "${name}" path: /workspaces/${name}`
+    };
   }
 }
 

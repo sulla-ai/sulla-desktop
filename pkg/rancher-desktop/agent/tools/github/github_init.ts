@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration } from "../base";
+import { BaseTool, ToolRegistration, ToolResponse } from "../base";
 import { execSync } from 'child_process';
 import path from 'path';
 
@@ -10,7 +10,7 @@ export class GitHubInitWorker extends BaseTool {
   description: string = '';
   schemaDef: any = {};
 
-  protected async _validatedCall(input: any) {
+  protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { absolutePath } = input;
 
     try {
@@ -27,15 +27,13 @@ export class GitHubInitWorker extends BaseTool {
       });
 
       return {
-        success: true,
-        message: `Git repository initialized successfully at ${absolutePath}`,
-        path: absolutePath
+        successBoolean: true,
+        responseString: `Git repository initialized successfully at ${absolutePath}`
       };
     } catch (error: any) {
       return {
-        success: false,
-        error: `Failed to initialize git repository: ${error.message}`,
-        path: absolutePath
+        successBoolean: false,
+        responseString: `Failed to initialize git repository at ${absolutePath}: ${error.message}`
       };
     }
   }

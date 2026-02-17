@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration } from "../base";
+import { BaseTool, ToolRegistration, ToolResponse } from "../base";
 import { getIntegrationService } from "../../services/IntegrationService";
 import { integrations } from "../../integrations/catalog";
 
@@ -9,31 +9,42 @@ export class IntegrationIsEnabledWorker extends BaseTool {
   name: string = '';
   description: string = '';
   schemaDef: any = {};
-  protected async _validatedCall(input: any) {
+  protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { integration_slug } = input;
 
     try {
       const catalogEntry = integrations[integration_slug];
       if (!catalogEntry) {
-        return `Integration "${integration_slug}" not found in the catalog. Available integrations: ${Object.keys(integrations).join(', ')}`;
+        return {
+          successBoolean: false,
+          responseString: `Integration "${integration_slug}" not found in the catalog. Available integrations: ${Object.keys(integrations).join(', ')}`
+        };
       }
 
       const service = getIntegrationService();
       await service.initialize();
       const status = await service.getConnectionStatus(integration_slug);
 
+      const responseString = `Integration: ${integration_slug} (${catalogEntry.name})
+Enabled: ${status.connected ? 'Yes' : 'No'}
+Connected at: ${status.connected_at ? new Date(status.connected_at).toLocaleString() : 'Never'}
+Last sync at: ${status.last_sync_at ? new Date(status.last_sync_at).toLocaleString() : 'Never'}`;
+
       return {
-        integration_id: integration_slug,
-        name: catalogEntry.name,
-        enabled: status.connected,
-        connected_at: status.connected_at ?? null,
-        last_sync_at: status.last_sync_at ?? null,
+        successBoolean: true,
+        responseString
       };
     } catch (error) {
       if (error instanceof Error) {
-        return `Error checking integration status: ${error.message}`;
+        return {
+          successBoolean: false,
+          responseString: `Error checking integration status: ${error.message}`
+        };
       } else {
-        return 'Error checking integration status: Unknown error';
+        return {
+          successBoolean: false,
+          responseString: 'Error checking integration status: Unknown error'
+        };
       }
     }
   }

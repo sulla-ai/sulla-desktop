@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration } from '../base';
+import { BaseTool, ToolRegistration, ToolResponse } from '../base';
 import { execSync } from 'child_process';
 import path from 'path';
 import os from 'os';
@@ -11,7 +11,7 @@ export class DeleteWorkspaceWorker extends BaseTool {
   description: string = '';
   schemaDef: any = {};
 
-  protected async _validatedCall(input: any) {
+  protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { name } = input;
     const limaHome = path.join(os.homedir(), 'Library/Application Support/rancher-desktop/lima');
     const limactlPath = path.join(__dirname, '../../../resources/darwin/lima/bin/limactl');
@@ -19,9 +19,15 @@ export class DeleteWorkspaceWorker extends BaseTool {
       execSync(`${limactlPath} shell 0 -- rm -rf /workspaces/${name}`, {
         env: { ...process.env, LIMA_HOME: limaHome }
       });
-      return { success: true, message: `Workspace ${name} deleted.` };
+      return {
+        successBoolean: true,
+        responseString: `Workspace "${name}" deleted successfully from /workspaces/${name}`
+      };
     } catch (error: any) {
-      return { success: false, error: `Failed to delete workspace: ${error.message}` };
+      return {
+        successBoolean: false,
+        responseString: `Failed to delete workspace "${name}": ${error.message}`
+      };
     }
   }
 }

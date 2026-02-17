@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration } from "../base";
+import { BaseTool, ToolRegistration, ToolResponse } from "../base";
 import { createN8nService } from "../../services/N8nService";
 
 /**
@@ -8,9 +8,29 @@ export class CreateVariableWorker extends BaseTool {
   name: string = '';
   description: string = '';
   schemaDef: any = {};
-  protected async _validatedCall(input: any) {
-    const service = await createN8nService();
-    return await service.createVariable(input);
+  protected async _validatedCall(input: any): Promise<ToolResponse> {
+    try {
+      const service = await createN8nService();
+      const variable = await service.createVariable(input);
+
+      const responseString = `Variable created successfully:
+ID: ${variable.id}
+Key: ${variable.key}
+Value: ${variable.value}
+Project ID: ${variable.projectId || 'Global'}
+Created: ${new Date(variable.createdAt).toLocaleString()}
+Updated: ${new Date(variable.updatedAt).toLocaleString()}`;
+
+      return {
+        successBoolean: true,
+        responseString
+      };
+    } catch (error) {
+      return {
+        successBoolean: false,
+        responseString: `Error creating variable: ${(error as Error).message}`
+      };
+    }
   }
 }
 

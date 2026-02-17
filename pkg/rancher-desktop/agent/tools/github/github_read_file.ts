@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration } from "../base";
+import { BaseTool, ToolRegistration, ToolResponse } from "../base";
 import { Octokit } from "@octokit/rest";
 import { getIntegrationService } from '../../services/IntegrationService';
 
@@ -9,13 +9,16 @@ export class GitHubReadFileWorker extends BaseTool {
   name: string = '';
   description: string = '';
   schemaDef: any = {};
-  protected async _validatedCall(input: any) {
+  protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { owner, repo, path, ref } = input;
 
     const integrationService = getIntegrationService();
     const tokenValue = await integrationService.getIntegrationValue('github', 'token');
     if (!tokenValue) {
-      return "Error: GitHub token not configured.";
+      return {
+        successBoolean: false,
+        responseString: "Error: GitHub token not configured."
+      };
     }
 
     const octokit = new Octokit({ auth: tokenValue.value });
@@ -30,23 +33,38 @@ export class GitHubReadFileWorker extends BaseTool {
 
       const data = response.data;
       if (Array.isArray(data)) {
-        return `Path '${path}' is a directory, not a file.`;
+        return {
+          successBoolean: false,
+          responseString: `Path '${path}' is a directory, not a file.`
+        };
       }
 
       if (data.type !== 'file') {
-        return `Path '${path}' is not a file.`;
+        return {
+          successBoolean: false,
+          responseString: `Path '${path}' is not a file.`
+        };
       }
 
       const content = Buffer.from(data.content, 'base64').toString('utf-8');
+      const responseString = `File: ${data.path}
+Size: ${data.size} bytes
+SHA: ${data.sha}
+Encoding: ${data.encoding}
+Ref: ${ref || 'default'}
+
+Content:
+${content}`;
+
       return {
-        path: data.path,
-        content,
-        encoding: data.encoding,
-        size: data.size,
-        sha: data.sha,
+        successBoolean: true,
+        responseString
       };
     } catch (error) {
-      return `Error reading file: ${(error as Error).message}`;
+      return {
+        successBoolean: false,
+        responseString: `Error reading file: ${(error as Error).message}`
+      };
     }
   }
 }

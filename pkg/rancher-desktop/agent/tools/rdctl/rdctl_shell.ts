@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration } from "../base";
+import { BaseTool, ToolRegistration, ToolResponse } from "../base";
 import { runCommand } from "../util/CommandRunner";
 
 /**
@@ -8,7 +8,7 @@ export class RdctlShellWorker extends BaseTool {
   name: string = '';
   description: string = '';
   schemaDef: any = {};
-  protected async _validatedCall(input: any) {
+  protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { command } = input;
 
     const args = ['shell'];
@@ -21,12 +21,21 @@ export class RdctlShellWorker extends BaseTool {
       const res = await runCommand('rdctl', args, { timeoutMs: command ? 60_000 : 300_000, maxOutputChars: 160_000 });
 
       if (res.exitCode !== 0) {
-        return `Error: ${res.stderr || res.stdout}`;
+        return {
+          successBoolean: false,
+          responseString: `Error executing shell command in VM: ${res.stderr || res.stdout}`
+        };
       }
 
-      return res.stdout;
+      return {
+        successBoolean: true,
+        responseString: `Shell command executed in Sulla Desktop VM${command ? `: ${command}` : ' (interactive)'}\nOutput:\n${res.stdout}`
+      };
     } catch (error) {
-      return `Error executing rdctl shell: ${(error as Error).message}`;
+      return {
+        successBoolean: false,
+        responseString: `Error executing rdctl shell: ${(error as Error).message}`
+      };
     }
   }
 }

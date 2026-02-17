@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration } from "../base";
+import { BaseTool, ToolRegistration, ToolResponse } from "../base";
 import { Octokit } from "@octokit/rest";
 import { getIntegrationService } from '../../services/IntegrationService';
 
@@ -9,13 +9,16 @@ export class GitHubListBranchesWorker extends BaseTool {
   name: string = '';
   description: string = '';
   schemaDef: any = {};
-  protected async _validatedCall(input: any) {
+  protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { owner, repo, protected: isProtected } = input;
 
     const integrationService = getIntegrationService();
     const tokenValue = await integrationService.getIntegrationValue('github', 'token');
     if (!tokenValue) {
-      return "Error: GitHub token not configured.";
+      return {
+        successBoolean: false,
+        responseString: "Error: GitHub token not configured."
+      };
     }
 
     const octokit = new Octokit({ auth: tokenValue.value });
@@ -27,16 +30,31 @@ export class GitHubListBranchesWorker extends BaseTool {
         protected: isProtected,
       });
 
-      return response.data.map(branch => ({
-        name: branch.name,
-        commit: {
-          sha: branch.commit.sha,
-          url: branch.commit.url,
-        },
-        protected: branch.protected,
-      }));
+      const branches = response.data;
+      if (!branches || branches.length === 0) {
+        return {
+          successBoolean: false,
+          responseString: `No branches found in ${owner}/${repo}${isProtected ? ' (protected only)' : ''}.`
+        };
+      }
+
+      // Format detailed list of branches
+      let responseString = `Branches in ${owner}/${repo}${isProtected ? ' (protected only)' : ''}:\n\n`;
+      branches.forEach((branch, index) => {
+        responseString += `${index + 1}. Name: ${branch.name}\n`;
+        responseString += `   SHA: ${branch.commit.sha}\n`;
+        responseString += `   Protected: ${branch.protected ? 'Yes' : 'No'}\n\n`;
+      });
+
+      return {
+        successBoolean: true,
+        responseString
+      };
     } catch (error) {
-      return `Error listing branches: ${(error as Error).message}`;
+      return {
+        successBoolean: false,
+        responseString: `Error listing branches: ${(error as Error).message}`
+      };
     }
   }
 }

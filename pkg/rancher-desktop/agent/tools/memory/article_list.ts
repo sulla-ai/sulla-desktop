@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration } from "../base";
+import { BaseTool, ToolRegistration, ToolResponse } from "../base";
 import { ArticlesRegistry } from "../../database/registry/ArticlesRegistry";
 
 /**
@@ -8,7 +8,7 @@ export class ArticleListWorker extends BaseTool {
   name: string = '';
   description: string = '';
   schemaDef: any = {};
-  protected async _validatedCall(input: any) {
+  protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { limit = 10 } = input;
 
     try {
@@ -16,12 +16,34 @@ export class ArticleListWorker extends BaseTool {
       const result = await registry.search({ limit, sortBy: 'order', sortOrder: 'asc' });
 
       if (result.items.length === 0) {
-        return "No articles found.";
+        return {
+          successBoolean: false,
+          responseString: "No articles found."
+        };
       }
 
-      return result.items;
+      // Format detailed list of articles
+      let responseString = `Articles (limit: ${limit}, sorted by order):\n\n`;
+      result.items.forEach((article: any, index: number) => {
+        responseString += `${index + 1}. Slug: ${article.slug}\n`;
+        responseString += `   Title: ${article.title}\n`;
+        responseString += `   Section: ${article.section || 'N/A'}\n`;
+        responseString += `   Category: ${article.category || 'N/A'}\n`;
+        responseString += `   Tags: ${article.tags || 'None'}\n`;
+        responseString += `   Order: ${article.order}\n`;
+        responseString += `   Locked: ${article.locked ? 'Yes' : 'No'}\n`;
+        responseString += `   Author: ${article.author}\n\n`;
+      });
+
+      return {
+        successBoolean: true,
+        responseString
+      };
     } catch (error) {
-      return `Error listing articles: ${(error as Error).message}`;
+      return {
+        successBoolean: false,
+        responseString: `Error listing articles: ${(error as Error).message}`
+      };
     }
   }
 }

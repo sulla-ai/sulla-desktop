@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration } from "../base";
+import { BaseTool, ToolRegistration, ToolResponse } from "../base";
 import { postgresClient } from "../../database/PostgresClient";
 
 /**
@@ -8,14 +8,25 @@ export class PgQueryWorker extends BaseTool {
   name: string = '';
   description: string = '';
   schemaDef: any = {};
-  protected async _validatedCall(input: any) {
+  protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { sql, params = [] } = input;
 
     try {
       const result = await postgresClient.query(sql, params);
-      return result;
+
+      const responseString = `PostgreSQL Query Result:
+Rows Returned: ${result.length}
+Query Executed Successfully`;
+
+      return {
+        successBoolean: true,
+        responseString
+      };
     } catch (error) {
-      return `Error executing PostgreSQL query: ${(error as Error).message}`;
+      return {
+        successBoolean: false,
+        responseString: `Error executing PostgreSQL query: ${(error as Error).message}`
+      };
     }
   }
 }

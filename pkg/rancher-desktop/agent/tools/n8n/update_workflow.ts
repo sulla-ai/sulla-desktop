@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration } from "../base";
+import { BaseTool, ToolRegistration, ToolResponse } from "../base";
 import { createN8nService } from "../../services/N8nService";
 
 /**
@@ -8,10 +8,32 @@ export class UpdateWorkflowWorker extends BaseTool {
   name: string = '';
   description: string = '';
   schemaDef: any = {};
-  protected async _validatedCall(input: any) {
-    const service = await createN8nService();
-    const { id, ...workflowData } = input;
-    return await service.updateWorkflow(id, workflowData);
+  protected async _validatedCall(input: any): Promise<ToolResponse> {
+    try {
+      const service = await createN8nService();
+      const { id, ...workflowData } = input;
+      const workflow = await service.updateWorkflow(id, workflowData);
+
+      const responseString = `Workflow updated successfully:
+ID: ${workflow.id}
+Name: ${workflow.name}
+Active: ${workflow.active ? 'Yes' : 'No'}
+Updated: ${new Date(workflow.updatedAt).toLocaleString()}
+Nodes: ${workflow.nodes?.length || 0}
+Connections: ${Object.keys(workflow.connections || {}).length}
+Tags: ${(workflow.tags || []).map((tag: any) => tag.name).join(', ') || 'None'}
+Owner: ${workflow.owner?.email || 'N/A'}`;
+
+      return {
+        successBoolean: true,
+        responseString
+      };
+    } catch (error) {
+      return {
+        successBoolean: false,
+        responseString: `Error updating workflow: ${(error as Error).message}`
+      };
+    }
   }
 }
 

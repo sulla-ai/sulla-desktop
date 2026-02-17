@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration } from "../base";
+import { BaseTool, ToolRegistration, ToolResponse } from "../base";
 import { createN8nService } from "../../services/N8nService";
 
 /**
@@ -8,9 +8,36 @@ export class GetCredentialsWorker extends BaseTool {
   name: string = '';
   description: string = '';
   schemaDef: any = {};
-  protected async _validatedCall(input: any) {
-    const service = await createN8nService();
-    return await service.getCredentials(input);
+
+  protected async _validatedCall(input: any): Promise<ToolResponse> {
+    try {
+      const service = await createN8nService();
+      const result = await service.getCredentials(input);
+
+      if (result.length > 0) {
+        // Format a proper message for the LLM
+        const credentialCount = result.length;
+        const responseString = `Found ${credentialCount} n8n credentials:\n\n` +
+          result.map((cred: any, index: number) =>
+            `${index + 1}. **${cred.name}** (Type: ${cred.type})`
+          ).join('\n');
+
+        return {
+          successBoolean: true,
+          responseString
+        };
+      }
+
+      return {
+        successBoolean: false,
+        responseString: 'No credentials found.'
+      };
+    } catch (error) {
+      return {
+        successBoolean: false,
+        responseString: `Error getting credentials: ${(error as Error).message}`
+      };
+    }
   }
 }
 

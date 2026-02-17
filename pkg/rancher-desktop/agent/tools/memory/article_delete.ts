@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration } from "../base";
+import { BaseTool, ToolRegistration, ToolResponse } from "../base";
 import { Article } from "../../database/models/Article";
 
 /**
@@ -8,27 +8,37 @@ export class ArticleDeleteWorker extends BaseTool {
   name: string = '';
   description: string = '';
   schemaDef: any = {};
-  protected async _validatedCall(input: any) {
+  protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { slug } = input;
 
     try {
       const article = await Article.find(slug);
       if (!article) {
-        return `Article with slug "${slug}" not found.`;
+        return {
+          successBoolean: false,
+          responseString: `Article with slug "${slug}" not found.`
+        };
       }
 
       await article.delete();
 
       return {
-        success: true,
-        slug,
-        message: `Article "${slug}" deleted successfully.`,
+        successBoolean: true,
+        responseString: `Article deleted successfully:
+Slug: ${slug}
+Title: ${article.attributes.title}`
       };
     } catch (error) {
       if (error instanceof Error) {
-        return `Error deleting article: ${error.message}`;
+        return {
+          successBoolean: false,
+          responseString: `Error deleting article: ${error.message}`
+        };
       } else {
-        return 'Error deleting article: Unknown error';
+        return {
+          successBoolean: false,
+          responseString: 'Error deleting article: Unknown error'
+        };
       }
     }
   }

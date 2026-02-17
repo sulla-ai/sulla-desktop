@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration } from "../base";
+import { BaseTool, ToolRegistration, ToolResponse } from "../base";
 import { runCommand } from "../util/CommandRunner";
 
 /**
@@ -8,7 +8,7 @@ export class DockerRunWorker extends BaseTool {
   name: string = '';
   description: string = '';
   schemaDef: any = {};
-  protected async _validatedCall(input: any) {
+  protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { image, name, command, options } = input;
 
     const args = ['run'];
@@ -27,12 +27,22 @@ export class DockerRunWorker extends BaseTool {
       const res = await runCommand('docker', args, { timeoutMs: 120000, maxOutputChars: 160_000 }); // Longer timeout for running containers
 
       if (res.exitCode !== 0) {
-        return `Error: ${res.stderr || res.stdout}`;
+        return {
+          successBoolean: false,
+          responseString: `Error running docker run: ${res.stderr || res.stdout}`
+        };
       }
 
-      return res.stdout;
+      const containerId = res.stdout.trim();
+      return {
+        successBoolean: true,
+        responseString: `Container started successfully. Image: ${image}, Container ID: ${containerId}`
+      };
     } catch (error) {
-      return `Error executing docker run: ${(error as Error).message}`;
+      return {
+        successBoolean: false,
+        responseString: `Error executing docker run: ${(error as Error).message}`
+      };
     }
   }
 }

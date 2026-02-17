@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration } from "../base";
+import { BaseTool, ToolRegistration, ToolResponse } from "../base";
 import { createN8nService } from "../../services/N8nService";
 
 /**
@@ -8,9 +8,28 @@ export class HealthCheckWorker extends BaseTool {
   name: string = '';
   description: string = '';
   schemaDef: any = {};
-  protected async _validatedCall(input: any) {
-    const service = await createN8nService();
-    return await service.healthCheck();
+  protected async _validatedCall(input: any): Promise<ToolResponse> {
+    try {
+      const service = await createN8nService();
+      const health = await service.healthCheck();
+
+      if (health) {
+        return {
+          successBoolean: true,
+          responseString: `n8n Health Status: Healthy - API is accessible and responding`
+        };
+      } else {
+        return {
+          successBoolean: false,
+          responseString: `n8n Health Status: Unhealthy - API is not accessible or not responding`
+        };
+      }
+    } catch (error) {
+      return {
+        successBoolean: false,
+        responseString: `Error checking n8n health: ${(error as Error).message}`
+      };
+    }
   }
 }
 

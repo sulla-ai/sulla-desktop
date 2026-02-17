@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration } from "../base";
+import { BaseTool, ToolRegistration, ToolResponse } from "../base";
 import { redisClient } from "../../database/RedisClient";
 
 /**
@@ -8,14 +8,21 @@ export class RedisExpireWorker extends BaseTool {
   name: string = '';
   description: string = '';
   schemaDef: any = {};
-  protected async _validatedCall(input: any) {
+  protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { key, seconds } = input;
 
     try {
       const result = await redisClient.expire(key, seconds);
-      return result === 1;
+
+      return {
+        successBoolean: true,
+        responseString: `Redis EXPIRE ${key}: ${result === 1 ? `expiration set to ${seconds} seconds` : 'key does not exist or already has expiration'}`
+      };
     } catch (error) {
-      return `Error setting Redis key expiration: ${(error as Error).message}`;
+      return {
+        successBoolean: false,
+        responseString: `Error setting Redis key expiration: ${(error as Error).message}`
+      };
     }
   }
 }

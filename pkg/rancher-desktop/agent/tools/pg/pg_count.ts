@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration } from "../base";
+import { BaseTool, ToolRegistration, ToolResponse } from "../base";
 import { postgresClient } from "../../database/PostgresClient";
 
 /**
@@ -8,15 +8,22 @@ export class PgCountWorker extends BaseTool {
   name: string = '';
   description: string = '';
   schemaDef: any = {};
-  protected async _validatedCall(input: any) {
+  protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { sql, params = [] } = input;
 
     try {
       const res = await postgresClient.queryOne<{ count: string }>(sql, params);
       const count = res ? parseInt(res.count, 10) : 0;
-      return { count };
+
+      return {
+        successBoolean: true,
+        responseString: `PostgreSQL Count Result: ${count}`
+      };
     } catch (error) {
-      return `Error executing PostgreSQL count query: ${(error as Error).message}`;
+      return {
+        successBoolean: false,
+        responseString: `Error executing PostgreSQL count query: ${(error as Error).message}`
+      };
     }
   }
 }

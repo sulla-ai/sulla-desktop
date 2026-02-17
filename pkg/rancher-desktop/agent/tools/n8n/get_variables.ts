@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration } from "../base";
+import { BaseTool, ToolRegistration, ToolResponse } from "../base";
 import { createN8nService } from "../../services/N8nService";
 
 /**
@@ -8,9 +8,38 @@ export class GetVariablesWorker extends BaseTool {
   name: string = '';
   description: string = '';
   schemaDef: any = {};
-  protected async _validatedCall(input: any) {
-    const service = await createN8nService();
-    return await service.getVariables(input);
+  protected async _validatedCall(input: any): Promise<ToolResponse> {
+    try {
+      const service = await createN8nService();
+      const variables = await service.getVariables(input);
+
+      if (!variables || variables.length === 0) {
+        return {
+          successBoolean: false,
+          responseString: 'No variables found with the specified filters.'
+        };
+      }
+
+      let responseString = `n8n Variables (${variables.length} found):\n\n`;
+      variables.forEach((variable: any, index: number) => {
+        responseString += `${index + 1}. Key: ${variable.key}\n`;
+        responseString += `   Value: ${variable.value}\n`;
+        responseString += `   ID: ${variable.id}\n`;
+        responseString += `   Project ID: ${variable.projectId || 'Global'}\n`;
+        responseString += `   Created: ${new Date(variable.createdAt).toLocaleString()}\n`;
+        responseString += `   Updated: ${new Date(variable.updatedAt).toLocaleString()}\n\n`;
+      });
+
+      return {
+        successBoolean: true,
+        responseString
+      };
+    } catch (error) {
+      return {
+        successBoolean: false,
+        responseString: `Error getting variables: ${(error as Error).message}`
+      };
+    }
   }
 }
 

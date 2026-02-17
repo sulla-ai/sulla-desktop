@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration } from "../base";
+import { BaseTool, ToolRegistration, ToolResponse } from "../base";
 import { runCommand } from "../util/CommandRunner";
 
 /**
@@ -8,19 +8,28 @@ export class DockerPullWorker extends BaseTool {
   name: string = '';
   description: string = '';
   schemaDef: any = {};
-  protected async _validatedCall(input: any) {
+  protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { image } = input;
 
     try {
       const res = await runCommand('docker', ['pull', image], { timeoutMs: 120000, maxOutputChars: 160_000 }); // Longer timeout for pulling
 
       if (res.exitCode !== 0) {
-        return `Error: ${res.stderr || res.stdout}`;
+        return {
+          successBoolean: false,
+          responseString: `Error pulling docker image: ${res.stderr || res.stdout}`
+        };
       }
 
-      return res.stdout;
+      return {
+        successBoolean: true,
+        responseString: `Docker image pulled successfully. Image: ${image}\nPull Output:\n${res.stdout}`
+      };
     } catch (error) {
-      return `Error executing docker pull: ${(error as Error).message}`;
+      return {
+        successBoolean: false,
+        responseString: `Error executing docker pull: ${(error as Error).message}`
+      };
     }
   }
 }

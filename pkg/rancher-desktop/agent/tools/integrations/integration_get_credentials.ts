@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration } from "../base";
+import { BaseTool, ToolRegistration, ToolResponse } from "../base";
 import { getIntegrationService } from "../../services/IntegrationService";
 import { integrations } from "../../integrations/catalog";
 
@@ -9,13 +9,16 @@ export class IntegrationGetCredentialsWorker extends BaseTool {
   name: string = '';
   description: string = '';
   schemaDef: any = {};
-  protected async _validatedCall(input: any) {
+  protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { integration_slug } = input;
 
     try {
       const catalogEntry = integrations[integration_slug];
       if (!catalogEntry) {
-        return `Integration "${integration_slug}" not found in the catalog. Available integrations: ${Object.keys(integrations).join(', ')}`;
+        return {
+          successBoolean: false,
+          responseString: `Integration "${integration_slug}" not found in the catalog. Available integrations: ${Object.keys(integrations).join(', ')}`
+        };
       }
 
       const service = getIntegrationService();
@@ -40,19 +43,32 @@ export class IntegrationGetCredentialsWorker extends BaseTool {
         has_value: prop.key in storedValues,
       }));
 
+      // Format detailed response
+      let responseString = `Integration: ${integration_slug} (${catalogEntry.name})
+Enabled: ${status.connected ? 'Yes' : 'No'}
+Connected at: ${status.connected_at ? new Date(status.connected_at).toLocaleString() : 'Never'}
+Last sync at: ${status.last_sync_at ? new Date(status.last_sync_at).toLocaleString() : 'Never'}
+
+Credentials:\n`;
+      credentials.forEach(cred => {
+        responseString += `- ${cred.title} (${cred.key}): ${cred.has_value ? '[SET]' : '[NOT SET]'} (${cred.required ? 'Required' : 'Optional'})\n`;
+      });
+
       return {
-        integration_id: integration_slug,
-        name: catalogEntry.name,
-        enabled: status.connected,
-        connected_at: status.connected_at ?? null,
-        last_sync_at: status.last_sync_at ?? null,
-        credentials,
+        successBoolean: true,
+        responseString
       };
     } catch (error) {
       if (error instanceof Error) {
-        return `Error retrieving integration credentials: ${error.message}`;
+        return {
+          successBoolean: false,
+          responseString: `Error retrieving integration credentials: ${error.message}`
+        };
       } else {
-        return 'Error retrieving integration credentials: Unknown error';
+        return {
+          successBoolean: false,
+          responseString: 'Error retrieving integration credentials: Unknown error'
+        };
       }
     }
   }

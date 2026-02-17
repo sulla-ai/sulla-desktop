@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration } from "../base";
+import { BaseTool, ToolRegistration, ToolResponse } from "../base";
 import { runCommand } from "../util/CommandRunner";
 
 /**
@@ -8,7 +8,7 @@ export class DockerLogsWorker extends BaseTool {
   name: string = '';
   description: string = '';
   schemaDef: any = {};
-  protected async _validatedCall(input: any) {
+  protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { container, follow, tail } = input;
 
     const args = ['logs', container];
@@ -23,12 +23,21 @@ export class DockerLogsWorker extends BaseTool {
       const res = await runCommand('docker', args, { timeoutMs: follow ? 300000 : 30000, maxOutputChars: 160_000 });
 
       if (res.exitCode !== 0) {
-        return `Error: ${res.stderr || res.stdout}`;
+        return {
+          successBoolean: false,
+          responseString: `Error fetching logs for container ${container}: ${res.stderr || res.stdout}`
+        };
       }
 
-      return res.stdout;
+      return {
+        successBoolean: true,
+        responseString: `Logs for container ${container}${follow ? ' (following)' : ''}${tail ? ` (last ${tail} lines)` : ''}:\n${res.stdout}`
+      };
     } catch (error) {
-      return `Error executing docker logs: ${(error as Error).message}`;
+      return {
+        successBoolean: false,
+        responseString: `Error executing docker logs: ${(error as Error).message}`
+      };
     }
   }
 }

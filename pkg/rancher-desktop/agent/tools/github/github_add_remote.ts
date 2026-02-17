@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration } from "../base";
+import { BaseTool, ToolRegistration, ToolResponse } from "../base";
 import { execSync } from 'child_process';
 
 /**
@@ -9,7 +9,7 @@ export class GitHubAddRemoteWorker extends BaseTool {
   description: string = '';
   schemaDef: any = {};
 
-  protected async _validatedCall(input: any) {
+  protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { absolutePath, remoteName, remoteUrl } = input;
 
     try {
@@ -26,19 +26,19 @@ export class GitHubAddRemoteWorker extends BaseTool {
         env: { ...process.env }
       });
 
+      const responseString = `Remote '${remoteName}' added successfully to repository at ${absolutePath}.
+Remote URL: ${remoteUrl}
+Current remotes:
+${remotesOutput.trim()}`;
+
       return {
-        success: true,
-        message: `Remote '${remoteName}' added successfully to repository at ${absolutePath}`,
-        remoteUrl: remoteUrl,
-        remotes: remotesOutput.trim()
+        successBoolean: true,
+        responseString
       };
     } catch (error: any) {
       return {
-        success: false,
-        error: `Failed to add remote: ${error.message}`,
-        path: absolutePath,
-        remoteName: remoteName,
-        remoteUrl: remoteUrl
+        successBoolean: false,
+        responseString: `Failed to add remote '${remoteName}' to repository at ${absolutePath}: ${error.message}`
       };
     }
   }

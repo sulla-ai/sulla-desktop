@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration } from "../base";
+import { BaseTool, ToolRegistration, ToolResponse } from "../base";
 import { runCommand } from "../util/CommandRunner";
 
 /**
@@ -8,7 +8,8 @@ export class ExecWorker extends BaseTool {
   name: string = '';
   description: string = '';
   schemaDef: any = {};
-  protected async _validatedCall(input: any) {
+
+  protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { command } = input;
 
     // Guardrails: block dangerous commands
@@ -27,7 +28,10 @@ export class ExecWorker extends BaseTool {
 
     for (const pattern of forbiddenPatterns) {
       if (pattern.test(command)) {
-        return `ERROR: Command blocked for security reasons. Pattern: ${pattern.source}`;
+        return {
+          successBoolean: false,
+          responseString: `ERROR: Command blocked for security reasons. Pattern: ${pattern.source}`
+        };
       }
     }
 
@@ -35,12 +39,21 @@ export class ExecWorker extends BaseTool {
       const res = await runCommand(command, [], { timeoutMs: 30000, maxOutputChars: 160_000 });
 
       if (res.exitCode !== 0) {
-        return `Command failed with exit code ${res.exitCode}:\n${res.stderr || res.stdout}`;
+        return {
+          successBoolean: false,
+          responseString: `Command failed with exit code ${res.exitCode}:\n${res.stderr || res.stdout}`
+        };
       }
 
-      return res.stdout;
+      return {
+        successBoolean: true,
+        responseString: res.stdout
+      };
     } catch (error) {
-      return `Error executing command: ${(error as Error).message}`;
+      return {
+        successBoolean: false,
+        responseString: `Error executing command: ${(error as Error).message}`
+      };
     }
   }
 }

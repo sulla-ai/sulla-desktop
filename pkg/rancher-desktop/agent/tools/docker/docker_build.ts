@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration } from "../base";
+import { BaseTool, ToolRegistration, ToolResponse } from "../base";
 import { runCommand } from "../util/CommandRunner";
 
 /**
@@ -8,7 +8,7 @@ export class DockerBuildWorker extends BaseTool {
   name: string = '';
   description: string = '';
   schemaDef: any = {};
-  protected async _validatedCall(input: any) {
+  protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { path, tag, options } = input;
 
     const args = ['build'];
@@ -21,12 +21,21 @@ export class DockerBuildWorker extends BaseTool {
       const res = await runCommand('docker', args, { timeoutMs: 300000, maxOutputChars: 160_000 }); // Longer timeout for building
 
       if (res.exitCode !== 0) {
-        return `Error: ${res.stderr || res.stdout}`;
+        return {
+          successBoolean: false,
+          responseString: `Error building docker image: ${res.stderr || res.stdout}`
+        };
       }
 
-      return res.stdout;
+      return {
+        successBoolean: true,
+        responseString: `Docker image built successfully. Tag: ${tag}, Path: ${path}\nBuild Output:\n${res.stdout}`
+      };
     } catch (error) {
-      return `Error executing docker build: ${(error as Error).message}`;
+      return {
+        successBoolean: false,
+        responseString: `Error executing docker build: ${(error as Error).message}`
+      };
     }
   }
 }

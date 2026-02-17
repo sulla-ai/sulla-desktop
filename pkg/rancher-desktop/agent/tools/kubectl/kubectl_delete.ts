@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration } from "../base";
+import { BaseTool, ToolRegistration, ToolResponse } from "../base";
 import { runCommand } from "../util/CommandRunner";
 
 /**
@@ -8,7 +8,7 @@ export class KubectlDeleteWorker extends BaseTool {
   name: string = '';
   description: string = '';
   schemaDef: any = {};
-  protected async _validatedCall(input: any) {
+  protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { resource, name, namespace, force, gracePeriod } = input;
 
     const args = ['delete', resource, name];
@@ -29,12 +29,23 @@ export class KubectlDeleteWorker extends BaseTool {
       const res = await runCommand('kubectl', args, { timeoutMs: 60_000, maxOutputChars: 160_000 });
 
       if (res.exitCode !== 0) {
-        return `Error: ${res.stderr || res.stdout}`;
+        return {
+          successBoolean: false,
+          responseString: `Error deleting resource: ${res.stderr || res.stdout}`
+        };
       }
 
-      return res.stdout;
+      const responseString = `Deleted ${resource} ${name}${namespace ? ` in namespace ${namespace}` : ''}${force ? ' (force)' : ''}${gracePeriod !== undefined ? ` (grace period: ${gracePeriod}s)` : ''}\nOutput:\n${res.stdout}`;
+
+      return {
+        successBoolean: true,
+        responseString
+      };
     } catch (error) {
-      return `Error executing kubectl delete: ${(error as Error).message}`;
+      return {
+        successBoolean: false,
+        responseString: `Error executing kubectl delete: ${(error as Error).message}`
+      };
     }
   }
 }

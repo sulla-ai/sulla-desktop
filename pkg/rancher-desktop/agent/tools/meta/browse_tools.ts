@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration } from "../base";
+import { BaseTool, ToolRegistration, ToolResponse } from "../base";
 import { toolRegistry } from "../registry";
 
 /**
@@ -8,15 +8,16 @@ export class BrowseToolsWorker extends BaseTool {
   name: string = '';
   description: string = '';
   schemaDef: any = {};
-  protected async _validatedCall(input: any) {
+  protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { category, query } = input;
 
     const tools = await toolRegistry.searchTools(query, category);
 
     if (tools.length === 0) {
-      return `No tools found${
-        category ? ` in category "${category}"` : ""
-      }${query ? ` matching "${query}"` : ""}.\n\nAvailable categories: ${toolRegistry.getCategories().join(", ")}`;
+      return {
+        successBoolean: false,
+        responseString: `No tools found${category ? ` in category "${category}"` : ""}${query ? ` matching "${query}"` : ""}.\n\nAvailable categories: ${toolRegistry.getCategories().join(", ")}`
+      }
     }
 
     // Attach found tools to state for LLM access
@@ -40,14 +41,8 @@ export class BrowseToolsWorker extends BaseTool {
     }
 
     return {
-      count: tools.length,
-      category: category || "all",
-      query: query || null,
-      tools: tools.map(tool => ({
-        name: tool.name,
-        description: tool.description,
-        category: tool.metadata.category,
-      })),
+      successBoolean: true,
+      responseString: `Found ${tools.length} tools${category ? ` in category "${category}"` : ""}${query ? ` matching "${query}"` : ""}.`
     };
   }
 }

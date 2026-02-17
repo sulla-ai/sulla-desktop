@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration } from "../base";
+import { BaseTool, ToolRegistration, ToolResponse } from "../base";
 import { runCommand } from "../util/CommandRunner";
 
 /**
@@ -8,7 +8,7 @@ export class KubectlDescribeWorker extends BaseTool {
   name: string = '';
   description: string = '';
   schemaDef: any = {};
-  protected async _validatedCall(input: any) {
+  protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { resource, name, namespace } = input;
 
     const args = ['describe', resource, name];
@@ -21,12 +21,23 @@ export class KubectlDescribeWorker extends BaseTool {
       const res = await runCommand('kubectl', args, { timeoutMs: 60_000, maxOutputChars: 160_000 });
 
       if (res.exitCode !== 0) {
-        return `Error: ${res.stderr || res.stdout}`;
+        return {
+          successBoolean: false,
+          responseString: `Error describing resource: ${res.stderr || res.stdout}`
+        };
       }
 
-      return res.stdout;
+      const responseString = `Description of ${resource} ${name}${namespace ? ` in namespace ${namespace}` : ''}:\n${res.stdout}`;
+
+      return {
+        successBoolean: true,
+        responseString
+      };
     } catch (error) {
-      return `Error executing kubectl describe: ${(error as Error).message}`;
+      return {
+        successBoolean: false,
+        responseString: `Error executing kubectl describe: ${(error as Error).message}`
+      };
     }
   }
 }

@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration } from "../base";
+import { BaseTool, ToolRegistration, ToolResponse } from "../base";
 import { createN8nService } from "../../services/N8nService";
 
 /**
@@ -8,9 +8,28 @@ export class ActivateWorkflowWorker extends BaseTool {
   name: string = '';
   description: string = '';
   schemaDef: any = {};
-  protected async _validatedCall(input: any) {
-    const service = await createN8nService();
-    return await service.activateWorkflow(input.id, input);
+  protected async _validatedCall(input: any): Promise<ToolResponse> {
+    try {
+      const service = await createN8nService();
+      const result = await service.activateWorkflow(input.id, input);
+
+      const responseString = `Workflow activated successfully:
+ID: ${input.id}
+Activation ID: ${result.id}
+Name: ${result.name || input.name || 'N/A'}
+Description: ${result.description || input.description || 'N/A'}
+Created: ${new Date(result.createdAt).toLocaleString()}`;
+
+      return {
+        successBoolean: true,
+        responseString
+      };
+    } catch (error) {
+      return {
+        successBoolean: false,
+        responseString: `Error activating workflow: ${(error as Error).message}`
+      };
+    }
   }
 }
 

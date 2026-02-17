@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration } from "../base";
+import { BaseTool, ToolRegistration, ToolResponse } from "../base";
 import { createN8nService } from "../../services/N8nService";
 
 /**
@@ -8,15 +8,49 @@ export class SearchTemplatesWorker extends BaseTool {
   name: string = '';
   description: string = '';
   schemaDef: any = {};
-  protected async _validatedCall(input: any) {
-    const service = await createN8nService();
-    return await service.searchTemplates({
-      search: input.search,
-      category: input.category,
-      nodes: input.nodes,
-      page: input.page,
-      limit: input.limit,
-    });
+  
+  protected async _validatedCall(input: any): Promise<ToolResponse> {
+    try {
+      const service = await createN8nService();
+      const result = await service.searchTemplates({
+        search: input.search,
+        category: input.category,
+        nodes: input.nodes,
+        page: input.page,
+        limit: input.limit,
+      });
+
+      // Format a proper message for the LLM
+      const templates = result.templates || [];
+      const totalCount = result.totalCount || templates.length;
+      
+      let message = `Found ${totalCount} n8n workflow templates`;
+      if (input.search) message += ` matching "${input.search}"`;
+      if (input.category) message += ` in category "${input.category}"`;
+      message += `:\n\n`;
+
+      if (templates.length === 0) {
+        message += "No templates found matching your criteria.";
+      } else {
+        message += templates.slice(0, 10).map((template: any, index: number) => 
+          `${index + 1}. **${template.name}**\n   ${template.description || 'No description available'}\n   Category: ${template.categories?.[0]?.name || 'Uncategorized'}\n   ID: ${template.id}`
+        ).join('\n\n');
+        
+        if (templates.length > 10) {
+          message += `\n\n... and ${templates.length - 10} more templates`;
+        }
+      }
+
+      return {
+        successBoolean: true,
+        responseString: message
+      };
+    } catch (error) {
+      return {
+        successBoolean: false,
+        responseString: `Error searching n8n templates: ${(error as Error).message}`
+      };
+    }
   }
 }
 

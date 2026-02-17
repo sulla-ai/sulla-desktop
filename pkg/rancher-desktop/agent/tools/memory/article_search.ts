@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration } from "../base";
+import { BaseTool, ToolRegistration, ToolResponse } from "../base";
 import { ArticlesRegistry } from "../../database/registry/ArticlesRegistry";
 
 /**
@@ -8,7 +8,7 @@ export class ArticleSearchWorker extends BaseTool {
   name: string = '';
   description: string = '';
   schemaDef: any = {};
-  protected async _validatedCall(input: any) {
+  protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { query, limit = 5, tag } = input;
 
     try {
@@ -16,15 +16,33 @@ export class ArticleSearchWorker extends BaseTool {
       const result = await registry.search({ query, limit, tags: tag ? [tag] : undefined });
 
       if (result.items.length === 0) {
-        return `No articles found matching "${query}"${tag ? ` with tag "${tag}"` : ""}.`;
+        return {
+          successBoolean: false,
+          responseString: `No articles found matching "${query}"${tag ? ` with tag "${tag}"` : ""}.`
+        };
       }
 
-      return result.items.map(item => ({
-        ...item,
-        score: "semantic similarity score",
-      }));
+      // Format detailed search results
+      let responseString = `Search results for "${query}"${tag ? ` (filtered by tag: ${tag})` : ""} (limit: ${limit}):\n\n`;
+      result.items.forEach((item: any, index: number) => {
+        responseString += `${index + 1}. Slug: ${item.slug}\n`;
+        responseString += `   Title: ${item.title}\n`;
+        responseString += `   Section: ${item.section || 'N/A'}\n`;
+        responseString += `   Category: ${item.category || 'N/A'}\n`;
+        responseString += `   Tags: ${item.tags || 'None'}\n`;
+        responseString += `   Relevance Score: ${item.score || item.relevance || 'N/A'}\n`;
+        responseString += `   Excerpt: ${item.excerpt || 'N/A'}\n\n`;
+      });
+
+      return {
+        successBoolean: true,
+        responseString
+      };
     } catch (error) {
-      return `Error searching articles: ${(error as Error).message}`;
+      return {
+        successBoolean: false,
+        responseString: `Error searching articles: ${(error as Error).message}`
+      };
     }
   }
 }

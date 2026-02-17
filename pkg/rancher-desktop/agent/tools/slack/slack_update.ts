@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration } from "../base";
+import { BaseTool, ToolRegistration, ToolResponse } from "../base";
 import { registry } from "../../integrations";
 import type { SlackClient } from "../../integrations/slack/SlackClient";
 
@@ -9,15 +9,28 @@ export class SlackUpdateWorker extends BaseTool {
   name: string = '';
   description: string = '';
   schemaDef: any = {};
-  protected async _validatedCall(input: any) {
+  protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { channel, ts, text } = input;
 
     try {
       const slack = await registry.get<SlackClient>('slack');
       const res = await slack.updateMessage(channel, ts, text);
-      return { ok: res.ok };
+      if (res.ok) {
+        return {
+          successBoolean: true,
+          responseString: `Slack message updated successfully in channel ${channel} at timestamp ${ts}`
+        };
+      } else {
+        return {
+          successBoolean: false,
+          responseString: `Failed to update Slack message: ${res.error || 'Unknown error'}`
+        };
+      }
     } catch (error) {
-      return `Error updating Slack message: ${(error as Error).message}`;
+      return {
+        successBoolean: false,
+        responseString: `Error updating Slack message: ${(error as Error).message}`
+      };
     }
   }
 }

@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration } from "../base";
+import { BaseTool, ToolRegistration, ToolResponse } from "../base";
 import { createN8nService } from "../../services/N8nService";
 
 /**
@@ -8,9 +8,28 @@ export class CreateCredentialWorker extends BaseTool {
   name: string = '';
   description: string = '';
   schemaDef: any = {};
-  protected async _validatedCall(input: any) {
-    const service = await createN8nService();
-    return await service.createCredential(input);
+  protected async _validatedCall(input: any): Promise<ToolResponse> {
+    try {
+      const service = await createN8nService();
+      const credential = await service.createCredential(input);
+
+      const responseString = `Credential created successfully:
+ID: ${credential.id}
+Name: ${credential.name}
+Type: ${credential.type}
+Created: ${new Date(credential.createdAt).toLocaleString()}
+Updated: ${new Date(credential.updatedAt).toLocaleString()}`;
+
+      return {
+        successBoolean: true,
+        responseString
+      };
+    } catch (error) {
+      return {
+        successBoolean: false,
+        responseString: `Error creating credential: ${(error as Error).message}`
+      };
+    }
   }
 }
 

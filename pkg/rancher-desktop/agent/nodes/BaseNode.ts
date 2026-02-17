@@ -1070,9 +1070,9 @@ Never call for:
                 tool: action,
                 success: result.success,
                 error: result.error || null,
-                result: result.result && JSON.stringify(result.result).length < 5000
+                result: result.result ? (JSON.stringify(result.result).length < 5000
                     ? result.result
-                    : '[truncated — see logs]',
+                    : `${JSON.stringify(result.result).substring(0, 5000)}...`) : null,
                 toolCallId: result.toolCallId
             },
             null,

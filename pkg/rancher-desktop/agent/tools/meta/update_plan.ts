@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration } from "../base";
+import { BaseTool, ToolRegistration, ToolResponse } from "../base";
 import { HierarchicalThreadState } from '../../nodes/Graph';
 
 /**
@@ -8,29 +8,49 @@ export class UpdatePlanWorker extends BaseTool<HierarchicalThreadState> {
   name: string = '';
   description: string = '';
   schemaDef: any = {};
-  
-  protected async _validatedCall(input: any) {
+
+  protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { milestoneId, status, note } = input;
 
     const plan = this.state!.metadata!.plan;
-    if (!plan || !plan.milestones) return { success: false, error: "No active plan" };
+    if (!plan || !plan.milestones) {
+      return {
+        successBoolean: false,
+        responseString: "No active plan"
+      };
+    }
 
     const milestone = plan.milestones.find((m) => m.model && m.model.id === milestoneId);
-    if (milestone && milestone.model) {
+    if (!milestone || !milestone.model) {
+      return {
+        successBoolean: false,
+        responseString: `Milestone ${milestoneId} not found in active plan`
+      };
+    }
+
+    try {
       milestone.model.status = status;
       // Note: note property not implemented in AgentPlanTodoInterface yet
       // if (note) milestone.model.note = note;
       await milestone.model.save();
+
+      await this.emitProgressUpdate?.({
+        type: "plan_updated",
+        milestoneId: milestoneId,
+        status: status,
+        note: note,
+      });
+
+      return {
+        successBoolean: true,
+        responseString: `Milestone ${milestoneId} updated to ${status}`
+      };
+    } catch (e: any) {
+      return {
+        successBoolean: false,
+        responseString: `Failed to update milestone: ${e?.message}`
+      };
     }
-
-    await this.emitProgressUpdate?.({
-      type: "plan_updated",
-      milestoneId: milestoneId,
-      status: status,
-      note: note,
-    });
-
-    return { success: true, milestoneId: milestoneId, status: status };
   }
 }
 

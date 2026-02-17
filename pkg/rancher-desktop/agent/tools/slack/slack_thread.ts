@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration } from "../base";
+import { BaseTool, ToolRegistration, ToolResponse } from "../base";
 import { registry } from "../../integrations";
 import type { SlackClient } from "../../integrations/slack/SlackClient";
 
@@ -9,15 +9,28 @@ export class SlackThreadWorker extends BaseTool {
   name: string = '';
   description: string = '';
   schemaDef: any = {};
-  protected async _validatedCall(input: any) {
+  protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { channel, ts } = input;
 
     try {
       const slack = await registry.get<SlackClient>('slack');
       const replies = await slack.getThreadReplies(channel, ts);
-      return replies;
+      if (!replies || replies.length === 0) {
+        return {
+          successBoolean: false,
+          responseString: `No replies found in Slack thread for message ${ts} in channel ${channel}`
+        };
+      }
+      const repliesStr = replies.map(reply => `- ${reply.user}: ${reply.text} (at ${reply.ts})`).join('\n');
+      return {
+        successBoolean: true,
+        responseString: `Slack thread replies for message ${ts} in channel ${channel} (${replies.length} replies):\n${repliesStr}`
+      };
     } catch (error) {
-      return `Error getting Slack thread: ${(error as Error).message}`;
+      return {
+        successBoolean: false,
+        responseString: `Error getting Slack thread: ${(error as Error).message}`
+      };
     }
   }
 }

@@ -1,4 +1,4 @@
-import { BaseTool } from "../base";
+import { BaseTool, ToolResponse } from "../base";
 import { getIntegrationService } from '../../services/IntegrationService';
 
 // Define the registration type
@@ -18,13 +18,16 @@ export class BraveSearchWorker extends BaseTool {
   description: string = '';
   schemaDef: any = {};
 
-  protected async _validatedCall(input: any) {
+  protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { query, count = 10 } = input;
 
     const integrationService = getIntegrationService();
     const apiKeyValue = await integrationService.getIntegrationValue('brave_search', 'api_key');
     if (!apiKeyValue) {
-      return "Error: Brave Search API key not configured.";
+      return {
+        successBoolean: false,
+        responseString: "Error: Brave Search API key not configured."
+      };
     }
 
     const apiKey = apiKeyValue.value;
@@ -40,13 +43,19 @@ export class BraveSearchWorker extends BaseTool {
       });
 
       if (!response.ok) {
-        throw new Error(`Brave Search API error: ${response.status} ${response.statusText}`);
+        return {
+          successBoolean: false,
+          responseString: `Brave Search API error: ${response.status} ${response.statusText}`
+        };
       }
 
       const data = await response.json();
 
       if (!data.web?.results) {
-        return `No search results found for "${query}".`;
+        return {
+          successBoolean: false,
+          responseString: `No search results found for "${query}".`
+        };
       }
 
       const results = data.web.results.map((result: any, index: number) => ({
@@ -59,12 +68,14 @@ export class BraveSearchWorker extends BaseTool {
       }));
 
       return {
-        query,
-        total_results: data.web.total || results.length,
-        results,
+        successBoolean: true,
+        responseString: `Found ${results.length} search results for "${query}" (total available: ${data.web.total || results.length}).`
       };
     } catch (error) {
-      return `Error performing Brave search: ${(error as Error).message}`;
+      return {
+        successBoolean: false,
+        responseString: `Error performing Brave search: ${(error as Error).message}`
+      };
     }
   }
 }

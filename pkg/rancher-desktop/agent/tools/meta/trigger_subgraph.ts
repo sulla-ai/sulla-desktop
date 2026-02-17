@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration } from "../base";
+import { BaseTool, ToolRegistration, ToolResponse } from "../base";
 
 /**
  * Trigger Subgraph Tool - Worker class for execution
@@ -7,16 +7,15 @@ export class TriggerSubgraphWorker extends BaseTool {
   name: string = '';
   description: string = '';
   schemaDef: any = {};
-  protected async _validatedCall(input: any) {
+
+  protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { name, prompt } = input;
 
     // This tool just sets metadata flags that will be handled by the OverLordPlannerNode
     // The actual subgraph execution happens in the graph flow
     return {
-      success: true,
-      action: name,
-      reasoning: prompt,
-      message: `Triggered ${name} subgraph with instructions: ${prompt}`
+      successBoolean: true,
+      responseString: `Triggering ${name} subgraph with instructions: ${prompt}`
     };
   }
 }

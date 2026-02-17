@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration } from "../base";
+import { BaseTool, ToolRegistration, ToolResponse } from "../base";
 import DuckDuckGoService from 'ddgs';
 
 /**
@@ -8,7 +8,7 @@ export class DuckDuckGoSearchWorker extends BaseTool {
   name: string = '';
   description: string = '';
   schemaDef: any = {};
-  protected async _validatedCall(input: any) {
+  protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { query, maxResults = 10 } = input;
 
     const ddg = new DuckDuckGoService();
@@ -18,21 +18,21 @@ export class DuckDuckGoSearchWorker extends BaseTool {
       const limitedResults = results.slice(0, maxResults);
 
       if (!limitedResults || limitedResults.length === 0) {
-        return `No search results found for "${query}".`;
+        return {
+          successBoolean: false,
+          responseString: `No search results found for "${query}".`
+        };
       }
 
       return {
-        query,
-        results: limitedResults.map((result: any, index: number) => ({
-          rank: index + 1,
-          title: result.title,
-          url: result.url,
-          description: result.description || result.body || '',
-          hostname: result.hostname,
-        })),
+        successBoolean: true,
+        responseString: `Found ${limitedResults.length} search results for "${query}".`
       };
     } catch (error) {
-      return `Error performing DuckDuckGo search: ${(error as Error).message}`;
+      return {
+        successBoolean: false,
+        responseString: `Error performing DuckDuckGo search: ${(error as Error).message}`
+      };
     } finally {
       await ddg.close();
     }

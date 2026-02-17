@@ -1,4 +1,6 @@
 // src/tools/base.ts
+import { ToolResult } from "../types";
+
 export interface ToolMetadata extends Record<string, unknown> {
   category: string;
   requiresApproval?: boolean;
@@ -22,6 +24,11 @@ type InputSchemaDef = Record<string, FieldSchema>;
 
 interface ParsedInput {
   [key: string]: unknown;
+}
+
+export interface ToolResponse {
+  successBoolean: boolean;
+  responseString: string;
 }
 
 export type ToolRegistration = {
@@ -151,16 +158,32 @@ export abstract class BaseTool<TState = any> {
   // Execution entry point
   // ─────────────────────────────────────────────────────────────
 
-  async call(rawInput: unknown): Promise<unknown> {
+  async call(rawInput: unknown): Promise<ToolResult> {
     const validated = this.parseInput(rawInput);
-    return this._validatedCall(validated);
+    try {
+      const { successBoolean, responseString } = await this._validatedCall(validated);
+      return {
+        toolName: this.name,
+        success: successBoolean,
+        result: responseString
+      };
+    } catch (error) {
+      return {
+        toolName: this.name,
+        success: false,
+        error: error instanceof Error ? error.message : String(error)
+      };
+    }
   }
 
-  async invoke(input: unknown): Promise<unknown> {
-    return this.call(input);  // or directly this._call(input) if you prefer
+  async invoke(input: unknown, state?: TState): Promise<ToolResult> {
+    if (state) {
+      this.setState(state);
+    }
+    return this.call(input);
   }
 
-  protected abstract _validatedCall(input: ParsedInput): Promise<unknown>;
+  protected abstract _validatedCall(input: ParsedInput): Promise<ToolResponse>;
 
   // ─────────────────────────────────────────────────────────────
   // Existing helpers

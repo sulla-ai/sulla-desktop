@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration } from "../base";
+import { BaseTool, ToolRegistration, ToolResponse } from "../base";
 import { runCommand } from "../util/CommandRunner";
 
 /**
@@ -8,19 +8,28 @@ export class DockerStopWorker extends BaseTool {
   name: string = '';
   description: string = '';
   schemaDef: any = {};
-  protected async _validatedCall(input: any) {
+  protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { container } = input;
 
     try {
       const res = await runCommand('docker', ['stop', container], { timeoutMs: 60000, maxOutputChars: 160_000 });
 
       if (res.exitCode !== 0) {
-        return `Error: ${res.stderr || res.stdout}`;
+        return {
+          successBoolean: false,
+          responseString: `Error stopping docker container: ${res.stderr || res.stdout}`
+        };
       }
 
-      return res.stdout;
+      return {
+        successBoolean: true,
+        responseString: `Container stopped successfully. Container: ${container}`
+      };
     } catch (error) {
-      return `Error executing docker stop: ${(error as Error).message}`;
+      return {
+        successBoolean: false,
+        responseString: `Error executing docker stop: ${(error as Error).message}`
+      };
     }
   }
 }

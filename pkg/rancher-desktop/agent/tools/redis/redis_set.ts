@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration } from "../base";
+import { BaseTool, ToolRegistration, ToolResponse } from "../base";
 import { redisClient } from "../../database/RedisClient";
 
 /**
@@ -8,14 +8,21 @@ export class RedisSetWorker extends BaseTool {
   name: string = '';
   description: string = '';
   schemaDef: any = {};
-  protected async _validatedCall(input: any) {
+  protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { key, value, ttl } = input;
 
     try {
       await redisClient.set(key, value, ttl);
-      return 'OK';
+
+      return {
+        successBoolean: true,
+        responseString: `Redis SET ${key} = "${value}"${ttl ? ` (TTL: ${ttl}s)` : ''}`
+      };
     } catch (error) {
-      return `Error setting Redis key: ${(error as Error).message}`;
+      return {
+        successBoolean: false,
+        responseString: `Error setting Redis key: ${(error as Error).message}`
+      };
     }
   }
 }

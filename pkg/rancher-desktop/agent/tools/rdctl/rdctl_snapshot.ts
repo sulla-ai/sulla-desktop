@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration } from "../base";
+import { BaseTool, ToolRegistration, ToolResponse } from "../base";
 import { runCommand } from "../util/CommandRunner";
 
 /**
@@ -8,7 +8,7 @@ export class RdctlSnapshotWorker extends BaseTool {
   name: string = '';
   description: string = '';
   schemaDef: any = {};
-  protected async _validatedCall(input: any) {
+  protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { subcommand, args = [] } = input;
 
     const cmdArgs = ['snapshot', subcommand, ...args];
@@ -17,12 +17,21 @@ export class RdctlSnapshotWorker extends BaseTool {
       const res = await runCommand('rdctl', cmdArgs, { timeoutMs: 120_000, maxOutputChars: 160_000 });
 
       if (res.exitCode !== 0) {
-        return `Error: ${res.stderr || res.stdout}`;
+        return {
+          successBoolean: false,
+          responseString: `Error executing snapshot command: ${res.stderr || res.stdout}`
+        };
       }
 
-      return res.stdout;
+      return {
+        successBoolean: true,
+        responseString: `Snapshot command executed: ${subcommand}${args.length ? ` ${args.join(' ')}` : ''}\nOutput:\n${res.stdout}`
+      };
     } catch (error) {
-      return `Error executing rdctl snapshot: ${(error as Error).message}`;
+      return {
+        successBoolean: false,
+        responseString: `Error executing rdctl snapshot: ${(error as Error).message}`
+      };
     }
   }
 }

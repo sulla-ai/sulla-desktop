@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration } from "../base";
+import { BaseTool, ToolRegistration, ToolResponse } from "../base";
 import { SullaSettingsModel } from '../../database/models/SullaSettingsModel';
 import { parseJson } from '../../services/JsonParseService';
 
@@ -9,7 +9,8 @@ export class RemoveObservationalMemoryWorker extends BaseTool {
   name: string = '';
   description: string = '';
   schemaDef: any = {};
-  protected async _validatedCall(input: any) {
+
+  protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { id } = input;
 
     // Get current observational memories
@@ -23,30 +24,48 @@ export class RemoveObservationalMemoryWorker extends BaseTool {
       } else {
         memoryArray = [];
       }
-    } catch (e) {
-      console.error('Failed to parse observational memory:', e);
-      memoryArray = [];
+    } catch (e: any) {
+      return {
+        successBoolean: false,
+        responseString: `Failed to parse observational memory: ${e?.message}`
+      };
     }
 
     // Find and remove the memory
     const index = memoryArray.findIndex((mem: any) => mem.id === id);
     if (index === -1) {
       return {
-        success: false,
-        error: `Memory with ID "${id}" not found.`,
+        successBoolean: false,
+        responseString: `Memory with ID "${id}" not found.`
       };
     }
 
     const removedMemory = memoryArray.splice(index, 1)[0];
 
+    // Test round-trip to ensure valid JSON before saving
+    try {
+      const testString = JSON.stringify(memoryArray);
+      JSON.parse(testString);
+    } catch (e: any) {
+      return {
+        successBoolean: false,
+        responseString: `Memory data corruption detected, aborting save: ${e?.message}`
+      };
+    }
+
     // Save back to settings
-    await SullaSettingsModel.set('observationalMemory', JSON.stringify(memoryArray));
+    try {
+      await SullaSettingsModel.set('observationalMemory', JSON.stringify(memoryArray));
+    } catch (e: any) {
+      return {
+        successBoolean: false,
+        responseString: `Failed to save memory: ${e?.message}`
+      };
+    }
 
     return {
-      success: true,
-      removedId: id,
-      totalMemories: memoryArray.length,
-      message: `Memory removed: "${removedMemory.content}"`,
+      successBoolean: true,
+      responseString: `Memory removed: "${removedMemory.content}"`
     };
   }
 }

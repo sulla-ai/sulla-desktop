@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration } from "../base";
+import { BaseTool, ToolRegistration, ToolResponse } from "../base";
 import { Article } from "../../database/models/Article";
 
 /**
@@ -8,7 +8,7 @@ export class ArticleCreateWorker extends BaseTool {
   name: string = '';
   description: string = '';
   schemaDef: any = {};
-  protected async _validatedCall(input: any) {
+  protected async _validatedCall(input: any): Promise<ToolResponse> {
     const {
       slug,
       title,
@@ -27,7 +27,10 @@ export class ArticleCreateWorker extends BaseTool {
     try {
       const existing = await Article.find(slug);
       if (existing) {
-        return `Article with slug "${slug}" already exists.`;
+        return {
+          successBoolean: false,
+          responseString: `Article with slug "${slug}" already exists.`
+        };
       }
 
       const article = await Article.create({
@@ -45,17 +48,31 @@ export class ArticleCreateWorker extends BaseTool {
         related_entities,
       });
 
+      const responseString = `Article created successfully:
+Slug: ${slug}
+Title: ${title}
+Section: ${section || 'N/A'}
+Category: ${category || 'N/A'}
+Author: ${author}
+Tags: ${tags || 'None'}
+Locked: ${locked ? 'Yes' : 'No'}
+Order: ${order}`;
+
       return {
-        success: true,
-        slug,
-        title,
-        message: `Article "${title}" created successfully.`,
+        successBoolean: true,
+        responseString
       };
     } catch (error) {
       if (error instanceof Error) {
-        return `Error creating article: ${error.message}`;
+        return {
+          successBoolean: false,
+          responseString: `Error creating article: ${error.message}`
+        };
       } else {
-        return 'Error creating article: Unknown error';
+        return {
+          successBoolean: false,
+          responseString: 'Error creating article: Unknown error'
+        };
       }
     }
   }

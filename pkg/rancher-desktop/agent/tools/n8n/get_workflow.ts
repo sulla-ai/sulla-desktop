@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration } from "../base";
+import { BaseTool, ToolRegistration, ToolResponse } from "../base";
 import { createN8nService } from "../../services/N8nService";
 
 /**
@@ -8,9 +8,33 @@ export class GetWorkflowWorker extends BaseTool {
   name: string = '';
   description: string = '';
   schemaDef: any = {};
-  protected async _validatedCall(input: any) {
-    const service = await createN8nService();
-    return await service.getWorkflow(input.id, input.excludePinnedData);
+  protected async _validatedCall(input: any): Promise<ToolResponse> {
+    try {
+      const service = await createN8nService();
+      const workflow = await service.getWorkflow(input.id, input.excludePinnedData);
+
+      const responseString = `Workflow Details:
+ID: ${workflow.id}
+Name: ${workflow.name}
+Active: ${workflow.active ? 'Yes' : 'No'}
+Created: ${new Date(workflow.createdAt).toLocaleString()}
+Updated: ${new Date(workflow.updatedAt).toLocaleString()}
+Nodes: ${workflow.nodes?.length || 0}
+Connections: ${Object.keys(workflow.connections || {}).length}
+Tags: ${(workflow.tags || []).map((tag: any) => tag.name).join(', ') || 'None'}
+Owner: ${workflow.owner?.email || 'N/A'}
+Settings: ${JSON.stringify(workflow.settings, null, 2)}`;
+
+      return {
+        successBoolean: true,
+        responseString
+      };
+    } catch (error) {
+      return {
+        successBoolean: false,
+        responseString: `Error getting workflow: ${(error as Error).message}`
+      };
+    }
   }
 }
 

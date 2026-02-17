@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration } from "../base";
+import { BaseTool, ToolRegistration, ToolResponse } from "../base";
 import { Octokit } from "@octokit/rest";
 import { getIntegrationService } from '../../services/IntegrationService';
 /**
@@ -9,13 +9,16 @@ class GitHubCommentOnIssueWorker extends BaseTool {
   description: string = '';
   schemaDef: any = {};
 
-  protected async _validatedCall(input: any) {
+  protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { owner, repo, issue_number, body } = input;
 
     const integrationService = getIntegrationService();
     const tokenValue = await integrationService.getIntegrationValue('github', 'token');
     if (!tokenValue) {
-      return "Error: GitHub token not configured.";
+      return {
+        successBoolean: false,
+        responseString: "Error: GitHub token not configured."
+      };
     }
 
     const octokit = new Octokit({ auth: tokenValue.value });
@@ -28,15 +31,22 @@ class GitHubCommentOnIssueWorker extends BaseTool {
         body,
       });
 
+      const responseString = `Comment added to issue #${issue_number} in ${owner}/${repo}:
+Comment ID: ${response.data.id}
+URL: ${response.data.html_url}
+Created by: ${response.data.user?.login || 'Unknown'}
+Created at: ${new Date(response.data.created_at).toLocaleString()}
+Body: ${response.data.body}`;
+
       return {
-        id: response.data.id,
-        url: response.data.html_url,
-        body: response.data.body,
-        user: response.data.user?.login,
-        created_at: response.data.created_at,
+        successBoolean: true,
+        responseString
       };
     } catch (error) {
-      return `Error commenting on issue: ${(error as Error).message}`;
+      return {
+        successBoolean: false,
+        responseString: `Error commenting on issue: ${(error as Error).message}`
+      };
     }
   }
 }

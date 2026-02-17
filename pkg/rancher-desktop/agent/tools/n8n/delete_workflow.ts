@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration } from "../base";
+import { BaseTool, ToolRegistration, ToolResponse } from "../base";
 import { createN8nService } from "../../services/N8nService";
 
 /**
@@ -8,9 +8,25 @@ export class DeleteWorkflowWorker extends BaseTool {
   name: string = '';
   description: string = '';
   schemaDef: any = {};
-  protected async _validatedCall(input: any) {
-    const service = await createN8nService();
-    return await service.deleteWorkflow(input.id);
+  protected async _validatedCall(input: any): Promise<ToolResponse> {
+    try {
+      const service = await createN8nService();
+      const result = await service.deleteWorkflow(input.id);
+
+      const responseString = `Workflow deleted successfully:
+ID: ${input.id}
+Deletion completed at: ${new Date().toLocaleString()}`;
+
+      return {
+        successBoolean: true,
+        responseString
+      };
+    } catch (error) {
+      return {
+        successBoolean: false,
+        responseString: `Error deleting workflow: ${(error as Error).message}`
+      };
+    }
   }
 }
 

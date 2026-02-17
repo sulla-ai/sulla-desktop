@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration } from "../base";
+import { BaseTool, ToolRegistration, ToolResponse } from "../base";
 import { runCommand } from "../util/CommandRunner";
 
 /**
@@ -8,7 +8,7 @@ export class LimaCreateWorker extends BaseTool {
   name: string = '';
   description: string = '';
   schemaDef: any = {};
-  protected async _validatedCall(input: any) {
+  protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { template } = input;
 
     const args = ['create'];
@@ -21,12 +21,23 @@ export class LimaCreateWorker extends BaseTool {
       const res = await runCommand('limactl', args, { timeoutMs: 300_000, maxOutputChars: 160_000 }); // Longer timeout for creating
 
       if (res.exitCode !== 0) {
-        return `Error: ${res.stderr || res.stdout}`;
+        return {
+          successBoolean: false,
+          responseString: `Error creating Lima VM: ${res.stderr || res.stdout}`
+        };
       }
 
-      return res.stdout;
+      const responseString = `Lima VM created${template ? ` using template ${template}` : ''}\nOutput:\n${res.stdout}`;
+
+      return {
+        successBoolean: true,
+        responseString
+      };
     } catch (error) {
-      return `Error executing limactl create: ${(error as Error).message}`;
+      return {
+        successBoolean: false,
+        responseString: `Error executing limactl create: ${(error as Error).message}`
+      };
     }
   }
 }

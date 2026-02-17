@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration } from "../base";
+import { BaseTool, ToolRegistration, ToolResponse } from "../base";
 import { runCommand } from "../util/CommandRunner";
 
 /**
@@ -8,17 +8,26 @@ export class RdctlResetWorker extends BaseTool {
   name: string = '';
   description: string = '';
   schemaDef: any = {};
-  protected async _validatedCall(input: any) {
+  protected async _validatedCall(input: any): Promise<ToolResponse> {
     try {
       const res = await runCommand('rdctl', ['reset'], { timeoutMs: 300_000, maxOutputChars: 160_000 }); // Longer timeout for reset
 
       if (res.exitCode !== 0) {
-        return `Error: ${res.stderr || res.stdout}`;
+        return {
+          successBoolean: false,
+          responseString: `Error resetting Sulla Desktop: ${res.stderr || res.stdout}`
+        };
       }
 
-      return res.stdout;
+      return {
+        successBoolean: true,
+        responseString: `Sulla Desktop reset successfully.\nOutput:\n${res.stdout}`
+      };
     } catch (error) {
-      return `Error executing rdctl reset: ${(error as Error).message}`;
+      return {
+        successBoolean: false,
+        responseString: `Error executing rdctl reset: ${(error as Error).message}`
+      };
     }
   }
 }

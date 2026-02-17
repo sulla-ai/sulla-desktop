@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration } from "../base";
+import { BaseTool, ToolRegistration, ToolResponse } from "../base";
 import { registry } from "../../integrations";
 import type { SlackClient } from "../../integrations/slack/SlackClient";
 
@@ -10,19 +10,21 @@ export class SlackUserWorker extends BaseTool {
   description: string = '';
   schemaDef: any = {};
 
-  protected async _validatedCall(input: any) {
+  protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { userId } = input;
 
     try {
       const slack = await registry.get<SlackClient>('slack');
       const user = await slack.getUserInfo(userId);
       return {
-        id: user.id,
-        name: user.name,
-        real_name: user.real_name || user.profile?.real_name
+        successBoolean: true,
+        responseString: `Slack user info for ${userId}:\n- ID: ${user.id}\n- Name: ${user.name}\n- Real Name: ${user.real_name || user.profile?.real_name || 'N/A'}`
       };
     } catch (error) {
-      return `Error getting Slack user info: ${(error as Error).message}`;
+      return {
+        successBoolean: false,
+        responseString: `Error getting Slack user info: ${(error as Error).message}`
+      };
     }
   }
 }

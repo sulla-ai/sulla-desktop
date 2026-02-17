@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration } from "../base";
+import { BaseTool, ToolRegistration, ToolResponse } from "../base";
 import { AgentPlan } from '../../database/models/AgentPlan';
 import { AgentPlanTodo } from '../../database/models/AgentPlanTodo';
 
@@ -9,41 +9,60 @@ export class CreatePlanWorker extends BaseTool {
   name: string = '';
   description: string = '';
   schemaDef: any = {};
-  protected async _validatedCall(input: any) {
+
+  protected async _validatedCall(input: any): Promise<ToolResponse> {
     console.log('[CreatePlanTool] updatePlan started');
 
     const threadId = (this.state as any).metadata?.threadId;
     const wsChannel = (this.state as any).metadata?.wsChannel;
+    let plan;
+    let createdTodos = [];
 
-    // AgentPlan fillable: thread_id, revision, status, goal, goaldescription, complexity, requirestools, wschannel
-    const plan = await AgentPlan.create({
-      thread_id: threadId,
-      goal: input.goal,
-      goaldescription: input.goaldescription,
-      requirestools: input.requirestools,
-      complexity: input.estimatedcomplexity,
-      status: 'active',
-      wschannel: wsChannel,
-    });
+    try {
+      // AgentPlan fillable: thread_id, revision, status, goal, goaldescription, complexity, requirestools, wschannel
+      plan = await AgentPlan.create({
+        thread_id: threadId,
+        goal: input.goal,
+        goaldescription: input.goaldescription,
+        requirestools: input.requirestools,
+        complexity: input.estimatedcomplexity,
+        status: 'active',
+        wschannel: wsChannel,
+      });
+    } catch (e:any) {
+      return {
+        successBoolean: false,
+        responseString: `Plan creation failed: no id returned. e: ${e?.message}`
+      };
+    }
 
     const planId = plan.attributes.id;
     if (!planId) {
-      throw new Error(`Plan creation failed: no id returned. Attributes: ${JSON.stringify(plan.attributes)}`);
+      return {
+        successBoolean: false,
+        responseString: `Plan creation failed: no id returned.`
+      };
     }
 
-    // AgentPlanTodo fillable: plan_id, status, order_index, title, description, category_hints, wschannel
-    const createdTodos = [];
-    for (let i = 0; i < input.milestones.length; i++) {
-      const milestone = input.milestones[i];
-      const todo = await AgentPlanTodo.create({
-        plan_id: planId,
-        title: milestone.title,
-        description: milestone.description,
-        status: 'pending',
-        order_index: i,
-        wschannel: wsChannel,
-      });
-      createdTodos.push(todo);
+    try {
+      // AgentPlanTodo fillable: plan_id, status, order_index, title, description, category_hints, wschannel
+      for (let i = 0; i < input.milestones.length; i++) {
+        const milestone = input.milestones[i];
+        const todo = await AgentPlanTodo.create({
+          plan_id: planId,
+          title: milestone.title,
+          description: milestone.description,
+          status: 'pending',
+          order_index: i,
+          wschannel: wsChannel,
+        });
+        createdTodos.push(todo);
+      }
+    } catch (e:any) {
+      return {
+        successBoolean: false,
+        responseString: `Plan creation failed: no id returned. e: ${e?.message}`
+      };
     }
 
     // Use the just-created todos
@@ -56,8 +75,6 @@ export class CreatePlanWorker extends BaseTool {
       (this.state as any).metadata.planTodos = await AgentPlanTodo.findForPlan(planId);
     }
 
-    console.log('[CreatePlanTool] Plan created with ID:', planId);
-
     await this.emitProgressUpdate?.({
       type: "plan_created",
       plan: {
@@ -69,11 +86,8 @@ export class CreatePlanWorker extends BaseTool {
     });
 
     return {
-      success: true,
-      planId: planId,
-      goal: input.goal,
-      milestoneCount: input.milestones.length,
-      message: `Plan created successfully with ${input.milestones.length} milestones`,
+      successBoolean: true,
+      responseString: `Plan created (id:${planId}) successfully with ${input.milestones.length} milestones`
     };
   }
 }

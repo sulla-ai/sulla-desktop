@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration } from "../base";
+import { BaseTool, ToolRegistration, ToolResponse } from "../base";
 import { SullaSettingsModel } from '../../database/models/SullaSettingsModel';
 import { parseJson } from '../../services/JsonParseService';
 
@@ -20,7 +20,7 @@ export class AddObservationalMemoryWorker extends BaseTool {
   description: string = '';
   schemaDef: any = {};
   
-  protected async _validatedCall(input: any) {
+  protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { priority, content } = input;
 
     // Get current observational memories
@@ -34,9 +34,11 @@ export class AddObservationalMemoryWorker extends BaseTool {
       } else {
         memoryArray = [];
       }
-    } catch (e) {
-      console.error('Failed to parse observational memory:', e);
-      memoryArray = [];
+    } catch (e: any) {
+      return {
+        successBoolean: false,
+        responseString: `Failed to parse observational memory: ${e?.message}`
+      }
     }
 
     // Add new memory
@@ -54,14 +56,23 @@ export class AddObservationalMemoryWorker extends BaseTool {
       memoryArray = memoryArray.slice(-50);
     }
 
+    // Test round-trip to ensure valid JSON before saving
+    try {
+      const testString = JSON.stringify(memoryArray);
+      JSON.parse(testString);
+    } catch (e: any) {
+      return {
+        successBoolean: false,
+        responseString: `Failed to parse observational memory: ${e?.message}`
+      }
+    }
+
     // Save back to settings
     await SullaSettingsModel.set('observationalMemory', JSON.stringify(memoryArray));
 
     return {
-      success: true,
-      id: newMemory.id,
-      totalMemories: memoryArray.length,
-      message: `Observation stored with ID: ${newMemory.id}`,
+      successBoolean: true,
+      responseString: Object.values(newMemory).join(' ')
     };
   }
 }

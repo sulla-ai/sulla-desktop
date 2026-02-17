@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration } from "../base";
+import { BaseTool, ToolRegistration, ToolResponse } from "../base";
 import { redisClient } from "../../database/RedisClient";
 
 /**
@@ -8,14 +8,21 @@ export class RedisDecrWorker extends BaseTool {
   name: string = '';
   description: string = '';
   schemaDef: any = {};
-  protected async _validatedCall(input: any) {
+  protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { key } = input;
 
     try {
       const newValue = await redisClient.decr(key);
-      return newValue;
+
+      return {
+        successBoolean: true,
+        responseString: `Redis DECR ${key}: new value is ${newValue}`
+      };
     } catch (error) {
-      return `Error decrementing Redis key: ${(error as Error).message}`;
+      return {
+        successBoolean: false,
+        responseString: `Error decrementing Redis key: ${(error as Error).message}`
+      };
     }
   }
 }

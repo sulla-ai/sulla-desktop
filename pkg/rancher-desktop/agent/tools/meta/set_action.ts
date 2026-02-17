@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration } from "../base";
+import { BaseTool, ToolRegistration, ToolResponse } from "../base";
 
 /**
  * Set Action Tool - Worker class for execution
@@ -7,7 +7,8 @@ export class SetActionWorker extends BaseTool {
   name: string = '';
   description: string = '';
   schemaDef: any = {};
-  protected async _validatedCall(input: any) {
+
+  protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { action } = input;
 
     this.state!.metadata!.action = action;
@@ -17,7 +18,10 @@ export class SetActionWorker extends BaseTool {
       action: action
     });
 
-    return { success: true, message: `Action set to ${action}` };
+    return {
+      successBoolean: true,
+      responseString: `Action set to ${action}`
+    };
   }
 }
 
