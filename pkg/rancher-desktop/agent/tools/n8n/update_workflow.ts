@@ -11,6 +11,27 @@ export class UpdateWorkflowWorker extends BaseTool {
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     try {
       const service = await createN8nService();
+
+      // Parse nodes from JSON strings to objects if needed
+      if (Array.isArray(input.nodes)) {
+        input.nodes = input.nodes.map((node: any) => {
+          if (typeof node === 'string') {
+            return JSON.parse(node);
+          }
+          return node;
+        });
+      }
+
+      // Parse connections from JSON string to object if needed
+      if (typeof input.connections === 'string') {
+        input.connections = JSON.parse(input.connections);
+      }
+
+      // Parse staticData from JSON string to object if needed
+      if (typeof input.staticData === 'string') {
+        input.staticData = JSON.parse(input.staticData);
+      }
+
       const { id, ...workflowData } = input;
       const workflow = await service.updateWorkflow(id, workflowData);
 
