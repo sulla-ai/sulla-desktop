@@ -123,30 +123,34 @@ export class SullaSettingsModel extends BaseModel<SettingsAttributes> {
       throw new Error('Installation lock file not set for bootstrap');
     }
 
-    console.log('SullaSettingsModel: full bootstrap starting');
+    try {
+      console.log('SullaSettingsModel: full bootstrap starting');
 
-    // PG → Redis
-    // now that the system is ready we can write to persistent storage
-    await this.initialize();
-    this.isReady = true;
+      // PG → Redis
+      // now that the system is ready we can write to persistent storage
+      await this.initialize();
+      this.isReady = true;
 
-    if (!(await this.getSetting('sullaInstalled', false))) {
-      // Read from installation lock file and sync to persistent storage
-      try {
-        const content = await fs.readFile(this.getFallbackFilePath(), 'utf8');
-        const data = JSON.parse(content) as Record<string, any>;
-        for (const [property, value] of Object.entries(data)) {
-          await this.setSetting(property, value);
+      if (!(await this.getSetting('sullaInstalled', false))) {
+        // Read from installation lock file and sync to persistent storage
+        try {
+          const content = await fs.readFile(this.getFallbackFilePath(), 'utf8');
+          const data = JSON.parse(content) as Record<string, any>;
+          for (const [property, value] of Object.entries(data)) {
+            await this.setSetting(property, value);
+          }
+          console.log(`SullaSettingsModel: synced ${Object.keys(data).length} settings from lock file`);
+        } catch (err) {
+          console.log('SullaSettingsModel: no lock file to sync or error reading:', err);
         }
-        console.log(`SullaSettingsModel: synced ${Object.keys(data).length} settings from lock file`);
-      } catch (err) {
-        console.log('SullaSettingsModel: no lock file to sync or error reading:', err);
+
+        await this.setSetting('sullaInstalled', true, 'boolean');
+
+        // do not delete the fallback file. it acts as our installation lock file
+        console.log('SullaSettingsModel: full bootstrap complete');
       }
-
-      await this.setSetting('sullaInstalled', true, 'boolean');
-
-      // do not delete the fallback file. it acts as our installation lock file
-      console.log('SullaSettingsModel: full bootstrap complete');
+    } catch (err) {
+      console.error('SullaSettingsModel: bootstrap is not ready yet. Try again later');
     }
   }
 
@@ -243,6 +247,7 @@ export class SullaSettingsModel extends BaseModel<SettingsAttributes> {
       return;
     }
 
+    console.log(`[SullaSettingsModel] Fallback to file save for:  ${property}`);
     // Fallback: read-modify-write JSON file
     const filePath = this.getFallbackFilePath();
     let data: Record<string, any> = {};

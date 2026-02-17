@@ -9,8 +9,11 @@ import { getLocalService } from '../../agent/languagemodels';
 export class StartupProgressController {
 
   private readonly OLLAMA_BASE = 'http://127.0.0.1:30114';
+  private readonly WS_URL = 'ws://localhost:30118/';
   private readinessInterval: ReturnType<typeof setInterval> | null = null;
   private k8sReady = false;
+  private receivedProgress = false;
+  private wsProbeAttempted = false;
 
   /**
    * 
@@ -70,6 +73,7 @@ export class StartupProgressController {
     ipcRenderer.on('ollama-model-status' as any, this.handleOllamaModelStatus);
 
     this.startReadinessCheck();
+    this.probeWebSocket();
   }
 
   /**
@@ -139,6 +143,7 @@ export class StartupProgressController {
 
   private readonly handleProgress = (_: unknown, progress: { current: number; max: number; description?: string }) => {
     console.log('[StartupProgressController] handleProgress:', progress);
+    this.receivedProgress = true;
     // Show overlay on any progress event
     this.state.showOverlay.value = true;
     
@@ -181,6 +186,55 @@ export class StartupProgressController {
     this.state.systemReady.value = false;
     this.k8sReady = false;
   };
+
+  /**
+   * Probe the websocket to see if services are already running.
+   * If the connection succeeds and we haven't received any progress events,
+   * the system is already up — close the overlay.
+   */
+  private probeWebSocket(): void {
+    if (this.wsProbeAttempted) return;
+    this.wsProbeAttempted = true;
+
+    console.log('[StartupProgressController] Probing websocket at', this.WS_URL);
+    let ws: WebSocket;
+    try {
+      ws = new WebSocket(this.WS_URL);
+    } catch {
+      console.log('[StartupProgressController] WebSocket probe failed to create');
+      return;
+    }
+
+    const cleanup = () => {
+      try { ws.close(); } catch {}
+    };
+
+    // Give the probe 5 seconds to connect
+    const timeout = setTimeout(() => {
+      console.log('[StartupProgressController] WebSocket probe timed out');
+      cleanup();
+    }, 5000);
+
+    ws.onopen = () => {
+      clearTimeout(timeout);
+      console.log('[StartupProgressController] WebSocket probe connected');
+      if (!this.receivedProgress) {
+        console.log('[StartupProgressController] No progress events received — services already running, closing overlay');
+        this.state.systemReady.value = true;
+        this.state.showOverlay.value = false;
+        this.state.progressDescription.value = 'System ready!';
+        this.state.startupPhase.value = 'ready';
+        sessionStorage.setItem('sulla-startup-splash-seen', 'true');
+      }
+      cleanup();
+    };
+
+    ws.onerror = () => {
+      clearTimeout(timeout);
+      console.log('[StartupProgressController] WebSocket probe failed — services not yet available');
+      cleanup();
+    };
+  }
 
   private startReadinessCheck(): void {
     this.readinessInterval = setInterval(async () => {

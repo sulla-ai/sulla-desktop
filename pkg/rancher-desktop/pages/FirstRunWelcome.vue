@@ -109,6 +109,8 @@ const handleNext = async () => {
   if (await SullaSettingsModel.get('sullaEmail', false) &&
       await SullaSettingsModel.get('sullaPassword', false)) {
     console.log('[FirstRunWelcome] Triggering custom environment...');
+
+    sessionStorage.setItem('sulla-startup-splash-seen', 'true');
     ipcRenderer.invoke('start-sulla-custom-env');
   } else {
     console.log('[FirstRunWelcome] Not ready to trigger custom environment yet');

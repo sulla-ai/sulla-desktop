@@ -60,6 +60,10 @@ clean-hard:
     rm -rf resources/win32/
     @echo "Cleanup complete. Run 'just build' for a fresh install."
 
+nvm:
+    nvm install 22.22
+    nvm use 22.22
+
 # Install dependencies and build the application for production
 install:
     yarn install --legacy-peer-deps
@@ -331,3 +335,9 @@ k3s-tail:
 k3s-status:
     LIMA_HOME=~/Library/Application\ Support/rancher-desktop/lima \
     limactl shell 0 -- sudo systemctl status k3s
+
+
+# Watch pod events in real time (shows scheduling, image pulls, crashes)
+show-compose-yaml:
+    LIMA_HOME=~/Library/Application\ Support/rancher-desktop/lima \
+    limactl shell 0 -- sudo cat /tmp/sulla-docker-compose.yml
