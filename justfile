@@ -71,6 +71,9 @@ install:
 build:
     NODE_OPTIONS="--max-old-space-size=12288" yarn build
 
+package:
+    yarn package
+    
 # Rebuild without wiping VM (preserves cached images)
 rebuild: clean build
 

@@ -15,6 +15,17 @@
     "type": "git",
     "url": "git@github.com:sulla-ai/sulla-desktop.git"
   },
+  "build": {
+    "artifactName": "Sulla-Desktop-${version}-${arch}.${ext}",
+    "mac": {
+      "identity": null,
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false,
+      "entitlements": null,
+      "entitlementsInherit": null,
+      "target": ["dmg", "zip"]
+    }
+  },
   "scripts": {
     "start": "electron .",
     "dev": "node scripts/ts-wrapper.js scripts/dev.ts",
