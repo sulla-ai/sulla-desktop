@@ -131,6 +131,7 @@ export interface IpcMainInvokeEvents {
   'k8s-progress':              () => Readonly<{ current: number, max: number, description?: string, transitionTime?: Date }>;
 
   // #region Sulla
+  'start-sulla-custom-env':    () => void;
   'sulla-restart-ollama':      () => void;
   'app-quit':                  () => void;
   // #endregion

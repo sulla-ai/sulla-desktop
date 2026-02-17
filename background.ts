@@ -353,8 +353,7 @@ Electron.app.whenReady().then(async() => {
       backendStarted = true;
     }
 
-
-    writeSettings({ experimental: { firstRunSullaNetworking: true } });
+    await SullaSettingsModel.set('firstRunSullaNetworking', false, 'boolean');
 
   } catch (ex: any) {
     console.error(`Error starting up: ${ ex }`, ex.stack);
@@ -779,9 +778,7 @@ ipcMainProxy.on('model-changed', (_event, data) => {
 ipcMainProxy.handle('start-sulla-custom-env' as any, async() => {
   console.log('Starting Sulla custom environment...');
   
-  const firstRunCredentialsNeeded = await SullaSettingsModel.get('firstRunCredentialsNeeded', true);
   const firstKubernetesIsInstalled = await SullaSettingsModel.get('firstKubernetesIsInstalled', false);
-
   if (firstKubernetesIsInstalled !== true) {
     console.log('Sulla custom environment: Lima/Kubernetes not yet installed, skipping.');
 
@@ -789,10 +786,10 @@ ipcMainProxy.handle('start-sulla-custom-env' as any, async() => {
   }
 
   if (!cfg.kubernetes.enabled) {
-    // Docker mode
-    if ((k8smanager.kubeBackend as any).sullaStepDockerEnvironment) {
+    // Docker mode — sullaStepDockerEnvironment lives on LimaBackend (the VM backend)
+    if ((k8smanager as any).sullaStepDockerEnvironment) {
       console.log('Sulla custom environment: running Docker environment step...');
-      await (k8smanager.kubeBackend as any).sullaStepDockerEnvironment();
+      await (k8smanager as any).sullaStepDockerEnvironment();
     }
   } else {
     // K8s mode

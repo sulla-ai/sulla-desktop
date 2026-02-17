@@ -153,7 +153,6 @@ export default class SettingsValidator {
         sullaN8nEncryptionKey: this.checkString,
         sullaServiceAccountUserId: this.checkString,
         sullaSubscribeToUpdates: this.checkBoolean,
-        firstRunSullaNetworking: this.checkBoolean,
         virtualMachine:  {
           diskSize: this.checkLima(this.checkByteUnits),
           mount:    {

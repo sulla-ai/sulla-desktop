@@ -106,13 +106,10 @@ const handleNext = async () => {
   console.log('[FirstRunWelcome] Settings committed successfully');
 
   // Check if ready to trigger custom environment
-  if (await SullaSettingsModel.get('firstRunSullaNetworking', false) &&
-      await SullaSettingsModel.get('sullaEmail', false) &&
-      await SullaSettingsModel.get('sullaPassword', false) &&
-      await SullaSettingsModel.get('sullaServicePassword', false) &&
-      await SullaSettingsModel.get('sullaN8nEncryptionKey', false)) {
+  if (await SullaSettingsModel.get('sullaEmail', false) &&
+      await SullaSettingsModel.get('sullaPassword', false)) {
     console.log('[FirstRunWelcome] Triggering custom environment...');
-    await ipcRenderer.invoke('start-sulla-custom-env');
+    ipcRenderer.invoke('start-sulla-custom-env');
   } else {
     console.log('[FirstRunWelcome] Not ready to trigger custom environment yet');
     console.log('[FirstRunWelcome] firstRunSullaNetworking:', await SullaSettingsModel.get('firstRunSullaNetworking'));

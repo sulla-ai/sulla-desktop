@@ -177,8 +177,6 @@ export const defaultSettings = {
     sullaServiceAccountUserId: '',
     /** Subscribe to updates and newsletters */
     sullaSubscribeToUpdates: true,
-    /** Flag indicating if the first-run Sulla networking setup is complete */
-    firstRunSullaNetworking: false,
     virtualMachine:  {
       diskSize: '100GiB',
       mount:    {
