@@ -1,20 +1,75 @@
 # Sulla Desktop
 
-Sulla is a fully opensource AI agent that runs on your desktop, fully local with long-term memory and voice support. This is your personal AI assistant that installs with just a click, it runs in the background and foreground and is always available to help you with your daily tasks.
+**Your private AI executive assistant that runs on your machine.**
 
-![sulla-preview](https://github.com/user-attachments/assets/aff9dbc9-8968-4ef3-9097-ee045cd4b706)
+Sulla is a fully open-source, desktop-native autonomous agent built for AI automation enthusiasts, n8n power users, vibe coders, and busy business owners. Persistent long-term memory, calendar engine, n8n automation layer, Docker workspaces — all yours to own and extend. No subscriptions. No cloud lock-in.
 
-Jonathon Byrdziak and Alan Carvalho, the Co-Founders and Developers, see this as the new future of AI, a local AI assistant that is easily extensible. Something that will replace the need for cloud services and provide a more secure and private experience.
+Designed for people who live in n8n, love building workflows, code by feel, or simply have too many high-value tasks and not enough hours.
 
-## Easy Installation
+![Sulla preview](https://github.com/user-attachments/assets/aff9dbc9-8968-4ef3-9097-ee045cd4b706)
 
+## Sulla Desktop — Your Personal AI Assistant Layer
 
+**Delegate like you have a full-time technical co-founder — without the payroll.**
 
+**Perfect for** ai automation enthusiasts, vibe coders, business owners, agency owners, and operators who want more output without more hours or headcount.
 
-## Developer Installation
+You’ll Be Able To:
 
+**Ship AI Workflows & Automations 5–10× Faster**  
+(Search 9000+ templates, customize, deploy — minutes not days)
 
+**Delegate Multi-Step Technical Projects With Confidence**  
+(Planning, coding, Docker, memory updates — handled)
 
+**Own Your Context & Memory Forever**  
+(Vector DB + markdown plans that never vanish)
+
+## Core Specs
+
+- Persistent vector long-term memory  
+- Observational short-term context layer  
+- Calendar engine with auto-wake events  
+- Docker workspaces for isolated dev  
+- n8n integration — search/import thousands of templates  
+- Dynamic tool registry + skill nodes  
+- Runs on consumer hardware (8–16 GB RAM recommended)  
+- Fully open-source (Apache 2.0) — fork, extend, own it
+
+## When You Install Sulla Desktop
+
+Step 1 — One-click installer on Mac, Linux, or Windows
+Step 2 — Connect any LLM (local Ollama or remote API)  
+Step 3 — Start delegating
+
+## Your No-Hassle Ownership Promise
+
+100% open-source. No subscriptions. No usage caps. No data sharing.  
+Install it, run it, modify it — it’s yours.
+
+## Frequently Asked Questions
+
+**How much hardware do I need?**  
+8 GB RAM minimum (runs well), 16 GB+ ideal for faster inference. Works on most modern laptops/desktops.
+
+**How fast can I expect real results?**  
+Workflow velocity and delegation confidence build in 7–30 days of consistent use. Results scale with your task volume.
+
+**Is it fully local?**  
+Core agent, memory, tools, and execution run 100% on your machine. LLM inference can be local (Ollama) or remote (your choice for speed/privacy balance).
+
+**How do I extend it?**  
+Add custom skill nodes, SOPs, or tools via code. Everything is modular and documented.
+
+**Who is this really for?**  
+Anyone who lives in n8n, codes by vibe, or has more high-leverage tasks than time — and wants to stop paying specialists to do what their own machine can handle.
+
+Install Sulla Desktop today.  
+You deserve an assistant that scales with you, not against you.
+
+— Jonathon Byrdziak  
+Coeur d’Alene, Idaho  
+Founder, Sulla Desktop
 
 ## License
 

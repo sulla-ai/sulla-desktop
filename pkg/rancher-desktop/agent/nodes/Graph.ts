@@ -825,7 +825,7 @@ export function createHierarchicalGraph(): Graph<HierarchicalThreadState> {
 
     // Force tactical_planner even if activeMilestoneIndex is unset
     state.metadata.plan.activeMilestoneIndex ??= 0;
-    return 'tactical_planner';
+    return 'strategic_planner';
   });
 
   graph.addConditionalEdge('tactical_planner', state => {
