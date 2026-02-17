@@ -41,7 +41,6 @@ export interface LLMResponse {
 }
 
 export interface PromptEnrichmentOptions {
-    includeToolSetAction?: boolean;
   includeSoul?: boolean;
   includeAwareness?: boolean;
   includeMemory?: boolean;
@@ -205,33 +204,6 @@ export abstract class BaseNode {
             AwarenessMessage = AwarenessMessage.replace('{{sop_list}}', sopList);
 
         parts.push(AwarenessMessage);
-
-
-        if (options.includeToolSetAction) {
-            const SET_ACTION_PROMPT = `### SOP: Deciding Next Move
-
-Call **set_action** to control flow. Choose exactly one:
-
-- direct_answer     → end graph → deliver final response to user
-- ask_clarification  → end graph → ask user one clear question
-- use_tools          → continue graph → execute tool calls, then rerun this node
-- create_plan        → spawn hierarchical strategy+tactics subgraph → execute complex multi-step work
-- run_again          → re-run this exact node immediately (no tools)
-
-Use this table to decide:
-
-| Situation                              | Action              |
-|----------------------------------------|---------------------|
-| Ready to give complete, confident answer | direct_answer     |
-| Missing one piece of critical info     | ask_clarification |
-| Need external data / computation       | use_tools         |
-| Task requires multi-step planning      | create_plan       |
-| Previous tool results need re-evaluation | run_again       |
-
-Default: **direct_answer** unless clear reason to continue.
-            `;
-            parts.push(SET_ACTION_PROMPT);
-        }
 
         /////////////////////////////////////////////////////////////////
         // adds observational memories to the message thread

@@ -66,7 +66,6 @@ export class StrategicPlannerNode extends BaseNode {
     }
 
     const enriched = await this.enrichPrompt(STRATEGIC_PLAN_PROMPT, state, {
-      includeToolSetAction: true,
       includeSoul: true,
       includeAwareness: true,
       includeMemory: true,
@@ -88,19 +87,6 @@ export class StrategicPlannerNode extends BaseNode {
       await this.wsChatMessage(state, llmResponse);
     }
 
-    // If we had tool calls but no user message, need more planning
-    if (!state.metadata.hadUserMessages && state.metadata.hadToolCalls) {
-      return { state, decision: { type: 'continue' } };
-    }
-
-    if (state.metadata.action === 'direct_answer' || state.metadata.action === 'ask_clarification') {
-      return { state, decision: { type: 'end' } };
-    }
-
-    if (state.metadata.action === 'run_again') {
-      return { state, decision: { type: 'continue' } };
-    }
-    
     return { state, decision: { type: 'next' } };
   }
 }

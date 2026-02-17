@@ -664,6 +664,26 @@ type SidebarTodo = {
   statusLabel: string;
 };
 
+function normalizeStatus(status: string): SidebarTodoStatus {
+  if (status === 'in_progress' || status === 'done' || status === 'blocked') {
+    return status;
+  }
+  return 'pending';
+}
+
+function makeStatusLabel(status: SidebarTodoStatus): string {
+  switch (status) {
+  case 'in_progress':
+    return 'In progress';
+  case 'done':
+    return 'Completed';
+  case 'blocked':
+    return 'Blocked';
+  default:
+    return 'Pending';
+  }
+}
+
 const onAgentResponse = (resp: AgentResponse) => {
   const metadata = (resp?.metadata || {}) as Record<string, any>;
   const nextPlanId = typeof metadata.activePlanId === 'number' ? metadata.activePlanId : null;
@@ -781,6 +801,29 @@ watch(() => messages.value.length, async () => {
   console.log('[Auto-Scroll] Scrolling to bottom, messages count:', messages.value.length);
   container.scrollTop = container.scrollHeight; // Instant scroll, no smooth behavior
 }, { flush: 'post' });
+
+const activePlanGoal = computed<string | null>(() => {
+  const persona = registry.getActivePersonaService();
+  return persona?.planState.goal ?? null;
+});
+
+const activePlanTodos = computed<SidebarTodo[]>(() => {
+  const persona = registry.getActivePersonaService();
+  if (!persona) return [];
+  const todos: SidebarTodo[] = [];
+  for (const todoId of persona.planState.todoOrder) {
+    const t = persona.planState.todos.get(todoId);
+    if (!t) continue;
+    const status = normalizeStatus(t.status);
+    todos.push({
+      key: String(t.id),
+      title: t.title,
+      status,
+      statusLabel: makeStatusLabel(status),
+    });
+  }
+  return todos;
+});
 
 const latestChatError = computed(() => {
   for (let i = messages.value.length - 1; i >= 0; i--) {
