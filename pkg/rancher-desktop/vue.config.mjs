@@ -62,6 +62,15 @@ export default {
     });
   },
 
+  configureWebpack: {
+    externals: {
+      'puppeteer-extra-plugin': 'commonjs puppeteer-extra-plugin',
+      'puppeteer-extra':        'commonjs puppeteer-extra',
+      'puppeteer':              'commonjs puppeteer',
+      'clone-deep':             'commonjs clone-deep'
+    }
+  },
+  
   css: {
     loaderOptions: {
       sass: {

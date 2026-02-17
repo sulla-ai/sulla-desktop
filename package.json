@@ -2,19 +2,18 @@
   "name": "rancher-desktop",
   "productName": "Sulla Desktop",
   "license": "Apache-2.0",
-  "version": "1.22.0",
+  "version": "0.1.0-beta",
   "author": {
-    "name": "SUSE",
-    "email": "containers@suse.com"
+    "name": "Jonathon Byrdziak",
+    "email": "jonathonbyrd@gmail.com"
   },
   "engines": {
     "node": "^22.14.0"
   },
   "type": "module",
-  "packageManager": "yarn@4.9.4",
   "repository": {
     "type": "git",
-    "url": "https://github.com/sulla-ai/desktop.git"
+    "url": "git@github.com:sulla-ai/sulla-desktop.git"
   },
   "scripts": {
     "start": "electron .",

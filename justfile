@@ -61,11 +61,11 @@ clean-hard:
     @echo "Cleanup complete. Run 'just build' for a fresh install."
 
 # Install dependencies and build the application for production
-build:
-    NODE_OPTIONS="--max-old-space-size=12288" yarn build
-
 install:
-    yarn install
+    npm install --legacy-peer-deps
+
+build:
+    NODE_OPTIONS="--max-old-space-size=12288" npm run build
 
 # Rebuild without wiping VM (preserves cached images)
 rebuild: clean build
@@ -73,44 +73,27 @@ rebuild: clean build
 # Full rebuild - wipes everything including VM and cached images
 rebuild-hard: clean-hard install build
 
-# Start the development server (runs in foreground)
+# Dev mode (foreground)
+dev:
+    NODE_NO_WARNINGS=1 npm run dev
+
+# Start after build
 start:
-    NODE_NO_WARNINGS=1 yarn start
+    NODE_NO_WARNINGS=1 npm run start
 
-up: 
-    NODE_NO_WARNINGS=1 just build start
-
-# Stop the development server gracefully
+# Stop gracefully (SIGTERM → force if needed)
 stop:
     #!/usr/bin/env bash
-    echo "Checking for running Sulla Desktop..."
     PIDS=$(pgrep -f "sulla.*Electron|Electron.*sulla" 2>/dev/null || true)
-    if [ -z "$PIDS" ]; then
-        echo "Sulla Desktop is not running."
-        exit 0
-    fi
-    echo "Found Sulla processes: $PIDS"
-    
-    # Send SIGTERM for graceful shutdown
-    echo "Requesting graceful shutdown (SIGTERM)..."
+    [ -z "$PIDS" ] && echo "Not running." && exit 0
+    echo "Stopping $PIDS..."
     pkill -TERM -f "sulla.*Electron|Electron.*sulla" 2>/dev/null || true
-    
-    # Wait for graceful shutdown (up to 15 seconds)
     for i in {1..15}; do
-        REMAINING=$(pgrep -f "sulla.*Electron|Electron.*sulla" 2>/dev/null || true)
-        if [ -z "$REMAINING" ]; then
-            echo "Sulla Desktop stopped gracefully."
-            exit 0
-        fi
-        echo "Waiting for shutdown... ($i/15)"
+        [ -z "$(pgrep -f 'sulla.*Electron|Electron.*sulla')" ] && echo "Stopped." && exit 0
         sleep 1
     done
-    
-    # Force kill if graceful shutdown failed
-    echo "Graceful shutdown timed out, force killing..."
-    pkill -9 -f "sulla.*Electron|Electron.*sulla" 2>/dev/null || true
-    sleep 1
-    echo "Sulla Desktop stopped."
+    pkill -9 -f "sulla.*Electron|Electron.*sulla" 2>/dev/null
+    echo "Force stopped."
 
 # Restart the development server (use --hard to wipe VM and images)
 restart hard="":

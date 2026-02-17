@@ -5,21 +5,24 @@ icon: ./resources/icons/mac-icon.png
 appId: io.sulla.desktop
 asar: true
 asarUnpack:
-- '**/*.node'
+  - '**/*.node'
+  - 'node_modules/puppeteer-extra-plugin/**'
+  - 'node_modules/clone-deep/**'
+  - 'node_modules/puppeteer/**'
 electronLanguages: [ en-US ]
 extraResources:
-- resources/
-- '!resources/darwin/lima*.tgz'
-- '!resources/darwin/qemu*.tgz'
-- '!resources/linux/lima*.tgz'
-- '!resources/linux/qemu*.tgz'
-- '!resources/linux/staging/'
-- '!resources/win32/staging/'
-- '!resources/host/'
-- '!resources/**/*.js.map'
+  - resources/
+  - '!resources/darwin/lima*.tgz'
+  - '!resources/darwin/qemu*.tgz'
+  - '!resources/linux/lima*.tgz'
+  - '!resources/linux/qemu*.tgz'
+  - '!resources/linux/staging/'
+  - '!resources/win32/staging/'
+  - '!resources/host/'
+  - '!resources/**/*.js.map'
 files:
-- dist/app/**/*
-- '!**/node_modules/*/prebuilds/!(${platform}*)/*.node'
+  - dist/app/**/*
+  - '!**/node_modules/*/prebuilds/!(${platform}*)/*.node'
 mac:
   darkModeSupport: true
   hardenedRuntime: true
@@ -28,8 +31,8 @@ mac:
   target: [ dmg, zip ]
   identity: ~ # We sign in a separate step
   extraFiles:
-  - build/signing-config-mac.yaml
-  - { from: dist/electron-builder.yaml, to: electron-builder.yml }
+    - build/signing-config-mac.yaml
+    - { from: dist/electron-builder.yaml, to: electron-builder.yml }
 win:
   icon: ./pkg/rancher-desktop/pages/agent/sulla-icon.ico
   target: [ zip ]
@@ -37,11 +40,11 @@ win:
     signingHashAlgorithms: [ sha256 ] # We only support Windows 10 + WSL2
   requestedExecutionLevel: asInvoker # The _app_ doesn't need privileges
   extraFiles:
-  - build/wix/*
-  - build/license.rtf
-  - build/signing-config-win.yaml
-  - { from: dist/wix-custom-action.dll, to: wix-custom-action.dll }
-  - { from: dist/electron-builder.yaml, to: electron-builder.yml }
+    - build/wix/*
+    - build/license.rtf
+    - build/signing-config-win.yaml
+    - { from: dist/wix-custom-action.dll, to: wix-custom-action.dll }
+    - { from: dist/electron-builder.yaml, to: electron-builder.yml }
 linux:
   category: Utility
   executableName: rancher-desktop
