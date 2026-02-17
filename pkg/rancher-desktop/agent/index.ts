@@ -4,7 +4,7 @@
 export * from './types';
 export { Sensory, getSensory } from './SensoryInput';
 export { ResponseHandler, getResponseHandler } from './ResponseHandler';
-export { Graph, createHierarchicalGraph, createHeartbeatGraph } from './nodes/Graph';
+export { Graph, createHierarchicalGraph } from './nodes/Graph';
 
 // Graph Nodes
 export { BaseNode } from './nodes/BaseNode';

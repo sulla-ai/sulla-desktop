@@ -30,6 +30,7 @@ mac:
   icon: ./resources/icons/mac-icon.png
   target: [ dmg, zip ]
   identity: ~ # We sign in a separate step
+  artifactName: Sulla-Desktop-$$   {version}-mac.   $${ext}
   extraFiles:
     - build/signing-config-mac.yaml
     - { from: dist/electron-builder.yaml, to: electron-builder.yml }

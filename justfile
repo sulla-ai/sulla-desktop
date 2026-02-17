@@ -62,10 +62,10 @@ clean-hard:
 
 # Install dependencies and build the application for production
 install:
-    npm install --legacy-peer-deps
+    yarn install --legacy-peer-deps
 
 build:
-    NODE_OPTIONS="--max-old-space-size=12288" npm run build
+    NODE_OPTIONS="--max-old-space-size=12288" yarn build
 
 # Rebuild without wiping VM (preserves cached images)
 rebuild: clean build
@@ -73,13 +73,16 @@ rebuild: clean build
 # Full rebuild - wipes everything including VM and cached images
 rebuild-hard: clean-hard install build
 
+build-mac:
+    yarn package
+
 # Dev mode (foreground)
 dev:
-    NODE_NO_WARNINGS=1 npm run dev
+    NODE_NO_WARNINGS=1 yarn dev
 
 # Start after build
 start:
-    NODE_NO_WARNINGS=1 npm run start
+    NODE_NO_WARNINGS=1 yarn start
 
 # Stop gracefully (SIGTERM → force if needed)
 stop:
