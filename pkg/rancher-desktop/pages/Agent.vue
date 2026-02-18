@@ -3,7 +3,7 @@
     <PostHogTracker page-name="Agent" />
     <div class="flex h-screen flex-col">
 
-      <AgentHeader :is-dark="isDark" :toggle-theme="toggleTheme" />
+      <AgentHeader :is-dark="isDark" :toggle-theme="toggleTheme" :extension-menu-items="extensionMenuItems" />
 
     <!-- Loading overlay while system boots -->
     <StartupOverlay
@@ -692,6 +692,8 @@ const onAgentResponse = (resp: AgentResponse) => {
   // This handler can be used for additional response processing if needed
 };
 
+const extensionMenuItems = ref([]);
+
 const chatController = new ChatInterface();
 
 const frontendGraphController = new FrontendGraphWebSocketService({
@@ -866,6 +868,21 @@ onMounted(async () => {
   // Load settings eagerly — SullaSettingsModel has a disk fallback even before Redis/PG are ready
   await settingsController.start();
   await modelSelector.start();
+
+  // Connect to WebSocket for extensions
+  const ws = new WebSocket('ws://localhost:30118/');
+  ws.onopen = () => {
+    console.log('WebSocket connected for extensions');
+  };
+  ws.onmessage = (event) => {
+    const msg = JSON.parse(event.data);
+    if (msg.type === 'extension_menu_items') {
+      extensionMenuItems.value = msg.data;
+    }
+  };
+  ws.onerror = (error) => {
+    console.error('WebSocket error:', error);
+  };
 });
 
 // Re-sync settings when system is fully ready (bootstrap may have updated values)

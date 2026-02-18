@@ -25,6 +25,7 @@ export { getHeartbeatService, HeartbeatService } from './services/HeartbeatServi
 export { FrontendGraphWebSocketService } from './services/FrontendGraphWebSocketService';
 export { getBackendGraphWebSocketService, BackendGraphWebSocketService } from './services/BackendGraphWebSocketService';
 export { getIntegrationService, IntegrationService } from './services/IntegrationService';
+export { getExtensionService, ExtensionService } from './services/ExtensionService';
 
 // Models
 export { AgentPersonaService } from './database/models/AgentPersonaModel';
