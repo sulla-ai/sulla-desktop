@@ -1,23 +1,20 @@
+import fs from 'fs';
+import path from 'path';
+import paths from '@pkg/utils/paths';
 import { getWebSocketClientService, type WebSocketMessage } from './WebSocketClientService';
+import { ExtensionMetadata } from '@pkg/main/extensions/types';
 
-export interface ExtensionMetadata {
+interface LocalExtensionMetadata extends ExtensionMetadata {
   name: string;
   version: string;
   title: string;
   description: string;
   vendor: string;
-  icon: string;
   category: string;
   platforms: string[];
   extensionScreenshots: any[];
   tags: string[];
-  ui: {
-    dashboardTab?: {
-      title: string;
-      root: string;
-      src: string;
-    };
-  };
+  containers: any;
   'ui-sulla'?: {
     'header-menu'?: {
       title: string;
@@ -25,7 +22,7 @@ export interface ExtensionMetadata {
       src: string;
     };
   };
-  containers: any;
+  [key: string]: any;
 }
 
 export interface HeaderMenuItem {
@@ -44,10 +41,13 @@ export function getExtensionService(): ExtensionService {
 }
 
 export class ExtensionService {
-  private initialized = false;
-  private extensions: ExtensionMetadata[] = [];
+  private extensions: LocalExtensionMetadata[] = [];
   private headerMenuItems: HeaderMenuItem[] = [];
-  private extensionUrls = ['http://localhost:8080']; // Example for voice-ai
+  private initialized = false;
+
+  constructor() {
+    // Constructor doesn't load, call initialize() later
+  }
 
   async initialize(): Promise<void> {
     if (this.initialized) return;
@@ -55,7 +55,7 @@ export class ExtensionService {
     console.log('[ExtensionService] Initializing...');
 
     try {
-      await this.loadExtensions(this.extensionUrls);
+      await this.loadExtensionsFromAPI();
 
       console.log(`[ExtensionService] Loaded ${this.extensions.length} extensions`);
     } catch (err) {
@@ -65,32 +65,45 @@ export class ExtensionService {
     this.initialized = true;
   }
 
-  private async loadExtensions(urls: string[]) {
-    for (const url of urls) {
-      try {
-        const response = await fetch(`${url}/metadata.json`);
-        if (response.ok) {
-          const metadata: ExtensionMetadata = await response.json();
-          this.extensions.push(metadata);
-          if (metadata['ui-sulla']?.['header-menu']) {
-            this.headerMenuItems.push(metadata['ui-sulla']['header-menu']);
+  private async loadExtensionsFromAPI(): Promise<void> {
+    try {
+      const statePath = path.join(paths.appHome, 'rd-engine.json');
+      const stateData = JSON.parse(await fs.promises.readFile(statePath, 'utf8'));
+      const password = stateData.password;
+      const auth = btoa(`user:${password}`);
+      const response = await fetch('http://localhost:6107/v1/extensions', {
+        headers: {
+          'Authorization': `Basic ${auth}`
+        }
+      });
+      if (response.ok) {
+        const extensionsData: Record<string, { version: string, metadata: ExtensionMetadata, labels: Record<string, string> }> = await response.json();
+        this.extensions = Object.values(extensionsData).map(ext => ext.metadata as LocalExtensionMetadata);
+        for (const ext of Object.values(extensionsData)) {
+          const metadata = ext.metadata as LocalExtensionMetadata;
+          const uiSulla = metadata['ui-sulla'];
+          if (uiSulla?.['header-menu']) {
+            this.headerMenuItems.push(uiSulla['header-menu']);
           }
         }
-      } catch (error) {
-        console.error(`Failed to load extension metadata from ${url}:`, error);
+      } else {
+        console.error(`Failed to fetch extensions: ${response.status}`);
       }
+    } catch (error) {
+      console.error('Failed to load extensions from API:', error);
     }
 
-    // Send to frontend
-    const wsService = getWebSocketClientService();
-    wsService.send('chat-controller', { type: 'extension_menu_items', data: this.headerMenuItems });
+    // Menu items will be requested by frontend via IPC
+
+    console.log('ExtensionService initialized with', this.headerMenuItems.length, 'menu items');
+    console.log('Menu items:', this.headerMenuItems);
   }
 
   getHeaderMenuItems(): HeaderMenuItem[] {
     return this.headerMenuItems;
   }
 
-  getExtensions(): ExtensionMetadata[] {
+  getExtensions(): LocalExtensionMetadata[] {
     return this.extensions;
   }
 }
