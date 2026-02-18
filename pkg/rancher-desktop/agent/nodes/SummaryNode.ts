@@ -64,12 +64,12 @@ ${JSON_ONLY_RESPONSE_INSTRUCTIONS}
  *
  * @extends BaseNode
  */
-export class SummaryNode extends BaseNode {
+export class SummaryNode<TState extends BaseThreadState = BaseThreadState> extends BaseNode {
   constructor() {
     super('summary', 'Conversation Summary');
   }
 
-  async execute(state: BaseThreadState): Promise<NodeResult<BaseThreadState>> {
+  async execute(state: TState): Promise<NodeResult<TState>> {
 
     // Establish WebSocket connection using the dynamic channel from state
     const connectionId = state.metadata.wsChannel as string;

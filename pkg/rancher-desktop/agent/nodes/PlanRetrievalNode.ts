@@ -1,0 +1,778 @@
+// PlanRetrievalNode.ts
+// Fast information extraction node for intent classification and keyword pulling
+// Returns structured data for goal setting, skill search, and memory search
+//
+// Key Features:
+// - Intent classification (lead_qualification, appointment_booking, etc)
+// - Goal extraction from user messages
+// - Skill and memory search keyword identification
+// - Low temperature for consistency
+// - JSON-only response with no tools
+
+import type { BaseThreadState, NodeResult } from './Graph';
+import { BaseNode, JSON_ONLY_RESPONSE_INSTRUCTIONS } from './BaseNode';
+import { articlesRegistry, type ArticleListItem } from '../database/registry/ArticlesRegistry';
+import { redisClient } from '../database/RedisClient';
+import { ActivePlanManager } from './ActivePlanManager';
+
+// ============================================================================
+// INTERFACES
+// ============================================================================
+
+interface PlanRetrievalResponse {
+  intent: string;
+  goal: string;
+  selected_skill_slug: string | null;
+  memory_search: string[];
+  response_immediate: boolean;
+}
+
+// ============================================================================
+// PLAN RETRIEVAL PROMPT
+// ============================================================================
+
+const PLAN_RETRIEVAL_PROMPT = `You are a specialized planning and intent analysis system. Your job is to extract structured data from user messages and select the most appropriate skill for execution.
+
+{{active_plans_context}}
+
+## Available Skills in Knowledge Base
+
+{{skills}}
+
+## Selection Guidelines
+
+Review the skills above and select the ONE skill that best matches the user's request based on the trigger conditions.
+
+Guidelines:
+- selected_skill_slug: Choose the exact slug ONLY if a skill's trigger clearly matches the user's request. Use null for general questions, information requests, or tasks that don't require a specific procedure.
+- memory_search: Keywords for finding relevant past conversations/context/knowledge
+- response_immediate: false if task requires planning/tools, true if simple question
+- Skills are for procedural tasks (building apps, creating workflows, etc.)
+- Memory search handles information retrieval, general assistance, and context gathering
+- Many user requests won't need a skill - that's perfectly normal
+
+## Memory Search Keywords  
+ONLY provide memory search keywords if the user's message indicates they need historical context, past information, or references to previous conversations/data.
+
+Provide 1-3 keywords ONLY when the user:
+- References past conversations ("remember when", "last time", "earlier")
+- Asks about stored information ("what did I tell you about", "my preferences")
+- Needs context from previous work (project details, customer info, etc.)
+- Mentions specific topics that would have been discussed before
+
+For simple requests, new topics, or immediate tasks: Use empty array []
+
+${JSON_ONLY_RESPONSE_INSTRUCTIONS}
+{
+  "intent": "primary_intent_classification",
+  "goal": "clear_statement_of_what_user_wants_to_achieve",  
+  "selected_skill_slug": "exact_slug_of_best_matching_skill_or_null",
+  "memory_search": [],
+  "response_immediate": true_or_false
+}`.trim();
+
+// ============================================================================
+// PLAN RETRIEVAL NODE
+// ============================================================================
+
+/**
+ * Plan Retrieval Node
+ * 
+ * Purpose:
+ *   - Fast intent classification from user messages
+ *   - Extract actionable goals for planning
+ *   - Identify skill and memory search keywords
+ *   - Determine response immediacy requirements
+ * 
+ * Design:
+ *   - No tool access - pure information extraction
+ *   - Low temperature for consistency
+ *   - JSON-only response format
+ *   - Minimal context requirements
+ *   - Fast execution for real-time planning
+ */
+export class PlanRetrievalNode extends BaseNode {
+  constructor() {
+    super('plan_retrieval', 'Plan Retrieval');
+  }
+
+  async execute(state: BaseThreadState): Promise<NodeResult<BaseThreadState>> {
+
+    // Initialize diagnostics metadata
+    const diagnostics: Record<string, any> = {
+      skillsLoaded: false,
+      analysisCompleted: false,
+      skillArticlesFound: 0,
+      memoryArticlesFound: 0,
+      vectorSearchFailed: false,
+    };
+
+    // ----------------------------------------------------------------
+    // 1. LOAD AVAILABLE SKILLS (NO FILTERING - ALLOW PLAN MONITORING)
+    // ----------------------------------------------------------------
+    const availableSkills = await this.loadSkillTriggers();
+    const activePlanCount = await this.getActivePlanCount(state);
+    diagnostics.skillsLoaded = true;
+    diagnostics.activePlansFound = activePlanCount;
+
+    // ----------------------------------------------------------------
+    // 2. FAST-PATH RULE-BASED INTENT DETECTION (with skill checking)
+    // ----------------------------------------------------------------
+    let planData = this.tryRuleBasedIntentDetection(state, availableSkills);
+    
+    if (!planData) {
+      // ----------------------------------------------------------------
+      // 3. FALLBACK TO LLM ANALYSIS FOR COMPLEX CASES
+      // ----------------------------------------------------------------
+      planData = await this.analyzeUserIntent(state, availableSkills);
+      if (!planData) {
+        return { state, decision: { type: 'continue' } };
+      }
+      diagnostics.llmAnalysisUsed = true;
+    } else {
+      diagnostics.ruleBasedDetection = true;
+      console.log('[PlanRetrievalNode] Used fast-path rule-based intent detection - skipped LLM call');
+    }
+    diagnostics.analysisCompleted = true;
+
+    // ----------------------------------------------------------------
+    // 4. PERFORM VECTOR DATABASE SEARCHES
+    // ----------------------------------------------------------------
+    const { skillArticles, memoryArticles } = await this.performVectorSearches(planData);
+    diagnostics.skillArticlesFound = skillArticles.length;
+    diagnostics.memoryArticlesFound = memoryArticles.length;
+
+    // ----------------------------------------------------------------
+    // 5. STORE RESULTS AND APPEND TOOL MESSAGES
+    // ----------------------------------------------------------------
+    this.storeMetadata(state, planData);
+    this.storeSkillData(state, skillArticles);
+    await this.appendMemoryResults(state, memoryArticles, planData);
+
+    // ----------------------------------------------------------------
+    // 6. LOG COMPLETION SUMMARY
+    // ----------------------------------------------------------------
+    this.logCompletionSummary(planData, skillArticles, memoryArticles);
+
+    // Persist diagnostics on state for downstream inspection
+    (state.metadata as any).planRetrieval.diagnostics = diagnostics;
+
+    return { 
+      state, 
+      decision: { type: 'next' }
+    };
+  }
+
+  // ======================================================================
+  // STEP 1: RULE-BASED FAST-PATH DETECTION
+  // ======================================================================
+
+  /**
+   * Fast-path rule-based intent detection for simple messages
+   * Skips LLM call entirely when conditions are met:
+   * - Short message thread (< 10 messages)
+   * - Short last user message (< 100 chars)
+   * - NO potential skill trigger matches (defers to LLM if skills might apply)
+   * - Recognizable patterns (greetings, simple questions)
+   */
+  private tryRuleBasedIntentDetection(state: BaseThreadState, availableSkills: string): PlanRetrievalResponse | null {
+    const messages = state.messages;
+    const lastUserMessage = this.findLatestUserMessage(messages);
+    
+    // Bail early if no user message
+    if (!lastUserMessage) return null;
+    
+    const messageContent = typeof lastUserMessage.content === 'string' ? lastUserMessage.content : '';
+    const messageLength = messageContent.length;
+    const threadLength = messages.length;
+    
+    // Rule 1: Only apply to small threads and short messages
+    if (threadLength > 10 || messageLength > 100) {
+      console.log(`[PlanRetrievalNode] Thread too long (${threadLength}) or message too long (${messageLength}) - using LLM`);
+      return null;
+    }
+    
+    // Rule 2: Check for potential skill trigger matches - defer to LLM if any found
+    if (this.messageMatchesSkillTriggers(messageContent, availableSkills)) {
+      console.log('[PlanRetrievalNode] Message potentially matches skill triggers - using LLM for proper analysis');
+      return null;
+    }
+    
+    // Rule 3: Check for greeting patterns
+    const greetingPatterns = [
+      /^(hi|hello|hey|good morning|good afternoon|good evening)\b/i,
+      /^(thanks?|thank you|thx)\b/i,
+      /^(goodbye|bye|see you|talk later)\b/i
+    ];
+    
+    for (const pattern of greetingPatterns) {
+      if (pattern.test(messageContent.trim())) {
+        console.log('[PlanRetrievalNode] Detected greeting pattern - using fast-path');
+        return {
+          intent: 'greeting',
+          goal: 'User wants to exchange greetings or pleasantries',
+          selected_skill_slug: null,
+          memory_search: [], // No context needed for greetings
+          response_immediate: true
+        };
+      }
+    }
+    
+    // Rule 4: Check for simple question patterns
+    const simpleQuestionPatterns = [
+      /^(what|how|when|where|why)\s/i,
+      /\?\s*$/,
+      /^(can you|could you|will you|would you)\s/i
+    ];
+    
+    const isSimpleQuestion = simpleQuestionPatterns.some(pattern => pattern.test(messageContent.trim()));
+    if (isSimpleQuestion && messageLength < 50) {
+      console.log('[PlanRetrievalNode] Detected simple question pattern - using fast-path');
+      return {
+        intent: 'simple_question',
+        goal: 'User has a brief question or inquiry',
+        selected_skill_slug: null,
+        memory_search: [], // Most simple questions don't need context
+        response_immediate: true
+      };
+    }
+    
+    // Rule 5: Check for status/confirmation patterns
+    const statusPatterns = [
+      /^(ok|okay|yes|no|sure|fine|alright)\b/i,
+      /^(got it|understood|makes sense)\b/i
+    ];
+    
+    for (const pattern of statusPatterns) {
+      if (pattern.test(messageContent.trim()) && messageLength < 30) {
+        console.log('[PlanRetrievalNode] Detected status/confirmation pattern - using fast-path');
+        return {
+          intent: 'acknowledgment',
+          goal: 'User is acknowledging or confirming something',
+          selected_skill_slug: null,
+          memory_search: [], // Acknowledgments rarely need context
+          response_immediate: true
+        };
+      }
+    }
+    
+    // No rule-based detection matched
+    console.log(`[PlanRetrievalNode] No rule-based pattern matched for message: "${messageContent.slice(0, 50)}..." - using LLM`);
+    return null;
+  }
+
+  /**
+   * Check if user message potentially matches any skill triggers
+   * Returns true if LLM should analyze (potential skill match found)
+   * Returns false if safe to proceed with rule-based patterns
+   */
+  private messageMatchesSkillTriggers(messageContent: string, availableSkills: string): boolean {
+    // If no skills available, no match possible
+    if (!availableSkills || availableSkills.includes('_No skills found')) {
+      return false;
+    }
+    
+    // Extract trigger phrases from skill list (look for "Trigger:" lines)
+    const triggerMatches = availableSkills.match(/Trigger:\s*([^\n]+)/gi);
+    if (!triggerMatches || triggerMatches.length === 0) {
+      return false; // No triggers found in skills
+    }
+    
+    // Extract trigger keywords/phrases
+    const triggerKeywords: string[] = [];
+    for (const match of triggerMatches) {
+      const triggerText = match.replace(/Trigger:\s*/i, '').toLowerCase().trim();
+      // Split on common delimiters and extract meaningful terms
+      const words = triggerText.split(/[,;\s]+/).filter(word => word.length > 2);
+      triggerKeywords.push(...words);
+    }
+    
+    if (triggerKeywords.length === 0) {
+      return false; // No meaningful trigger keywords found
+    }
+    
+    // Check user message for trigger keyword matches
+    const userWords = messageContent.toLowerCase().split(/\s+/).filter(word => word.length > 2);
+    const messageText = messageContent.toLowerCase();
+    
+    // Look for exact keyword matches or phrase matches
+    for (const trigger of triggerKeywords) {
+      if (trigger.length > 15) {
+        // Long triggers - check for phrase inclusion
+        if (messageText.includes(trigger)) {
+          console.log(`[PlanRetrievalNode] Found potential skill trigger phrase match: "${trigger}"`);
+          return true;
+        }
+      } else if (trigger.length > 4) {
+        // Medium triggers - check for word matches
+        if (userWords.some(word => word.includes(trigger) || trigger.includes(word))) {
+          console.log(`[PlanRetrievalNode] Found potential skill trigger word match: "${trigger}"`);
+          return true;
+        }
+      }
+      // Skip very short triggers (< 5 chars) to avoid false positives
+    }
+    
+    return false; // No trigger matches found - safe for rule-based patterns
+  }
+
+  /**
+   * Find the most recent user message in the array
+   */
+  private findLatestUserMessage(messages: any[]): any | null {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === 'user') return messages[i];
+    }
+    return null;
+  }
+
+  // ======================================================================
+  // STEP 2: SKILL LOADING AND ACTIVE PLAN FILTERING
+  // ======================================================================
+
+  /**
+   * Get count of active plans for diagnostics (no filtering)
+   */
+  private async getActivePlanCount(state: BaseThreadState): Promise<number> {
+    const threadId = (state.metadata as any).threadId;
+    const activePlanManager = ActivePlanManager.getInstance();
+    
+    try {
+      const { planSummaries } = await activePlanManager.getActiveSkills(threadId);
+      return planSummaries.length;
+    } catch (error) {
+      console.warn('[PlanRetrievalNode] Failed to get active plan count:', error);
+      return 0;
+    }
+  }
+
+  /**
+   * Load skill triggers with cache-first approach and background refresh.
+   * Never blocks streaming - returns cached data immediately, then refreshes in background if stale.
+   */
+  private async loadSkillTriggers(): Promise<string> {
+    const cacheKey = 'sulla:skills:triggers';
+    const cacheTimestampKey = 'sulla:skills:triggers:timestamp';
+    const cacheTTL = 3600; // 1 hour in seconds
+    
+    let cachedData: string | null = null;
+    let cacheTimestamp: number = 0;
+    
+    // Step 1: Always try to get cached data first
+    try {
+      await redisClient.initialize();
+      cachedData = await redisClient.get(cacheKey);
+      const timestampStr = await redisClient.get(cacheTimestampKey);
+      cacheTimestamp = timestampStr ? parseInt(timestampStr, 10) : 0;
+    } catch (error) {
+      console.warn('[PlanRetrievalNode] Redis cache read failed:', error);
+    }
+    
+    const now = Math.floor(Date.now() / 1000);
+    const cacheAge = now - cacheTimestamp;
+    const isCacheStale = cacheAge > cacheTTL;
+    
+    // Step 2: If we have cached data, return it immediately
+    if (cachedData) {
+      console.log(`[PlanRetrievalNode] Retrieved skill triggers from cache (age: ${cacheAge}s)`);
+      
+      // Step 3: If cache is stale, trigger background refresh for next request
+      if (isCacheStale) {
+        console.log('[PlanRetrievalNode] Cache is stale, triggering background refresh');
+        this.refreshSkillTriggersInBackground(cacheKey, cacheTimestampKey).catch(err => {
+          console.warn('[PlanRetrievalNode] Background skill refresh failed:', err);
+        });
+      }
+      
+      return cachedData;
+    }
+    
+    // Step 4: No cache exists - we need to load synchronously (first time only)
+    console.log('[PlanRetrievalNode] No cache found, loading skills synchronously (first time)');
+    return this.loadSkillTriggersFromDatabase(cacheKey, cacheTimestampKey);
+  }
+
+  /**
+   * Background refresh of skill triggers cache (non-blocking)
+   */
+  private async refreshSkillTriggersInBackground(cacheKey: string, timestampKey: string): Promise<void> {
+    try {
+      const freshData = await this.loadSkillTriggersFromDatabase(cacheKey, timestampKey);
+      console.log('[PlanRetrievalNode] Background refresh completed successfully');
+    } catch (error) {
+      console.warn('[PlanRetrievalNode] Background refresh failed:', error);
+    }
+  }
+
+  /**
+   * Load skill triggers from database and update cache
+   */
+  private async loadSkillTriggersFromDatabase(cacheKey: string, timestampKey: string): Promise<string> {
+    let result: string;
+    
+    try {
+      const { Article } = await import('../database/models/Article');
+      const articles = await Article.findByTag('skill');
+
+      if (!articles || articles.length === 0) {
+        result = '_No skills found in the knowledge base yet._';
+        console.log('[PlanRetrievalNode] No skills found in database');
+      } else {
+        const lines: string[] = [];
+        const seenSlugs = new Set<string>();
+
+        for (const article of articles) {
+          const slug = article.attributes.slug || 'unknown';
+          if (seenSlugs.has(slug)) {
+            continue; // Skip duplicates
+          }
+          seenSlugs.add(slug);
+
+          const title = article.attributes.title || slug;
+          const doc = article.attributes.document || '';
+
+          // Extract the **Trigger**: line from the document content
+          const triggerMatch = doc.match(/\*\*Trigger\*\*\s*:\s*(.+)/i);
+          const trigger = triggerMatch ? triggerMatch[1].trim() : 'No trigger defined';
+
+          lines.push(`- **${title}** (slug: \`${slug}\`)\n  Trigger: ${trigger}`);
+        }
+
+        result = lines.join('\n');
+        console.log(`[PlanRetrievalNode] Loaded ${articles.length} skills from database`);
+      }
+    } catch (error) {
+      console.warn('[PlanRetrievalNode] Failed to load skill triggers from database:', error);
+      result = '_Failed to load skills from the knowledge base._';
+    }
+
+    // ALWAYS cache the result - whether skills exist, don't exist, or failed to load
+    // This ensures streaming never waits for database queries
+    const timestamp = Math.floor(Date.now() / 1000);
+    try {
+      await redisClient.set(cacheKey, result);
+      await redisClient.set(timestampKey, timestamp.toString());
+      console.log('[PlanRetrievalNode] Cached skill triggers result (ensures no future blocking)');
+    } catch (error) {
+      console.warn('[PlanRetrievalNode] Redis cache write failed:', error);
+    }
+
+    return result;
+  }
+
+  // ======================================================================
+  // STEP 2: LLM ANALYSIS
+  // ======================================================================
+
+  /**
+   * Analyze user intent using LLM with available skills context and active plan awareness
+   */
+  private async analyzeUserIntent(state: BaseThreadState, availableSkills: string): Promise<PlanRetrievalResponse | null> {
+    // Get active plans context
+    const threadId = (state.metadata as any).threadId;
+    const activePlanManager = ActivePlanManager.getInstance();
+    const activePlanSummary = await activePlanManager.getActivePlanSummary(threadId);
+    
+    // Build active plans context for plan status awareness
+    let activePlansContext = '';
+    if (activePlanSummary !== 'No active plans currently running.') {
+      activePlansContext = `## Currently Active Plans\n${activePlanSummary}\n\n**Plan Selection Options**:\n- Select a DIFFERENT skill if you want to start a new parallel plan\n- Select the SAME skill as an active plan if you want to monitor/check status of that existing plan\n- All skills remain available - choose based on user intent`;
+    } else {
+      activePlansContext = `## Currently Active Plans\nNo active plans currently running - all skills are available for new plans.`;
+    }
+    
+    // Replace placeholders with actual data
+    const analysisPrompt = PLAN_RETRIEVAL_PROMPT
+      .replace('{{skills}}', availableSkills)
+      .replace('{{active_plans_context}}', activePlansContext);
+
+    console.log('[PlanRetrievalNode] Analyzing messages for intent and planning data with available skills');
+
+    // Use low temperature for consistent extraction
+    const extractionResult = await this.chat(
+      state,
+      analysisPrompt,
+      {
+        temperature: 0.1, // Low temperature for consistency
+        maxTokens: 500,   // Keep response concise
+        format: 'json',   // JSON-only response
+        disableTools: true // No tools needed for intent analysis
+      }
+    );
+
+    if (!extractionResult) {
+      console.warn('[PlanRetrievalNode] No extraction result from LLM');
+      return null;
+    }
+
+    // Validate and return extraction results
+    return this.validatePlanData(extractionResult);
+  }
+
+  /**
+   * Validate and normalize plan retrieval data - very relaxed extraction
+   */
+  private validatePlanData(rawData: any): PlanRetrievalResponse {
+    // Helper to extract string from any value
+    const extractString = (val: any, fallback: string = ''): string => {
+      if (typeof val === 'string' && val.trim()) return val.trim();
+      if (typeof val === 'object' && val !== null) {
+        // Try common object properties
+        if (val.value || val.text || val.content || val.description) {
+          return extractString(val.value || val.text || val.content || val.description, fallback);
+        }
+        // Convert object to JSON string if it has meaningful content
+        const str = JSON.stringify(val);
+        if (str !== '{}' && str !== '[]' && str !== 'null') return str;
+      }
+      return val ? String(val).trim() : fallback;
+    };
+
+    // Helper to extract array of strings from any value
+    const extractStringArray = (val: any): string[] => {
+      const results: string[] = [];
+      
+      if (Array.isArray(val)) {
+        for (const item of val) {
+          const str = extractString(item);
+          if (str) results.push(str);
+        }
+      } else if (typeof val === 'string') {
+        // Try splitting by common delimiters
+        const splits = val.split(/[,;\n\r]+/).map((s: string) => s.trim()).filter((s: string) => s);
+        results.push(...splits);
+      } else if (typeof val === 'object' && val !== null) {
+        // Extract values from object properties
+        for (const key of Object.keys(val)) {
+          const str = extractString(val[key]);
+          if (str) results.push(str);
+        }
+      } else if (val) {
+        const str = extractString(val);
+        if (str) results.push(str);
+      }
+      
+      return results.slice(0, 5); // Allow up to 5 items instead of 3
+    };
+
+    // Helper to extract boolean from any value
+    const extractBoolean = (val: any, fallback: boolean = true): boolean => {
+      if (typeof val === 'boolean') return val;
+      if (typeof val === 'string') {
+        const lower = val.toLowerCase().trim();
+        if (['true', 'yes', '1', 'immediate', 'now'].includes(lower)) return true;
+        if (['false', 'no', '0', 'later', 'delayed'].includes(lower)) return false;
+      }
+      if (typeof val === 'number') return val > 0;
+      return fallback;
+    };
+
+    return {
+      intent: extractString(rawData?.intent || rawData?.type || rawData?.category || rawData?.classification, 'general'),
+      goal: extractString(rawData?.goal || rawData?.objective || rawData?.target || rawData?.purpose || rawData?.description, 'Process user request'),
+      selected_skill_slug: rawData?.selected_skill_slug || null,
+      memory_search: extractStringArray(rawData?.memory_search || rawData?.memories || rawData?.context || rawData?.search_terms),
+      response_immediate: extractBoolean(rawData?.response_immediate || rawData?.immediate || rawData?.urgent || rawData?.priority)
+    };
+  }
+
+  // ======================================================================
+  // STEP 3: VECTOR DATABASE SEARCHES
+  // ======================================================================
+
+  /**
+   * Perform vector database searches for skills and memories in parallel with timeout protection
+   */
+  private async performVectorSearches(planData: PlanRetrievalResponse): Promise<{skillArticles: any[], memoryArticles: any[]}> {
+    console.log('[PlanRetrievalNode] Performing parallel vector database searches with timeout protection');
+    
+    try {
+      // Run both searches in parallel for optimal streaming performance
+      const [skillArticles, memoryArticles] = await Promise.allSettled([
+        this.loadSelectedSkillWithTimeout(planData.selected_skill_slug),
+        this.searchMemoriesWithTimeout(planData.memory_search)
+      ]);
+      
+      return {
+        skillArticles: skillArticles.status === 'fulfilled' ? skillArticles.value : [],
+        memoryArticles: memoryArticles.status === 'fulfilled' ? memoryArticles.value : []
+      };
+      
+    } catch (error) {
+      console.warn('[PlanRetrievalNode] Vector database search failed:', error);
+      // Continue with empty results rather than failing
+      return { skillArticles: [], memoryArticles: [] };
+    }
+  }
+
+  /**
+   * Load a specific skill by slug if selected (with timeout protection)
+   */
+  private async loadSelectedSkillWithTimeout(skillSlug: string | null, timeoutMs: number = 3000): Promise<any[]> {
+    if (!skillSlug) {
+      console.log('[PlanRetrievalNode] No skill selected - using memory search for general assistance');
+      return [];
+    }
+
+    console.log(`[PlanRetrievalNode] Loading selected skill: ${skillSlug}`);
+    
+    // Add timeout protection for database query
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error(`Skill loading timeout after ${timeoutMs}ms`)), timeoutMs);
+    });
+    
+    try {
+      const selectedSkill = await Promise.race([
+        articlesRegistry.getBySlug(skillSlug),
+        timeoutPromise
+      ]);
+      
+      if (selectedSkill) {
+        console.log(`[PlanRetrievalNode] Successfully loaded selected skill: ${skillSlug}`);
+        return [{
+          slug: selectedSkill.slug,
+          title: selectedSkill.title,
+          category: selectedSkill.category,
+          tags: selectedSkill.tags,
+          excerpt: selectedSkill.excerpt,
+          document: selectedSkill.document
+        }];
+      } else {
+        console.warn(`[PlanRetrievalNode] Selected skill not found: ${skillSlug}`);
+        return [];
+      }
+    } catch (error) {
+      console.warn(`[PlanRetrievalNode] Failed to load skill ${skillSlug}:`, error instanceof Error ? error.message : String(error));
+      return [];
+    }
+  }
+
+  /**
+   * Search for memory articles using extracted keywords with timeout protection
+   * Skips database query entirely if no keywords provided (optimizes streaming)
+   */
+  private async searchMemoriesWithTimeout(memoryKeywords: string[], timeoutMs: number = 4000): Promise<any[]> {
+    // Skip database search entirely if no keywords - common for simple/immediate requests
+    if (memoryKeywords.length === 0) {
+      console.log('[PlanRetrievalNode] No memory search keywords - skipping database query (streaming optimized)');
+      return [];
+    }
+
+    console.log(`[PlanRetrievalNode] Searching for memories with keywords: ${memoryKeywords.join(', ')}`);
+    
+    // Add timeout protection for vector search
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error(`Memory search timeout after ${timeoutMs}ms`)), timeoutMs);
+    });
+    
+    try {
+      const memoryQuery = memoryKeywords.join(' ');
+      const memoryResults = await Promise.race([
+        articlesRegistry.search({
+          query: memoryQuery,
+          limit: 5
+        }),
+        timeoutPromise
+      ]);
+      
+      const articles = memoryResults.items.map(item => ({
+        slug: item.slug,
+        title: item.title,
+        category: item.category,
+        tags: item.tags,
+        excerpt: item.excerpt
+      }));
+      
+      console.log(`[PlanRetrievalNode] Found ${articles.length} memory articles`);
+      return articles;
+    } catch (error) {
+      console.warn(`[PlanRetrievalNode] Memory search failed:`, error instanceof Error ? error.message : String(error));
+      return [];
+    }
+  }
+
+  // ======================================================================
+  // STEP 4: RESULT STORAGE AND MESSAGE APPENDING
+  // ======================================================================
+
+  /**
+   * Store essential plan data in state metadata
+   */
+  private storeMetadata(state: BaseThreadState, planData: PlanRetrievalResponse): void {
+    const metadata = state.metadata as any;
+    
+    metadata.planRetrieval = {
+      intent: planData.intent,
+      goal: planData.goal,
+      selected_skill_slug: planData.selected_skill_slug,
+      response_immediate: planData.response_immediate
+    };
+  }
+
+  /**
+   * Store skill data in state metadata for system prompt injection in PlannerNode
+   */
+  private storeSkillData(state: BaseThreadState, skillArticles: any[]): void {
+    const metadata = state.metadata as any;
+    
+    if (!metadata.planRetrieval) {
+      metadata.planRetrieval = {};
+    }
+    
+    // Store skill data for PlannerNode to access
+    if (skillArticles.length > 0) {
+      metadata.planRetrieval.skillData = {
+        slug: skillArticles[0].slug,
+        title: skillArticles[0].title,
+        excerpt: skillArticles[0].excerpt,
+        document: skillArticles[0].document,
+        category: skillArticles[0].category,
+        tags: skillArticles[0].tags
+      };
+      console.log(`[PlanRetrievalNode] Stored skill data in state: ${skillArticles[0].title}`);
+    } else {
+      metadata.planRetrieval.skillData = null;
+      console.log('[PlanRetrievalNode] No skill data to store');
+    }
+  }
+
+  /**
+   * Append only memory results as tool result messages (skills go through state)
+   */
+  private async appendMemoryResults(state: BaseThreadState, memoryArticles: any[], planData: PlanRetrievalResponse): Promise<void> {
+    // Only append memory articles as tool result message - skills flow through state metadata
+    if (memoryArticles.length > 0) {
+      await this.appendToolResultMessage(state, 'memory_search', {
+        toolName: 'memory_search',
+        success: true,
+        result: {
+          articles: memoryArticles,
+          count: memoryArticles.length,
+          keywords: planData.memory_search
+        },
+        toolCallId: 'plan_retrieval_memory'
+      });
+      console.log(`[PlanRetrievalNode] Appended ${memoryArticles.length} memory articles as tool messages`);
+    } else {
+      console.log('[PlanRetrievalNode] No memory articles to append');
+    }
+  }
+
+  // ======================================================================
+  // STEP 5: COMPLETION LOGGING
+  // ======================================================================
+
+  /**
+   * Log completion summary with key metrics
+   */
+  private logCompletionSummary(planData: PlanRetrievalResponse, skillArticles: any[], memoryArticles: any[]): void {
+    console.log('[PlanRetrievalNode] Completed plan retrieval with:', {
+      intent: planData.intent,
+      goal: planData.goal,
+      selectedSkill: skillArticles.length > 0 ? skillArticles[0].slug : null,
+      memoryKeywords: planData.memory_search.length,
+      memoryArticles: memoryArticles.length,
+      immediate: planData.response_immediate
+    });
+  }
+}

@@ -15,6 +15,7 @@ import { BaseLanguageModel, type RemoteProviderConfig } from './BaseLanguageMode
 import { getOllamaService } from './OllamaService';
 import { createRemoteModelService } from './RemoteService';
 import { SullaSettingsModel } from '../database/models/SullaSettingsModel';
+import { modelDiscoveryService, type ModelInfo } from './ModelDiscoveryService';
 
 class LLMRegistryImpl {
   private services = new Map<string, BaseLanguageModel>();
@@ -164,6 +165,108 @@ class LLMRegistryImpl {
     }
     return this.getRemoteService(model);
   }
+
+  // ============================================================================
+  // DYNAMIC MODEL DISCOVERY
+  // ============================================================================
+
+  /**
+   * Fetch available models for a specific provider
+   * @param providerId Provider identifier (e.g., 'openai', 'anthropic')
+   * @param apiKey API key for the provider
+   * @returns Available models from the provider
+   */
+  async fetchModelsForProvider(providerId: string, apiKey?: string): Promise<ModelInfo[]> {
+    const key = apiKey || await SullaSettingsModel.get('remoteApiKey', '');
+    if (!key) {
+      throw new Error(`No API key configured for provider: ${providerId}`);
+    }
+    
+    return await modelDiscoveryService.fetchModelsForProvider(providerId, key);
+  }
+
+  /**
+   * Fetch available models from all configured providers
+   * @returns All available models from configured providers
+   */
+  async fetchAllAvailableModels(): Promise<ModelInfo[]> {
+    const providers: Record<string, string> = {};
+    
+    // Get API keys for all supported providers
+    const supportedProviders = modelDiscoveryService.getSupportedProviders();
+    
+    for (const providerId of supportedProviders) {
+      // Try to get API key for each provider
+      try {
+        let apiKey = '';
+        
+        if (providerId === 'openai') {
+          apiKey = await SullaSettingsModel.get('openaiApiKey', '');
+        } else if (providerId === 'anthropic') {
+          apiKey = await SullaSettingsModel.get('anthropicApiKey', '');
+        } else if (providerId === 'google') {
+          apiKey = await SullaSettingsModel.get('googleApiKey', '');
+        } else if (providerId === 'grok') {
+          apiKey = await SullaSettingsModel.get('grokApiKey', '');
+        } else if (providerId === 'kimi') {
+          apiKey = await SullaSettingsModel.get('kimiApiKey', '');
+        } else if (providerId === 'nvidia') {
+          apiKey = await SullaSettingsModel.get('nvidiaApiKey', '');
+        } else {
+          // Fallback to generic remoteApiKey for unknown providers
+          const currentProvider = await SullaSettingsModel.get('remoteProvider', 'grok');
+          if (currentProvider === providerId) {
+            apiKey = await SullaSettingsModel.get('remoteApiKey', '');
+          }
+        }
+        
+        if (apiKey && apiKey.trim() !== '') {
+          providers[providerId] = apiKey;
+        }
+      } catch (error) {
+        console.warn(`[LLMRegistry] Failed to get API key for ${providerId}:`, error);
+      }
+    }
+    
+    return await modelDiscoveryService.fetchAllAvailableModels(providers);
+  }
+
+  /**
+   * Get currently configured remote models (for backwards compatibility)
+   * @returns Array containing the current remote model
+   */
+  async getCurrentRemoteModels(): Promise<ModelInfo[]> {
+    const remoteProvider = await SullaSettingsModel.get('remoteProvider', 'grok');
+    const remoteModel = await SullaSettingsModel.get('remoteModel', 'grok-4-1-fast-reasoning');
+    
+    return [{
+      id: remoteModel,
+      name: remoteModel,
+      provider: remoteProvider
+    }];
+  }
+
+  /**
+   * Clear model cache for dynamic discovery
+   * @param providerId Optional provider to clear cache for (clears all if not provided)
+   */
+  clearModelCache(providerId?: string): void {
+    modelDiscoveryService.clearCache(providerId);
+  }
+
+  /**
+   * Get model cache statistics
+   */
+  getModelCacheStats(): { size: number; providers: string[] } {
+    return modelDiscoveryService.getCacheStats();
+  }
+
+  /**
+   * Get supported providers for dynamic model fetching
+   */
+  getSupportedProviders(): string[] {
+    return modelDiscoveryService.getSupportedProviders();
+  }
 }
 
 export const LLMRegistry = new LLMRegistryImpl();
@@ -178,4 +281,21 @@ export const getService = async (context: 'local' | 'remote', model?: string) =>
   await LLMRegistry.getServiceForContext(context, model);
 export const getCurrentModel = async () => await LLMRegistry.getCurrentModel();
 export const getCurrentMode = async () => await LLMRegistry.getCurrentMode();
+
+// Dynamic model discovery exports
+export const fetchModelsForProvider = async (providerId: string, apiKey?: string) => 
+  await LLMRegistry.fetchModelsForProvider(providerId, apiKey);
+export const fetchAllAvailableModels = async () => 
+  await LLMRegistry.fetchAllAvailableModels();
+export const getCurrentRemoteModels = async () => 
+  await LLMRegistry.getCurrentRemoteModels();
+export const clearModelCache = (providerId?: string) => 
+  LLMRegistry.clearModelCache(providerId);
+export const getModelCacheStats = () => 
+  LLMRegistry.getModelCacheStats();
+export const getSupportedProviders = () => 
+  LLMRegistry.getSupportedProviders();
+
+// Export ModelInfo type for external use
+export type { ModelInfo };
 export const getCurrentConfig = async () => await LLMRegistry.getCurrentConfig();

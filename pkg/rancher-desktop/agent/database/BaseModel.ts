@@ -342,4 +342,8 @@ export abstract class BaseModel<T extends ModelAttributes = ModelAttributes> {
   get attributesSnapshot(): Readonly<Partial<T>> {
     return { ...this.attributes };
   }
+
+  static async query(sql: string, params: any[] = []): Promise<QueryResultRow[]> {
+    return await postgresClient.queryAll(sql, params);
+  }
 }

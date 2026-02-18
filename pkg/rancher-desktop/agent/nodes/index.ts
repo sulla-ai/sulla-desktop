@@ -1,6 +1,8 @@
 // Graph Nodes - Main exports
 
 export { BaseNode } from './BaseNode';
+export { InputHandlerNode } from './InputHandlerNode';
+export { PlanRetrievalNode } from './PlanRetrievalNode';
 export { MemoryNode } from './MemoryNode';
 export { OverLordPlannerNode } from './OverLordPlannerNode';
 export { StrategicPlannerNode } from './StrategicPlannerNode';
@@ -14,5 +16,7 @@ export { KnowledgeCriticNode } from './KnowledgeCriticNode';
 export { KnowledgeWriterNode } from './KnowledgeWriterNode';
 export { SummaryNode } from './SummaryNode';
 export { SimpleNode } from './SimpleNode';
+export { ReasoningNode } from './ReasoningNode';
+export { ActionNode } from './ActionNode';
 export { ContextTrimmerNode } from './Graph';
 export { SubgraphTriggerNode } from './Graph';

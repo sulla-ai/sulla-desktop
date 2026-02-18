@@ -61,11 +61,11 @@ clean-hard:
     @echo "Cleanup complete. Run 'just build' for a fresh install."
 
 nvm:
-    nvm install 22.22
-    nvm use 22.22
+    @nvm install 22.22
+    @nvm use 22.22
 
 # Install dependencies and build the application for production
-install:
+install: nvm
     yarn install --legacy-peer-deps
 
 build:
@@ -90,6 +90,33 @@ dev:
 # Start after build
 start:
     NODE_NO_WARNINGS=1 yarn start
+
+# ============================================================================
+# DEVELOPMENT & BUILD COMMANDS
+# ============================================================================
+
+# Test commands for Active Plan Management system
+test-install:
+    @echo "Installing test dependencies..."
+    yarn add --dev jest @types/jest ts-jest
+    @echo "Creating Jest config if it doesn't exist..."
+    [ -f jest.config.js ] || echo 'module.exports = { preset: "ts-jest", testEnvironment: "node", testMatch: ["**/__tests__/**/*.test.ts"] };' > jest.config.js
+
+# Run Active Plan Management mock tests (no server needed)
+test-plans:
+    @echo "🧪 Running Active Plan Management Mock Tests (no server required)"
+    @echo "Tests use mocked dependencies - completely isolated"
+    yarn test pkg/rancher-desktop/agent/nodes/__tests__/ActivePlanManager.mock.test.ts
+
+# Run all tests
+test:
+    @echo "🧪 Running all tests..."
+    yarn test
+
+# Run tests in watch mode for development
+test-watch:
+    @echo "🧪 Running tests in watch mode..."
+    yarn test --watch
 
 # Stop gracefully (SIGTERM → force if needed)
 stop:
@@ -272,6 +299,117 @@ chat:
     -H "Content-Type: application/json" \
     -d '{"model": "sulla", "messages": [{"role": "user", "content": "Test message"}]}'
 
+# ============================================================================
+# SPECIALIZED TESTS
+# ============================================================================
+
+# Test the 3-strike plan takeover system with detailed output
+test-takeover:
+    @echo "🎯 Testing 3-Strike Plan Takeover System"
+    @echo "Running detailed mock scenarios:"
+    @echo "  ✅ Strike 1: Healthy plans (< 60s) - should stop flow"
+    @echo "  ⚠️ Strike 2: Unhealthy plans (60-120s) - should pause"
+    @echo "  💀 Strike 3: Stale plans (>120s) - should takeover"
+    @echo ""
+    yarn test pkg/rancher-desktop/agent/nodes/__tests__/ActivePlanManager.mock.test.ts --verbose
+
+# Test with coverage report
+test-coverage:
+    @echo "📊 Running tests with coverage report..."
+    yarn test --coverage pkg/rancher-desktop/agent/nodes/__tests__/ActivePlanManager.mock.test.ts
+
+# Run InputHandlerNode mock tests
+test-input:
+    @echo "🔧 Running InputHandlerNode Mock Tests (input sanitization, rate limiting, spam detection)"
+    npx jest pkg/rancher-desktop/agent/nodes/__tests__/InputHandlerNode.mock.test.ts
+
+# Run PlanRetrievalNode mock tests  
+test-retrieval:
+    @echo "📋 Running PlanRetrievalNode Mock Tests (intent classification, skill selection, rule-based detection)"
+    npx jest pkg/rancher-desktop/agent/nodes/__tests__/PlanRetrievalNode.mock.test.ts
+
+# Run InputHandlerNode production tests (legitimate scenarios)
+test-input-prod:
+    @echo "🏭 Running InputHandlerNode Production Tests (real user scenarios, proper types)"
+    @echo "Testing: injection detection, rate limiting, spam detection, summarization triggers"
+    npx jest pkg/rancher-desktop/agent/nodes/__tests__/InputHandlerNode.production.test.ts
+
+# Run advanced InputHandler tests (real service integration)
+test-advanced-input:
+    @echo "🔥 Running Advanced InputHandler Tests"
+    @echo "Testing: real ConversationSummaryService and ObservationalSummaryService integration"
+    npx jest pkg/rancher-desktop/agent/nodes/__tests__/InputHandler.advanced.test.ts
+
+# Run single simple InputHandler test (start small)
+test-simple-input:
+    @echo "🧪 Running Single Simple InputHandler Test"
+    @echo "Testing: basic message processing with minimal setup"
+    npx jest pkg/rancher-desktop/agent/nodes/__tests__/InputHandler.simple.test.ts
+
+# Run single simple PlanRetrievalNode test (start small)
+test-simple-plan:
+    @echo "📋 Running Single Simple PlanRetrievalNode Test"
+    @echo "Testing: basic intent classification with minimal setup"
+    npx jest pkg/rancher-desktop/agent/nodes/__tests__/PlanRetrievalNode.simple.test.ts
+
+# Run advanced PlanRetrievalNode tests (adversarial scenarios)
+test-advanced-plan:
+    @echo "🔥 Running Advanced PlanRetrievalNode Tests"
+    @echo "Testing: malformed responses, timeouts, massive content, concurrency"
+    npx jest pkg/rancher-desktop/agent/nodes/__tests__/PlanRetrievalNode.advanced.test.ts
+
+# Run simple PlannerNode test (start small)
+test-simple-planner:
+    @echo "📅 Running Simple PlannerNode Test"
+    @echo "Testing: basic plan generation with minimal setup"
+    npx jest pkg/rancher-desktop/agent/nodes/__tests__/PlannerNode.simple.test.ts
+
+# Run simple SullaSettingsModel test (start small)
+test-simple-settings:
+    @echo "⚙️ Running Simple SullaSettingsModel Test"
+    @echo "Testing: basic get/set operations with file fallback"
+    npx jest pkg/rancher-desktop/agent/database/models/__tests__/SullaSettingsModel.simple.test.ts
+
+# Run ReAct loop integration test
+test-react-loop:
+    @echo "🔄 Running ReAct Loop Integration Test"
+    @echo "Testing: ReasoningNode → ActionNode → ReasoningNode cycle until goal achieved"
+    npx jest pkg/rancher-desktop/agent/nodes/__tests__/ReActLoop.simple.test.ts
+
+# ============================================================================
+# SKILLGRAPH TESTS
+# ============================================================================
+
+# Run SkillGraph core production test (focused validation without environment complexity)
+test-skillgraph-core:
+    @echo "🎯 Running SkillGraph CORE PRODUCTION Test"
+    @echo "Testing: TypeScript compatibility, real state mutations, actual node execution"
+    @echo "Purpose: Validate core functionality catches real production issues"
+    npx jest pkg/rancher-desktop/agent/nodes/__tests__/SkillGraph.core-production.test.ts --verbose
+
+# Run SkillGraph retry scenarios test (validates retry logic with simulated failures)
+test-skillgraph-retries:
+    @echo "🔄 Running SkillGraph RETRY SCENARIOS Test"
+    @echo "Testing: Planner retries (3 attempts), Reasoning retries (3 attempts), Critic verification"
+    @echo "Purpose: Validate retry logic works when LLM responses fail initially"
+    npx jest pkg/rancher-desktop/agent/nodes/__tests__/SkillGraph.retry-scenarios.test.ts --verbose
+
+# ============================================================================
+# NODE TESTS
+# ============================================================================
+
+# Run all node tests in sequence
+test-nodes:
+    @echo "🧪 Running All Node Mock Tests (InputHandler → PlanRetrieval → ActivePlan)"
+    @echo "Testing complete conversation flow..."
+    npx jest pkg/rancher-desktop/agent/nodes/__tests__/InputHandlerNode.mock.test.ts
+    npx jest pkg/rancher-desktop/agent/nodes/__tests__/PlanRetrievalNode.mock.test.ts
+    npx jest pkg/rancher-desktop/agent/nodes/__tests__/ActivePlanManager.mock.test.ts
+
+# ============================================================================
+# KUBERNETES & LIMA COMMANDS
+# ============================================================================
+
 limactl:
     LIMA_HOME=~/Library/Application\ Support/rancher-desktop/lima \
     limactl list
@@ -288,12 +426,6 @@ kubectl:
 watch-events:
     LIMA_HOME=~/Library/Application\ Support/rancher-desktop/lima \
     limactl shell 0 -- sudo k3s kubectl get events -A --watch
-
-
-
-
-
-
 
 # Quick check: is API server responding?
 k3s-ready:
@@ -314,15 +446,10 @@ k3s-restart:
 flannel-logs:
     limactl shell 0 -- sudo tail -f /var/log/k3s.log | grep -i flannel
 
-
-
-
-
-
 # Tail live k3s server logs inside Lima VM (most useful for startup hangs)
 k3s-logs:
     LIMA_HOME=~/Library/Application\ Support/rancher-desktop/lima \
-    limactl shell 0 -- sudo tail -f /var/log/k3s.log | grep -i flannel
+    limactl shell 0 -- sudo tail -f /var/log/k3s.log
 
 # Tail k3s agent logs (if using agent mode, less common in single-node)
 k3s-agent-logs:

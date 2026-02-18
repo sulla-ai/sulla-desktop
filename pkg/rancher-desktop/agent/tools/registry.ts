@@ -148,6 +148,10 @@ export class ToolRegistry {
     };
   }
 
+  getToolNames(): string[] {
+    return Array.from(this.loaders.keys());
+  }
+
   // For browse_tools — cheap metadata only, no loading instances or schemas
   getCategoryToolMetadata(category: string): () => Promise<Array<{ name: string; description: string; category: string }>> {
     return async () => {

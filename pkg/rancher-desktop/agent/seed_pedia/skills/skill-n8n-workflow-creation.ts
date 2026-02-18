@@ -5,10 +5,10 @@ title: "SOP: Create n8n Automation Workflow"
 section: Standard Operating Procedures
 category: Automation
 tags:
+  - skill
   - n8n
   - workflows
   - automation
-  - sop
 order: 6
 locked: true
 author: seed

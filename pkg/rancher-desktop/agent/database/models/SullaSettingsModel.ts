@@ -318,4 +318,127 @@ export class SullaSettingsModel extends BaseModel<SettingsAttributes> {
   public static generateId(): string {
     return crypto.randomUUID();
   }
+
+  // ──────────────────────────────────────────────
+  // Pattern-based querying for active plans
+  // ──────────────────────────────────────────────
+
+  /**
+   * Get all settings matching a key pattern
+   * Pattern examples: 'active_plan:*', 'active_plan:thread_123:*'
+   */
+  public static async getByPattern(pattern: string): Promise<Record<string, any>> {
+    if (this.isReady) {
+      // Redis pattern scanning
+      const keys = await redisClient.scan('0', 'MATCH', pattern.replace(':', '_'), 'COUNT', '1000');
+      if (keys[1].length > 0) {
+        const values = await redisClient.hmget('sulla_settings', ...keys[1]);
+        const result: Record<string, any> = {};
+        
+        for (let i = 0; i < keys[1].length; i++) {
+          const key = keys[1][i];
+          const value = values[i];
+          if (value !== null) {
+            // Get cast info from database
+            const setting = await this.find(key);
+            const cast = setting?.attributes.cast;
+            result[key] = this.castValue(value, cast);
+          }
+        }
+        return result;
+      }
+      
+      // Fallback to PostgreSQL pattern matching
+      try {
+        const settings = await this.query(`
+          SELECT property, value, cast 
+          FROM ${this.prototype.tableName} 
+          WHERE property LIKE ?
+        `, [pattern.replace('*', '%')]);
+        
+        const result: Record<string, any> = {};
+        for (const setting of settings) {
+          result[setting.property] = this.castValue(setting.value, setting.cast);
+        }
+        return result;
+      } catch (error) {
+        console.error('PostgreSQL pattern query failed:', error);
+        return {};
+      }
+    }
+
+    // File fallback - load entire file and filter
+    try {
+      const filePath = this.getFallbackFilePath();
+      const content = await fs.readFile(filePath, 'utf8');
+      const data = JSON.parse(content) as Record<string, any>;
+      
+      const regex = new RegExp('^' + pattern.replace('*', '.*') + '$');
+      const result: Record<string, any> = {};
+      
+      for (const [key, value] of Object.entries(data)) {
+        if (regex.test(key)) {
+          result[key] = value;
+        }
+      }
+      
+      return result;
+    } catch (error) {
+      console.warn('File pattern query failed:', error);
+      return {};
+    }
+  }
+
+  /**
+   * Delete all settings matching a pattern
+   */
+  public static async deleteByPattern(pattern: string): Promise<number> {
+    const matches = await this.getByPattern(pattern);
+    const keys = Object.keys(matches);
+    
+    if (keys.length === 0) {
+      return 0;
+    }
+
+    if (this.isReady) {
+      // Delete from PostgreSQL and Redis
+      try {
+        await this.query(`
+          DELETE FROM ${this.prototype.tableName} 
+          WHERE property LIKE ?
+        `, [pattern.replace('*', '%')]);
+        
+        if (keys.length > 0) {
+          await redisClient.hdel('sulla_settings', ...keys);
+        }
+      } catch (error) {
+        console.error('Pattern deletion failed:', error);
+      }
+    } else {
+      // File fallback
+      try {
+        const filePath = this.getFallbackFilePath();
+        const content = await fs.readFile(filePath, 'utf8');
+        const data = JSON.parse(content) as Record<string, any>;
+        
+        for (const key of keys) {
+          delete data[key];
+        }
+        
+        await fs.writeFile(filePath, JSON.stringify(data, null, 2));
+      } catch (error) {
+        console.warn('File pattern deletion failed:', error);
+      }
+    }
+    
+    return keys.length;
+  }
+
+  /**
+   * Check if any settings exist matching pattern
+   */
+  public static async existsByPattern(pattern: string): Promise<boolean> {
+    const matches = await this.getByPattern(pattern);
+    return Object.keys(matches).length > 0;
+  }
 }

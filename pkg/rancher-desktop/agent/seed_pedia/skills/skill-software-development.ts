@@ -5,10 +5,10 @@ title: "SOP: Software Development Workflow"
 section: Standard Operating Procedures
 category: Software Development
 tags:
+  - skill
   - software-development
   - coding
   - vibe-coding
-  - sop
 order: 5
 locked: true
 author: seed

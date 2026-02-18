@@ -9,6 +9,32 @@ import { AgentPlanInterface } from '../database/models/AgentPlan';
 import { AgentPlanTodoInterface } from '../database/models/AgentPlanTodo';
 import { SullaSettingsModel } from '../database/models/SullaSettingsModel';
 import { BaseNode } from './BaseNode';
+import { 
+  StrategicPlannerNode, 
+  TacticalPlannerNode, 
+  TacticalExecutorNode, 
+  TacticalCriticNode, 
+  StrategicCriticNode, 
+  SummaryNode,
+  OverLordPlannerNode,
+  MemoryNode,
+  SimpleNode,
+  InputHandlerNode,
+  PlanRetrievalNode
+} from './index';
+import { PlannerNode } from './PlannerNode';
+import { ReasoningNode } from './ReasoningNode';
+import { ActionNode } from './ActionNode';
+import { SkillCriticNode } from './SkillCriticNode';
+import { OutputNode } from './OutputNode';
+
+// ============================================================================
+// CONFIGURATION CONSTANTS
+// ============================================================================
+
+// SkillGraph retry configuration
+const MAX_PLANNER_RETRIES = 2; // Total attempts: 3 (0, 1, 2)
+const MAX_REASONING_RETRIES = 2; // Total attempts: 3 (0, 1, 2)
 
 // ============================================================================
 // DEFAULT SETTINGS
@@ -21,8 +47,88 @@ const MAX_MESSAGES_IN_THREAD = 120;
 const DEFAULT_MAX_ITERATIONS = 10;
 const DEFAULT_MAX_REVISION_COUNT = 3;
 // ============================================================================
-// INTERFACES AND TYPES
+// THREAD STATE INTERFACES
 // ============================================================================
+
+/**
+ * SkillGraph-specific thread state interface
+ * Extends BaseThreadState with SkillGraph-specific metadata properties
+ */
+export interface SkillGraphState extends BaseThreadState {
+  metadata: BaseThreadState['metadata'] & {
+    planRetrieval?: {
+      intent: string;
+      goal: string;
+      response_immediate: boolean;
+      skillData?: {
+        title: string;
+        excerpt: string;
+        document: string;
+      };
+    };
+    planner?: {
+      goal: string;
+      skill_focused: boolean;
+      plan_steps: string[];
+      complexity_assessment?: string;
+    };
+    reasoning?: {
+      currentDecision?: {
+        current_situation: string;
+        goal_progress: string;
+        next_action: string;
+        action_type: 'continue' | 'complete' | 'verify_evidence';
+        reasoning: string;
+        confidence: number;
+        stop_condition_met: boolean;
+        skill_progress?: {
+          current_step: number;
+          total_steps: number;
+          evidence_required: string;
+          task_verification?: {
+            verification_method: string;
+            expected_outcome: string;
+          };
+        };
+      };
+    };
+    actions?: Array<{
+      success: boolean;
+      result: any;
+      evidence_collected?: Array<{
+        evidence_type: string;
+        description: string;
+        evidence_pointer?: string;
+        verification_method: string;
+      }>;
+      completion_justification?: string;
+    }>;
+    skillCritic?: {
+      decision: 'continue' | 'revise' | 'complete';
+      reason: string;
+      progressScore: number;
+      evidenceScore: number;
+      nextAction?: string;
+      completionJustification?: string;
+      evaluatedAt: number;
+    };
+    output?: {
+      taskStatus: 'completed' | 'partial' | 'failed';
+      completionScore: number;
+      skillCompliance: number;
+      summaryMessage: string;
+      accomplishments: string[];
+      evidenceHighlights: string[];
+      nextSteps: string[];
+      skillFeedback: string;
+      generatedAt: number;
+      cycleCount: number;
+      actionCount: number;
+      evidenceCount: number;
+    };
+    reactLoopCount?: number;
+  };
+}
 
 /**
  * Generic node interface for any graph execution.
@@ -109,6 +215,14 @@ export interface BaseThreadState {
     memory: {
       knowledgeBaseContext: string;
       chatSummariesContext: string;
+    };
+
+    // Plan retrieval data from PlanRetrievalNode - minimal metadata only
+    // Skills and memories are now added to message thread via tool results
+    planRetrieval?: {
+      intent: string;
+      goal: string;
+      response_immediate: boolean;
     };
 
     // any graph could technically call another graph, this is the format
@@ -345,6 +459,23 @@ export class Graph<TState = HierarchicalThreadState> {
   }
 
   /**
+   * Get node by ID for testing and validation purposes
+   * @param nodeId - The node identifier
+   * @returns The node instance or undefined if not found
+   */
+  getNode(nodeId: string): GraphNode<TState> | undefined {
+    return this.nodes.get(nodeId);
+  }
+
+  /**
+   * Get all node IDs for validation purposes
+   * @returns Array of all registered node IDs
+   */
+  getNodeIds(): string[] {
+    return Array.from(this.nodes.keys());
+  }
+
+  /**
    * Execute the graph from entry point until end or max iterations.
    * 
    * @param initialState - Starting state (TState)
@@ -541,7 +672,7 @@ export class SubgraphTriggerNode implements GraphNode<OverlordThreadState> {
         break;
 
       case 'knowledge':
-        subGraph = createKnowledgeGraph();
+        subGraph = await createKnowledgeGraph();
         subState = await createInitialThreadState<KnowledgeThreadState>(
           prompt,
           {
@@ -656,12 +787,12 @@ export function nextThreadId(): string {
   return `thread_${Date.now()}_${++threadCounter}`;
 }
 
-export class ContextTrimmerNode extends BaseNode {
+export class ContextTrimmerNode<TState extends BaseThreadState = HierarchicalThreadState> extends BaseNode {
   constructor() {
     super('context_trimmer', 'Context Trimmer');
   }
 
-  async execute(state: HierarchicalThreadState): Promise<NodeResult<HierarchicalThreadState>> {
+  async execute(state: TState): Promise<NodeResult<TState>> {
     if (state.messages.length > MAX_MESSAGES_IN_THREAD) {
       state.messages = state.messages.slice(-MAX_MESSAGES_IN_THREAD);
       console.log(`[ContextTrimmer] Trimmed to last ${MAX_MESSAGES_IN_THREAD} messages`);
@@ -699,7 +830,7 @@ export class ContextTrimmerNode extends BaseNode {
  * 
  * @returns {Graph} Fully configured knowledge base creation graph
  */
-export function createKnowledgeGraph(): Graph<KnowledgeThreadState> {
+export async function createKnowledgeGraph(): Promise<Graph<KnowledgeThreadState>> {
   const {
     MemoryNode,
     KnowledgePlannerNode,
@@ -707,16 +838,16 @@ export function createKnowledgeGraph(): Graph<KnowledgeThreadState> {
     KnowledgeCriticNode,
     KnowledgeWriterNode,
     SummaryNode
-  } = require('.');
+  } = await import('.');
 
   const graph = new Graph<KnowledgeThreadState>();
 
-  graph.addNode(new MemoryNode());
+  graph.addNode(new MemoryNode() as any);
   graph.addNode(new KnowledgePlannerNode());   // id: 'knowledge_planner'
   graph.addNode(new KnowledgeExecutorNode());  // id: 'knowledge_executor'
   graph.addNode(new KnowledgeCriticNode());    // id: 'knowledge_critic'
   graph.addNode(new KnowledgeWriterNode());    // id: 'knowledge_writer'
-  graph.addNode(new SummaryNode());
+  graph.addNode(new SummaryNode() as any);
 
   // Planner always starts executor
   graph.addEdge('memory_recall', 'knowledge_planner');
@@ -792,25 +923,17 @@ export function createKnowledgeGraph(): Graph<KnowledgeThreadState> {
  * Critic: Reviews tactical step execution, can request revision or advance
  */
 export function createHierarchicalGraph(): Graph<HierarchicalThreadState> {
-  const {
-    StrategicPlannerNode,
-    TacticalPlannerNode,
-    TacticalExecutorNode,
-    TacticalCriticNode,
-    StrategicCriticNode,
-    SummaryNode
-  } = require('.');
 
   const graph = new Graph<HierarchicalThreadState>();
 
   // Add nodes
-  graph.addNode(new ContextTrimmerNode());
+  graph.addNode(new ContextTrimmerNode<HierarchicalThreadState>());
   graph.addNode(new StrategicPlannerNode());
   graph.addNode(new TacticalPlannerNode());
   graph.addNode(new TacticalExecutorNode());
   graph.addNode(new TacticalCriticNode());
   graph.addNode(new StrategicCriticNode());
-  graph.addNode(new SummaryNode());
+  graph.addNode(new SummaryNode<HierarchicalThreadState>());
 
   graph.addEdge('context_trimmer', 'strategic_planner');
 
@@ -991,16 +1114,11 @@ export function createHierarchicalGraph(): Graph<HierarchicalThreadState> {
  * This graph handles autonomous strategic oversight during idle periods
  */
 export function createOverlordGraph(): Graph<OverlordThreadState> {
-  const {
-    ContextTrimmerNode,
-    OverLordPlannerNode,
-    SubgraphTriggerNode
-  } = require('.');
 
   // Create lightweight heartbeat graph with only core nodes
   const graph = new Graph<OverlordThreadState>();
 
-  graph.addNode(new ContextTrimmerNode());
+  graph.addNode(new ContextTrimmerNode<OverlordThreadState>());
   graph.addNode(new OverLordPlannerNode());  // id: 'overlord_planner'
   graph.addNode(new SubgraphTriggerNode());
 
@@ -1038,10 +1156,6 @@ export function createOverlordGraph(): Graph<OverlordThreadState> {
  * This graph handles autonomous strategic oversight during idle periods
  */
 export function createSimpleGraph(): Graph<BaseThreadState> {
-  const {
-    MemoryNode,
-    SimpleNode
-  } = require('.');
 
   // Create lightweight heartbeat graph with only core nodes
   const graph = new Graph<BaseThreadState>();
@@ -1054,6 +1168,172 @@ export function createSimpleGraph(): Graph<BaseThreadState> {
 
   graph.setEntryPoint('memory_recall');
   graph.setEndPoints('simple');
+
+  return graph;
+}
+
+/**
+ * Create a skill-aware ReAct graph for intelligent planning and execution.
+ * 
+ * This graph combines planning with a reasoning-action loop that can:
+ * - Load and follow skill templates (SOPs)
+ * - Track progress with evidence-based verification
+ * - Execute actions with full tool access via BaseNode
+ * - Maintain skill compliance and step verification
+ * 
+ * Flow: Input → PlanRetrieval → Planner → Reasoning ↔ Action (loop until complete)
+ * 
+ * Features:
+ * - Skill template integration for guided execution
+ * - Evidence-based task verification
+ * - Progress tracking with completed/pending step separation
+ * - ActivePlanManager integration for heartbeats
+ * - Quality inspection before marking tasks complete
+ * 
+ * @returns {Graph} Fully configured skill-aware ReAct graph
+ */
+export function createSkillGraph(): Graph<SkillGraphState> {
+  const graph = new Graph<SkillGraphState>();
+
+  // Add all required nodes
+  graph.addNode(new InputHandlerNode());     // id: 'input_handler'
+  graph.addNode(new PlanRetrievalNode());    // id: 'plan_retrieval' 
+  graph.addNode(new PlannerNode());          // id: 'planner' (skill-aware planning)
+  graph.addNode(new ReasoningNode());        // id: 'reasoning'
+  graph.addNode(new ActionNode());          // id: 'action'
+  graph.addNode(new SkillCriticNode());         // id: 'skill_critic'
+  graph.addNode(new OutputNode());              // id: 'output' (skill-aware completion)
+
+  // Sequential flow: Input → PlanRetrieval → Planner
+  graph.addEdge('input_handler', 'plan_retrieval');
+  graph.addEdge('plan_retrieval', 'planner');
+
+  // Planner → Reasoning (start ReAct loop) - with proper response_immediate handling
+  graph.addConditionalEdge('planner', state => {
+    const plannerData = (state.metadata as any).planner;
+    const planRetrievalData = (state.metadata as any).planRetrieval;
+    const responseImmediate = planRetrievalData?.response_immediate;
+    const hasPlan = plannerData?.plan_steps?.length > 0;
+    
+    // Check response_immediate first - this determines the intended flow
+    if (responseImmediate === true) {
+      console.log('[SkillGraph] Simple response requested - proceeding directly to output');
+      return 'output';
+    }
+    
+    // For complex tasks (response_immediate: false), we expect a plan
+    if (!hasPlan) {
+      // Check retry counter for planner failures
+      const plannerRetries = (state.metadata as any).plannerRetries || 0;
+      
+      if (plannerRetries < MAX_PLANNER_RETRIES) {
+        (state.metadata as any).plannerRetries = plannerRetries + 1;
+        console.log(`[SkillGraph] Planner failed (attempt ${plannerRetries + 1}/${MAX_PLANNER_RETRIES + 1}) - retrying planner`);
+        return 'planner';
+      } else {
+        console.log(`[SkillGraph] Planner failed after ${MAX_PLANNER_RETRIES + 1} attempts - complex task cannot be completed, proceeding to output with failure`);
+        return 'output';
+      }
+    }
+    
+    console.log('[SkillGraph] Complex plan ready - starting ReAct loop');
+    return 'reasoning';
+  });
+
+  // ReAct Loop: Reasoning ↔ Action with loop counter and critic intervention
+  graph.addConditionalEdge('reasoning', state => {
+    const reasoningData = (state.metadata as any).reasoning?.currentDecision;
+    
+    if (!reasoningData) {
+      // Check retry counter for reasoning failures
+      const reasoningRetries = (state.metadata as any).reasoningRetries || 0;
+      
+      if (reasoningRetries < MAX_REASONING_RETRIES) {
+        (state.metadata as any).reasoningRetries = reasoningRetries + 1;
+        console.log(`[SkillGraph] Reasoning failed (attempt ${reasoningRetries + 1}/${MAX_REASONING_RETRIES + 1}) - retrying reasoning`);
+        return 'reasoning';
+      } else {
+        console.log(`[SkillGraph] Reasoning failed after ${MAX_REASONING_RETRIES + 1} attempts - proceeding to output with failure`);
+        return 'output';
+      }
+    }
+    
+    // Reset reasoning retries on successful reasoning
+    (state.metadata as any).reasoningRetries = 0;
+    
+    if (reasoningData.stop_condition_met || reasoningData.action_type === 'complete') {
+      console.log('[SkillGraph] Task completed by reasoning - proceeding to output');
+      return 'output';
+    }
+    
+    console.log('[SkillGraph] Proceeding to action execution');
+    return 'action';
+  });
+  
+  // Action completes → always route through critic for verification (no bypasses)
+  graph.addConditionalEdge('action', state => {
+    const actionData = (state.metadata as any).actions || [];
+    const reasoningData = (state.metadata as any).reasoning?.currentDecision;
+    
+    // Initialize or increment loop counter
+    const currentLoopCount = (state.metadata as any).reactLoopCount || 0;
+    const newLoopCount = currentLoopCount + 1;
+    (state.metadata as any).reactLoopCount = newLoopCount;
+    
+    // Always send to critic after action completion for verification
+    // The critic will decide if task is truly complete or needs more work
+    if (reasoningData?.stop_condition_met || reasoningData?.action_type === 'complete') {
+      console.log('[SkillGraph] Task marked complete by reasoning - sending to critic for verification');
+      return 'skill_critic';
+    }
+    
+    // After 3 ReAct cycles, send to critic for evaluation
+    if (newLoopCount >= 3) {
+      console.log(`[SkillGraph] ${newLoopCount} ReAct cycles completed - sending to critic for evaluation`);
+      return 'skill_critic';
+    }
+    
+    console.log(`[SkillGraph] Action completed (cycle ${newLoopCount}) - returning to reasoning`);
+    return 'reasoning';
+  });
+  
+  // Critic evaluation → routing based on decision
+  graph.addConditionalEdge('skill_critic', state => {
+    const criticData = (state.metadata as any).skillCritic;
+    
+    if (!criticData) {
+      console.log('[SkillGraph] No critic decision - defaulting to output');
+      return 'output';
+    }
+    
+    switch (criticData.decision) {
+      case 'continue':
+        console.log('[SkillGraph] Critic: Continue ReAct loop');
+        // Reset loop counter for next batch of cycles
+        (state.metadata as any).reactLoopCount = 0;
+        return 'reasoning';
+        
+      case 'revise':
+        console.log('[SkillGraph] Critic: Revise approach - back to planner');
+        (state.metadata as any).reactLoopCount = 0;
+        return 'planner';
+        
+      case 'complete':
+      default:
+        console.log('[SkillGraph] Critic: Task complete - proceeding to output');
+        return 'output';
+    }
+  });
+
+  // Output can loop back to input for continued work
+  graph.addConditionalEdge('output', state => {
+    const shouldContinue = (state.metadata as any).cycleComplete === false;
+    return shouldContinue ? 'input_handler' : 'end';
+  });
+
+  // Set entry and end points
+  graph.setEntryPoint('input_handler');
+  graph.setEndPoints('output');
 
   return graph;
 }

@@ -1,4 +1,4 @@
-import { Graph, createOverlordGraph, OverlordThreadState, BaseThreadState, HierarchicalThreadState, createHierarchicalGraph, createSimpleGraph } from '../nodes/Graph';
+import { Graph, createOverlordGraph, OverlordThreadState, BaseThreadState, HierarchicalThreadState, createHierarchicalGraph, createSimpleGraph, createSkillGraph, SkillGraphState } from '../nodes/Graph';
 import { SullaSettingsModel } from '../database/models/SullaSettingsModel';
 import { getCurrentModel, getCurrentMode } from '../languagemodels';
 
@@ -95,6 +95,27 @@ export const GraphRegistry = {
     const graph = createHierarchicalGraph();
 
     const state = await buildHierarchicalState(wsChannel, threadId);
+
+    registry.set(threadId, { graph, state });
+    return { graph, state };
+  },
+
+  /**
+   * Get or create SkillGraph — skill-aware ReAct planning and execution.
+   * Use for tasks that require skill template following and evidence verification.
+   */
+  getOrCreateSkillGraph: async function(wsChannel: string, threadId: string): Promise<{
+    graph: Graph<SkillGraphState>;
+    state: SkillGraphState;
+  }> {
+    if (registry.has(threadId)) {
+      return Promise.resolve(registry.get(threadId)!);
+    }
+
+    // No existing → create new SkillGraph under this threadId
+    const graph = createSkillGraph();
+
+    const state = await buildSkillState(wsChannel, threadId);
 
     registry.set(threadId, { graph, state });
     return { graph, state };
@@ -294,6 +315,64 @@ async function buildSimpleState(wsChannel: string, threadId?: string): Promise<B
       finalSummary: '',
       finalState: 'running',
       returnTo: null,
+    }
+  };
+}
+
+/**
+ * Build initial state for SkillGraph execution
+ * Optimized for skill-aware ReAct planning and execution
+ * @param wsChannel 
+ * @param threadId 
+ * @returns 
+ */
+async function buildSkillState(wsChannel: string, threadId?: string): Promise<SkillGraphState> {
+  const id = threadId ?? nextThreadId();
+
+  const mode = await SullaSettingsModel.get('modelMode', 'local');
+  const llmModel = mode === 'remote' ? await SullaSettingsModel.get('remoteModel', 'grok-4-1-fast-reasoning') : await SullaSettingsModel.get('sullaModel', 'tinyllama:latest');
+  const llmLocal = mode === 'local';
+
+  return {
+    messages: [],
+    metadata: {
+      action: 'direct_answer',
+      threadId: id,
+      wsChannel: wsChannel,
+      
+      cycleComplete: false,
+      waitingForUser: false,
+
+      llmModel,
+      llmLocal,
+      options: { abort: undefined },
+      currentNodeId: 'input_handler', // SkillGraph entry point
+      consecutiveSameNode: 0,
+      iterations: 0,
+      revisionCount: 0,
+      maxIterationsReached: false,
+      memory: {
+        knowledgeBaseContext: '',
+        chatSummariesContext: ''
+      },
+      subGraph: {
+        state: 'completed',
+        name: 'hierarchical',
+        prompt: '',
+        response: ''
+      },
+      finalSummary: '',
+      finalState: 'running',
+      returnTo: null,
+
+      // SkillGraph-specific metadata properties
+      planRetrieval: undefined,
+      planner: undefined, 
+      reasoning: undefined,
+      actions: undefined,
+      skillCritic: undefined,
+      output: undefined,
+      reactLoopCount: 0
     }
   };
 }

@@ -32,7 +32,9 @@ export interface LLMCallOptions {
     model?: string;
     maxTokens?: number;
     format?: 'json' | undefined;
+    temperature?: number;
     signal?: AbortSignal;
+    disableTools?: boolean;
 }
 
 export interface LLMResponse {
@@ -114,16 +116,6 @@ Use the built in tools to quickly and accurately accomplish tasks in their categ
 Use the browse_tools to locate the other available tools.
 Available Tool Categories: {{tool_categories}}
 
-## Standard Operating Procedures
-
-SOPs are your learned skills and processes. You follow them when their trigger conditions are met. You create new SOPs, maintain existing ones, and only modify them when they fail to produce desired results.
-
-### Available SOPs in Memory:
-
-To load a full SOP, use tool "article_find" with the SOP's slug. Always load the full SOP before executing it.
-
-{{sop_list}}
-
 `;
 
 // ============================================================================
@@ -196,12 +188,6 @@ export abstract class BaseNode {
 
             AwarenessMessage = AwarenessMessage.replace('{{formattedTime}}', formattedTime);
             AwarenessMessage = AwarenessMessage.replace('{{timeZone}}', timeZone);
-
-            /////////////////////////////////////////////////////////////////
-            // dynamically load SOP triggers from the knowledge base
-            /////////////////////////////////////////////////////////////////
-            const sopList = await this.loadSOPTriggers();
-            AwarenessMessage = AwarenessMessage.replace('{{sop_list}}', sopList);
 
         parts.push(AwarenessMessage);
 
@@ -328,47 +314,6 @@ Never call for:
     }
 
     /**
-     * Query the knowledge base for all articles tagged with "sop".
-     * Extracts the **Trigger** line from each SOP document and returns a formatted list
-     * of slug + trigger so the LLM knows which SOPs exist and when to load them.
-     */
-    protected async loadSOPTriggers(): Promise<string> {
-        try {
-            const { Article } = await import('../database/models/Article');
-            const articles = await Article.findByTag('sop');
-
-            if (!articles || articles.length === 0) {
-                return '_No SOPs found in the knowledge base yet._';
-            }
-
-            const lines: string[] = [];
-            const seenSlugs = new Set<string>();
-
-            for (const article of articles) {
-                const slug = article.attributes.slug || 'unknown';
-                if (seenSlugs.has(slug)) {
-                    continue; // Skip duplicates
-                }
-                seenSlugs.add(slug);
-
-                const title = article.attributes.title || slug;
-                const doc = article.attributes.document || '';
-
-                // Extract the **Trigger**: line from the document content
-                const triggerMatch = doc.match(/\*\*Trigger\*\*\s*:\s*(.+)/i);
-                const trigger = triggerMatch ? triggerMatch[1].trim() : 'No trigger defined';
-
-                lines.push(`- **${title}** (slug: \`${slug}\`)\n  Trigger: ${trigger}`);
-            }
-
-            return lines.join('\n');
-        } catch (error) {
-            console.warn('[BaseNode] Failed to load SOP triggers:', error);
-            return '_Failed to load SOPs from the knowledge base._';
-        }
-    }
-
-    /**
      * 
      * @param state 
      * @param systemPrompt 
@@ -424,16 +369,20 @@ Never call for:
         throwIfAborted(state, 'Chat operation aborted');
         
         // Build dynamic LLM tools: meta category + found tools (set by browse_tools if found)
-        let llmTools = (state as any).llmTools;
-        if (!llmTools && state.foundTools?.length) {
-          // Fallback: convert foundTools to LLM format if llmTools wasn't set
-          const metaLLMTools = await toolRegistry.getLLMToolsFor(await toolRegistry.getToolsByCategory("meta"));
-          const foundLLMTools = await Promise.all(state.foundTools.map((tool: any) => toolRegistry.convertToolToLLM(tool.name)));
-          llmTools = [...metaLLMTools, ...foundLLMTools];
-        }
-        if (!llmTools) {
-          // Final fallback to just meta tools
-          llmTools = await toolRegistry.getLLMToolsFor(await toolRegistry.getToolsByCategory("meta"));
+        // Skip tool loading if tools are explicitly disabled
+        let llmTools: any[] = [];
+        if (!options.disableTools) {
+          llmTools = (state as any).llmTools;
+          if (!llmTools && state.foundTools?.length) {
+            // Fallback: convert foundTools to LLM format if llmTools wasn't set
+            const metaLLMTools = await toolRegistry.getLLMToolsFor(await toolRegistry.getToolsByCategory("meta"));
+            const foundLLMTools = await Promise.all(state.foundTools.map((tool: any) => toolRegistry.convertToolToLLM(tool.name)));
+            llmTools = [...metaLLMTools, ...foundLLMTools];
+          }
+          if (!llmTools) {
+            // Final fallback to just meta tools
+            llmTools = await toolRegistry.getLLMToolsFor(await toolRegistry.getToolsByCategory("meta"));
+          }
         }
 
         const systemMessage = messages.find(msg => msg.role === 'system');
@@ -446,6 +395,7 @@ Never call for:
                 model: state.metadata.llmModel,
                 maxTokens: options.maxTokens,
                 format: options.format,
+                temperature: options.temperature,
                 signal: (state as any).metadata?.__abort?.signal,
                 tools: llmTools,
             });
@@ -481,7 +431,12 @@ Never call for:
                         const chatMessages = messages.filter(msg =>
                             ['system', 'user', 'assistant'].includes(msg.role)
                         ) as ChatMessage[];
-                        const reply = await ollama.chat(chatMessages, { signal: options.signal });
+                        const reply = await ollama.chat(chatMessages, { 
+                            signal: options.signal,
+                            temperature: options.temperature,
+                            maxTokens: options.maxTokens,
+                            format: options.format
+                        });
                         if (reply) {
                             this.appendResponse(state, reply.content);
                             return reply;

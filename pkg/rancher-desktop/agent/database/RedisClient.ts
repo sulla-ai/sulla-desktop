@@ -114,6 +114,35 @@ export class RedisClient {
     return this.client.ttl(key);
   }
 
+  async keys(pattern: string): Promise<string[]> {
+    await this.ensureConnected();
+    return this.client.keys(pattern);
+  }
+
+  async scan(cursor: string, ...args: string[]): Promise<[string, string[]]> {
+    await this.ensureConnected();
+    // Handle scan parameters properly - ioredis expects specific parameter patterns
+    if (args.length === 0) {
+      return this.client.scan(cursor);
+    }
+    
+    // Handle MATCH pattern
+    if (args[0] === 'MATCH' && args[1]) {
+      if (args[2] === 'COUNT' && args[3]) {
+        return this.client.scan(cursor, 'MATCH', args[1], 'COUNT', args[3]);
+      }
+      return this.client.scan(cursor, 'MATCH', args[1]);
+    }
+    
+    // Handle COUNT
+    if (args[0] === 'COUNT' && args[1]) {
+      return this.client.scan(cursor, 'COUNT', args[1]);
+    }
+    
+    // Fallback: call without additional args if pattern doesn't match
+    return this.client.scan(cursor);
+  }
+
   // Hash commands
   async hset(key: string, field: string, value: string): Promise<number> {
     await this.ensureConnected();
@@ -128,6 +157,11 @@ export class RedisClient {
   async hgetall(key: string): Promise<Record<string, string>> {
     await this.ensureConnected();
     return this.client.hgetall(key);
+  }
+
+  async hmget(key: string, ...fields: string[]): Promise<Array<string | null>> {
+    await this.ensureConnected();
+    return this.client.hmget(key, ...fields);
   }
 
   async hdel(key: string, ...fields: string[]): Promise<number> {
