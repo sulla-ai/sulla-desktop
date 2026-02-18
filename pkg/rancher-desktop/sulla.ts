@@ -122,10 +122,6 @@ export async function instantiateSullaStart(): Promise<void> {
 
         SullaIntegrations();
 
-        httpCommandServer = new HttpCommandServer(new BackgroundCommandWorker());
-            await httpCommandServer.init();
-            await httpCredentialHelperServer.init();
-
         const extensionService = getExtensionService();
         await extensionService.initialize();
         console.log('[Background] ExtensionService initialized');
