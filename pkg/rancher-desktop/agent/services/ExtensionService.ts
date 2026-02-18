@@ -1,8 +1,8 @@
 import fs from 'fs';
 import path from 'path';
 import paths from '@pkg/utils/paths';
-import { getWebSocketClientService, type WebSocketMessage } from './WebSocketClientService';
 import { ExtensionMetadata } from '@pkg/main/extensions/types';
+import { ipcRenderer } from '@pkg/utils/ipcRenderer';
 
 interface LocalExtensionMetadata extends ExtensionMetadata {
   name: string;
@@ -87,16 +87,19 @@ export class ExtensionService {
           }
         }
       } else {
-        console.error(`Failed to fetch extensions: ${response.status}`);
+        console.error(`[ExtensionService] Failed to fetch extensions: ${response.status}`);
       }
     } catch (error) {
-      console.error('Failed to load extensions from API:', error);
+      console.error('[ExtensionService] Failed to load extensions from API:', error);
     }
 
-    // Menu items will be requested by frontend via IPC
-
-    console.log('ExtensionService initialized with', this.headerMenuItems.length, 'menu items');
-    console.log('Menu items:', this.headerMenuItems);
+    // Send initial metadata to renderer
+    if (ipcRenderer) {
+      ipcRenderer.send('extensions/metadata', this.extensions);
+      console.log('[ExtensionService] Sent extensions/metadata to renderer');
+    }
+    
+    console.log('[ExtensionService] Initialization complete');
   }
 
   getHeaderMenuItems(): HeaderMenuItem[] {

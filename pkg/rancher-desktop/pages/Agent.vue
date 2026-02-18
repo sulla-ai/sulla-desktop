@@ -869,20 +869,10 @@ onMounted(async () => {
   await settingsController.start();
   await modelSelector.start();
 
-  // Connect to WebSocket for extensions
-  const ws = new WebSocket('ws://localhost:30118/');
-  ws.onopen = () => {
-    console.log('WebSocket connected for extensions');
-  };
-  ws.onmessage = (event) => {
-    const msg = JSON.parse(event.data);
-    if (msg.type === 'extension_menu_items') {
-      extensionMenuItems.value = msg.data;
-    }
-  };
-  ws.onerror = (error) => {
-    console.error('WebSocket error:', error);
-  };
+  console.log('[ExtensionService] Setting up extensions metadata listener');
+  ipcRenderer.on('extensions/metadata', (_event, metadata) => {
+    console.log('[ExtensionService] Received extensions metadata:', metadata);
+  });
 });
 
 // Re-sync settings when system is fully ready (bootstrap may have updated values)

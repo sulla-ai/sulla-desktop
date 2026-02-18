@@ -12,7 +12,6 @@ import { createN8nService } from './agent/services/N8nService';
 import { VectorBaseModel } from '@pkg/agent/database/VectorBaseModel';
 import { getDatabaseManager } from '@pkg/agent/database/DatabaseManager';
 import { initSullaEvents } from '@pkg/main/sullaEvents';
-import { getExtensionService } from '@pkg/agent/services/ExtensionService';
 import * as path from 'path';
 import { app } from 'electron';
 import { execSync } from 'child_process';
@@ -121,10 +120,6 @@ export async function instantiateSullaStart(): Promise<void> {
         }
 
         SullaIntegrations();
-
-        const extensionService = getExtensionService();
-        await extensionService.initialize();
-        console.log('[Background] ExtensionService initialized');
 
     } catch (ex: any) {
         console.error('[Background] Failed to initialize Sulla:', ex);
