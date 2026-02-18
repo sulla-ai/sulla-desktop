@@ -1,6 +1,6 @@
 <template>
   <div class="max-w-lg mx-auto p-6 bg-white dark:bg-gray-800">
-    <form @submit.prevent="handleNext">
+    <form @submit.prevent="handleNextWelcome">
       <h2 class="text-2xl font-bold mb-4 text-gray-900 dark:text-gray-100">Create Your Account</h2>
       <p class="mb-6 text-gray-600 dark:text-gray-400">Set up your account details and preferences.</p>
 
@@ -82,7 +82,7 @@ onMounted(async () => {
   primaryUserName.value = loadedPrimaryUserName || '';
 });
 
-const handleNext = async () => {
+const handleNextWelcome = async () => {
   // Load and set service password and encryption key
   console.log('[FirstRunWelcome] Loading service password and encryption key...');
   

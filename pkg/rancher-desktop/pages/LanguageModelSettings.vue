@@ -11,6 +11,7 @@ import { N8nService } from '../agent/services/N8nService';
 import { SullaSettingsModel } from '../agent/database/models/SullaSettingsModel';
 import { randomUUID } from 'crypto';
 import { REMOTE_PROVIDERS } from '../shared/remoteProviders';
+import { getSupportedProviders, fetchModelsForProvider, clearModelCache } from '../agent/languagemodels';
 import PostHogTracker from '@pkg/components/PostHogTracker.vue';
 
 // Nav items for the Language Model Settings sidebar
@@ -112,6 +113,10 @@ export default defineComponent({
       selectedRemoteModel:  'grok-4-1-fast-reasoning',
       apiKey:               '',
       apiKeyVisible:        false,
+      // Dynamic model loading
+      dynamicModels:        {} as Record<string, Array<{id: string; name: string; description: string; pricing?: string}>>,
+      loadingRemoteModels:  false,
+      modelLoadError:       '' as string,
       remoteRetryCount:     3, // Number of retries before falling back to local LLM
       remoteTimeoutSeconds: 60, // Remote API timeout limit in seconds
       // Local Ollama settings
@@ -207,7 +212,8 @@ export default defineComponent({
       return this.remoteProviders.find(p => p.id === this.selectedProvider);
     },
     currentProviderModels(): Array<{ id: string; name: string; description: string; pricing?: string }> {
-      return this.currentProvider?.models || [];
+      // Use dynamic models if available, fallback to static ones
+      return this.dynamicModels[this.selectedProvider] || this.currentProvider?.models || [];
     },
     selectedRemoteModelDescription(): string {
       const model = this.currentProviderModels.find(m => m.id === this.selectedRemoteModel);
@@ -283,7 +289,29 @@ export default defineComponent({
     });
 
     await this.loadModels();
+    
+    // Load remote models if API key exists
+    if (this.selectedProvider && this.apiKey.trim()) {
+      await this.loadRemoteModels();
+    }
+    
     ipcRenderer.send('dialog/ready');
+  },
+
+  watch: {
+    // Watch for API key changes to automatically load models
+    async apiKey(newApiKey: string, oldApiKey: string) {
+      if (newApiKey && newApiKey.trim() && newApiKey !== oldApiKey && this.selectedProvider) {
+        await this.loadRemoteModels();
+      }
+    },
+    
+    // Watch for provider changes to automatically load models  
+    async selectedProvider(newProvider: string, oldProvider: string) {
+      if (newProvider && newProvider !== oldProvider && this.apiKey.trim()) {
+        await this.loadRemoteModels();
+      }
+    }
   },
 
   beforeUnmount() {
@@ -536,12 +564,81 @@ export default defineComponent({
     },
 
     // Remote model methods
-    onProviderChange() {
-      // Reset to first model of new provider
-      const provider = this.remoteProviders.find(p => p.id === this.selectedProvider);
+    async onProviderChange() {
+      // Clear current model selection
+      this.selectedRemoteModel = '';
+      
+      // Load models for the new provider if we have an API key
+      if (this.apiKey.trim()) {
+        await this.loadRemoteModels();
+      } else {
+        // Use static fallback if no API key
+        const provider = this.remoteProviders.find(p => p.id === this.selectedProvider);
+        if (provider && provider.models.length > 0) {
+          this.selectedRemoteModel = provider.models[0].id;
+        }
+      }
+    },
 
-      if (provider && provider.models.length > 0) {
-        this.selectedRemoteModel = provider.models[0].id;
+    async loadRemoteModels() {
+      if (!this.selectedProvider || !this.apiKey.trim()) {
+        return;
+      }
+
+      this.loadingRemoteModels = true;
+      this.modelLoadError = '';
+
+      try {
+        const modelList = await fetchModelsForProvider(this.selectedProvider, this.apiKey);
+        
+        // Transform models to match expected format
+        const transformedModels = modelList.map(modelInfo => ({
+          id: modelInfo.id,
+          name: modelInfo.name,
+          description: modelInfo.description || `${modelInfo.name} model`,
+          pricing: modelInfo.pricing ? 
+            `Input: $${modelInfo.pricing.input || 0}/1M tokens, Output: $${modelInfo.pricing.output || 0}/1M tokens` : 
+            undefined
+        }));
+
+        this.dynamicModels[this.selectedProvider] = transformedModels;
+
+        // Auto-select first model if none selected
+        if (transformedModels.length > 0 && (!this.selectedRemoteModel || !transformedModels.find(m => m.id === this.selectedRemoteModel))) {
+          this.selectedRemoteModel = transformedModels[0].id;
+        }
+      } catch (error) {
+        this.modelLoadError = `Failed to load models: ${error instanceof Error ? error.message : String(error)}`;
+        console.error('[LM Settings] Failed to load remote models:', error);
+        
+        // Fallback to static models on error
+        const provider = this.remoteProviders.find(p => p.id === this.selectedProvider);
+        if (provider && provider.models.length > 0 && !this.selectedRemoteModel) {
+          this.selectedRemoteModel = provider.models[0].id;
+        }
+      } finally {
+        this.loadingRemoteModels = false;
+      }
+    },
+
+    async refreshRemoteModels() {
+      if (!this.selectedProvider || !this.apiKey.trim()) {
+        return;
+      }
+
+      try {
+        // Clear the cache for this provider
+        clearModelCache(this.selectedProvider);
+        
+        // Clear current models and reload
+        this.dynamicModels[this.selectedProvider] = [];
+        this.selectedRemoteModel = '';
+        
+        // Force reload models from API
+        await this.loadRemoteModels();
+      } catch (error) {
+        this.modelLoadError = `Failed to refresh models: ${error instanceof Error ? error.message : String(error)}`;
+        console.error('[LM Settings] Model refresh failed:', error);
       }
     },
 
@@ -634,6 +731,46 @@ export default defineComponent({
               },
               body:    JSON.stringify(testBody),
               signal:  AbortSignal.timeout(timeoutMs),
+            });
+
+            if (!testRes.ok) {
+              const errorText = await testRes.text();
+              console.error('[Remote Test] Error response:', testRes.status, errorText);
+
+              this.activationError = `Remote model test failed: ${testRes.status}. Check model, key, and timeout.`;
+              console.error('Remote model test error:', errorText);
+
+              return;
+            }
+          } catch (err) {
+            this.activationError = 'Remote model test failed (timeout/network). Check connection, API key, and timeout.';
+            console.error('Remote model test error:', err);
+
+            return;
+          }
+        } else if (provider.id === 'anthropic') {
+          const testUrl = `${provider.baseUrl}/messages`;
+          const testBody = {
+            model: this.selectedRemoteModel,
+            max_tokens: 10,
+            messages: [{ role: 'user', content: 'Reply with the word: OK' }]
+          };
+
+          console.log('[Remote Test] Provider:', provider.id);
+          console.log('[Remote Test] URL:', testUrl);
+          console.log('[Remote Test] Model:', this.selectedRemoteModel);
+          console.log('[Remote Test] API Key starts with:', this.apiKey.substring(0, 10) + '...');
+
+          try {
+            const testRes = await fetch(testUrl, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'x-api-key': this.apiKey,
+                'anthropic-version': '2023-06-01'
+              },
+              body: JSON.stringify(testBody),
+              signal: AbortSignal.timeout(timeoutMs),
             });
 
             if (!testRes.ok) {
@@ -1664,19 +1801,39 @@ export default defineComponent({
             <!-- Model Selection -->
             <div class="setting-group">
               <label class="setting-label">Model</label>
-              <select
-                v-model="selectedRemoteModel"
-                class="model-select"
-              >
-                <option
-                  v-for="model in currentProviderModels"
-                  :key="model.id"
-                  :value="model.id"
+              <div style="display: flex; gap: 8px; align-items: flex-start;">
+                <select
+                  v-model="selectedRemoteModel"
+                  :disabled="loadingRemoteModels"
+                  class="model-select"
+                  style="flex: 1;"
                 >
-                  {{ model.name }}{{ model.pricing ? ` - ${model.pricing}` : '' }}
-                </option>
-              </select>
-              <p class="setting-description">
+                  <option v-if="loadingRemoteModels" value="">Loading models...</option>
+                  <option v-else-if="!apiKey.trim()" value="">Enter API key to load models</option>
+                  <option v-else-if="currentProviderModels.length === 0" value="">No models available</option>
+                  <option
+                    v-else
+                    v-for="model in currentProviderModels"
+                    :key="model.id"
+                    :value="model.id"
+                  >
+                    {{ model.name }}{{ model.pricing ? ` - ${model.pricing}` : '' }}
+                  </option>
+                </select>
+                <button 
+                  type="button" 
+                  @click="refreshRemoteModels" 
+                  :disabled="loadingRemoteModels || !apiKey.trim()" 
+                  class="refresh-button"
+                  title="Refresh models from API"
+                  style="padding: 8px 12px; background: #007acc; color: white; border: none; border-radius: 4px; cursor: pointer; min-width: 80px;"
+                  :style="{ opacity: (loadingRemoteModels || !apiKey.trim()) ? 0.5 : 1, cursor: (loadingRemoteModels || !apiKey.trim()) ? 'not-allowed' : 'pointer' }"
+                >
+                  {{ loadingRemoteModels ? '🔄' : 'Refresh' }}
+                </button>
+              </div>
+              <p v-if="modelLoadError" class="setting-description" style="color: #ff6b6b;">{{ modelLoadError }}</p>
+              <p v-else class="setting-description">
                 {{ selectedRemoteModelDescription }}
               </p>
             </div>

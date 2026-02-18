@@ -163,17 +163,22 @@ export class SullaSettingsModel extends BaseModel<SettingsAttributes> {
    * @returns 
    */
   public static async initialize(): Promise<void> {
-    const all = await this.all();
-    console.log('SullaSettingsModel: initializing with', all.length, 'settings');
-    if (all.length === 0) return;
+    try {
+      const pipeline = redisClient.pipeline();
 
-    const pipeline = redisClient.pipeline();
-    for (const setting of all) {
-      const property = setting.attributes.property as string;
-      const value = setting.attributes.value;
-      pipeline.hset('sulla_settings', property, String(value));
+      const all = await this.all();
+      console.log('SullaSettingsModel: initializing with', all.length, 'settings');
+      if (all.length === 0) return;
+      for (const setting of all) {
+        const property = setting.attributes.property as string;
+        const value = setting.attributes.value;
+        pipeline.hset('sulla_settings', property, String(value));
+      }
+      await pipeline.exec();
+
+    } catch (error) {
+      throw new Error(`Failed to initialize settings in Redis: ${error instanceof Error ? error.message : String(error)}`);
     }
-    await pipeline.exec();
   }
 
   // ──────────────────────────────────────────────
@@ -247,9 +252,9 @@ export class SullaSettingsModel extends BaseModel<SettingsAttributes> {
       return;
     }
 
-    console.log(`[SullaSettingsModel] Fallback to file save for:  ${property}`);
     // Fallback: read-modify-write JSON file
     const filePath = this.getFallbackFilePath();
+    console.log(`[SullaSettingsModel] Fallback path set to: ${filePath}`);
     let data: Record<string, any> = {};
     try {
       const content = await fs.readFile(filePath, 'utf8');

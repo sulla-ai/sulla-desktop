@@ -1,19 +1,11 @@
 import type { Ref } from 'vue';
-import type { AgentResponse, SensoryInput } from '../types';
-import type { HierarchicalThreadState } from '../nodes/Graph';
+import type { SkillGraphState } from '../nodes/Graph';
 import { getWebSocketClientService, type WebSocketMessage } from './WebSocketClientService';
 import { AbortService } from './AbortService';
 import { GraphRegistry, nextThreadId, nextMessageId } from './GraphRegistry';
 
 export type FrontendGraphWebSocketDeps = {
   currentThreadId: Ref<string | null>;
-  sensory: { createTextInput: (text: string) => SensoryInput };
-  responseHandler: {
-    hasErrors: (resp: AgentResponse) => boolean;
-    getError: (resp: AgentResponse) => string | null | undefined;
-    formatText: (resp: AgentResponse) => string | undefined;
-  };
-  onAgentResponse?: (resp: AgentResponse) => void;
 };
 
 export class FrontendGraphWebSocketService {
@@ -75,8 +67,8 @@ export class FrontendGraphWebSocketService {
     const channelId = 'chat-controller';
     const threadId = threadIdFromMsg || nextThreadId();
     
-    // Get or create persistent graph for this thread - do this outside try/catch
-    const { graph, state } = await GraphRegistry.getOrCreate(channelId, threadId) as { graph: any; state: HierarchicalThreadState };
+    // Get or create persistent SkillGraph for this thread - do this outside try/catch
+    const { graph, state } = await GraphRegistry.getOrCreateSkillGraph(channelId, threadId) as { graph: any; state: SkillGraphState };
 
     // Create a fresh AbortService for this run and wire it into state
     const abort = new AbortService();
@@ -117,33 +109,9 @@ export class FrontendGraphWebSocketService {
       state.metadata.cycleComplete = false;
       state.metadata.waitingForUser = false;
 
-      // Execute on the persistent graph
-      await graph.execute(state, 'context_trimmer');
-
-      // Build response from final state
-      const content = state.metadata.finalSummary?.trim() || (state.metadata as any).response?.trim() || '';
-
-      const response: AgentResponse = {
-        id: `resp_${Date.now()}`,
-        threadId: state.metadata.threadId,
-        type: 'text',
-        content,
-        refined: !!state.metadata.strategicCriticVerdict,
-        metadata: { ...state.metadata },
-        timestamp: Date.now()
-      };
-
-      if (this.deps.responseHandler.hasErrors(response)) {
-        const err = this.deps.responseHandler.getError(response);
-        throw new Error(err || 'Unknown error');
-      }
-
-      const formatted = this.deps.responseHandler.formatText(response) || response.content;
-      if (formatted.trim()) {
-        this.emitAssistantMessage(formatted.trim());
-      }
-
-      this.deps.onAgentResponse?.(response);
+      // Execute on the persistent SkillGraph starting from input_handler
+      // The graph nodes (especially OutputNode) will send WebSocket messages directly
+      await graph.execute(state, 'input_handler');
     } catch (err: any) {
       if (err.name === 'AbortError') {
         console.log('[FrontendGraphWS] Execution aborted');

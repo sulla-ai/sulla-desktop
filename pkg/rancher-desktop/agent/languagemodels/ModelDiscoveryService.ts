@@ -10,6 +10,7 @@ interface ModelInfo {
   id: string;
   name: string;
   provider: string;
+  description?: string;
   capabilities?: string[];
   contextLength?: number;
   pricing?: {
@@ -47,14 +48,29 @@ export class ModelDiscoveryService {
       modelsEndpoint: '/models',
       authHeader: 'x-api-key',
       parseResponse: (data) => {
-        // Anthropic doesn't have a models endpoint yet, return known models
-        return [
-          { id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet', provider: 'anthropic', contextLength: 200000 },
-          { id: 'claude-3-5-haiku-20241022', name: 'Claude 3.5 Haiku', provider: 'anthropic', contextLength: 200000 },
-          { id: 'claude-3-opus-20240229', name: 'Claude 3 Opus', provider: 'anthropic', contextLength: 200000 },
-          { id: 'claude-3-sonnet-20240229', name: 'Claude 3 Sonnet', provider: 'anthropic', contextLength: 200000 },
-          { id: 'claude-3-haiku-20240307', name: 'Claude 3 Haiku', provider: 'anthropic', contextLength: 200000 }
-        ];
+        // Parse real Anthropic models API response
+        if (data && Array.isArray(data.data)) {
+          return data.data.map((model: any) => ({
+            id: model.id,
+            name: model.display_name || model.id,
+            provider: 'anthropic',
+            contextLength: model.context_length || 200000,
+            description: model.description || `${model.display_name || model.id} model`,
+            created: model.created,
+            type: model.type
+          }));
+        }
+        // Fallback if API structure is different
+        if (data && Array.isArray(data)) {
+          return data.map((model: any) => ({
+            id: model.id,
+            name: model.display_name || model.name || model.id,
+            provider: 'anthropic',
+            contextLength: model.context_length || model.contextLength || 200000,
+            description: model.description || `${model.display_name || model.name || model.id} model`
+          }));
+        }
+        return [];
       }
     },
     
@@ -122,12 +138,6 @@ export class ModelDiscoveryService {
     }
 
     try {
-      // Special handling for Anthropic (no models endpoint yet)
-      if (providerId === 'anthropic') {
-        const models = provider.parseResponse({});
-        this.cache.set(cacheKey, { models, timestamp: Date.now() });
-        return models;
-      }
 
       const url = `${provider.baseUrl}${provider.modelsEndpoint}`;
       const headers: Record<string, string> = {
@@ -140,6 +150,11 @@ export class ModelDiscoveryService {
         headers.Authorization = `Bearer ${apiKey}`;
       } else {
         headers[provider.authHeader] = apiKey;
+      }
+
+      // Add required headers for specific providers
+      if (providerId === 'anthropic') {
+        headers['anthropic-version'] = '2023-06-01';
       }
 
       const response = await fetch(url, {

@@ -24,32 +24,7 @@ Execution Summary:
 - Evidence collected: {{evidenceCount}} pieces
 - Final status: {{finalStatus}}
 
-Progress Details:
-{{progressSummary}}
-
-Evidence Collected:
-{{evidenceDetails}}
-
-{{criticEvaluation}}
-
-Create a comprehensive completion report that helps the user understand:
-1. What was accomplished
-2. How well it aligns with skill requirements
-3. What evidence supports the completion
-4. What they should do next (if anything)
-
-${JSON_ONLY_RESPONSE_INSTRUCTIONS}
-{
-  "taskStatus": "completed" | "partial" | "failed",
-  "completionScore": 0,                    // 0-10 integer (how well task was completed)
-  "skillCompliance": 0,                    // 0-10 integer (adherence to skill template)
-  "summaryMessage": "Clear user-facing completion summary",
-  "accomplishments": ["list", "of", "completed", "items"],
-  "evidenceHighlights": ["key", "evidence", "pieces"],
-  "nextSteps": ["recommended", "next", "actions"],
-  "skillFeedback": "Assessment of skill template execution",
-  "emit_chat_message": "Final message to user with results"
-}
+Be thorough but conversational. The user should understand exactly what was done and what the results are.
 `.trim();
 
 /**
@@ -125,41 +100,21 @@ export class OutputNode extends BaseNode {
       includeKnowledgebasePlan: false,
     });
 
-    const llmResponse = await this.chat(state, enriched);
+    const summaryText = await this.chat(state, enriched);
 
-    let outputData;
-    if (!llmResponse) {
-      // Fallback output if LLM fails
-      outputData = this.createFallbackOutput(context);
-    } else {
-      outputData = llmResponse as {
-        taskStatus: 'completed' | 'partial' | 'failed';
-        completionScore: number;
-        skillCompliance: number;
-        summaryMessage: string;
-        accomplishments: string[];
-        evidenceHighlights: string[];
-        nextSteps: string[];
-        skillFeedback: string;
-      };
+    // Send the summary directly to user via WebSocket
+    const wsChannel = (state.metadata as any).wsChannel;
+    if (wsChannel && summaryText.trim()) {
+      await this.wsChatMessage(state, summaryText.trim(), 'assistant');
     }
-
-    // Store output results in state
-    (state.metadata as any).output = {
-      ...outputData,
-      generatedAt: Date.now(),
-      cycleCount,
-      actionCount: actionsData.length,
-      evidenceCount: this.countEvidence(actionsData)
-    };
 
     // Mark task as complete and ready for user
     (state.metadata as any).cycleComplete = true;
     (state.metadata as any).waitingForUser = true;
-    (state.metadata as any).finalState = outputData.taskStatus;
+    (state.metadata as any).finalState = 'completed';
 
-    console.log(`[Output] Task ${outputData.taskStatus} (Score: ${outputData.completionScore}/10, Skill: ${outputData.skillCompliance}/10)`);
-    console.log(`[Output] ${outputData.summaryMessage}`);
+    console.log(`[Output] Task completed`);
+    console.log(`[Output] ${summaryText.slice(0, 100)}...`);
 
     return { state, decision: { type: 'end' } };
   }

@@ -128,12 +128,30 @@ export class RemoteModelService extends BaseLanguageModel {
       const anthropicBody: any = {
         model: this.model,
         max_tokens: options.maxTokens ?? 1024,
-        messages: messages.map(m => ({ role: m.role === 'system' ? 'user' : m.role, content: m.content })),
+        messages: messages.map(m => {
+          // Anthropic only supports 'user' and 'assistant' roles
+          if (m.role === 'system' || m.role === 'tool') {
+            return { role: 'user', content: m.content };
+          }
+          return { role: m.role, content: m.content };
+        }),
         system: messages.find(m => m.role === 'system')?.content,
       };
 
       if (options.tools?.length) {
-        anthropicBody.tools = options.tools;
+        // Transform OpenAI-style tools to Anthropic format
+        anthropicBody.tools = options.tools.map((tool: any) => {
+          if (tool.type === 'function') {
+            return {
+              type: 'custom',
+              name: tool.function.name,
+              description: tool.function.description,
+              input_schema: tool.function.parameters || { type: 'object', properties: {} }
+            };
+          }
+          // Pass through if already in Anthropic format
+          return tool;
+        });
       }
 
       return anthropicBody;
@@ -151,6 +169,38 @@ export class RemoteModelService extends BaseLanguageModel {
     }
 
     return baseBody;
+  }
+
+  /**
+   * Override buildFetchOptions to handle provider-specific authentication.
+   */
+  protected buildFetchOptions(body: any, signal?: AbortSignal): RequestInit {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+
+    const overrides = this.providerOverrides[this.config.id] || {};
+    
+    if (this.apiKey) {
+      if (overrides.authHeader === 'x-api-key') {
+        // Anthropic uses x-api-key header
+        headers['x-api-key'] = this.apiKey;
+        // Add required anthropic-version header
+        if (this.config.id === 'anthropic') {
+          headers['anthropic-version'] = '2023-06-01';
+        }
+      } else {
+        // Default to Bearer token for other providers
+        headers.Authorization = `Bearer ${this.apiKey}`;
+      }
+    }
+
+    return {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+      signal,
+    };
   }
 
 }

@@ -65,7 +65,7 @@ nvm:
     @nvm use 22.22
 
 # Install dependencies and build the application for production
-install: nvm
+install:
     yarn install --legacy-peer-deps
 
 build:
