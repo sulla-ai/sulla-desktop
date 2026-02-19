@@ -8,7 +8,7 @@
       </button>
     </div>
     <div class="relative flex grow basis-0 items-center">
-      <a aria-label="Home page" href="/">
+      <a aria-label="Home page" href="#/">
         <svg aria-hidden="true" viewBox="0 0 32 33" fill="none" class="h-9 w-9 lg:hidden">
           <g fill="none" stroke="#38BDF8" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" transform="translate(0,4)">
             <rect x="8" y="6" width="16" height="20" rx="8" />
@@ -62,6 +62,15 @@
         >
           Integrations
         </router-link>
+        <router-link
+          v-for="item in extensionMenuItems"
+          :key="item.link"
+          :to="item.link"
+          class="text-sm font-semibold"
+          :class="route.path === item.link ? 'text-[#0d0d0d] dark:text-white' : 'text-[#0d0d0d]/60 hover:text-[#0d0d0d] dark:text-white/60 dark:hover:text-white'"
+        >
+          {{ item.title }}
+        </router-link>
       </nav>
     </div>
     <div class="relative flex basis-0 justify-end gap-6 sm:gap-8">
@@ -91,12 +100,18 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue';
 import { useRoute } from 'vue-router';
+import { getExtensionService } from '@pkg/agent';
+
+const extensionService = getExtensionService();
 
 defineProps<{
   isDark: boolean;
   toggleTheme: () => void;
 }>();
+
+const extensionMenuItems = computed(() => extensionService.getHeaderMenuItems());
 
 const route = useRoute();
 </script>
