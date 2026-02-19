@@ -39,6 +39,7 @@ It's likely that you will need to disregard much of what the executor says they 
 
 Now compare the technical instructions against the planning instructions and determine if the planning instructions within the project resource document still requires some work or if they are now fully completed.
 One important exclusion: if you have done all of the work you can do and you are blocked buy something you're unable to figure out yourself and you require your humans assistance, such as the case for tools fundamentally breaking or missing credentials
+
 ${JSON_ONLY_RESPONSE_INSTRUCTIONS}
 {
   "technical_completed": boolean,

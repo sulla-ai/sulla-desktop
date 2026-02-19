@@ -36,7 +36,11 @@ export class ExecWorker extends BaseTool {
     }
 
     try {
-      const res = await runCommand(command, [], { timeoutMs: 30000, maxOutputChars: 160_000 });
+      const res = await runCommand(command, [], {
+        timeoutMs: 30000,
+        maxOutputChars: 160_000,
+        runInLimaShell: true,
+      });
 
       if (res.exitCode !== 0) {
         return {
