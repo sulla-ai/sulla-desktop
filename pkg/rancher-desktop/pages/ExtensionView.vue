@@ -1,7 +1,7 @@
 <template>
   <div class="min-h-screen bg-white text-sm text-[#0d0d0d] dark:bg-slate-900 dark:text-neutral-50 font-sans" :class="{ dark: isDark }">
     <PostHogTracker page-name="Extension" />
-    <div class="flex min-h-screen flex-col">
+    <div class="flex h-screen flex-col">
       <AgentHeader :is-dark="isDark" :toggle-theme="toggleTheme" />
 
       <div class="flex w-full flex-col">
@@ -31,7 +31,7 @@
         </div>
       </div>
 
-      <iframe :src="extensionContentUrl" class="w-full h-full"></iframe>
+      <iframe :src="extensionContentUrl" class="w-full flex-1"></iframe>
     </div>
   </div>
 </template>
