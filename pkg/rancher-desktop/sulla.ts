@@ -61,11 +61,12 @@ export async function initiateWindowContext(): Promise<void> {
         console.error('[WindowContext] Failed to initialize settings:', error);
     }
 
+    // Initialize extension service
     try {
         const extensionService = getExtensionService();
         await extensionService.initialize();
     } catch (error) {
-        console.error('[WindowContext] Failed to initialize extension service:', error);
+        console.error('[ExtensionService] Failed to initialize:', error);
     }
 }
 

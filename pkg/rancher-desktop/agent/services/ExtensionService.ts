@@ -3,7 +3,7 @@ import path from 'path';
 import paths from '@pkg/utils/paths';
 import { ExtensionMetadata } from '@pkg/main/extensions/types';
 
-interface LocalExtensionMetadata extends ExtensionMetadata {
+export interface LocalExtensionMetadata extends ExtensionMetadata {
   name: string;
   version: string;
   title: string;
@@ -99,7 +99,11 @@ export class ExtensionService {
     return this.headerMenuItems;
   }
 
-  getExtensions(): LocalExtensionMetadata[] {
+  getExtensionsMetadata(): LocalExtensionMetadata[] {
     return this.extensions;
+  }
+
+  getExtensionMetadata(name: string): LocalExtensionMetadata | undefined {
+    return this.extensions.find(ext => ext.name === name);
   }
 }

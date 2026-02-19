@@ -39,7 +39,7 @@ const router = createRouter({
     { path: '/Integrations/:id', component: AgentIntegrationDetail, name: 'AgentIntegrationDetail' },
     { path: '/Automations', component: AgentAutomations, name: 'AgentAutomations' },
     { path: '/FirstRun', component: FirstRun, name: 'FirstRun' },
-    { path: '/extension/:id', component: ExtensionView, name: 'ExtensionView' },
+    { path: '/Extension/:name', component: ExtensionView, name: 'ExtensionView' },
   ],
 });
 
