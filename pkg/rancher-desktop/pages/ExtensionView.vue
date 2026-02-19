@@ -9,7 +9,7 @@
           <div class="py-16 sm:px-2 lg:relative lg:px-0 lg:py-20">
             <div class="mx-auto flex flex-row items-center gap-x-8 gap-y-10 px-4 md:px-6 lg:px-8 xl:gap-x-16">
               <div class="relative z-10">
-                <img v-if="extensionMetadata?.icon && extensionMetadata.icon.endsWith('.svg')" 
+                <img v-if="extensionMetadata?.icon" 
                   :src="extensionIcon" 
                   :alt="extensionMetadata?.title" class="h-16 w-16 rounded-lg" />
               </div>
@@ -29,15 +29,9 @@
             </div>
           </div>
         </div>
-
-        <div class="flex-1 overflow-auto">
-          <div class="mx-auto max-w-6xl px-4 py-6">
-            <div class="overflow-auto">
-              <iframe :src="extensionContentUrl" class="w-full h-full"></iframe>
-            </div>
-          </div>
-        </div>
       </div>
+
+      <iframe :src="extensionContentUrl" class="w-full h-full"></iframe>
     </div>
   </div>
 </template>
@@ -45,9 +39,10 @@
 <script setup lang="ts">
 import AgentHeader from './agent/AgentHeader.vue';
 import PostHogTracker from '@pkg/components/PostHogTracker.vue';
-import { computed, onMounted, ref } from 'vue';
+import { onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { getExtensionService, LocalExtensionMetadata } from '@pkg/agent';
+import { hexEncode } from '@pkg/utils/string-encode';
 
 const THEME_STORAGE_KEY = 'agentTheme';
 const isDark = ref(false);
@@ -81,7 +76,7 @@ onMounted(async () => {
   }
 
   extensionMetadata.value = metadata;
-  extensionContentUrl.value = metadata?.['ui-sulla']?.['header-menu']?.src || '#';
-  extensionIcon.value = require(`@pkg/assets/images/${name}-${metadata?.icon}`);
+  extensionContentUrl.value = `x-rd-extension://${ hexEncode(metadata.id) }/ui/dashboard-tab/ui/index.html`;
+  extensionIcon.value = `x-rd-extension://${ hexEncode(metadata.id) }/icon.svg`;
 });
 </script>

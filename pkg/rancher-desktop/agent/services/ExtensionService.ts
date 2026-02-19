@@ -4,6 +4,7 @@ import paths from '@pkg/utils/paths';
 import { ExtensionMetadata } from '@pkg/main/extensions/types';
 
 export interface LocalExtensionMetadata extends ExtensionMetadata {
+  id: string;
   name: string;
   version: string;
   title: string;
@@ -40,7 +41,7 @@ export function getExtensionService(): ExtensionService {
 }
 
 export class ExtensionService {
-  private extensions: LocalExtensionMetadata[] = [];
+  private extensionsMetadata: LocalExtensionMetadata[] = [];
   private headerMenuItems: HeaderMenuItem[] = [];
   private initialized = false;
 
@@ -56,7 +57,7 @@ export class ExtensionService {
     try {
       await this.loadExtensionsFromAPI();
 
-      console.log(`[ExtensionService] Loaded ${this.extensions.length} extensions`);
+      console.log(`[ExtensionService] Loaded ${this.extensionsMetadata.length} extensions`);
     } catch (err) {
       console.error('[ExtensionService] Initialization failed:', err);
     }
@@ -77,9 +78,11 @@ export class ExtensionService {
       });
       if (response.ok) {
         const extensionsData: Record<string, { version: string, metadata: ExtensionMetadata, labels: Record<string, string> }> = await response.json();
-        this.extensions = Object.values(extensionsData).map(ext => ext.metadata as LocalExtensionMetadata);
-        for (const ext of Object.values(extensionsData)) {
-          const metadata = ext.metadata as LocalExtensionMetadata;
+        this.extensionsMetadata = Object.entries(extensionsData).map(([key, ext]) => (
+          { ...ext.metadata, id: key } as LocalExtensionMetadata
+        ));
+        
+        for (const metadata of this.extensionsMetadata) {
           const uiSulla = metadata['ui-sulla'];
           if (uiSulla?.['header-menu']) {
             this.headerMenuItems = [...this.headerMenuItems, uiSulla['header-menu']];
@@ -100,10 +103,10 @@ export class ExtensionService {
   }
 
   getExtensionsMetadata(): LocalExtensionMetadata[] {
-    return this.extensions;
+    return this.extensionsMetadata;
   }
 
   getExtensionMetadata(name: string): LocalExtensionMetadata | undefined {
-    return this.extensions.find(ext => ext.name === name);
+    return this.extensionsMetadata.find(ext => ext.name === name);
   }
 }
