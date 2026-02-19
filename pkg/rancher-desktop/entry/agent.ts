@@ -22,6 +22,7 @@ import AgentAutomations from '../pages/AgentAutomations.vue';
 import AgentKnowledgeBaseSections from '../pages/AgentKnowledgeBaseSections.vue';
 import AgentKnowledgeBaseEdit from '../pages/AgentKnowledgeBaseEdit.vue';
 import FirstRun from '../pages/FirstRun.vue';
+import ExtensionView from '../pages/ExtensionView.vue';
 
 const router = createRouter({
   history: createWebHashHistory(),
@@ -38,6 +39,7 @@ const router = createRouter({
     { path: '/Integrations/:id', component: AgentIntegrationDetail, name: 'AgentIntegrationDetail' },
     { path: '/Automations', component: AgentAutomations, name: 'AgentAutomations' },
     { path: '/FirstRun', component: FirstRun, name: 'FirstRun' },
+    { path: '/Extension/:name', component: ExtensionView, name: 'ExtensionView' },
   ],
 });
 

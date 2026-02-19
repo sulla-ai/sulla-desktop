@@ -15,7 +15,6 @@
     com.docker.extension.screenshots: ""
     dev.chainguard.image.title: Voice AI
     dev.chainguard.package.main: ""
-    maintainer: NGINX Docker Maintainers <docker-maint@nginx.com>
     org.opencontainers.image.authors: Sulla Team
     org.opencontainers.image.created: 2024-02-16T16:00:00Z
     org.opencontainers.image.description: Extension provides Voice AI functionality for Rancher Desktop

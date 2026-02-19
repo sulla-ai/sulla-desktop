@@ -66,7 +66,7 @@ nvm:
 
 # Install dependencies and build the application for production
 install:
-    yarn install --legacy-peer-deps
+    yarn install
 
 build:
     NODE_OPTIONS="--max-old-space-size=12288" yarn build
