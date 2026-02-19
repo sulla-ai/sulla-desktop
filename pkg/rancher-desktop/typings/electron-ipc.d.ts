@@ -100,7 +100,6 @@ export interface IpcMainEvents {
     level: 'success' | 'warning' | 'error',
     message: string
   ) => void;
-  'extensions/metadata': (metadata: import('@pkg/main/extensions/types').ExtensionMetadata[]) => void;
   'ok:extensions/getContentArea': (payload: { top: number, right: number, bottom: number, left: number }) => void;
   // #endregion
 
@@ -280,9 +279,5 @@ export interface IpcRendererEvents {
 
   // #region Agent Configuration
   'model-changed': (payload: { model: string; type: 'local' } | { model: string; type: 'remote'; provider: string }) => void;
-  // #endregion
-
-  // #region Extensions
-  'extensions/metadata': (metadata: import('@pkg/main/extensions/types').ExtensionMetadata[]) => void;
   // #endregion
 }

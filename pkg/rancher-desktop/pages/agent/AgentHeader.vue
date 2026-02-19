@@ -100,13 +100,18 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue';
 import { useRoute } from 'vue-router';
+import { getExtensionService } from '@pkg/agent';
+
+const extensionService = getExtensionService();
 
 defineProps<{
   isDark: boolean;
   toggleTheme: () => void;
-  extensionMenuItems: { title: string; link: string; src: string }[];
 }>();
+
+const extensionMenuItems = computed(() => extensionService.getHeaderMenuItems());
 
 const route = useRoute();
 </script>

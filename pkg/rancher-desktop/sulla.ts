@@ -4,6 +4,7 @@ import { SullaSettingsModel } from '@pkg/agent/database/models/SullaSettingsMode
 import { getIntegrationService } from './agent/services/IntegrationService';
 import { getSchedulerService } from '@pkg/agent/services/SchedulerService';
 import { getHeartbeatService } from '@pkg/agent/services/HeartbeatService';
+import { getExtensionService } from '@pkg/agent/services/ExtensionService';
 import { getBackendGraphWebSocketService } from '@pkg/agent/services/BackendGraphWebSocketService';
 import { SullaIntegrations } from './agent/integrations';
 import { postgresClient } from '@pkg/agent/database/PostgresClient';
@@ -60,6 +61,12 @@ export async function initiateWindowContext(): Promise<void> {
         console.error('[WindowContext] Failed to initialize settings:', error);
     }
 
+    try {
+        const extensionService = getExtensionService();
+        await extensionService.initialize();
+    } catch (error) {
+        console.error('[WindowContext] Failed to initialize extension service:', error);
+    }
 }
 
 /**

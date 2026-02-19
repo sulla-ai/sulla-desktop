@@ -2,7 +2,6 @@ import fs from 'fs';
 import path from 'path';
 import paths from '@pkg/utils/paths';
 import { ExtensionMetadata } from '@pkg/main/extensions/types';
-import { ipcRenderer } from '@pkg/utils/ipcRenderer';
 
 interface LocalExtensionMetadata extends ExtensionMetadata {
   name: string;
@@ -83,7 +82,7 @@ export class ExtensionService {
           const metadata = ext.metadata as LocalExtensionMetadata;
           const uiSulla = metadata['ui-sulla'];
           if (uiSulla?.['header-menu']) {
-            this.headerMenuItems.push(uiSulla['header-menu']);
+            this.headerMenuItems = [...this.headerMenuItems, uiSulla['header-menu']];
           }
         }
       } else {
@@ -91,12 +90,6 @@ export class ExtensionService {
       }
     } catch (error) {
       console.error('[ExtensionService] Failed to load extensions from API:', error);
-    }
-
-    // Send initial metadata to renderer
-    if (ipcRenderer) {
-      ipcRenderer.send('extensions/metadata', this.extensions);
-      console.log('[ExtensionService] Sent extensions/metadata to renderer');
     }
     
     console.log('[ExtensionService] Initialization complete');

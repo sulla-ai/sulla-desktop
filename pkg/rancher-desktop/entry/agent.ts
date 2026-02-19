@@ -23,11 +23,6 @@ import AgentKnowledgeBaseSections from '../pages/AgentKnowledgeBaseSections.vue'
 import AgentKnowledgeBaseEdit from '../pages/AgentKnowledgeBaseEdit.vue';
 import FirstRun from '../pages/FirstRun.vue';
 import ExtensionView from '../pages/ExtensionView.vue';
-import { getExtensionService } from '@pkg/agent';
-
-const extensionService = getExtensionService();
-await extensionService.initialize();
-console.log('[Background] ExtensionService initialized');
 
 const router = createRouter({
   history: createWebHashHistory(),

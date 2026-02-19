@@ -3,7 +3,7 @@
     <PostHogTracker page-name="Agent" />
     <div class="flex h-screen flex-col">
 
-      <AgentHeader :is-dark="isDark" :toggle-theme="toggleTheme" :extension-menu-items="extensionMenuItems" />
+      <AgentHeader :is-dark="isDark" :toggle-theme="toggleTheme" />
 
     <!-- Loading overlay while system boots -->
     <StartupOverlay
@@ -692,8 +692,6 @@ const onAgentResponse = (resp: AgentResponse) => {
   // This handler can be used for additional response processing if needed
 };
 
-const extensionMenuItems = ref([]);
-
 const chatController = new ChatInterface();
 
 const frontendGraphController = new FrontendGraphWebSocketService({
@@ -868,11 +866,6 @@ onMounted(async () => {
   // Load settings eagerly — SullaSettingsModel has a disk fallback even before Redis/PG are ready
   await settingsController.start();
   await modelSelector.start();
-
-  console.log('[ExtensionService] Setting up extensions metadata listener');
-  ipcRenderer.on('extensions/metadata', (_event, metadata) => {
-    console.log('[ExtensionService] Received extensions metadata:', metadata);
-  });
 });
 
 // Re-sync settings when system is fully ready (bootstrap may have updated values)
