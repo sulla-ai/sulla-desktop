@@ -75,8 +75,10 @@ onMounted(async () => {
     return;
   }
 
+  const extensionHex = hexEncode(metadata.id);
+
   extensionMetadata.value = metadata;
-  extensionContentUrl.value = `x-rd-extension://${ hexEncode(metadata.id) }/ui/dashboard-tab/ui/index.html`;
-  extensionIcon.value = `x-rd-extension://${ hexEncode(metadata.id) }/icon.svg`;
+  extensionContentUrl.value = `x-rd-extension://${ extensionHex }/ui/dashboard-tab/ui/index.html`;
+  extensionIcon.value = `x-rd-extension://${ extensionHex }/icon.svg`;
 });
 </script>

@@ -71,7 +71,7 @@ export class ExtensionService {
       const stateData = JSON.parse(await fs.promises.readFile(statePath, 'utf8'));
       const password = stateData.password;
       const auth = btoa(`user:${password}`);
-      const response = await fetch('http://localhost:6107/v1/extensions', {
+      const response = await fetch('http://127.0.0.1:6107/v1/extensions', {
         headers: {
           'Authorization': `Basic ${auth}`
         }
