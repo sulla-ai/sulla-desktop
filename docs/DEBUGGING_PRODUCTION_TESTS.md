@@ -241,3 +241,107 @@ Each of these would have caused production failures if not caught and fixed.
 5. **Document patterns** - Create reusable mock structures for common scenarios
 
 This approach ensures tests catch real production issues and prevent deployment failures.
+
+## Case Study: SkillGraph Routing Bug Discovery
+
+### Background
+While developing integration tests for SkillGraph routing behavior, we discovered a **critical production bug** where skill-focused plans were incorrectly routing to `output` instead of `reasoning`, bypassing the ReAct loop entirely.
+
+### The Bug
+**Expected Behavior:**
+1. User requests workflow creation → `plan_retrieval` selects skill → `planner` creates skill-focused plan → routes to `reasoning` for execution
+
+**Actual Behavior:**
+1. User requests workflow creation → `plan_retrieval` selects skill → `planner` creates **generic fallback plan** → routes to `output` (skips execution)
+
+### Root Cause Analysis
+
+**Step 1: Test Infrastructure Issues**
+- **Jest Hanging:** Tests hung indefinitely due to unclosed database connections
+  - **Solution:** Added proper cleanup with `getDatabaseManager().stop()` and `--forceExit`
+- **Network Mocking:** Initially tried mocking `fetch()` but LLM services use different HTTP clients
+  - **Solution:** Mock at `languagemodels` level instead of network level
+
+**Step 2: LLM Mock Configuration**
+- **Pattern Recognition Failed:** Mock conditions weren't matching actual system messages
+- **Debug Strategy:** Added logging to capture actual system message content
+- **Solution:** Fixed mock conditions to match real prompts
+
+**Step 3: The Actual Bug Discovery**
+Through comprehensive debugging, we found:
+
+```typescript
+// Plan Retrieval (WORKING CORRECTLY)
+planRetrieval: {
+  selected_skill_slug: "sop-n8n-workflow-creation", // ✅ Skill detected
+  response_immediate: false                         // ✅ Should route to reasoning
+}
+
+// Planner Node (THE BUG)
+planner: {
+  skill_focused: false,  // ❌ WRONG! Should be true
+  plan_steps: [          // ❌ Generic fallback plan, not skill-specific
+    "Analyze the requirements and context",
+    "Break down the task into manageable components",
+    // ... generic steps
+  ]
+}
+```
+
+**The bug:** Even when PlanRetrievalNode correctly identifies a skill, PlannerNode falls back to generic planning instead of using the skill-specific SOP, causing `skill_focused: false` and routing to output.
+
+### Testing Strategy Learnings
+
+**1. Integration Test Architecture**
+```typescript
+// ✅ CORRECT: Use actual GraphRegistry
+const { graph, state } = await GraphRegistry.getOrCreateSkillGraph(channel, threadId);
+
+// ❌ WRONG: Manual graph creation
+const graph = createHierarchicalGraph(); // Bypasses production setup
+```
+
+**2. Proper System Initialization**
+```typescript
+// Follow sulla.ts initialization patterns
+const { getDatabaseManager } = await import('../../database/DatabaseManager');
+await dbManager.initialize();
+SullaSettingsModel.setFallbackFilePath('/tmp/test-settings.json');
+```
+
+**3. Strategic Mocking**
+- **Mock:** External services (HTTP calls, ES modules causing syntax errors)
+- **Don't Mock:** Internal routing logic, GraphRegistry, node execution, tools
+
+**4. Debug Logging Strategy**
+```typescript
+// Log all metadata to understand routing decisions
+console.log(`[DEBUG] Full metadata:`, JSON.stringify(result.metadata, null, 2));
+
+// Log conditional edge inputs
+console.log(`[DEBUG] responseImmediate: ${responseImmediate}, hasPlan: ${hasPlan}`);
+```
+
+### Production Impact
+
+This test **successfully caught a critical production bug** that would have caused:
+- Users requesting workflow automation getting generic responses instead of skill-specific execution
+- Complete bypass of the ReAct reasoning loop
+- No automated tool usage for complex tasks
+- Poor user experience with generic instead of expert-level assistance
+
+### Key Takeaways
+
+1. **Integration tests catch routing bugs** that unit tests miss
+2. **Real system initialization** is crucial for finding production issues  
+3. **Comprehensive debug logging** reveals the exact failure points
+4. **Strategic mocking** (externals only) preserves bug-catching capability
+5. **Jest cleanup** requires proper connection management and `--forceExit`
+
+### Next Steps
+
+1. **Fix the PlannerNode bug** - ensure skill-focused plans set `skill_focused: true`
+2. **Verify conditional routing** - check Graph.ts routing logic for skill-focused plans
+3. **Add production monitoring** - alert when plans route to output instead of reasoning unexpectedly
+
+This case study demonstrates how properly designed integration tests can catch critical production routing bugs that would otherwise escape to production.

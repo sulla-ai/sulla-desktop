@@ -1,94 +1,108 @@
-import { BaseNode, JSON_ONLY_RESPONSE_INSTRUCTIONS } from './BaseNode';
+import { BaseNode } from './BaseNode';
 import { BaseThreadState, NodeResult } from './Graph';
-import { ActivePlanManager } from './ActivePlanManager';
 
-// Types for planner responses
-interface PlannerResponse {
-  restated_goal: string;
-  plan_steps: string[];
-  complexity_score: number;
-  complexity_reasoning: string;
-  skill_focused: boolean;
-  estimated_duration: string;
-  inheritedState?: any; // For plan takeovers
-  takeoverMetadata?: {
-    originalExecutor: string;
-    takeoverTimestamp: number;
-    takeoverReason: string;
-    originalPlanId: string;
-    stallDuration: number;
-  };
-}
+// ============================================================================
+// PRD PROMPT
+//
+// The Planner's only job is to produce a rich, personalized PRD that will be
+// used as the system prompt for every ReasoningNode and ActionNode cycle.
+//
+// The LLM has full tool access here — it should research the environment,
+// pull relevant documents, inspect files, and iterate until the PRD is
+// complete and accurate for *this* user and *this* system.
+//
+// Required sections are listed below. The LLM has freedom in the content
+// of each section but must include all of them.
+// ============================================================================
 
-// Planner prompt template
-const PLANNER_PROMPT = `You are a {{planning_mode}} AI that {{planning_action}} based on user goals.
+const PRD_PROMPT = `You are the Project Manager + Solutions Architect. Your sole responsibility is to own and maintain the single source of truth: a living, non-technical Project Resource Document (PRD).
 
-## Context
-User Goal: {{goal}}
-{{skill_context}}
+User intent: {{intent}}
+Goal: {{goal}}
 
-## Your Task
-1. **Restate the Goal**: Clearly articulate what the user wants to achieve
-2. **{{task_type}}**: {{task_description}}
-3. **Assess Complexity**: Rate complexity 1-10 and explain reasoning
-4. **Estimate Duration**: Provide realistic time estimate
+## Critic Project Feedback (if provided)
+{{critic_project_feedback}}
 
-{{planning_instructions}}
+## Latest Technical Execution Brief (if provided)
+{{critic_tprd}}
 
-## Response Format
-${JSON_ONLY_RESPONSE_INSTRUCTIONS}
+## Rules (never break)
+- This PRD is the master document. Only you (Planner) may ever modify or extend it.
+- Produce a clean, product-level, non-technical document the entire graph will follow.
+- Research first if needed.
+- When ready, output ONLY the PRD block below — nothing else, no commentary, no tool calls after research.
+- Critic may kick revisions back to you. When it does, incorporate changes and re-issue the updated full PRD.
+- The only response you are to provide is the PRD
+- the markdown header in this PRD template must be followed
 
-{
-  "restated_goal": "Clear restatement of the user's objective",
-  "plan_steps": [
-    "Step 1: Specific actionable item",
-    "Step 2: Next logical step",
-    "Step 3: Continue until goal achieved"
-  ],
-  "complexity_score": 5,
-  "complexity_reasoning": "Explanation of complexity factors",
-  "skill_focused": true/false,
-  "estimated_duration": "2-4 hours"
-}
+### PRD Quick Start Template
+\`\`\`
+---
+slug: your-prd-slug-goes-here
+title: "the project title goes here"
+section: Projects
+category: "The category this would fall under goes here"
+tags:
+  - skill
+  - n8n
+mentions:
+  - slugs-to-mentioned-entity-docs
+related_entities:
+   - slugs-to-related-entities
+---
 
-{{focus_instruction}}`;
+# Project Resource Document (Source of Truth)
 
-const SKILL_FOCUSED_INSTRUCTIONS = `## Planning Instructions - SOP Compliance
-A specific skill SOP has been selected for this task: **{{skill_title}}**
+**Goal**: [One-sentence restatement]
 
-**FOLLOW THIS EXACT SOP - DO NOT DEVIATE FROM THE PRESCRIBED STEPS UNLESS EXPLICITLY OVERRIDDEN BY USER INSTRUCTIONS**
+**Status**: In Progress | Under Review | Complete
 
-Your task is SOP compliance, not general planning:
-- Follow the exact steps provided in this SOP
-- Execute the prescribed methodology precisely as outlined
-- Maintain the sequence and dependencies as specified
-- Only modify steps if user instructions explicitly contradict this SOP
-- This is a standard operating procedure - execute it as prescribed
+## 1. Objective
+What success looks like for the user (measurable, non-technical).
 
-This is not a general plan - this is SOP execution.`;
+## 2. Must-Haves
+Non-negotiable outcomes.
 
-const GENERAL_PLANNING_INSTRUCTIONS = `## Planning Instructions - General Approach
-No specific skill was selected, so create a comprehensive general plan:
-- Analyze the goal from first principles
-- Consider multiple approaches and methodologies
-- Break down complex tasks into manageable steps
-- Account for common challenges and prerequisites`;
+## 3. Nice-to-Haves
+Optional value adds.
+
+## 4. Environment & Resources
+Relevant tools, constraints, user preferences.
+
+## 5. High-Level Process
+Product steps only (no code, no architecture details — leave that to Reasoning node).
+
+## 6. Checklist
+- [ ] Actionable item
+- [ ] ...
+
+## 7. Notes & Revision History
+Decisions, risks, previous critic feedback, your updates.
+
+\`\`\`
+
+You may add/remove/rename sections for clarity on this specific task. Keep it concise and human-readable. This document lives forever and is the only source of truth.
+
+CRITICAL OUTPUT RULE: After any tools, the very next message you send must be ONLY the PRD block above. Nothing else.
+`;
+
+// ============================================================================
+// PLANNER NODE
+// ============================================================================
 
 /**
  * Planner Node
- * 
+ *
  * Purpose:
- *   - Generate actionable plans based on user goals
- *   - Restate goals clearly for confirmation
- *   - Assess plan complexity and duration
- *   - Adapt planning approach based on selected skills
- * 
+ *   - Produce a personalized PRD working document from goal + SOP skill
+ *   - Research the environment using tools before writing the PRD
+ *   - Store the completed PRD at state.metadata.planning_instructions
+ *
  * Design:
- *   - Controller pattern with organized private methods
- *   - Skill-aware prompting for focused planning
- *   - Complexity scoring for resource estimation
- *   - Always returns a plan (never fails)
- *   - Streaming optimized with tool disabling
+ *   - Tools enabled — Planner actively researches context before writing
+ *   - Tool calls happen inline within this.chat() via BaseNode
+ *   - PRD stored at state.metadata.planning_instructions (single write, read-only for others)
+ *   - No responseImmediate logic — Planner always produces a PRD
  */
 export class PlannerNode extends BaseNode {
   constructor() {
@@ -96,625 +110,150 @@ export class PlannerNode extends BaseNode {
   }
 
   async execute(state: BaseThreadState): Promise<NodeResult<BaseThreadState>> {
-
-    // Initialize diagnostics metadata
-    const diagnostics: Record<string, any> = {
-      goalExtracted: false,
-      skillDetected: false,
-      planGenerated: false,
-      complexityScored: false,
-      planStepsCount: 0
-    };
+    let prompt = PRD_PROMPT;
 
     // ----------------------------------------------------------------
     // 1. EXTRACT GOAL AND SKILL CONTEXT FROM STATE
     // ----------------------------------------------------------------
-    const { goal, selectedSkill } = this.extractPlanningContext(state);
-    diagnostics.goalExtracted = !!goal;
-    diagnostics.skillDetected = !!selectedSkill;
+    prompt = this.addPlanningContext(state, prompt);
 
     // ----------------------------------------------------------------
-    // 2. CHECK FOR EXISTING PLAN OR GENERATE NEW ONE
+    // 2. GENERATE PRD — LLM is the only author
+    //    Tools are enabled — the LLM researches the environment first,
+    //    then outputs the PRD and nothing else.
     // ----------------------------------------------------------------
-    const existingPlan = await this.checkForExistingPlan(state, selectedSkill);
-    
-    let planData: PlannerResponse;
-    
-    if (existingPlan) {
-      // Join or monitor existing plan
-      planData = await this.handleExistingPlan(state, existingPlan, goal);
-      diagnostics.joinedExistingPlan = true;
-      diagnostics.planGenerated = true;
-      diagnostics.planStepsCount = planData.plan_steps.length;
+    const prd = await this.generatePrd(state, prompt);
+
+    if (prd) {
+      this.storePrd(state, prd);
     } else {
-      // Generate new plan
-      const newPlanData = await this.generateActionPlan(state, goal, selectedSkill);
-      if (!newPlanData) {
-        // Fallback plan generation - never fail completely
-        const fallbackPlan = this.createFallbackPlan(goal);
-        this.storePlanInState(state, fallbackPlan);
-        planData = fallbackPlan;
-        diagnostics.planGenerated = true;
-        diagnostics.planStepsCount = fallbackPlan.plan_steps.length;
-      } else {
-        this.storePlanInState(state, newPlanData);
-        await this.registerActivePlan(state, newPlanData);
-        planData = newPlanData;
-        diagnostics.planGenerated = true;
-        diagnostics.complexityScored = true;
-        diagnostics.planStepsCount = newPlanData.plan_steps.length;
-      }
+      // LLM failed — leave planning_instructions unset so Graph retry logic triggers
+      (state.metadata as any).planner = {
+        ...((state.metadata as any).planner || {}),
+        prd_generated: false,
+      };
+      console.warn('[PlannerNode] PRD generation failed — graph will retry');
     }
 
-    // ----------------------------------------------------------------
-    // 3. APPEND PLAN SUMMARY TO CONVERSATION
-    // ----------------------------------------------------------------
-    await this.appendPlanSummary(state, planData || this.createFallbackPlan(goal));
-
-    // ----------------------------------------------------------------
-    // 4. LOG COMPLETION SUMMARY
-    // ----------------------------------------------------------------
-    this.logPlannerCompletion(planData || this.createFallbackPlan(goal));
-
-    // Persist plan data and diagnostics for downstream inspection
-    (state.metadata as any).planner = { 
-      ...((state.metadata as any).planner || {}),
-      ...planData, // Store actual plan data including plan_steps
-      diagnostics 
-    };
-
-    return { 
-      state, 
-      decision: { type: 'next' }
-    };
-  }
-
-  // ======================================================================
-  // STEP 1: CONTEXT EXTRACTION
-  // ======================================================================
-
-  /**
-   * Extract goal and skill context from PlanRetrievalNode results
-   */
-  private extractPlanningContext(state: BaseThreadState): { goal: string; selectedSkill: any | null } {
-    const planRetrieval = (state.metadata as any).planRetrieval || {};
-    
-    // Extract goal from plan retrieval
-    const goal = planRetrieval.goal || 
-                 planRetrieval.intent || 
-                 'Complete the requested task';
-
-    // Get skill data directly from state metadata (not from tool messages)
-    const selectedSkill = planRetrieval.skillData || null;
-
-    console.log(`[PlannerNode] Extracted context - Goal: "${goal}", Skill: ${selectedSkill ? selectedSkill.title : 'None'}`);
-    
-    return { goal, selectedSkill };
-  }
-
-  // ======================================================================
-  // STEP 2: PLAN GENERATION
-  // ======================================================================
-
-  /**
-   * Generate comprehensive action plan using LLM with skill-aware prompting
-   */
-  private async generateActionPlan(
-    state: BaseThreadState, 
-    goal: string, 
-    selectedSkill: any | null
-  ): Promise<PlannerResponse | null> {
-    
-    // Build context and instructions based on skill selection
-    let skillContext = '';
-    let planningInstructions = '';
-    let planningMode = '';
-    let planningAction = '';
-    let taskType = '';
-    let taskDescription = '';
-    let focusInstruction = '';
-    
-    if (selectedSkill) {
-      // SOP-focused approach when skill is selected
-      skillContext = `
-**SELECTED SOP SKILL: ${selectedSkill.title}**
-SOP Description: ${selectedSkill.excerpt || 'No description available'}
-
-**COMPLETE SOP DOCUMENT:**
-${selectedSkill.document || 'No SOP content available'}`;
-      
-      planningInstructions = SKILL_FOCUSED_INSTRUCTIONS.replace('{{skill_title}}', selectedSkill.title);
-      planningMode = 'SOP Compliance';
-      planningAction = 'executes Standard Operating Procedures (SOPs)';
-      taskType = 'Execute SOP Steps';
-      taskDescription = 'Extract and execute the exact steps from the selected SOP skill document';
-      focusInstruction = 'This is SOP execution - follow the prescribed steps precisely unless user instructions explicitly override the SOP.';
-    } else {
-      // General planning approach when no skill selected
-      skillContext = 'No specific SOP skill selected - using general planning approach.';
-      planningInstructions = GENERAL_PLANNING_INSTRUCTIONS;
-      planningMode = 'strategic planning';
-      planningAction = 'creates actionable plans';
-      taskType = 'Create Action Plan';
-      taskDescription = 'Break down the goal into specific, actionable steps';
-      focusInstruction = 'Focus on creating a practical, executable plan that moves the user toward their goal efficiently.';
-    }
-
-    // Prepare prompt with all context variables
-    const planningPrompt = PLANNER_PROMPT
-      .replace('{{goal}}', goal)
-      .replace('{{skill_context}}', skillContext)
-      .replace('{{planning_instructions}}', planningInstructions)
-      .replace('{{planning_mode}}', planningMode)
-      .replace('{{planning_action}}', planningAction)
-      .replace('{{task_type}}', taskType)
-      .replace('{{task_description}}', taskDescription)
-      .replace('{{focus_instruction}}', focusInstruction);
-
-    console.log(`[PlannerNode] Generating plan for goal: "${goal}" ${selectedSkill ? `with skill: ${selectedSkill.title}` : 'without specific skill'}`);
-
-    // Generate plan with LLM
-    const planResult = await this.chat(
+    return {
       state,
-      planningPrompt,
-      {
-        temperature: 0.2, // Slightly creative but consistent
-        maxTokens: 800,   // Allow for detailed plans
-        format: 'json',   // JSON-only response
-        disableTools: true // No tools needed for planning
-      }
-    );
-
-    if (!planResult) {
-      console.warn('[PlannerNode] No plan result from LLM - using fallback');
-      return null;
-    }
-
-    // Validate and return plan data
-    return this.validatePlanData(planResult);
-  }
-
-  /**
-   * Validate and normalize plan data from LLM response
-   */
-  private validatePlanData(rawData: any): PlannerResponse | null {
-    try {
-      const data = typeof rawData.content === 'string' ? JSON.parse(rawData.content) : rawData.content;
-      
-      // Validate required fields
-      const restated_goal = data.restated_goal || data.goal || 'Complete the requested task';
-      const plan_steps = Array.isArray(data.plan_steps) ? data.plan_steps : ['Analyze requirements', 'Execute task'];
-      const complexity_score = Math.max(1, Math.min(10, parseInt(data.complexity_score) || 5));
-      const complexity_reasoning = data.complexity_reasoning || 'Standard complexity assessment';
-      const skill_focused = Boolean(data.skill_focused);
-      const estimated_duration = data.estimated_duration || 'Time estimate unavailable';
-
-      return {
-        restated_goal,
-        plan_steps,
-        complexity_score,
-        complexity_reasoning,
-        skill_focused,
-        estimated_duration
-      };
-    } catch (error) {
-      console.warn('[PlannerNode] Failed to validate plan data:', error);
-      return null;
-    }
-  }
-
-  /**
-   * Create fallback plan when LLM generation fails
-   */
-  private createFallbackPlan(goal: string): PlannerResponse {
-    return {
-      restated_goal: goal || 'Complete the user\'s request',
-      plan_steps: [
-        'Analyze the requirements and context',
-        'Break down the task into manageable components', 
-        'Execute each component systematically',
-        'Review and refine the results',
-        'Deliver the completed outcome'
-      ],
-      complexity_score: 5,
-      complexity_reasoning: 'Fallback complexity estimate - moderate difficulty assumed',
-      skill_focused: false,
-      estimated_duration: '1-3 hours'
+      decision: { type: 'next' },
     };
   }
 
   // ======================================================================
-  // STEP 3: PLAN STORAGE AND MESSAGING
+  // CONTEXT EXTRACTION
   // ======================================================================
 
-  /**
-   * Store plan data via Redis-backed message system for serverless handoff
-   * Plans persist through conversation messages, not ephemeral state
-   */
-  private storePlanInState(state: BaseThreadState, planData: PlannerResponse): void {
-    // Store minimal plan reference for downstream nodes within same instance
-    const planReference = {
-      planId: `plan_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      goal: planData.restated_goal,
-      stepsCount: planData.plan_steps.length,
-      complexity: planData.complexity_score,
-      handoffViaMessages: true // Flag indicating plan is in messages, not state
-    };
+  private addPlanningContext(
+    state: BaseThreadState,
+    basePrompt: string,
+  ): string {
+    const planRetrieval = (state.metadata as any).planRetrieval || {};
 
-    // Store minimal reference in instance memory (not Redis state)
-    (state as any).__currentPlanReference = planReference;
+    const goal =
+      planRetrieval.goal ||
+      planRetrieval.intent ||
+      'Complete the requested task';
+    const intent = planRetrieval.intent || '';
 
-    console.log(`[PlannerNode] Plan stored via message handoff system (ID: ${planReference.planId})`);
-    console.log(`[PlannerNode] Plan data flows through Redis-backed conversation messages`);
+    const plannerMeta = (state.metadata as any).planner || {};
+    const criticProjectFeedback = plannerMeta.critic_feedback || 'No critic project feedback provided.';
+    const criticTprd = plannerMeta.critic_tprd || 'No technical execution brief provided.';
+
+    const prompt = basePrompt
+      .replace('{{goal}}', goal)
+      .replace('{{intent}}', intent)
+      .replace('{{critic_project_feedback}}', criticProjectFeedback)
+      .replace('{{critic_tprd}}', criticTprd);
+
+    console.log(`[PlannerNode] Goal: "${goal}"`);
+
+    return prompt;
   }
 
-  /**
-   * Check if an existing plan is already running for the selected skill
-   */
-  private async checkForExistingPlan(state: BaseThreadState, selectedSkill: any | null): Promise<any | null> {
-    if (!selectedSkill) {
-      return null; // No skill selected, no existing plan to check
-    }
+  // ======================================================================
+  // PRD GENERATION
+  // ======================================================================
 
-    const threadId = (state.metadata as any).threadId;
-    const activePlanManager = ActivePlanManager.getInstance();
+  private async generatePrd(
+    state: BaseThreadState,
+    prompt: string,
+  ): Promise<string | null> {
 
-    try {
-      const activePlans = await activePlanManager.getActivePlans(threadId);
-      
-      // Look for existing plan using the same skill
-      const existingPlan = activePlans.find(plan => 
-        plan.skillSlug === selectedSkill.slug && 
-        (plan.status === 'planning' || plan.status === 'executing' || plan.status === 'paused')
-      );
+    const enrichedPrompt = await this.enrichPrompt(prompt, state, {
+      includeSoul: false,
+      includeAwareness: true,
+      includeMemory: false
+    });
 
-      if (existingPlan) {
-        console.log(`[PlannerNode] Found existing plan for skill ${selectedSkill.title}`);
-        console.log(`[PlannerNode] Plan ID: ${existingPlan.planId}, Status: ${existingPlan.status}`);
-        console.log(`[PlannerNode] Executor PID: ${existingPlan.executorPID}`);
-        
-        const timeSinceHeartbeat = Date.now() - existingPlan.lastHeartbeat;
-        console.log(`[PlannerNode] Time since last heartbeat: ${Math.floor(timeSinceHeartbeat / 1000)}s`);
-      }
+    console.log('[PlannerNode] Generating PRD');
 
-      return existingPlan || null;
-    } catch (error) {
-      console.warn('[PlannerNode] Failed to check for existing plans:', error);
+    // Tools are intentionally ENABLED — the LLM researches the environment
+    // then produces the PRD as its final response when done with tool calls.
+    const content = await this.chat(state, enrichedPrompt, {
+      temperature: 0.3,
+      maxTokens: 4096,
+    });
+
+    if (!content) {
+      console.warn('[PlannerNode] LLM returned no content for PRD');
       return null;
     }
+
+    const contentStr = typeof content === 'string' ? content : String(content);
+
+    console.log(`[PlannerNode] PRD generated: ${contentStr.length} chars`);
+    return contentStr;
   }
 
-  /**
-   * Handle existing plan using 3-strike system
-   */
-  private async handleExistingPlan(state: BaseThreadState, existingPlan: any, userGoal: string): Promise<PlannerResponse> {
-    const skillData = (state.metadata as any).planRetrieval?.skillData;
-    const skillTitle = skillData?.title || 'Unknown Skill';
-    const activePlanManager = ActivePlanManager.getInstance();
-    
-    // 3-STRIKE ASSESSMENT
-    if (this.isPlanHealthy(existingPlan)) {
-      // STRIKE 1: Plan is healthy - STOP FLOW
-      return this.createHealthyPlanResponse(existingPlan, skillTitle);
-    } 
-    else if (this.isPlanUnhealthy(existingPlan)) {
-      // STRIKE 2: Plan is unhealthy - MARK AS PAUSED
-      await activePlanManager.updatePlanStatus(
-        existingPlan.threadId, 
-        existingPlan.planId, 
-        existingPlan.executorPID, 
-        'paused'
-      );
-      return this.createUnhealthyPlanResponse(existingPlan, skillTitle);
-    }
-    else if (this.isPlanStale(existingPlan)) {
-      // STRIKE 3: Plan is stale - EXECUTE TAKEOVER
-      return await this.executePlanTakeover(state, existingPlan, userGoal, skillTitle);
-    }
-    
-    // Fallback - treat as monitoring
-    return this.createMonitoringPlanResponse(existingPlan, skillTitle);
-  }
+  // ======================================================================
+  // PRD STORAGE
+  // ======================================================================
 
-  /**
-   * Check if plan is healthy (Strike 1)
-   */
-  private isPlanHealthy(plan: any): boolean {
-    const timeSinceHeartbeat = Date.now() - plan.lastHeartbeat;
-    return (
-      timeSinceHeartbeat < 60000 && // Less than 60 seconds
-      (plan.status === 'planning' || plan.status === 'executing') &&
-      plan.executorPID && // Has executor
-      !plan.takeoverAllowed
-    );
-  }
+  private storePrd(
+    state: BaseThreadState,
+    prd: string
+  ): void {
+    // Store the PRD as planning_instructions — the single source of truth
+    // consumed by ReasoningNode and ActionNode as their system prompt base
+    (state.metadata as any).planning_instructions = prd;
 
-  /**
-   * Check if plan is unhealthy (Strike 2)  
-   */
-  private isPlanUnhealthy(plan: any): boolean {
-    const timeSinceHeartbeat = Date.now() - plan.lastHeartbeat;
-    return (
-      timeSinceHeartbeat >= 60000 && // 60-120 seconds
-      timeSinceHeartbeat < 120000 &&
-      plan.status === 'executing' &&
-      !plan.takeoverAllowed
-    );
-  }
-
-  /**
-   * Check if plan is stale (Strike 3)
-   */
-  private isPlanStale(plan: any): boolean {
-    const timeSinceHeartbeat = Date.now() - plan.lastHeartbeat;
-    return (
-      timeSinceHeartbeat >= 120000 || // Over 120 seconds
-      plan.status === 'paused' ||
-      plan.takeoverAllowed === true
-    );
-  }
-
-  /**
-   * Create response for healthy plan (Strike 1) - STOP FLOW
-   */
-  private createHealthyPlanResponse(plan: any, skillTitle: string): PlannerResponse {
-    const timeSinceHeartbeat = Date.now() - plan.lastHeartbeat;
-    const secondsAgo = Math.floor(timeSinceHeartbeat / 1000);
-
-    return {
-      restated_goal: `${skillTitle} plan is actively running`,
-      plan_steps: [
-        `✅ Plan Status: HEALTHY and ACTIVE`,
-        `📋 Current Goal: ${plan.goal}`,
-        `⚡ Last Activity: ${secondsAgo} seconds ago`,
-        `🎯 Executor: ${plan.executorPID}`,
-        `⏱️ Started: ${new Date(plan.startedAt).toLocaleTimeString()}`,
-        `🔄 This plan is progressing normally`,
-        `⏹️ No action needed - stopping flow to avoid duplication`
-      ],
-      complexity_score: 1,
-      complexity_reasoning: 'Simple status check - plan is healthy',
-      skill_focused: true,
-      estimated_duration: '30 seconds'
+    // Store planner metadata for routing and diagnostics
+    (state.metadata as any).planner = {
+      ...((state.metadata as any).planner || {}),
+      prd_generated: true
     };
-  }
 
-  /**
-   * Create response for unhealthy plan (Strike 2) - PAUSE AND MONITOR
-   */
-  private createUnhealthyPlanResponse(plan: any, skillTitle: string): PlannerResponse {
-    const timeSinceHeartbeat = Date.now() - plan.lastHeartbeat;
-    const secondsAgo = Math.floor(timeSinceHeartbeat / 1000);
-
-    return {
-      restated_goal: `${skillTitle} plan marked as unhealthy`,
-      plan_steps: [
-        `⚠️ Plan Status: UNHEALTHY - No recent activity`,
-        `📋 Stalled Goal: ${plan.goal}`,
-        `⏰ Silent for: ${secondsAgo} seconds`,
-        `🔴 Executor: ${plan.executorPID} (not responding)`,
-        `⏸️ Plan marked as PAUSED for monitoring`,
-        `🔍 Next attempt will trigger takeover if still stalled`,
-        `⏹️ Monitoring initiated - stopping flow`
-      ],
-      complexity_score: 2,
-      complexity_reasoning: 'Plan health assessment and pause action',
-      skill_focused: true,
-      estimated_duration: '1 minute'
-    };
-  }
-
-  /**
-   * Register active plan with ActivePlanManager to prevent duplicates
-   */
-  private async registerActivePlan(state: BaseThreadState, planData: PlannerResponse): Promise<void> {
-    const threadId = (state.metadata as any).threadId;
-    const planReference = (state as any).__currentPlanReference;
-    const planId = planReference ? planReference.planId : `plan_${Date.now()}`;
-    
-    // Extract skill information if plan is skill-focused
-    let skillSlug: string | null = null;
-    let skillTitle: string | null = null;
-    
-    if (planData.skill_focused) {
-      const planRetrieval = (state.metadata as any).planRetrieval || {};
-      const skillData = planRetrieval.skillData;
-      if (skillData) {
-        skillSlug = skillData.slug;
-        skillTitle = skillData.title;
-      }
-    }
-    
-    const activePlanManager = ActivePlanManager.getInstance();
-    
-    try {
-      await activePlanManager.registerActivePlan(
-        threadId,
-        planId,
-        planData.restated_goal,
-        skillSlug,
-        skillTitle
-      );
-      
-      console.log(`[PlannerNode] Registered active plan with ActivePlanManager`);
-      console.log(`[PlannerNode] Plan ID: ${planId}`);
-      console.log(`[PlannerNode] Skill: ${skillTitle || 'General Planning'}`);
-    } catch (error) {
-      console.warn('[PlannerNode] Failed to register active plan:', error);
-    }
-  }
-
-  /**
-   * Append plan as structured message for serverless handoff and user visibility
-   * This message carries the complete plan data across Redis-backed instances
-   */
-  private async appendPlanSummary(state: BaseThreadState, planData: PlannerResponse): Promise<void> {
-    const stepsText = planData.plan_steps
-      .map((step, index) => `${index + 1}. ${step}`)
-      .join('\n');
-
-    // Create user-visible plan summary
-    const userPlanSummary = `## 📋 Action Plan Created
-
-**Goal**: ${planData.restated_goal}
-
-**Plan Steps**:
-${stepsText}
-
-**Complexity**: ${planData.complexity_score}/10 - ${planData.complexity_reasoning}
-**Estimated Duration**: ${planData.estimated_duration}
-${planData.skill_focused ? '**Approach**: SOP-focused execution' : '**Approach**: General planning'}
-
-Ready to proceed with execution!`;
-
-    // Append user-visible message
-    state.messages.push({
-      role: 'assistant',
-      content: userPlanSummary
-    });
-
-    // Get plan ID from current plan reference
-    const planReference = (state as any).__currentPlanReference;
-    const planId = planReference ? planReference.planId : `plan_${Date.now()}`;
-
-    // Append structured plan data message for serverless handoff (tool result format)
-    await this.appendToolResultMessage(state, 'plan_creation', {
-      toolName: 'plan_creation',
-      success: true,
-      result: {
-        planId,
-        goal: planData.restated_goal,
-        steps: planData.plan_steps,
-        complexity: planData.complexity_score,
-        complexityReasoning: planData.complexity_reasoning,
-        skillFocused: planData.skill_focused,
-        estimatedDuration: planData.estimated_duration,
-        timestamp: Date.now(),
-        handoffType: 'serverless_redis_message'
-      },
-      toolCallId: 'planner_handoff'
-    });
-
-    console.log('[PlannerNode] Plan stored in Redis-backed messages for serverless handoff');
-    console.log('[PlannerNode] Plan accessible to next serverless instance via message history');
-  }
-
-  /**
-   * Log completion summary for diagnostics
-   */
-  private logPlannerCompletion(planData: PlannerResponse): void {
-    console.log(`
-[PlannerNode] Planning completed successfully:
-- Goal: ${planData.restated_goal}
-- Steps: ${planData.plan_steps.length}
-- Complexity: ${planData.complexity_score}/10
-- Skill-focused: ${planData.skill_focused}
-- Duration: ${planData.estimated_duration}
-    `.trim());
-  }
-
-  /**
-   * Execute full plan takeover (Strike 3) - INHERIT AND RE-PLAN
-   */
-  private async executePlanTakeover(state: BaseThreadState, stalePlan: any, userGoal: string, skillTitle: string): Promise<PlannerResponse> {
-    const activePlanManager = ActivePlanManager.getInstance();
-    const threadId = (state.metadata as any).threadId;
-    
-    try {
-      // Execute takeover
-      const takeover = await activePlanManager.attemptPlanTakeover(threadId, stalePlan.planId);
-      
-      if (!takeover.success) {
-        // Fallback to monitoring if takeover fails
-        return this.createMonitoringPlanResponse(stalePlan, skillTitle);
-      }
-
-      // Create inherited state
-      const inheritedState = this.extractInheritedState(stalePlan);
-      
-      // Generate takeover plan
-      const timeSinceStart = Date.now() - stalePlan.startedAt;
-      const minutesStalled = Math.floor(timeSinceStart / (1000 * 60));
-      
-      return {
-        restated_goal: `Takeover: ${userGoal}`,
-        plan_steps: [
-          `🔄 PLAN TAKEOVER INITIATED`,
-          `💀 Previous executor ${takeover.previousExecutor} displaced`,
-          `🆕 New executor: ${takeover.newExecutorPID}`,
-          `📋 Inherited goal: ${stalePlan.goal}`,
-          `⏱️ Plan was stalled for ${minutesStalled} minutes`,
-          `🔍 Reviewing inherited state and progress`,
-          `✅ Verifying completed steps from previous executor`,
-          `🚀 Resuming execution with fresh process`,
-          `🎯 Completing objective: ${userGoal}`
-        ],
-        complexity_score: stalePlan.complexity_score ? stalePlan.complexity_score + 1 : 4,
-        complexity_reasoning: 'Increased complexity due to plan takeover and state recovery',
-        skill_focused: true,
-        estimated_duration: '2-4 minutes',
-        inheritedState,
-        takeoverMetadata: {
-          originalExecutor: takeover.previousExecutor ?? 'unknown',
-          takeoverTimestamp: Date.now(),
-          takeoverReason: 'stalled_plan_recovery',
-          originalPlanId: stalePlan.planId,
-          stallDuration: timeSinceStart
-        }
+    const parsedPrd = this.extractPrdFrontmatter(prd, state);
+    if (parsedPrd) {
+      (state.metadata as any).planner = {
+        ...((state.metadata as any).planner || {}),
+        prd_slug: parsedPrd.meta.slug,
       };
-      
-    } catch (error) {
-      console.error('[PlannerNode] Plan takeover failed:', error);
-      return this.createMonitoringPlanResponse(stalePlan, skillTitle);
+
+      void this.savePrdArticleAsync(parsedPrd.meta, parsedPrd.document);
     }
+
+    console.log(`[PlannerNode] PRD stored at planning_instructions (${prd.length} chars)`);
   }
 
-  /**
-   * Extract inherited state from stale plan
-   */
-  private extractInheritedState(stalePlan: any): any {
-    return {
-      originalPlanId: stalePlan.planId,
-      originalGoal: stalePlan.goal,
-      originalExecutor: stalePlan.executorPID,
-      timeElapsed: Date.now() - stalePlan.startedAt,
-      lastKnownStatus: stalePlan.status,
-      heartbeatHistory: {
-        lastHeartbeat: stalePlan.lastHeartbeat,
-        heartbeatCount: stalePlan.heartbeatCount,
-        expectedInterval: stalePlan.currentHeartbeatInterval
-      },
-      recoveryNeeded: true,
-      skillContext: {
-        slug: stalePlan.skillSlug,
-        title: stalePlan.skillTitle
-      }
-    };
+  private extractPrdFrontmatter(
+    prd: string,
+    state: BaseThreadState,
+  ): { meta: Record<string, any>; document: string } | null {
+    const goal = (state.metadata as any).planRetrieval?.goal || 'project-resource-document';
+    return this.prepareArticleFromStructuredOutput(prd, {
+      fallbackSlugSource: goal,
+      fallbackTitle: goal,
+      fallbackHeader: 'Project Resource Document',
+      defaultSection: 'Projects',
+      defaultCategory: 'Projects',
+      defaultTags: ['skill'],
+    });
   }
 
-  /**
-   * Create monitoring response (fallback)
-   */
-  private createMonitoringPlanResponse(plan: any, skillTitle: string): PlannerResponse {
-    const timeSinceHeartbeat = Date.now() - plan.lastHeartbeat;
-    const heartbeatMinutes = Math.floor(timeSinceHeartbeat / (1000 * 60));
-    const heartbeatSeconds = Math.floor((timeSinceHeartbeat % (1000 * 60)) / 1000);
-
-    return {
-      restated_goal: `Monitor ${skillTitle} plan status`,
-      plan_steps: [
-        `📊 Monitoring existing plan: ${plan.goal}`,
-        `🆔 Plan ID: ${plan.planId}`,
-        `📈 Status: ${plan.status.toUpperCase()}`,
-        `👤 Executor: ${plan.executorPID}`,
-        `💓 Last heartbeat: ${heartbeatMinutes}m ${heartbeatSeconds}s ago`,
-        `⏰ Started: ${new Date(plan.startedAt).toLocaleTimeString()}`,
-        `🔍 Assessing plan health and progress`
-      ],
-      complexity_score: 2,
-      complexity_reasoning: 'Plan monitoring and status assessment',
-      skill_focused: true,
-      estimated_duration: '1-2 minutes'
-    };
+  private async savePrdArticleAsync(meta: Record<string, any>, document: string): Promise<void> {
+    await this.saveArticleAsync(meta, document, 'PlannerNode');
   }
 }

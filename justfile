@@ -109,7 +109,7 @@ test-plans:
     yarn test pkg/rancher-desktop/agent/nodes/__tests__/ActivePlanManager.mock.test.ts
 
 # Run all tests
-test:
+test-all:
     @echo "🧪 Running all tests..."
     yarn test
 
@@ -319,9 +319,8 @@ test-coverage:
     yarn test --coverage pkg/rancher-desktop/agent/nodes/__tests__/ActivePlanManager.mock.test.ts
 
 # Run InputHandlerNode mock tests
-test-input:
-    @echo "🔧 Running InputHandlerNode Mock Tests (input sanitization, rate limiting, spam detection)"
-    npx jest pkg/rancher-desktop/agent/nodes/__tests__/InputHandlerNode.mock.test.ts
+test:
+    npx jest pkg/rancher-desktop/agent/nodes/__tests__/SkillGraph.integration.test.ts --detectOpenHandles
 
 # Run PlanRetrievalNode mock tests  
 test-retrieval:

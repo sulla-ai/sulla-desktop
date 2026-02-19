@@ -9,6 +9,7 @@ import { BaseLanguageModel, ChatMessage, NormalizedResponse } from '../languagem
 import { abortIfSignalReceived, throwIfAborted } from '../services/AbortService';
 import { tools, toolRegistry } from '../tools';
 import { BaseTool } from '../tools/base';
+import { Article } from '../database/models/Article';
 
 // ============================================================================
 // DEFAULT SETTINGS
@@ -49,8 +50,18 @@ export interface PromptEnrichmentOptions {
   includeTools?: boolean;
   includeStrategicPlan?: boolean;
   includeTacticalPlan?: boolean;
-  includeKnowledgebasePlan: boolean;
+  includeKnowledgebasePlan?: boolean;
   includeKnowledgeBaseSections?: boolean;
+}
+
+export interface StructuredArticlePreparationOptions {
+    fallbackSlugSource: string;
+    fallbackTitle: string;
+    fallbackHeader: string;
+    defaultSection?: string;
+    defaultCategory?: string;
+    defaultTags?: string[];
+    placeholderPattern?: RegExp;
 }
 
 
@@ -159,6 +170,11 @@ export abstract class BaseNode {
             }
         }
 
+        // Always preserve the caller's base prompt and enrich around it.
+        if (basePrompt?.trim()) {
+            parts.push(basePrompt.trim());
+        }
+
         let AwarenessMessage = ENVIRONMENT_PROMPT;
 
             /////////////////////////////////////////////////////////////////
@@ -249,14 +265,7 @@ Content rules – enforced:
 - Third-person/neutral voice only (“Human prefers…”, “User committed to…”)
 - No “I” or “you”
 - Always include specifics when they exist: dates, numbers, names, versions, exact phrases, URLs
-- Maximize signal per character – never vague
-
-Never call for:
-- chit-chat
-- temporary status
-- already-known facts
-- routine messages
-`;
+- Maximize signal per character – never vague`;
             parts.push(AWARENESS_SYSTEM_INSTRUCTIONS);
         }
         
@@ -386,7 +395,7 @@ Never call for:
         }
 
         const systemMessage = messages.find(msg => msg.role === 'system');
-        console.log('[BaseNode] prompt:', systemMessage ? systemMessage.content : 'No system message');
+        console.log(`[BaseNode:${this.name}] prompt:`, systemMessage ? systemMessage.content : 'No system message');
         try {
             // Primary attempt
             state.metadata.hadToolCalls = false;
@@ -466,6 +475,191 @@ Never call for:
         if (!raw || typeof raw !== 'string') return null;
 
         return parseJson(raw);
+    }
+
+    protected prepareArticleFromStructuredOutput(
+        rawOutput: string,
+        options: StructuredArticlePreparationOptions,
+    ): { meta: Record<string, any>; document: string } {
+        const normalizedOutput = this.normalizeStructuredOutput(rawOutput);
+        const fmMatch = normalizedOutput.match(/---\s*\n([\s\S]*?)\n---\s*\n?([\s\S]*)/);
+        const rawMeta = fmMatch ? this.parseYamlFrontmatter(fmMatch[1]) : {};
+
+        const sanitizedFallbackSlug = this.sanitizeText(options.fallbackSlugSource, options.placeholderPattern);
+        const rawSlug = this.sanitizeText(rawMeta.slug || sanitizedFallbackSlug || options.fallbackHeader, options.placeholderPattern);
+        let slug = this.normalizeSlug(rawSlug);
+
+        if (!slug) {
+            const headerSlug = this.normalizeSlug(options.fallbackHeader) || 'document';
+            slug = `${headerSlug}-${Date.now()}`;
+        }
+
+        const title = this.sanitizeText(rawMeta.title || options.fallbackTitle || slug, options.placeholderPattern) || slug;
+        const section = this.sanitizeText(rawMeta.section || options.defaultSection || 'Projects', options.placeholderPattern) || 'Projects';
+        const category = this.sanitizeText(rawMeta.category || options.defaultCategory || 'Projects', options.placeholderPattern) || 'Projects';
+        const defaultTags = options.defaultTags?.length ? options.defaultTags : ['skill'];
+        const tags = this.sanitizeStringArray(rawMeta.tags, options.placeholderPattern).length
+            ? this.sanitizeStringArray(rawMeta.tags, options.placeholderPattern)
+            : defaultTags;
+        const mentions = this.sanitizeStringArray(rawMeta.mentions, options.placeholderPattern);
+        const relatedEntities = this.sanitizeStringArray(rawMeta.related_entities, options.placeholderPattern);
+        const document = this.buildSafeDocumentBody(
+            fmMatch?.[2],
+            normalizedOutput,
+            title,
+            options.fallbackHeader,
+            `${this.name} generated this document.`,
+        );
+
+        return {
+            meta: {
+                schemaversion: Number(rawMeta.schemaversion) || 1,
+                slug,
+                title,
+                section,
+                category,
+                tags,
+                mentions,
+                related_entities: relatedEntities,
+            },
+            document,
+        };
+    }
+
+    protected async saveArticleAsync(meta: Record<string, any>, document: string, nodeLabel: string): Promise<void> {
+        try {
+            const article = new Article();
+            article.fill({
+                schemaversion: meta.schemaversion,
+                slug: meta.slug,
+                title: meta.title,
+                section: meta.section,
+                category: meta.category,
+                tags: meta.tags,
+                mentions: meta.mentions,
+                related_entities: meta.related_entities,
+                document,
+            });
+
+            await article.save();
+            console.log(`[${nodeLabel}] Saved article asynchronously: ${meta.slug}`);
+        } catch (error) {
+            console.warn(`[${nodeLabel}] Failed to save article asynchronously:`, error);
+        }
+    }
+
+    protected normalizeStructuredOutput(content: string): string {
+        const trimmed = String(content || '').trim();
+        const fencedMatch = trimmed.match(/^```(?:markdown|md|yaml)?\s*\n([\s\S]*?)\n```$/i);
+        return fencedMatch ? fencedMatch[1].trim() : trimmed;
+    }
+
+    protected parseYamlFrontmatter(frontmatter: string): Record<string, any> {
+        const result: Record<string, any> = {};
+        let currentArrayKey: string | null = null;
+
+        for (const rawLine of frontmatter.split('\n')) {
+            const line = rawLine.replace(/\t/g, '  ');
+            const trimmed = line.trim();
+            if (!trimmed) continue;
+
+            const keyValueMatch = trimmed.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*:\s*(.*)$/);
+            if (keyValueMatch) {
+                const key = keyValueMatch[1];
+                const value = keyValueMatch[2].trim();
+
+                if (!value) {
+                    result[key] = [];
+                    currentArrayKey = key;
+                    continue;
+                }
+
+                currentArrayKey = null;
+                const unquoted = value.replace(/^"([\s\S]*)"$/, '$1').replace(/^'([\s\S]*)'$/, '$1');
+                const inlineArrayMatch = unquoted.match(/^\[(.*)\]$/);
+                if (inlineArrayMatch) {
+                    result[key] = inlineArrayMatch[1]
+                        .split(',')
+                        .map(item => item.trim())
+                        .filter(Boolean);
+                    continue;
+                }
+
+                result[key] = unquoted;
+                continue;
+            }
+
+            const arrayItemMatch = trimmed.match(/^-\s+(.*)$/);
+            if (arrayItemMatch && currentArrayKey) {
+                if (!Array.isArray(result[currentArrayKey])) {
+                    result[currentArrayKey] = [];
+                }
+                result[currentArrayKey].push(arrayItemMatch[1].trim());
+            }
+        }
+
+        return result;
+    }
+
+    protected sanitizeText(value: any, placeholderPattern?: RegExp): string {
+        const text = String(value || '')
+            .replace(/^"|"$/g, '')
+            .replace(/^'|'$/g, '')
+            .trim();
+
+        if (!text) return '';
+
+        const defaultPlaceholderPattern = /(your-|goes-here|slugs-to-|the\s+project\s+title|the\s+actin\s+step\s+name|the\s+category\s+this\s+would\s+fall\s+under)/i;
+        const pattern = placeholderPattern || defaultPlaceholderPattern;
+        if (pattern.test(text)) {
+            return '';
+        }
+
+        return text;
+    }
+
+    protected sanitizeStringArray(value: any, placeholderPattern?: RegExp): string[] {
+        const raw = Array.isArray(value)
+            ? value
+            : typeof value === 'string'
+                ? value.split(',')
+                : [];
+
+        const out = raw
+            .map(item => this.sanitizeText(item, placeholderPattern))
+            .filter(Boolean);
+
+        return Array.from(new Set(out));
+    }
+
+    protected buildSafeDocumentBody(
+        body: string | undefined,
+        source: string,
+        title: string,
+        fallbackHeader: string,
+        fallbackDescription: string,
+    ): string {
+        const cleanedBody = String(body || '').trim();
+        if (cleanedBody.length > 24) {
+            return cleanedBody;
+        }
+
+        const strippedFrontmatter = source.replace(/---\s*\n[\s\S]*?\n---\s*\n?/m, '').trim();
+        if (strippedFrontmatter.length > 24) {
+            return strippedFrontmatter;
+        }
+
+        const safeTitle = title || fallbackHeader;
+        return `# ${fallbackHeader}\n\nTitle: ${safeTitle}\n\n${fallbackDescription}`;
+    }
+
+    protected normalizeSlug(value: string): string {
+        return String(value)
+            .toLowerCase()
+            .trim()
+            .replace(/['"]/g, '')
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-+|-+$/g, '');
     }
  
     /**

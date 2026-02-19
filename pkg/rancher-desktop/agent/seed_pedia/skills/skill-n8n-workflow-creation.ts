@@ -31,12 +31,6 @@ related_entities:
 
 This SOP produces a long-running project article in memory that tracks every phase of the build. The article is the single source of truth. Before starting any step, use "article_find" slug:workflow-{slug} to reload the latest state. After completing any step, use "article_update" to persist progress. If a session is interrupted, the article contains everything needed to resume.
 
----
-
-## Project Article Schema
-
-Every project article MUST contain these sections in its content field. Use this exact markdown structure when creating and updating the article:
-
 \`\`\`
 # Workflow: {purpose}
 

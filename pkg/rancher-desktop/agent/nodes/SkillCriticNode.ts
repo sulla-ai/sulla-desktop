@@ -6,42 +6,46 @@
 import type { BaseThreadState, NodeResult } from './Graph';
 import { BaseNode, JSON_ONLY_RESPONSE_INSTRUCTIONS } from './BaseNode';
 
-const SKILL_CRITIC_PROMPT = `
-You are the Skill Critic: Expert evaluator for skill-aware ReAct loops.
+const SKILL_CRITIC_PROMPT = `You are the Critic Agent. Sole job: validate completion of the project documents.
 
-You review reasoning-action cycles to determine if the agent should continue, revise approach, or complete the task.
+**Inputs every cycle:**
+- Full Project Resource Document (PRD) The PRD is the primary source of truth for this project and includes the project context.
+- Current Technical Execution Brief (TPRD) The last task that was worked on.
+- Statement from the Executor 
+- Previous cycle history
 
-Current Goal: {{goal}}
-{{skillContext}}
+**Rules (never break):**
+- You will know if the technical resource document is completed if you can point to factual proof that it has met it's goal.
+- If the technical resource document is not completed then you need to give a complete explanation of why and what you need to see in order for it to be done.
+- You will know if the project is completed if the technical document has been completed and it;s completion proves we have met the ultimate goal of the PRD.
+- If the prd is not completed then we need a full reason as to why and what you need to see to confirm its completion.
 
-ReAct Loop Progress:
-- Total cycles completed: {{cycleCount}}
-- Current step: {{currentStep}}
-- Last reasoning: {{lastReasoning}}
-- Last action result: {{lastActionResult}}
-- Evidence collected: {{evidenceCount}} pieces
+Here's the full project resource document (PRD) this is the primary source of truth for the project we're currently working on and includes the full project context.
+---
+## Planning Instructions (PRD)
+{{planning_instructions}}
+---
 
-Skill Progress:
-{{skillProgress}}
+Now I'm gonna give you the technicalinstructions were a planner has decided what steps to work on.
+An executor has received this document and attempted to complete the steps inside.
+---
+## Technical Instructions (TPRD)
+{{technical_instructions}}
+---
 
-Rules:
-1. CONTINUE: If making good progress toward skill objectives (< 5 cycles)
-2. REVISE: If stuck, poor results, or wrong approach (any cycle count)  
-3. COMPLETE: If skill objectives are met with solid evidence (any cycle count)
-4. Consider evidence quality - file creation, API responses, data analysis
-5. Evaluate if the approach aligns with skill template requirements
+Now you have in the message history all of the steps taken by the executor in order to attempt to complete the technical instructions.
+I want you to review the work that's been done against the technical instructions having the full project context you need to determine if this technical resource document and the steps inside it has been completed satisfactorally.
+It's likely that you will need to disregard much of what the executor says they have done and look to see what they actually have done from the tool calls to find factual evidence that this technical resource has been completed satisfactorally.
 
+Now compare the technical instructions against the planning instructions and determine if the planning instructions within the project resource document still requires some work or if they are now fully completed.
+One important exclusion: if you have done all of the work you can do and you are blocked buy something you're unable to figure out yourself and you require your humans assistance, such as the case for tools fundamentally breaking or missing credentials
 ${JSON_ONLY_RESPONSE_INSTRUCTIONS}
 {
-  "progressScore": 0,                    // 0-10 integer (progress toward goal)
-  "evidenceScore": 0,                    // 0-10 integer (quality of evidence)
-  "decision": "continue" | "revise" | "complete",
-  "reason": "Clear explanation of decision with evidence",
-  "nextAction": "Suggested next step if continuing/revising",
-  "completionJustification": "Why task is complete (if applicable)",
-  "emit_chat_message": "Update user on ReAct loop progress"
-}
-`.trim();
+  "technical_completed": boolean,
+  "technical_feedback": "string — thorough factual explanation. If false, list missing proof/items with exact quotes from Executor output. If true, confirm what was delivered.",
+  "project_complete": boolean,
+  "project_feedback": "string — does this complete a Must-Have in PRD? If false, list remaining open items from PRD with exact section references."
+}`.trim();
 
 /**
  * Skill Critic Node
@@ -77,154 +81,74 @@ export class SkillCriticNode extends BaseNode {
   }
 
   async execute(state: BaseThreadState): Promise<NodeResult<BaseThreadState>> {
-
-    // Establish WebSocket connection using the dynamic channel from state
-    const connectionId = state.metadata.wsChannel as string;
-    if (connectionId && !this.isWebSocketConnected(connectionId)) {
-      this.connectWebSocket(connectionId);
-    }
-
-    const plannerData = (state.metadata as any).planner || {};
-    const reasoningData = (state.metadata as any).reasoning || {};
-    const actionsData = (state.metadata as any).actions || [];
-    const planRetrievalData = (state.metadata as any).planRetrieval || {};
-
-    // Extract evaluation context
-    const context = this.extractCriticContext(state, plannerData, reasoningData, actionsData, planRetrievalData);
-
-    if (!context.goal) {
-      console.log('[SkillCritic] No goal found, defaulting to complete');
-      return { state, decision: { type: 'next' } };
-    }
-
-    // Build evaluation prompt
-    const prompt = this.buildCriticPrompt(context);
+    const prompt = this.buildCriticPrompt(state);
 
     const enriched = await this.enrichPrompt(prompt, state, {
       includeSoul: true,
       includeAwareness: true,
-      includeMemory: false,
-      includeTools: false,
-      includeStrategicPlan: false,
-      includeTacticalPlan: false,
-      includeKnowledgebasePlan: false,
+      includeMemory: false
     });
 
-    const llmResponse = await this.chat(state, enriched);
+    const llmResponse = await this.chat(state, enriched, {
+      format: 'json',
+      disableTools: true,
+      temperature: 0,
+      maxTokens: 4096,
+    });
 
     if (!llmResponse) {
-      // Fallback decision if LLM fails
-      const fallbackDecision = context.cycleCount >= 5 ? 'complete' : 'continue';
       (state.metadata as any).skillCritic = {
-        decision: fallbackDecision,
-        reason: 'LLM response failed, using fallback logic',
-        progressScore: context.cycleCount >= 3 ? 7 : 4,
-        evidenceScore: context.evidenceCount > 0 ? 6 : 2
+        technical_completed: false,
+        technical_feedback: 'Critic model returned no response. Technical completion cannot be validated.',
+        project_complete: false,
+        project_feedback: 'Project completion cannot be validated until technical completion is confirmed.',
+        evaluatedAt: Date.now(),
       };
       return { state, decision: { type: 'next' } };
     }
 
-    const data = llmResponse as {
-      progressScore: number;
-      evidenceScore: number;
-      decision: 'continue' | 'revise' | 'complete';
-      reason: string;
-      nextAction?: string;
-      completionJustification?: string;
-    };
+    const data = (typeof llmResponse === 'string'
+      ? this.parseJson(llmResponse)
+      : llmResponse) as {
+      technical_completed?: boolean;
+      technical_feedback?: string;
+      project_complete?: boolean;
+      project_feedback?: string;
+    } | null;
 
-    // Store critic decision in state
+    if (!data || typeof data !== 'object') {
+      (state.metadata as any).skillCritic = {
+        technical_completed: false,
+        technical_feedback: 'Critic response was not valid JSON. Technical completion cannot be validated.',
+        project_complete: false,
+        project_feedback: 'Project completion cannot be validated until technical completion is confirmed.',
+        evaluatedAt: Date.now(),
+      };
+      return { state, decision: { type: 'next' } };
+    }
+
+    const technicalCompleted = data.technical_completed === true;
+    const projectComplete = technicalCompleted && data.project_complete === true;
+
     (state.metadata as any).skillCritic = {
-      decision: data.decision,
-      reason: data.reason,
-      progressScore: data.progressScore || 5,
-      evidenceScore: data.evidenceScore || 5,
-      nextAction: data.nextAction,
-      completionJustification: data.completionJustification,
-      evaluatedAt: Date.now()
+      technical_completed: technicalCompleted,
+      technical_feedback: (data.technical_feedback || '').trim(),
+      project_complete: projectComplete,
+      project_feedback: (data.project_feedback || '').trim(),
+      evaluatedAt: Date.now(),
     };
 
-    console.log(`[SkillCritic] Decision: ${data.decision} (Progress: ${data.progressScore}/10, Evidence: ${data.evidenceScore}/10)`);
-    console.log(`[SkillCritic] Reason: ${data.reason}`);
+    console.log(`[SkillCritic] technical_completed=${technicalCompleted} project_complete=${projectComplete}`);
 
     return { state, decision: { type: 'next' } };
   }
 
-  /**
-   * Extract context for critic evaluation
-   */
-  private extractCriticContext(state: BaseThreadState, plannerData: any, reasoningData: any, actionsData: any[], planRetrievalData: any) {
-    const goal = plannerData.goal || 'Unknown goal';
-    const skillData = planRetrievalData.skillData || null;
-    
-    // Count ReAct cycles (reasoning + action pairs)
-    const cycleCount = Math.min(
-      reasoningData.currentDecision ? 1 : 0,
-      actionsData.length
-    );
+  private buildCriticPrompt(state: BaseThreadState): string {
+    const planningInstructions = (state.metadata as any).planning_instructions || 'No planning instructions available.';
+    const technicalInstructions = (state.metadata as any).technical_instructions || 'No technical instructions available.';
 
-    // Extract evidence count
-    const evidenceCount = actionsData.reduce((count, action) => {
-      return count + (action.evidence_collected?.length || 0);
-    }, 0);
-
-    const lastAction = actionsData[actionsData.length - 1];
-    const currentStep = plannerData.plan_steps?.[0] || 'Unknown step';
-
-    return {
-      goal,
-      skillData,
-      cycleCount,
-      evidenceCount,
-      currentStep,
-      lastReasoning: reasoningData.currentDecision?.reasoning || 'No reasoning available',
-      lastActionResult: lastAction?.result || 'No action result available',
-      skillProgress: this.summarizeSkillProgress(reasoningData, actionsData, skillData)
-    };
-  }
-
-  /**
-   * Build critic evaluation prompt with context
-   */
-  private buildCriticPrompt(context: any): string {
-    let prompt = SKILL_CRITIC_PROMPT
-      .replace('{{goal}}', context.goal)
-      .replace('{{cycleCount}}', context.cycleCount.toString())
-      .replace('{{currentStep}}', context.currentStep)
-      .replace('{{lastReasoning}}', context.lastReasoning)
-      .replace('{{lastActionResult}}', JSON.stringify(context.lastActionResult))
-      .replace('{{evidenceCount}}', context.evidenceCount.toString())
-      .replace('{{skillProgress}}', context.skillProgress);
-
-    if (context.skillData) {
-      const skillContext = `
-Skill Template: ${context.skillData.title}
-Template Steps: ${context.skillData.document}
-`;
-      prompt = prompt.replace('{{skillContext}}', skillContext);
-    } else {
-      prompt = prompt.replace('{{skillContext}}', 'No skill template loaded');
-    }
-
-    return prompt;
-  }
-
-  /**
-   * Summarize skill progress for critic evaluation
-   */
-  private summarizeSkillProgress(reasoningData: any, actionsData: any[], skillData: any): string {
-    if (!skillData) {
-      return 'No skill template - evaluating general progress';
-    }
-
-    const completedActions = actionsData.filter(action => action.success).length;
-    const failedActions = actionsData.length - completedActions;
-    
-    return `
-- Actions completed: ${completedActions}
-- Actions failed: ${failedActions}
-- Evidence pieces: ${actionsData.reduce((sum, action) => sum + (action.evidence_collected?.length || 0), 0)}
-- Current reasoning state: ${reasoningData.currentDecision?.action_type || 'unknown'}
-`;
+    return SKILL_CRITIC_PROMPT
+      .replace('{{planning_instructions}}', planningInstructions)
+      .replace('{{technical_instructions}}', technicalInstructions);
   }
 }

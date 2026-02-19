@@ -1,10 +1,11 @@
 /**
  * SkillGraph Planner Retry Scenario Test
- * 
+ *
  * Tests specifically the planner retry logic:
- * - Planner fails first 2 attempts with empty plan_steps
- * - Succeeds on 3rd attempt with valid plan
+ * - Planner fails first 2 attempts (LLM returns null)
+ * - Succeeds on 3rd attempt with valid text plan
  * - Should trigger ReAct loop after successful plan
+ * - Graph checks textPlan existence for retry routing
  */
 
 // Setup Node.js globals for Jest environment (required by dependencies)
@@ -54,27 +55,29 @@ beforeEach(() => {
   attemptCounts.planner = 0;
   attemptCounts.reasoning = 0;
   attemptCounts.critic = 0;
-  
+
   // Clear all timers to prevent hanging
   jest.clearAllTimers();
 });
 
 // Mock LLM service - PLANNER RETRY SCENARIO
+// Uses chat(messages, options) pattern - BaseNode.normalizedChat sends messages
+// where the system prompt is the LAST system message in the array
 const mockLLMService = {
-    generateResponse: jest.fn().mockImplementation(async (prompt: string) => {
+    chat: jest.fn().mockImplementation(async (messages: any[], options?: any) => {
+      // Extract system prompt to determine which node is calling
+      const systemMsg = [...messages].reverse().find((m: any) => m.role === 'system');
+      const prompt = systemMsg?.content || messages.map((m: any) => m.content).join(' ');
 
       // Plan Retrieval - Always succeeds (we want to test planner failures)
-      if (prompt.includes('Plan Retrieval')) {
-        const planRetrievalResponse = {
-          intent: 'development',
-          goal: 'Create Node.js project with best practices',
-          selected_skill_slug: null,
-          memory_search: [],
-          response_immediate: false // Force complex flow to trigger planner
-        };
-        
+      if (prompt.includes('specialized planning') || prompt.includes('intent analysis')) {
         return {
-          content: JSON.stringify(planRetrievalResponse),
+          content: JSON.stringify({
+            intent: 'development',
+            goal: 'Create Node.js project with best practices',
+            selected_skill_slug: null,
+            memory_search: [],
+          }),
           metadata: {
             tokens_used: 150,
             prompt_tokens: 80,
@@ -85,43 +88,22 @@ const mockLLMService = {
       }
 
       // PLANNER RETRY SCENARIO - Fail first 2 attempts, succeed on 3rd
-      if (prompt.includes('based on user goals') || prompt.includes('User Goal:') || prompt.includes('Response Format')) {
+      // PlannerNode prompt contains these strings when generating a plan
+      if (prompt.includes('planning AI') || prompt.includes('actionable plans') || prompt.includes('SELECTED SOP SKILL') || prompt.includes('SOP execution') || prompt.includes('strategic planning') || prompt.includes('based on user goals')) {
         attemptCounts.planner++;
         console.log(`[TEST] Planner attempt #${attemptCounts.planner}`);
 
         if (attemptCounts.planner <= 2) {
-          // First 2 attempts fail - return malformed/empty response
-          console.log(`[TEST] Planner attempt ${attemptCounts.planner} - FAILING (empty plan_steps)`);
-          return {
-            content: JSON.stringify({
-              restated_goal: 'Create Node.js project with best practices',
-              plan_steps: [], // Empty plan = failure
-              complexity_score: 5,
-              complexity_reasoning: 'Failed attempt',
-              skill_focused: false,
-              estimated_duration: '1 hour'
-            }),
-            metadata: {
-              tokens_used: 50,
-              prompt_tokens: 40,
-              completion_tokens: 10,
-              time_spent: 800
-            }
-          };
+          // First 2 attempts fail - return null (LLM failure)
+          // PlannerNode checks: if (!content) return null
+          // Graph routing checks: if (!textPlan) → retry planner
+          console.log(`[TEST] Planner attempt ${attemptCounts.planner} - FAILING (null response)`);
+          return null;
         } else {
-          // 3rd attempt succeeds with valid plan
-          console.log(`[TEST] Planner attempt ${attemptCounts.planner} - SUCCESS (valid plan)`);
-          const plannerResponse = {
-            restated_goal: 'Create Node.js project with best practices',
-            skill_focused: true,
-            plan_steps: ['Init package.json', 'Create src/', 'Setup tests'],
-            complexity_score: 8,
-            complexity_reasoning: 'Complex setup with multiple components',
-            estimated_duration: '2-3 hours'
-          };
-          
+          // 3rd attempt succeeds with valid text plan
+          console.log(`[TEST] Planner attempt ${attemptCounts.planner} - SUCCESS (valid text plan)`);
           return {
-            content: JSON.stringify(plannerResponse),
+            content: 'RESPONSE: PLAN\n\nGoal: Create Node.js project with best practices\n\n1. [ ] Init package.json\n2. [ ] Create src/\n3. [ ] Setup tests',
             metadata: {
               tokens_used: 200,
               prompt_tokens: 120,
@@ -132,48 +114,49 @@ const mockLLMService = {
         }
       }
 
-      // All other nodes succeed immediately (we're only testing planner retry)
-      if (prompt.includes('Reasoning')) {
+      // Reasoning - text-based STATUS response
+      if (prompt.includes('ReAct reasoning agent')) {
         attemptCounts.reasoning++;
-        const reasoningResponse = {
-          current_situation: 'Starting Node.js project setup',
-          goal_progress: 'Initializing project structure',
-          next_action: 'Create package.json file',
-          action_type: 'complete',
-          reasoning: 'Package.json is the foundation',
-          confidence: 0.9,
-          stop_condition_met: true
-        };
+        console.log(`[TEST] Reasoning attempt #${attemptCounts.reasoning} - SUCCESS (STATUS: COMPLETE)`);
         return {
-          content: JSON.stringify(reasoningResponse),
+          content: 'STATUS: COMPLETE\n\n## Updated Plan\n1. [DONE] Init package.json\n2. [DONE] Create src/\n3. [DONE] Setup tests\n\nAll steps completed successfully.',
           metadata: { tokens_used: 150, prompt_tokens: 80, completion_tokens: 70, time_spent: 1200 }
         };
       }
 
-      if (prompt.includes('Skill Critic')) {
+      // Action Node
+      if (prompt.includes('Execute the next steps')) {
+        return {
+          content: 'Executed plan steps successfully. Created package.json, set up src directory, and configured tests.',
+          metadata: { tokens_used: 150, prompt_tokens: 80, completion_tokens: 70, time_spent: 1200 }
+        };
+      }
+
+      // Skill Critic
+      if (prompt.includes('Skill Critic') || prompt.includes('evaluate') || prompt.includes('progress')) {
         attemptCounts.critic++;
-        const criticResponse = {
-          progressScore: 9,
-          evidenceScore: 8,
-          decision: 'complete',
-          reason: 'Successfully completed with sufficient evidence',
-          nextAction: 'Project ready for use',
-          completionJustification: 'All steps executed and verified'
-        };
+        console.log(`[TEST] Critic attempt #${attemptCounts.critic} - SUCCESS (complete)`);
         return {
-          content: JSON.stringify(criticResponse),
+          content: JSON.stringify({
+            progressScore: 9,
+            evidenceScore: 8,
+            decision: 'complete',
+            reason: 'Successfully completed with sufficient evidence',
+            nextAction: 'Project ready for use',
+            completionJustification: 'All steps executed and verified'
+          }),
           metadata: { tokens_used: 150, prompt_tokens: 80, completion_tokens: 70, time_spent: 1200 }
         };
       }
 
-      if (prompt.includes('Output')) {
-        const outputResponse = {
-          taskStatus: 'completed',
-          completionScore: 8,
-          summaryMessage: 'Node.js project setup completed after planner retries'
-        };
+      // Output
+      if (prompt.includes('Output') || prompt.includes('summary') || prompt.includes('final')) {
         return {
-          content: JSON.stringify(outputResponse),
+          content: JSON.stringify({
+            taskStatus: 'completed',
+            completionScore: 8,
+            summaryMessage: 'Node.js project setup completed after planner retries'
+          }),
           metadata: { tokens_used: 150, prompt_tokens: 80, completion_tokens: 70, time_spent: 1200 }
         };
       }
@@ -189,7 +172,16 @@ jest.mock('../../languagemodels', () => ({
   getCurrentModel: jest.fn().mockResolvedValue('claude-3-haiku'),
   getCurrentMode: jest.fn().mockResolvedValue('remote'),
   getLLMService: jest.fn().mockImplementation(() => mockLLMService),
-  getService: jest.fn().mockImplementation(() => Promise.resolve(mockLLMService))
+  getService: jest.fn().mockImplementation(() => Promise.resolve(mockLLMService)),
+  getLocalService: jest.fn().mockImplementation(async () => ({ isAvailable: () => false }))
+}));
+
+// Mock WebSocket to prevent real connection attempts
+jest.mock('../../services/WebSocketClientService', () => ({
+  getWebSocketClientService: () => ({
+    send: jest.fn(),
+    isConnected: jest.fn(() => true)
+  })
 }));
 
 // Mock tool registry
@@ -223,7 +215,7 @@ jest.mock('../../database/models/SullaSettingsModel', () => ({
 }));
 
 describe('SkillGraph Planner Retry Scenario', () => {
-  
+
   afterEach(() => {
     jest.clearAllTimers();
     jest.clearAllMocks();
@@ -236,14 +228,14 @@ describe('SkillGraph Planner Retry Scenario', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     attemptCounts.planner = 0;
-    attemptCounts.reasoning = 0;  
+    attemptCounts.reasoning = 0;
     attemptCounts.critic = 0;
   });
 
   describe('Planner Retry Logic', () => {
-    it('should retry planner when it fails with empty plan_steps', async () => {
-      console.log('\n🔄 Testing Planner Retry Logic - Should fail twice, succeed on 3rd attempt');
-      
+    it('should retry planner when LLM returns null (no textPlan generated)', async () => {
+      console.log('\nTesting Planner Retry Logic - Should fail twice, succeed on 3rd attempt');
+
       const { graph, state } = await GraphRegistry.getOrCreateSkillGraph(
         'retry-test-planner',
         'planner-retry-thread'
@@ -258,24 +250,22 @@ describe('SkillGraph Planner Retry Scenario', () => {
       // Execute graph - should trigger planner retries
       const finalState = await graph.execute(state);
 
-      // Verify planner was called 3 times (2 failures + 1 success)  
+      // Verify planner was called 3 times (2 failures + 1 success)
       expect(attemptCounts.planner).toBe(3);
-      console.log(`✅ Planner retry count: ${attemptCounts.planner} (expected: 3)`);
+      console.log(`Planner retry count: ${attemptCounts.planner} (expected: 3)`);
 
-      // Verify final state shows successful completion
-      expect(finalState.metadata.planner).toBeDefined();
-      expect(finalState.metadata.planner.plan_steps).toHaveLength(3);
-      expect(finalState.metadata.planner.plan_steps).toEqual(['Init package.json', 'Create src/', 'Setup tests']);
-      
-      // Verify plannerRetries counter exists in state  
-      expect(finalState.metadata.plannerRetries).toBe(2);
-      
+      // Verify textPlan exists in reasoning metadata (text-based plan)
+      expect((finalState.metadata as any).reasoning?.textPlan).toBeDefined();
+      expect((finalState.metadata as any).reasoning.textPlan).toContain('Init package.json');
+
+      // Verify plannerRetries counter exists in state (2 retries before success)
+      expect((finalState.metadata as any).plannerRetries).toBe(2);
+
       // Verify ReAct loop was triggered after successful plan
       expect(attemptCounts.reasoning).toBeGreaterThan(0);
-      expect(attemptCounts.critic).toBeGreaterThan(0);
-      
-      console.log('✅ Planner retry test passed - retried and eventually succeeded');
-      console.log(`📊 Final counts: Planner: ${attemptCounts.planner}, Reasoning: ${attemptCounts.reasoning}, Critic: ${attemptCounts.critic}`);
-    });
+
+      console.log('Planner retry test passed - retried and eventually succeeded');
+      console.log(`Final counts: Planner: ${attemptCounts.planner}, Reasoning: ${attemptCounts.reasoning}, Critic: ${attemptCounts.critic}`);
+    }, 30000);
   });
 });

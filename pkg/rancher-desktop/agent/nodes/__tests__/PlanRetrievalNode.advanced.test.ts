@@ -54,7 +54,6 @@ jest.mock('../BaseNode', () => ({
           goal: 'Get help with React development',
           selected_skill_slug: null,
           memory_search: [],
-          response_immediate: true
         })
       });
     }
@@ -66,7 +65,6 @@ jest.mock('../BaseNode', () => ({
           goal: 'Create a new user account for team member',
           selected_skill_slug: 'user-management',
           memory_search: ['user', 'account'],
-          response_immediate: false
         })
       });
     }

@@ -125,18 +125,54 @@ export class RemoteModelService extends BaseLanguageModel {
 
     // Anthropic shape (uses tools array differently)
     if (this.config.id === 'anthropic') {
-      const anthropicBody: any = {
-        model: this.model,
-        max_tokens: options.maxTokens ?? 1024,
-        messages: messages.map(m => {
-          // Anthropic only supports 'user' and 'assistant' roles
-          if (m.role === 'system' || m.role === 'tool') {
+      // Extract system message content for separate system parameter
+      const systemMessage = messages.find(m => m.role === 'system');
+      
+      // Process messages for Anthropic
+      let processedMessages = messages
+        .filter(m => m.role !== 'system') // Remove system messages from messages array
+        .map(m => {
+          // Anthropic only supports 'user' and 'assistant' roles in messages
+          // Convert tool messages to user messages, keep user/assistant as-is
+          if (m.role === 'tool') {
             return { role: 'user', content: m.content };
           }
           return { role: m.role, content: m.content };
-        }),
-        system: messages.find(m => m.role === 'system')?.content,
+        });
+
+      // Anthropic requires conversation to end with user message.
+      // Do not delete messages; move the latest user message to the end if needed.
+      if (processedMessages.length > 0 && processedMessages[processedMessages.length - 1].role !== 'user') {
+        let lastUserIndex = -1;
+        for (let i = processedMessages.length - 1; i >= 0; i--) {
+          if (processedMessages[i].role === 'user') {
+            lastUserIndex = i;
+            break;
+          }
+        }
+
+        if (lastUserIndex >= 0 && lastUserIndex !== processedMessages.length - 1) {
+          const [lastUserMessage] = processedMessages.splice(lastUserIndex, 1);
+          processedMessages.push(lastUserMessage);
+          console.log('[RemoteService] Moved latest user message to end for Anthropic compatibility');
+        }
+      }
+
+      // Ensure we have at least one user message
+      if (processedMessages.length === 0 || processedMessages[processedMessages.length - 1].role !== 'user') {
+        console.warn('[RemoteService] No user message at end - this may cause Anthropic API errors');
+      }
+
+      const anthropicBody: any = {
+        model: this.model,
+        max_tokens: options.maxTokens ?? 1024,
+        messages: processedMessages,
       };
+
+      // Add system parameter if system message exists
+      if (systemMessage?.content) {
+        anthropicBody.system = systemMessage.content;
+      }
 
       if (options.tools?.length) {
         // Transform OpenAI-style tools to Anthropic format

@@ -53,7 +53,7 @@ export const browseToolsRegistration: ToolRegistration = {
   description: "List available tools by category or search term. Use this when you need a tool but don't know its exact name or category yet.",
   category: "meta",
   schemaDef: {
-    category: { type: 'enum' as const, enum: ["browser", "calendar", "docker", "github", "lima", "memory", "kubectl", "n8n", "pg", "rdctl", "redis", "slack"], optional: true, description: "Specific category of tools" },
+    category: { type: 'enum' as const, enum: ["browser", "calendar", "docker", "github", "integrations", "lima", "memory", "kubectl", "n8n", "pg", "rdctl", "redis", "slack"], optional: true, description: "Specific category of tools" },
     query: { type: 'string' as const, optional: true, description: "Keyword to filter tool names/descriptions" },
   },
   workerClass: BrowseToolsWorker,

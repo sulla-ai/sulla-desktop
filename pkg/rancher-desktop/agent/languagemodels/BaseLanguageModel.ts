@@ -234,6 +234,17 @@ export abstract class BaseLanguageModel {
    */
   protected normalizeFinishReason(rawReason: string | undefined): FinishReason | undefined {
     if (!rawReason) return undefined;
+
+    // Provider aliases (Anthropic/OpenAI-compatible variants)
+    const normalizedAliases: Record<string, FinishReason> = {
+      end_turn: FinishReason.Stop,
+      max_tokens: FinishReason.Length,
+      tool_use: FinishReason.ToolCalls,
+    };
+
+    if (normalizedAliases[rawReason]) {
+      return normalizedAliases[rawReason];
+    }
     
     // Check if the raw reason matches any enum value
     for (const reason of Object.values(FinishReason)) {

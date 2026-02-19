@@ -23,8 +23,8 @@ interface PlanRetrievalResponse {
   intent: string;
   goal: string;
   selected_skill_slug: string | null;
+  complexity: 'high' | 'medium' | 'low';
   memory_search: string[];
-  response_immediate: boolean;
 }
 
 // ============================================================================
@@ -33,6 +33,8 @@ interface PlanRetrievalResponse {
 
 const PLAN_RETRIEVAL_PROMPT = `You are a specialized planning and intent analysis system. Your job is to extract structured data from user messages and select the most appropriate skill for execution.
 
+Look at the users last message, think critically, think how would you handle the inquiry?
+
 {{active_plans_context}}
 
 ## Available Skills in Knowledge Base
@@ -40,35 +42,49 @@ const PLAN_RETRIEVAL_PROMPT = `You are a specialized planning and intent analysi
 {{skills}}
 
 ## Selection Guidelines
+- selected_skill_slug: exact slug ONLY if a skill trigger matches perfectly. Null for everything else (general chat, info requests, tool use).
+- memory_search: 1-3 keywords ONLY for historical references ("remember", "last time", "my previous", stored data). Empty [] otherwise.
 
-Review the skills above and select the ONE skill that best matches the user's request based on the trigger conditions.
+## Complexity Classification (strict order - follow exactly)
+1. Skill trigger matches? → selected_skill_slug = slug, complexity = "high"
+2. Else, requires ANY tool (web_search, browse_page, code_execution, API call, live data fetch) or info not in current context? → complexity = "medium"
+3. Else → complexity = "low"
 
-Guidelines:
-- selected_skill_slug: Choose the exact slug ONLY if a skill's trigger clearly matches the user's request. Use null for general questions, information requests, or tasks that don't require a specific procedure.
-- memory_search: Keywords for finding relevant past conversations/context/knowledge
-- response_immediate: false if task requires planning/tools, true if simple question
-- Skills are for procedural tasks (building apps, creating workflows, etc.)
-- Memory search handles information retrieval, general assistance, and context gathering
-- Many user requests won't need a skill - that's perfectly normal
-
-## Memory Search Keywords  
-ONLY provide memory search keywords if the user's message indicates they need historical context, past information, or references to previous conversations/data.
-
-Provide 1-3 keywords ONLY when the user:
-- References past conversations ("remember when", "last time", "earlier")
-- Asks about stored information ("what did I tell you about", "my preferences")
-- Needs context from previous work (project details, customer info, etc.)
-- Mentions specific topics that would have been discussed before
-
-For simple requests, new topics, or immediate tasks: Use empty array []
+Examples:
+- "how are you" → low
+- "check this API", "browse example.com", "current FB ad costs" → medium
+- "build lead scorer", "plan outbound campaign", "create workflow" → high
 
 ${JSON_ONLY_RESPONSE_INSTRUCTIONS}
 {
   "intent": "primary_intent_classification",
   "goal": "clear_statement_of_what_user_wants_to_achieve",  
   "selected_skill_slug": "exact_slug_of_best_matching_skill_or_null",
+  "complexity": "high" | "medium" | "low",
   "memory_search": [],
-  "response_immediate": true_or_false
+}
+
+## Selection Guidelines
+- selected_skill_slug: exact slug ONLY if a skill trigger matches perfectly. Null for everything else (general chat, info requests, tool use).
+- memory_search: 1-3 keywords ONLY for historical references ("remember", "last time", "my previous", stored data). Empty [] otherwise.
+
+## Complexity Classification (strict order - follow exactly)
+1. Skill trigger matches? → selected_skill_slug = slug, complexity = "high"
+2. Else, requires ANY tool (web_search, browse_page, code_execution, API call, live data fetch) or info not in current context? → complexity = "medium"
+3. Else → complexity = "low"
+
+Examples:
+- "how are you" → low
+- "check this API", "browse example.com", "current FB ad costs" → medium
+- "build lead scorer", "plan outbound campaign", "create workflow" → high
+
+${JSON_ONLY_RESPONSE_INSTRUCTIONS}
+{
+  "intent": "primary_intent_classification",
+  "goal": "clear_statement_of_what_user_wants_to_achieve",  
+  "selected_skill_slug": "exact_slug_of_best_matching_skill_or_null",
+  "complexity": "high" | "medium" | "low",
+  "memory_search": [],
 }`.trim();
 
 // ============================================================================
@@ -82,7 +98,6 @@ ${JSON_ONLY_RESPONSE_INSTRUCTIONS}
  *   - Fast intent classification from user messages
  *   - Extract actionable goals for planning
  *   - Identify skill and memory search keywords
- *   - Determine response immediacy requirements
  * 
  * Design:
  *   - No tool access - pure information extraction
@@ -146,7 +161,7 @@ export class PlanRetrievalNode extends BaseNode {
     // 5. STORE RESULTS AND APPEND TOOL MESSAGES
     // ----------------------------------------------------------------
     this.storeMetadata(state, planData);
-    this.storeSkillData(state, skillArticles);
+    await this.appendSelectedSkillMessage(state, skillArticles);
     await this.appendMemoryResults(state, memoryArticles, planData);
 
     // ----------------------------------------------------------------
@@ -212,8 +227,8 @@ export class PlanRetrievalNode extends BaseNode {
           intent: 'greeting',
           goal: 'User wants to exchange greetings or pleasantries',
           selected_skill_slug: null,
+          complexity: 'low',
           memory_search: [], // No context needed for greetings
-          response_immediate: true
         };
       }
     }
@@ -232,8 +247,8 @@ export class PlanRetrievalNode extends BaseNode {
         intent: 'simple_question',
         goal: 'User has a brief question or inquiry',
         selected_skill_slug: null,
+        complexity: 'low',
         memory_search: [], // Most simple questions don't need context
-        response_immediate: true
       };
     }
     
@@ -250,8 +265,8 @@ export class PlanRetrievalNode extends BaseNode {
           intent: 'acknowledgment',
           goal: 'User is acknowledging or confirming something',
           selected_skill_slug: null,
+          complexity: 'low',
           memory_search: [], // Acknowledgments rarely need context
-          response_immediate: true
         };
       }
     }
@@ -555,24 +570,20 @@ export class PlanRetrievalNode extends BaseNode {
       return results.slice(0, 5); // Allow up to 5 items instead of 3
     };
 
-    // Helper to extract boolean from any value
-    const extractBoolean = (val: any, fallback: boolean = true): boolean => {
-      if (typeof val === 'boolean') return val;
-      if (typeof val === 'string') {
-        const lower = val.toLowerCase().trim();
-        if (['true', 'yes', '1', 'immediate', 'now'].includes(lower)) return true;
-        if (['false', 'no', '0', 'later', 'delayed'].includes(lower)) return false;
+    const extractComplexity = (val: any): 'high' | 'medium' | 'low' => {
+      const normalized = extractString(val, 'medium').toLowerCase();
+      if (normalized === 'high' || normalized === 'medium' || normalized === 'low') {
+        return normalized;
       }
-      if (typeof val === 'number') return val > 0;
-      return fallback;
+      return 'medium';
     };
 
     return {
       intent: extractString(rawData?.intent || rawData?.type || rawData?.category || rawData?.classification, 'general'),
       goal: extractString(rawData?.goal || rawData?.objective || rawData?.target || rawData?.purpose || rawData?.description, 'Process user request'),
       selected_skill_slug: rawData?.selected_skill_slug || null,
+      complexity: extractComplexity(rawData?.complexity),
       memory_search: extractStringArray(rawData?.memory_search || rawData?.memories || rawData?.context || rawData?.search_terms),
-      response_immediate: extractBoolean(rawData?.response_immediate || rawData?.immediate || rawData?.urgent || rawData?.priority)
     };
   }
 
@@ -705,42 +716,36 @@ export class PlanRetrievalNode extends BaseNode {
       intent: planData.intent,
       goal: planData.goal,
       selected_skill_slug: planData.selected_skill_slug,
-      response_immediate: planData.response_immediate
+      complexity: planData.complexity,
     };
   }
 
-  /**
-   * Store skill data in state metadata for system prompt injection in PlannerNode
-   */
-  private storeSkillData(state: BaseThreadState, skillArticles: any[]): void {
-    const metadata = state.metadata as any;
-    
-    if (!metadata.planRetrieval) {
-      metadata.planRetrieval = {};
+  private async appendSelectedSkillMessage(state: BaseThreadState, skillArticles: any[]): Promise<void> {
+    if (skillArticles.length === 0) {
+      console.log('[PlanRetrievalNode] No selected skill to append as assistant message');
+      return;
     }
-    
-    // Store skill data for PlannerNode to access
-    if (skillArticles.length > 0) {
-      metadata.planRetrieval.skillData = {
-        slug: skillArticles[0].slug,
-        title: skillArticles[0].title,
-        excerpt: skillArticles[0].excerpt,
-        document: skillArticles[0].document,
-        category: skillArticles[0].category,
-        tags: skillArticles[0].tags
-      };
-      console.log(`[PlanRetrievalNode] Stored skill data in state: ${skillArticles[0].title}`);
-    } else {
-      metadata.planRetrieval.skillData = null;
-      console.log('[PlanRetrievalNode] No skill data to store');
-    }
+
+    const skill = skillArticles[0];
+    const payload = {
+      slug: skill.slug,
+      title: skill.title,
+      excerpt: skill.excerpt || '',
+      document: skill.document || '',
+      category: skill.category || '',
+      tags: Array.isArray(skill.tags) ? skill.tags : [],
+      selectedAt: Date.now(),
+    };
+
+    await this.appendResponse(state, `PLAN_RETRIEVAL_SKILL_CONTEXT\n${JSON.stringify(payload)}`);
+    console.log(`[PlanRetrievalNode] Appended selected skill context as assistant message: ${skill.slug}`);
   }
 
   /**
-   * Append only memory results as tool result messages (skills go through state)
+   * Append memory results as tool result messages (skill context is appended as assistant message)
    */
   private async appendMemoryResults(state: BaseThreadState, memoryArticles: any[], planData: PlanRetrievalResponse): Promise<void> {
-    // Only append memory articles as tool result message - skills flow through state metadata
+    // Only append memory articles as tool result message.
     if (memoryArticles.length > 0) {
       await this.appendToolResultMessage(state, 'memory_search', {
         toolName: 'memory_search',
@@ -772,7 +777,6 @@ export class PlanRetrievalNode extends BaseNode {
       selectedSkill: skillArticles.length > 0 ? skillArticles[0].slug : null,
       memoryKeywords: planData.memory_search.length,
       memoryArticles: memoryArticles.length,
-      immediate: planData.response_immediate
     });
   }
 }

@@ -38,20 +38,20 @@ import { GraphRegistry } from '../../services/GraphRegistry';
 // Mock LLM calls with realistic responses (external dependency)
 jest.mock('../../languagemodels', () => ({
   getService: jest.fn().mockImplementation(async (context: string, model: string) => ({
-    chat: jest.fn().mockImplementation(async (messages: any[]) => {
-        const prompt = messages[messages.length - 1]?.content || '';
-        
-        
-        if (prompt.includes('Plan Retrieval')) {
+    chat: jest.fn().mockImplementation(async (messages: any[], options?: any) => {
+        const systemMsg = [...messages].reverse().find((m: any) => m.role === 'system');
+        const prompt = systemMsg?.content || messages.map((m: any) => m.content).join(' ');
+
+
+        if (prompt.includes('Plan Retrieval') || prompt.includes('specialized planning') || prompt.includes('intent analysis')) {
           // PlanRetrievalNode expects JSON in reply.content field
           const planRetrievalResponse = {
             intent: 'development',
             goal: 'Create Node.js project with best practices',
             selected_skill_slug: null,
             memory_search: [],
-            response_immediate: false
           };
-          
+
           // BaseNode.chat expects reply.content to contain the JSON string
           const response = {
             content: JSON.stringify(planRetrievalResponse),
@@ -62,20 +62,25 @@ jest.mock('../../languagemodels', () => ({
               time_spent: 1200
             }
           };
-          
+
           return response;
         }
-        
-        if (prompt.includes('{{planning_mode}}') || prompt.includes('Planner') || prompt.includes('planning')) {
-          const plannerResponse = {
-            goal: 'Create Node.js project with best practices',
-            skill_focused: true,
-            plan_steps: ['Init package.json', 'Create src/', 'Setup tests'],
-            complexity_assessment: 'medium',
-            emit_chat_message: 'Created project plan'
-          };
+
+        if (prompt.includes('strategic planning') || prompt.includes('based on user goals') || prompt.includes('SOP Compliance') || prompt.includes('SELECTED SOP SKILL')) {
           return {
-            content: JSON.stringify(plannerResponse),
+            content: 'RESPONSE: PLAN\n\nGoal: Create Node.js project with best practices\n\n1. [ ] Init package.json\n2. [ ] Create src/\n3. [ ] Setup tests',
+            metadata: {
+              tokens_used: 200,
+              prompt_tokens: 120,
+              completion_tokens: 80,
+              time_spent: 1500
+            }
+          };
+        }
+
+        if (prompt.includes('ReAct reasoning agent')) {
+          return {
+            content: `STATUS: CONTINUE\n\n## Updated Plan\n1. [ ] Init package.json <- NEXT\n2. [ ] Create src/\n3. [ ] Setup tests\n\nProceeding with package.json creation.`,
             metadata: {
               tokens_used: 150,
               prompt_tokens: 80,
@@ -84,24 +89,10 @@ jest.mock('../../languagemodels', () => ({
             }
           };
         }
-        
-        if (prompt.includes('Reasoning')) {
-          const reasoningResponse = {
-            current_situation: 'Starting Node.js project setup',
-            goal_progress: 'Initializing project structure',
-            next_action: 'Create package.json file',
-            action_type: 'continue',
-            reasoning: 'Package.json is the foundation',
-            confidence: 0.9,
-            stop_condition_met: false,
-            skill_progress: {
-              current_step: 1,
-              total_steps: 3,
-              evidence_required: 'package.json creation'
-            }
-          };
+
+        if (prompt.includes('Execute the next steps')) {
           return {
-            content: JSON.stringify(reasoningResponse),
+            content: 'Executed plan steps. Created package.json with project configuration and set up directory structure.',
             metadata: {
               tokens_used: 150,
               prompt_tokens: 80,
@@ -110,7 +101,7 @@ jest.mock('../../languagemodels', () => ({
             }
           };
         }
-        
+
         if (prompt.includes('Skill Critic')) {
           const criticResponse = {
             progressScore: 8,
@@ -131,7 +122,7 @@ jest.mock('../../languagemodels', () => ({
             }
           };
         }
-        
+
         if (prompt.includes('Output')) {
           const outputResponse = {
             taskStatus: 'completed',
@@ -154,7 +145,7 @@ jest.mock('../../languagemodels', () => ({
             }
           };
         }
-        
+
         return {
           content: JSON.stringify({ error: 'Unexpected prompt in core test' }),
           metadata: {
@@ -168,7 +159,7 @@ jest.mock('../../languagemodels', () => ({
     })
   ),
   getCurrentMode: jest.fn(() => 'local'),
-  getLocalService: jest.fn(),
+  getLocalService: jest.fn().mockImplementation(async () => ({ isAvailable: () => false })),
   getRemoteService: jest.fn()
 }));
 

@@ -70,18 +70,15 @@ export class OutputNode extends BaseNode {
       this.connectWebSocket(connectionId);
     }
 
-    const plannerData = (state.metadata as any).planner || {};
     const actionsData = (state.metadata as any).actions || [];
-    const reasoningData = (state.metadata as any).reasoning || {};
     const criticData = (state.metadata as any).skillCritic || null;
     const planRetrievalData = (state.metadata as any).planRetrieval || {};
     const cycleCount = (state.metadata as any).reactLoopCount || 0;
 
     // Extract output context
     const context = this.extractOutputContext(
-      plannerData, 
+      state,
       actionsData, 
-      reasoningData, 
       criticData, 
       planRetrievalData, 
       cycleCount
@@ -123,22 +120,19 @@ export class OutputNode extends BaseNode {
    * Extract context for output generation
    */
   private extractOutputContext(
-    plannerData: any, 
+    state: BaseThreadState,
     actionsData: any[], 
-    reasoningData: any, 
     criticData: any, 
     planRetrievalData: any,
     cycleCount: number
   ) {
-    const goal = plannerData.goal || 'Unknown goal';
-    const skillData = planRetrievalData.skillData || null;
+    const goal = planRetrievalData.goal || planRetrievalData.intent || 'Unknown goal';
+    const skillData = this.extractSelectedSkillFromMessages(state);
     
     // Determine final status
     let finalStatus = 'completed';
     if (criticData) {
       finalStatus = criticData.decision === 'complete' ? 'completed' : 'partial';
-    } else if (reasoningData.currentDecision) {
-      finalStatus = reasoningData.currentDecision.stop_condition_met ? 'completed' : 'partial';
     }
 
     // Count evidence and actions
@@ -149,7 +143,7 @@ export class OutputNode extends BaseNode {
     const evidenceDetails = this.extractEvidenceDetails(actionsData);
     
     // Create progress summary
-    const progressSummary = this.createProgressSummary(actionsData, reasoningData, cycleCount);
+    const progressSummary = this.createProgressSummary(actionsData, cycleCount);
 
     return {
       goal,
@@ -162,6 +156,28 @@ export class OutputNode extends BaseNode {
       progressSummary,
       criticData
     };
+  }
+
+  private extractSelectedSkillFromMessages(state: BaseThreadState): any | null {
+    for (let i = state.messages.length - 1; i >= 0; i--) {
+      const message = state.messages[i];
+      if (message.role !== 'assistant') {
+        continue;
+      }
+
+      const content = typeof message.content === 'string' ? message.content : '';
+      if (!content.startsWith('PLAN_RETRIEVAL_SKILL_CONTEXT')) {
+        continue;
+      }
+
+      const jsonPayload = content.replace(/^PLAN_RETRIEVAL_SKILL_CONTEXT\s*/, '').trim();
+      const parsed = this.parseJson<any>(jsonPayload);
+      if (parsed && typeof parsed === 'object') {
+        return parsed;
+      }
+    }
+
+    return null;
   }
 
   /**
@@ -235,15 +251,14 @@ Critic Evaluation:
   /**
    * Create progress summary text
    */
-  private createProgressSummary(actionsData: any[], reasoningData: any, cycleCount: number): string {
+  private createProgressSummary(actionsData: any[], cycleCount: number): string {
     const successfulActions = actionsData.filter(action => action.success).length;
     const failedActions = actionsData.length - successfulActions;
     
     const summary = [
       `Total ReAct cycles: ${cycleCount}`,
       `Successful actions: ${successfulActions}`,
-      failedActions > 0 ? `Failed actions: ${failedActions}` : null,
-      reasoningData.currentDecision ? `Final reasoning: ${reasoningData.currentDecision.action_type}` : null
+      failedActions > 0 ? `Failed actions: ${failedActions}` : null
     ].filter(Boolean).join('\n');
 
     return summary || 'No progress data available';

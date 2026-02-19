@@ -52,8 +52,7 @@ jest.mock('../BaseNode', () => ({
           intent: 'general_question',
           goal: 'Get help with React development',
           selected_skill_slug: null,
-          memory_search: [],
-          response_immediate: true
+          memory_search: []
         })
       });
     }
@@ -64,8 +63,7 @@ jest.mock('../BaseNode', () => ({
           intent: 'user_management',
           goal: 'Create a new user account for team member',
           selected_skill_slug: 'user-management',
-          memory_search: ['user', 'account'],
-          response_immediate: false
+          memory_search: ['user', 'account']
         })
       });
     }
@@ -131,7 +129,6 @@ describe('PlanRetrievalNode Simple Test', () => {
     expect(metadata.planRetrieval.intent).toBe('simple_question');
     expect(metadata.planRetrieval.goal).toBe('User has a brief question or inquiry');
     expect(metadata.planRetrieval.selected_skill_slug).toBeNull();
-    expect(metadata.planRetrieval.response_immediate).toBe(true);
   });
 
   test('should match skill triggers and use LLM analysis path', async () => {
@@ -254,11 +251,11 @@ describe('PlanRetrievalNode Simple Test', () => {
     expect(metadata.planRetrieval.diagnostics.memoryArticlesFound).toBe(0);
   });
 
-  test('should identify tasks requiring planning with response_immediate = false', async () => {
+  test('should identify tasks requiring planning via LLM analysis', async () => {
     const planRetrievalNode = new PlanRetrievalNode();
     
     // Realistic production scenario: Complex task that requires multiple steps/planning
-    // This should result in response_immediate = false
+    // response_immediate routing is now handled by PlannerNode
     const state: any = {
       messages: [
         { role: 'user', content: 'I need to build a complete React e-commerce application with authentication, payment processing, and admin dashboard' }
@@ -306,9 +303,8 @@ describe('PlanRetrievalNode Simple Test', () => {
     expect(metadata.planRetrieval.diagnostics.llmAnalysisUsed).toBe(true);
     expect(metadata.planRetrieval.diagnostics.ruleBasedDetection).toBeUndefined();
     
-    // Complex tasks should not be immediate responses (require planning)
-    // Note: Our mock returns immediate=true, but production would likely return false
-    expect(metadata.planRetrieval.response_immediate).toBeDefined();
+    // Complex tasks are now routed by PlannerNode's response_immediate, not PlanRetrievalNode
+    expect(metadata.planRetrieval.intent).toBeDefined();
   });
 
   test('should force LLM analysis for long conversation threads (>10 messages)', async () => {
@@ -503,7 +499,6 @@ describe('PlanRetrievalNode Simple Test', () => {
       // Production correctly classifies greetings with specific intent
       expect(metadata.planRetrieval.intent).toBe('greeting');
       expect(metadata.planRetrieval.goal).toBe('User wants to exchange greetings or pleasantries');
-      expect(metadata.planRetrieval.response_immediate).toBe(true);
     }
   });
 });

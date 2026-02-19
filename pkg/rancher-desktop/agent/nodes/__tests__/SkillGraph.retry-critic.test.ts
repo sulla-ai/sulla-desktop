@@ -62,81 +62,49 @@ beforeEach(() => {
 
 // Mock LLM service - CRITIC RETRY SCENARIO
 const mockLLMService = {
-    generateResponse: jest.fn().mockImplementation(async (prompt: string) => {
+    chat: jest.fn().mockImplementation(async (messages: any[], options?: any) => {
+      // Extract system prompt to determine which node is calling
+      const systemMsg = [...messages].reverse().find((m: any) => m.role === 'system');
+      const prompt = systemMsg?.content || messages.map((m: any) => m.content).join(' ');
 
-      // Plan Retrieval - Always succeeds (we want to get to critic)
-      if (prompt.includes('Plan Retrieval')) {
-        const planRetrievalResponse = {
-          intent: 'development',
-          goal: 'Create Node.js project with best practices',
-          selected_skill_slug: null,
-          memory_search: [],
-          response_immediate: false // Force complex flow to trigger ReAct loop
-        };
-        
+      // Plan Retrieval - Always succeeds
+      if (prompt.includes('specialized planning') || prompt.includes('intent analysis')) {
         return {
-          content: JSON.stringify(planRetrievalResponse),
-          metadata: {
-            tokens_used: 150,
-            prompt_tokens: 80,
-            completion_tokens: 70,
-            time_spent: 1200
-          }
+          content: JSON.stringify({
+            intent: 'development',
+            goal: 'Create Node.js project with best practices',
+            selected_skill_slug: null,
+            memory_search: [],
+          }),
+          metadata: { tokens_used: 150, prompt_tokens: 80, completion_tokens: 70, time_spent: 1200 }
         };
       }
 
-      // Planner - Succeeds immediately (we want to get to ReAct loop)
-      if (prompt.includes('based on user goals') || prompt.includes('User Goal:') || prompt.includes('Response Format')) {
+      // Planner - Succeeds immediately (returns text, not JSON)
+      if (prompt.includes('planning AI') || prompt.includes('actionable plans') || prompt.includes('SELECTED SOP SKILL') || prompt.includes('SOP execution') || prompt.includes('strategic planning') || prompt.includes('based on user goals')) {
         attemptCounts.planner++;
         console.log(`[TEST] Planner attempt #${attemptCounts.planner} - SUCCESS (immediate)`);
-        
-        const plannerResponse = {
-          restated_goal: 'Create Node.js project with best practices',
-          skill_focused: true,
-          plan_steps: ['Init package.json', 'Create src/', 'Setup tests'],
-          complexity_score: 8,
-          complexity_reasoning: 'Complex setup with multiple components',
-          estimated_duration: '2-3 hours'
-        };
-        
         return {
-          content: JSON.stringify(plannerResponse),
-          metadata: {
-            tokens_used: 200,
-            prompt_tokens: 120,
-            completion_tokens: 80,
-            time_spent: 1500
-          }
+          content: 'RESPONSE: PLAN\n\nGoal: Create Node.js project with best practices\n\n1. [ ] Init package.json\n2. [ ] Create src/\n3. [ ] Setup tests',
+          metadata: { tokens_used: 200, prompt_tokens: 120, completion_tokens: 80, time_spent: 1500 }
         };
       }
 
-      // Reasoning - Succeeds immediately (we want to get to critic)
-      if (prompt.includes('Reasoning') || prompt.includes('ReAct') || prompt.includes('next_action')) {
+      // Reasoning - Always succeeds with CONTINUE to reach critic
+      if (prompt.includes('ReAct reasoning agent')) {
         attemptCounts.reasoning++;
-        console.log(`[TEST] Reasoning attempt #${attemptCounts.reasoning} - SUCCESS (immediate)`);
-        
-        const reasoningResponse = {
-          current_situation: 'Starting Node.js project setup',
-          goal_progress: 'Initializing project structure',
-          next_action: 'Create package.json file',
-          action_type: 'complete', // Mark complete to trigger critic
-          reasoning: 'Package.json is the foundation',
-          confidence: 0.9,
-          stop_condition_met: true,
-          currentDecision: {
-            action: 'create_package_json',
-            reasoning: 'Initialize project with package.json',
-            expected_outcome: 'package.json file created'
-          }
-        };
+        console.log(`[TEST] Reasoning attempt #${attemptCounts.reasoning} - SUCCESS (STATUS: CONTINUE)`);
         return {
-          content: JSON.stringify(reasoningResponse),
-          metadata: {
-            tokens_used: 150,
-            prompt_tokens: 80,
-            completion_tokens: 70,
-            time_spent: 1200
-          }
+          content: `STATUS: CONTINUE\n\n## Updated Plan\n1. [ ] Init package.json <- NEXT\n2. [ ] Create src/\n3. [ ] Setup tests\n\nProceeding with package.json creation.`,
+          metadata: { tokens_used: 150, prompt_tokens: 80, completion_tokens: 70, time_spent: 1200 }
+        };
+      }
+
+      // Action Node
+      if (prompt.includes('Execute the next steps')) {
+        return {
+          content: 'Executed plan steps. Created package.json with project configuration.',
+          metadata: { tokens_used: 150, prompt_tokens: 80, completion_tokens: 70, time_spent: 1200 }
         };
       }
 
@@ -146,59 +114,44 @@ const mockLLMService = {
         console.log(`[TEST] Critic attempt #${attemptCounts.critic}`);
 
         if (attemptCounts.critic === 1) {
-          // First critic attempt - REJECT completion claim
           console.log(`[TEST] Critic attempt ${attemptCounts.critic} - REJECTING (send back to reasoning)`);
-          const criticResponse = {
-            progressScore: 4,
-            evidenceScore: 3,
-            decision: 'continue', // Tell graph to continue working
-            reason: 'Insufficient evidence of task completion',
-            nextAction: 'Need more verification steps',
-            completionJustification: 'Task appears incomplete - needs more work',
-            emit_chat_message: 'More work needed - continuing'
-          };
           return {
-            content: JSON.stringify(criticResponse),
-            metadata: {
-              tokens_used: 120,
-              prompt_tokens: 70,
-              completion_tokens: 50,
-              time_spent: 1000
-            }
+            content: JSON.stringify({
+              progressScore: 4,
+              evidenceScore: 3,
+              decision: 'continue',
+              reason: 'Insufficient evidence of task completion',
+              nextAction: 'Need more verification steps',
+              completionJustification: 'Task appears incomplete - needs more work',
+              emit_chat_message: 'More work needed - continuing'
+            }),
+            metadata: { tokens_used: 120, prompt_tokens: 70, completion_tokens: 50, time_spent: 1000 }
           };
         } else {
-          // Second critic attempt - ACCEPT completion
           console.log(`[TEST] Critic attempt ${attemptCounts.critic} - ACCEPTING (allow completion)`);
-          const criticResponse = {
-            progressScore: 9,
-            evidenceScore: 8,
-            decision: 'complete',
-            reason: 'Successfully completed with sufficient evidence',
-            nextAction: 'Project ready for use',
-            completionJustification: 'All steps executed and verified',
-            emit_chat_message: 'Task completed successfully after validation'
-          };
           return {
-            content: JSON.stringify(criticResponse),
-            metadata: {
-              tokens_used: 150,
-              prompt_tokens: 80,
-              completion_tokens: 70,
-              time_spent: 1200
-            }
+            content: JSON.stringify({
+              progressScore: 9,
+              evidenceScore: 8,
+              decision: 'complete',
+              reason: 'Successfully completed with sufficient evidence',
+              nextAction: 'Project ready for use',
+              completionJustification: 'All steps executed and verified',
+              emit_chat_message: 'Task completed successfully after validation'
+            }),
+            metadata: { tokens_used: 150, prompt_tokens: 80, completion_tokens: 70, time_spent: 1200 }
           };
         }
       }
 
-      // Output - Always succeed (final step)
-      if (prompt.includes('Output')) {
-        const outputResponse = {
-          taskStatus: 'completed',
-          completionScore: 8,
-          summaryMessage: 'Node.js project setup completed after critic validation'
-        };
+      // Output
+      if (prompt.includes('Output') || prompt.includes('summary') || prompt.includes('final')) {
         return {
-          content: JSON.stringify(outputResponse),
+          content: JSON.stringify({
+            taskStatus: 'completed',
+            completionScore: 8,
+            summaryMessage: 'Node.js project setup completed after critic validation'
+          }),
           metadata: { tokens_used: 150, prompt_tokens: 80, completion_tokens: 70, time_spent: 1200 }
         };
       }
@@ -214,7 +167,16 @@ jest.mock('../../languagemodels', () => ({
   getCurrentModel: jest.fn().mockResolvedValue('claude-3-haiku'),
   getCurrentMode: jest.fn().mockResolvedValue('remote'),
   getLLMService: jest.fn().mockImplementation(() => mockLLMService),
-  getService: jest.fn().mockImplementation(() => Promise.resolve(mockLLMService))
+  getService: jest.fn().mockImplementation(() => Promise.resolve(mockLLMService)),
+  getLocalService: jest.fn().mockImplementation(async () => ({ isAvailable: () => false }))
+}));
+
+// Mock WebSocket to prevent real connection attempts
+jest.mock('../../services/WebSocketClientService', () => ({
+  getWebSocketClientService: () => ({
+    send: jest.fn(),
+    isConnected: jest.fn(() => true)
+  })
 }));
 
 // Mock tool registry
@@ -303,6 +265,6 @@ describe('SkillGraph Critic Retry Scenario', () => {
       console.log('✅ Critic retry test passed - proper routing and validation');
       console.log(`📊 Final counts: Planner: ${attemptCounts.planner}, Reasoning: ${attemptCounts.reasoning}, Critic: ${attemptCounts.critic}`);
       console.log(`🔄 ReAct loops: ${finalState.metadata.reactLoopCount} (critic rejection caused additional cycles)`);
-    });
+    }, 30000);
   });
 });

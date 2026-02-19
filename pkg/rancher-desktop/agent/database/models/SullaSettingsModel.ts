@@ -356,11 +356,11 @@ export class SullaSettingsModel extends BaseModel<SettingsAttributes> {
       // Fallback to PostgreSQL pattern matching
       try {
         const settings = await this.query(`
-          SELECT property, value, cast 
-          FROM ${this.prototype.tableName} 
-          WHERE property LIKE ?
+          SELECT property, value, "cast"
+          FROM sulla_settings
+          WHERE property LIKE $1
         `, [pattern.replace('*', '%')]);
-        
+
         const result: Record<string, any> = {};
         for (const setting of settings) {
           result[setting.property] = this.castValue(setting.value, setting.cast);
@@ -409,8 +409,8 @@ export class SullaSettingsModel extends BaseModel<SettingsAttributes> {
       // Delete from PostgreSQL and Redis
       try {
         await this.query(`
-          DELETE FROM ${this.prototype.tableName} 
-          WHERE property LIKE ?
+          DELETE FROM sulla_settings
+          WHERE property LIKE $1
         `, [pattern.replace('*', '%')]);
         
         if (keys.length > 0) {
