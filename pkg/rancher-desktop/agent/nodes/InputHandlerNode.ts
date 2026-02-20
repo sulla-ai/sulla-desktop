@@ -401,6 +401,7 @@ export class InputHandlerNode extends BaseNode {
     }
 
     state.messages = state.messages.filter(m => kept.has(m));
+    state.metadata.stateVersion = (state.metadata.stateVersion ?? 0) + 1;
     console.log(`[InputHandler] Token budget enforcement: ${totalTokens} → ${estimateTotalTokens(state.messages)} tokens`);
   }
 

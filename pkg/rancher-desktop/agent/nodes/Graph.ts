@@ -33,9 +33,9 @@ import { OutputNode } from './OutputNode';
 // ============================================================================
 
 // SkillGraph retry configuration
-const MAX_PLANNER_RETRIES = 2; // Total attempts: 3 (0, 1, 2)
-const MAX_REASONING_RETRIES = 3;
-const MAX_ACTION_LOOPS = 8;
+const MAX_PLANNER_RETRIES = 10; // Total attempts: 3 (0, 1, 2)
+const MAX_REASONING_RETRIES = 10;
+const MAX_ACTION_LOOPS = 20;
 
 // ============================================================================
 // DEFAULT SETTINGS
@@ -189,6 +189,7 @@ export interface BaseThreadState {
 
     llmModel: string;
     llmLocal: boolean;
+    stateVersion?: number;
 
     cycleComplete: boolean;
     waitingForUser: boolean;

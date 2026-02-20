@@ -77,7 +77,7 @@ export const browseToolsRegistration: ToolRegistration = {
   description: "List available tools by category or search term. Use this when you need a tool but don't know its exact name or category yet.",
   category: "meta",
   schemaDef: {
-    category: { type: 'string' as const, optional: true, description: "Specific category of tools (e.g. meta, workspace, slack, n8n)" },
+    category: { type: 'string' as const, optional: true, description: "Specific category of tools (e.g. meta, fs, workspace, slack, n8n)" },
     query: { type: 'string' as const, optional: true, description: "Keyword to filter tool names/descriptions" },
   },
   workerClass: BrowseToolsWorker,

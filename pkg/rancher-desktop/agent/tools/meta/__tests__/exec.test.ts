@@ -62,4 +62,35 @@ describe('exec security guardrails', () => {
     expect(result.result as string).toContain('Command failed with exit code 1');
     expect(result.result as string).toContain('instance \\\"0\\\" does not exist');
   });
+
+  it('accepts cmd alias and forwards it to runCommand', async () => {
+    const { ExecWorker, execRegistration } = await loadExecModule();
+
+    runCommandMock.mockResolvedValueOnce({
+      exitCode: 0,
+      stdout: 'ok',
+      stderr: '',
+    });
+
+    const worker = configureWorker(new ExecWorker(), execRegistration);
+    const result = await worker.invoke({ cmd: 'echo ok' });
+
+    expect(runCommandMock).toHaveBeenCalledWith(
+      'echo ok',
+      [],
+      expect.objectContaining({ runInLimaShell: true }),
+    );
+    expect(result.success).toBe(true);
+    expect(result.result).toBe('ok');
+  });
+
+  it('returns a clear error when neither command nor cmd is provided', async () => {
+    const { ExecWorker, execRegistration } = await loadExecModule();
+    const worker = configureWorker(new ExecWorker(), execRegistration);
+
+    const result = await worker.invoke({});
+
+    expect(result.success).toBe(false);
+    expect(result.result).toContain('Missing required field: command (or cmd)');
+  });
 });

@@ -137,7 +137,7 @@ Here's your codebase https://github.com/sulla-ai/sulla-desktop you can check the
 /**
  * 
  */
-export abstract class BaseNode {
+export abstract class BaseNode<T extends BaseThreadState = BaseThreadState> {
     id: string;
     name: string;
     protected llm: BaseLanguageModel | null = null;
@@ -147,7 +147,11 @@ export abstract class BaseNode {
         this.name = name;
     }
 
-    abstract execute(state: ThreadState): Promise<NodeResult<BaseThreadState>>;
+    abstract execute(state: T): Promise<NodeResult<T>>;
+
+    protected bumpStateVersion(state: BaseThreadState): void {
+        state.metadata.stateVersion = (state.metadata.stateVersion ?? 0) + 1;
+    }
 
     /**
      * 
@@ -240,6 +244,7 @@ export abstract class BaseNode {
                         timestamp: Date.now()
                     }
                 });
+                this.bumpStateVersion(state);
                 state.metadata.awarenessIncluded = true;
             }
 
@@ -285,6 +290,7 @@ Content rules – enforced:
                         timestamp: Date.now()
                     }
                 });
+                this.bumpStateVersion(state);
             }
         }
 
@@ -299,6 +305,7 @@ Content rules – enforced:
                         timestamp: Date.now()
                     }
                 });
+                this.bumpStateVersion(state);
             }
         }
 
@@ -853,6 +860,7 @@ Content rules – enforced:
                 timestamp: Date.now()
             }
         });
+        this.bumpStateVersion(state);
     }
 
     /**
@@ -1224,6 +1232,7 @@ Content rules – enforced:
                 timestamp: Date.now()
             }
         });
+        this.bumpStateVersion(state);
     }
 
     /**

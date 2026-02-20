@@ -33,7 +33,14 @@ export class ExecWorker extends BaseTool {
   }
 
   protected async _validatedCall(input: any): Promise<ToolResponse> {
-    const { command } = input;
+    const command = String(input.command ?? input.cmd ?? '').trim();
+
+    if (!command) {
+      return {
+        successBoolean: false,
+        responseString: 'Input validation failed: Missing required field: command (or cmd)'
+      };
+    }
 
     const blockedPattern = this.getForbiddenPattern(command);
     if (blockedPattern) {
@@ -76,7 +83,8 @@ export const execRegistration: ToolRegistration = {
   description: "Execute a shell command and return output. Use only when explicitly needed.",
   category: "meta",
   schemaDef: {
-    command: { type: 'string' as const, description: 'The exact shell command to run' },
+    command: { type: 'string' as const, optional: true, description: 'The exact shell command to run' },
+    cmd: { type: 'string' as const, optional: true, description: 'Alias for command' },
   },
   workerClass: ExecWorker,
 };

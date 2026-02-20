@@ -23,17 +23,22 @@ registry.register('slack', async () => {
     return null;
   }
 
-  const botToken  = (await svc.getIntegrationValue('slack', 'bot_token'))?.value;
-  const appToken  = (await svc.getIntegrationValue('slack', 'scopes_token'))?.value;
+  const botToken = (await svc.getIntegrationValue('slack', 'bot_token'))?.value;
+  const appToken = (
+    (await svc.getIntegrationValue('slack', 'scopes_token'))?.value ||
+    (await svc.getIntegrationValue('slack', 'app_token'))?.value ||
+    (await svc.getIntegrationValue('slack', 'app_level_token'))?.value
+  );
 
-  if (!botToken || !appToken) {
-    throw new Error('Slack tokens missing in DB');
+  // Inject tokens if present (SlackClient will also resolve from DB/env fallback)
+  if (botToken && appToken) {
+    slackClient.setTokens(botToken, appToken);
   }
 
-  // Inject tokens into existing singleton
-  slackClient.setTokens(botToken, appToken);
-
-  await slackClient.initialize();
+  const initialized = await slackClient.initialize();
+  if (!initialized) {
+    return null;
+  }
 
   return slackClient;
 });

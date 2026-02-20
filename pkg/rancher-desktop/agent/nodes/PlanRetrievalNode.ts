@@ -386,9 +386,13 @@ export class PlanRetrievalNode extends BaseNode {
     const now = Math.floor(Date.now() / 1000);
     const cacheAge = now - cacheTimestamp;
     const isCacheStale = cacheAge > cacheTTL;
+    const hasPoisonedCache = !!cachedData && (
+      cachedData.includes('_No skills found in the knowledge base yet._') ||
+      cachedData.includes('_Failed to load skills from the knowledge base._')
+    );
     
     // Step 2: If we have cached data, return it immediately
-    if (cachedData) {
+    if (cachedData && !hasPoisonedCache) {
       console.log(`[PlanRetrievalNode] Retrieved skill triggers from cache (age: ${cacheAge}s)`);
       
       // Step 3: If cache is stale, trigger background refresh for next request
@@ -400,6 +404,11 @@ export class PlanRetrievalNode extends BaseNode {
       }
       
       return cachedData;
+    }
+
+    // If cache exists but only contains a negative/error sentinel, refresh immediately.
+    if (hasPoisonedCache) {
+      console.log('[PlanRetrievalNode] Cached skill triggers contain sentinel result; forcing synchronous refresh');
     }
     
     // Step 4: No cache exists - we need to load synchronously (first time only)
@@ -446,9 +455,7 @@ export class PlanRetrievalNode extends BaseNode {
           const title = article.attributes.title || slug;
           const doc = article.attributes.document || '';
 
-          // Extract the **Trigger**: line from the document content
-          const triggerMatch = doc.match(/\*\*Trigger\*\*\s*:\s*(.+)/i);
-          const trigger = triggerMatch ? triggerMatch[1].trim() : '';
+          const trigger = this.extractSkillTrigger(doc);
 
           // Only include true skills that define an actual trigger
           if (!trigger || /^no\s+trigger\s+defined$/i.test(trigger)) {
@@ -480,6 +487,36 @@ export class PlanRetrievalNode extends BaseNode {
     }
 
     return result;
+  }
+
+  private extractSkillTrigger(document: string): string {
+    const doc = String(document || '');
+
+    // 1) Canonical markdown format: **Trigger**: ...
+    let match = doc.match(/\*\*Trigger\*\*\s*:\s*(.+)/i);
+    if (match?.[1]) {
+      return match[1].trim().replace(/^['"]|['"]$/g, '');
+    }
+
+    // 2) Plain text format: Trigger: ...
+    match = doc.match(/(?:^|\n)\s*Trigger\s*:\s*(.+)/i);
+    if (match?.[1]) {
+      return match[1].trim().replace(/^['"]|['"]$/g, '');
+    }
+
+    // 3) Frontmatter format:
+    // ---
+    // trigger: ...
+    // ---
+    const fm = doc.match(/^---\s*\n([\s\S]*?)\n---/);
+    if (fm?.[1]) {
+      const triggerLine = fm[1].match(/(?:^|\n)\s*trigger\s*:\s*(.+)/i);
+      if (triggerLine?.[1]) {
+        return triggerLine[1].trim().replace(/^['"]|['"]$/g, '');
+      }
+    }
+
+    return '';
   }
 
   // ======================================================================

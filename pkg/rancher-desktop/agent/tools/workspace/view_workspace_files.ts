@@ -1,5 +1,5 @@
 import { BaseTool, ToolRegistration, ToolResponse } from '../base';
-import { execSync } from 'child_process';
+import fs from 'fs';
 import path from 'path';
 import os from 'os';
 
@@ -13,17 +13,15 @@ export class ViewWorkspaceFilesWorker extends BaseTool {
 
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { name } = input;
-    const limaHome = path.join(os.homedir(), 'Library/Application Support/rancher-desktop/lima');
-    const limactlPath = path.join(__dirname, '../../../resources/darwin/lima/bin/limactl');
+    const rdDataDir = path.join(os.homedir(), 'Library/Application Support/rancher-desktop');
+    const relativeWorkspacePath = path.join('workspaces', name);
+    const absoluteWorkspacePath = path.join(rdDataDir, relativeWorkspacePath);
     try {
-      const output = execSync(`${limactlPath} shell 0 -- ls -la /workspaces/${name}`, {
-        env: { ...process.env, LIMA_HOME: limaHome },
-        encoding: 'utf-8'
-      });
-      const files = output.trim().split('\n');
+      const entries = fs.readdirSync(absoluteWorkspacePath, { withFileTypes: true });
+      const files = entries.map((entry) => `${entry.isDirectory() ? 'd' : '-'} ${entry.name}`);
       return {
         successBoolean: true,
-        responseString: `Files in workspace "${name}" (/workspaces/${name}):\n${files.join('\n')}`
+        responseString: `Files in workspace "${name}" (${relativeWorkspacePath}):\n${files.join('\n')}`
       };
     } catch (error: any) {
       return {
@@ -37,7 +35,7 @@ export class ViewWorkspaceFilesWorker extends BaseTool {
 // Export the complete tool registration with type enforcement
 export const viewWorkspaceFilesRegistration: ToolRegistration = {
   name: "view_workspace_files",
-  description: "List files in a workspace directory in the Lima VM.",
+  description: "List files in a workspace directory in the Rancher Desktop data directory.",
   category: "workspace",
   schemaDef: {
     name: { type: 'string' as const, description: 'The name of the workspace to view.' },

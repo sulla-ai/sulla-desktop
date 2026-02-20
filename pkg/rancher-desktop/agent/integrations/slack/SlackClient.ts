@@ -22,6 +22,7 @@ import { incomingMessage } from './prompts/incoming_message';
 const INTEGRATION_ID = 'slack';
 const TOKEN_PROPERTY = 'bot_token';
 const APP_TOKEN_PROPERTY = 'scopes_token';
+const APP_TOKEN_FALLBACK_PROPERTIES = ['app_token', 'app_level_token'];
 
 const WS_SERVICE = WebSocketClientService.getInstance();
 const SLACK_EVENTS_CHANNEL = 'dreaming-protocol';
@@ -92,6 +93,22 @@ export class SlackClient {
   private botToken?: string;
   private appToken?: string;
 
+  private normalizeTokens(botToken?: string, appToken?: string): { botToken: string; appToken: string } | null {
+    const bot = (botToken || '').trim();
+    const app = (appToken || '').trim();
+
+    if (!bot || !app) {
+      return null;
+    }
+
+    // Common misconfiguration: app/bot tokens entered in opposite fields.
+    if (bot.startsWith('xapp-') && app.startsWith('xoxb-')) {
+      return { botToken: app, appToken: bot };
+    }
+
+    return { botToken: bot, appToken: app };
+  }
+
   setTokens(botToken: string, appToken: string): void {
     this.botToken = botToken;
     this.appToken = appToken;
@@ -108,18 +125,35 @@ export class SlackClient {
     let appToken = this.appToken;
 
     if (!botToken || !appToken) {
-        const [botRow, appRow] = await Promise.all([
-            service.getIntegrationValue(INTEGRATION_ID, TOKEN_PROPERTY),
-            service.getIntegrationValue(INTEGRATION_ID, APP_TOKEN_PROPERTY),
-        ]);
+      const appRows = await Promise.all([
+        service.getIntegrationValue(INTEGRATION_ID, APP_TOKEN_PROPERTY),
+        ...APP_TOKEN_FALLBACK_PROPERTIES.map(property =>
+          service.getIntegrationValue(INTEGRATION_ID, property)
+        ),
+      ]);
+      const botRow = await service.getIntegrationValue(INTEGRATION_ID, TOKEN_PROPERTY);
 
-        botToken = botRow?.value;
-        appToken = appRow?.value;
+      botToken = botToken || botRow?.value || process.env.SLACK_BOT_TOKEN;
+      appToken = appToken || appRows.find(row => !!row?.value)?.value || process.env.SLACK_APP_TOKEN;
     }
 
-    if (!botToken || !appToken) {
+    const normalizedTokens = this.normalizeTokens(botToken, appToken);
+    if (!normalizedTokens) {
         console.error('[SlackClient] No Slack tokens available (injected or DB)');
         return false;
+    }
+
+    botToken = normalizedTokens.botToken;
+    appToken = normalizedTokens.appToken;
+
+    if (!botToken.startsWith('xoxb-')) {
+      console.error('[SlackClient] Invalid Slack bot token format. Expected xoxb- token for Socket Mode bot auth.');
+      return false;
+    }
+
+    if (!appToken.startsWith('xapp-')) {
+      console.error('[SlackClient] Invalid Slack app token format. Expected xapp- token to enable Socket Mode.');
+      return false;
     }
 
     this.app = new App({

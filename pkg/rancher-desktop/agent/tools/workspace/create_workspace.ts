@@ -1,5 +1,5 @@
 import { BaseTool, ToolRegistration, ToolResponse } from '../base';
-import { execSync } from 'child_process';
+import fs from 'fs';
 import path from 'path';
 import os from 'os';
 
@@ -13,15 +13,14 @@ export class CreateWorkspaceWorker extends BaseTool {
 
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { name } = input;
-    const limaHome = path.join(os.homedir(), 'Library/Application Support/rancher-desktop/lima');
-    const limactlPath = path.join(__dirname, '../../../resources/darwin/lima/bin/limactl');
+    const rdDataDir = path.join(os.homedir(), 'Library/Application Support/rancher-desktop');
+    const relativeWorkspacePath = path.join('workspaces', name);
+    const absoluteWorkspacePath = path.join(rdDataDir, relativeWorkspacePath);
     try {
-      execSync(`${limactlPath} shell 0 -- mkdir -p /workspaces/${name}`, {
-        env: { ...process.env, LIMA_HOME: limaHome }
-      });
+      fs.mkdirSync(absoluteWorkspacePath, { recursive: true });
       return {
         successBoolean: true,
-        responseString: `Workspace "${name}" created successfully at /workspaces/${name}`
+        responseString: `Workspace "${name}" created successfully at ${relativeWorkspacePath}`
       };
     } catch (error: any) {
       return {

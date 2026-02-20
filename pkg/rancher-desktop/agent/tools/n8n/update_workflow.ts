@@ -21,6 +21,26 @@ export class UpdateWorkflowWorker extends BaseTool {
     }
   }
 
+  private sanitizeShared(shared: any[] | undefined): any[] | undefined {
+    if (!Array.isArray(shared)) {
+      return undefined;
+    }
+
+    return shared.map((entry: any) => {
+      if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) {
+        return entry;
+      }
+
+      const cloned = { ...entry } as any;
+      if (cloned.project && typeof cloned.project === 'object' && !Array.isArray(cloned.project)) {
+        const { id: _projectId, ...projectWithoutId } = cloned.project;
+        cloned.project = projectWithoutId;
+      }
+
+      return cloned;
+    });
+  }
+
   private async normalizeWorkflowPayload(input: any, service: any): Promise<{ id: string; workflowData: any }> {
     const payload = { ...input };
     const id = String(payload.id || '').trim();
@@ -43,7 +63,7 @@ export class UpdateWorkflowWorker extends BaseTool {
       ? (existingWorkflow?.settings || {})
       : (this.parseJsonIfString(payload.settings, 'settings') || {});
     const shared = payload.shared === undefined
-      ? existingWorkflow?.shared
+      ? undefined
       : this.parseJsonIfString(payload.shared, 'shared');
     const staticData = payload.staticData === undefined
       ? existingWorkflow?.staticData
@@ -77,6 +97,8 @@ export class UpdateWorkflowWorker extends BaseTool {
       throw new Error('Invalid workflow payload: shared must be an array when provided.');
     }
 
+    const sanitizedShared = this.sanitizeShared(shared);
+
     const workflowData: any = {
       name,
       nodes: normalizedNodes,
@@ -87,8 +109,8 @@ export class UpdateWorkflowWorker extends BaseTool {
     if (active !== undefined) {
       workflowData.active = active;
     }
-    if (shared !== undefined) {
-      workflowData.shared = shared;
+    if (sanitizedShared !== undefined) {
+      workflowData.shared = sanitizedShared;
     }
     if (staticData !== undefined) {
       workflowData.staticData = staticData;

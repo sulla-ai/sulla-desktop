@@ -64,15 +64,73 @@ describe('ConversationSummaryService overflow summarization', () => {
 
     await service.performSummarization(state);
 
-    // From 110 messages with no existing summary, service should remove at least 31
-    // to bring conversation back within 80 after inserting the summary message.
-    expect(capturedBatch.length).toBeGreaterThanOrEqual(31);
+    // From 110 messages with no existing summary, service should remove at least 91
+    // to bring conversation back within 20 after inserting the summary message.
+    expect(capturedBatch.length).toBeGreaterThanOrEqual(91);
 
     const roles = new Set(capturedBatch.map(m => m.role));
     expect(roles.has('user')).toBe(true);
     expect(roles.has('assistant')).toBe(true);
     expect(roles.has('tool')).toBe(true);
 
-    expect(state.messages.length).toBeLessThanOrEqual(80);
+    expect(state.messages.length).toBeLessThanOrEqual(20);
+  });
+
+  it('force-trims to max window even when summarizer returns no observations', async () => {
+    const service = new ConversationSummaryServiceClass() as any;
+
+    const messages: any[] = [{ role: 'system', content: 'system prompt' }];
+    for (let i = 0; i < 40; i++) {
+      messages.push({ role: i % 2 === 0 ? 'user' : 'assistant', content: `message ${i}` });
+    }
+
+    const state: any = {
+      messages,
+      metadata: {
+        threadId: 'thread-overflow-no-observations',
+        llmLocal: false,
+        llmModel: 'claude-3-haiku',
+      },
+    };
+
+    service.summarizeBatch = async () => [];
+
+    await service.performSummarization(state);
+
+    expect(state.messages.length).toBeLessThanOrEqual(20);
+    expect(Array.isArray(state.metadata.conversationSummaries)).toBe(true);
+    expect(state.metadata.conversationSummaries.length).toBeGreaterThan(0);
+    expect((state.messages[0]?.metadata as any)?._conversationSummary).toBe(true);
+  });
+
+  it('skips stale summarization apply when stateVersion changes during async summarize', async () => {
+    const service = new ConversationSummaryServiceClass() as any;
+
+    const messages: any[] = [{ role: 'system', content: 'system prompt' }];
+    for (let i = 0; i < 40; i++) {
+      messages.push({ role: i % 2 === 0 ? 'user' : 'assistant', content: `message ${i}` });
+    }
+
+    const state: any = {
+      messages,
+      metadata: {
+        threadId: 'thread-version-lock',
+        llmLocal: false,
+        llmModel: 'claude-3-haiku',
+        stateVersion: 0,
+      },
+    };
+
+    const originalLength = state.messages.length;
+
+    service.summarizeBatch = async (activeState: any) => {
+      activeState.metadata.stateVersion = (activeState.metadata.stateVersion ?? 0) + 1;
+      return [{ priority: '🟡', content: 'would be stale' }];
+    };
+
+    await service.performSummarization(state);
+
+    expect(state.messages.length).toBe(originalLength);
+    expect(state.metadata.conversationSummaries).toBeUndefined();
   });
 });

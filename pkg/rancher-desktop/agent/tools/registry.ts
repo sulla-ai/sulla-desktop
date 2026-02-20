@@ -35,12 +35,12 @@ export class ToolRegistry {
     browser: "Web search tools like Brave and DuckDuckGo.",
     calendar: "Tools for managing calendar events.",
     docker: "Tools for Docker container management.",
-    fs: "File system operations tools.",
+    fs: "File system operations tools for creating, reading, writing, moving, copying, and deleting files/directories.",
     github: "GitHub repository management tools.",
     kubectl: "Kubernetes cluster management tools.",
     n8n: "Tools for managing n8n workflows, executions, credentials, tags, variables, and data tables.",
     slack: "Slack messaging and reaction tools.",
-    workspace: "Tools for managing isolated workspaces in the Lima VM.",
+    workspace: "Tools for managing workspace folders in the Rancher Desktop data directory.",
     redis: "Redis key/value store operations.",
     pg: "PostgreSQL database queries and transactions.",
     rdctl: "Sulla Desktop / rdctl management commands.",
@@ -168,16 +168,69 @@ export class ToolRegistry {
     return Promise.all(tools.map(tool => this.convertToolToLLM(tool)));
   }
 
+  private expandSearchAliases(value: string): string {
+    return value
+      .replace(/executions?/g, 'execute')
+      .replace(/workflows?/g, 'workflow');
+  }
+
+  private normalizeSearchText(value: string): string {
+    return this.expandSearchAliases(value.toLowerCase()).replace(/[^a-z0-9]/g, '');
+  }
+
+  private getFuzzyScore(name: string, description: string, query: string): number {
+    const rawQuery = this.expandSearchAliases(query.toLowerCase());
+    const normalizedQuery = this.normalizeSearchText(rawQuery);
+    if (!normalizedQuery) return 0;
+
+    const normalizedName = this.normalizeSearchText(name);
+    const normalizedDescription = this.normalizeSearchText(description);
+    let score = 0;
+
+    if (normalizedName.includes(normalizedQuery)) score += 100;
+    if (normalizedDescription.includes(normalizedQuery)) score += 60;
+
+    const tokens = rawQuery.split(/[\s_\-]+/).filter(token => token.length >= 3);
+    for (const token of tokens) {
+      if (name.toLowerCase().includes(token)) score += 15;
+      if (description.toLowerCase().includes(token)) score += 8;
+    }
+
+    return score;
+  }
+
   async searchTools(query?: string, category?: string): Promise<any[]> {
-    let names: string[] = this.categories.get(category || '') || [];
+    let names: string[] = category
+      ? (this.categories.get(category) || [])
+      : Array.from(this.loaders.keys());
+
     if (query) {
       const q = query.toLowerCase();
-      names = names.filter(name => {
+      const directMatches = names.filter(name => {
         if (name.toLowerCase().includes(q)) return true;
         const desc = this.descriptions.get(name);
         return desc && desc.toLowerCase().includes(q);
       });
+
+      if (directMatches.length > 0) {
+        names = directMatches;
+      } else {
+        const fuzzyMatches = names
+          .map(name => {
+            const description = this.descriptions.get(name) || '';
+            return {
+              name,
+              score: this.getFuzzyScore(name, description, q),
+            };
+          })
+          .filter(item => item.score > 0)
+          .sort((a, b) => b.score - a.score)
+          .map(item => item.name);
+
+        names = fuzzyMatches;
+      }
     }
+
     return Promise.all(names.map(name => this.getTool(name)));
   }
 

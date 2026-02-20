@@ -74,6 +74,7 @@ export class FrontendGraphWebSocketService {
     const abort = new AbortService();
     this.activeAbort = abort;
     state.metadata.options.abort = abort;
+    state.metadata.stateVersion = state.metadata.stateVersion ?? 0;
 
     try {
 
@@ -104,6 +105,7 @@ export class FrontendGraphWebSocketService {
         metadata: { source: 'user' }
       };
       state.messages.push(newMsg as any);
+      state.metadata.stateVersion = (state.metadata.stateVersion ?? 0) + 1;
 
       // Reset pause flags when real user input comes in
       state.metadata.cycleComplete = false;
