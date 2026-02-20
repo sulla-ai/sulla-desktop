@@ -2,9 +2,9 @@ import { BaseTool, ToolRegistration, ToolResponse } from "../base";
 import { createN8nService } from "../../services/N8nService";
 
 /**
- * Create Workflow Tool - Worker class for execution
+ * Validate Workflow Payload Tool - checks create/update payload compatibility with n8n API.
  */
-export class CreateWorkflowWorker extends BaseTool {
+export class ValidateWorkflowPayloadWorker extends BaseTool {
   name: string = '';
   description: string = '';
   schemaDef: any = {};
@@ -39,6 +39,9 @@ export class CreateWorkflowWorker extends BaseTool {
       if (typeof parsedNode !== 'object' || parsedNode === null || Array.isArray(parsedNode)) {
         throw new Error(`Invalid workflow payload: nodes[${index}] must be an object.`);
       }
+      if (!parsedNode.name || !parsedNode.type || !Array.isArray(parsedNode.position)) {
+        throw new Error(`Invalid workflow payload: nodes[${index}] must include name, type, and position.`);
+      }
       return parsedNode;
     });
 
@@ -59,59 +62,51 @@ export class CreateWorkflowWorker extends BaseTool {
 
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     try {
-      const service = await createN8nService();
       const payload = this.normalizeWorkflowPayload(input);
-      const workflow = await service.createWorkflow(payload);
 
-      const responseString = `Workflow created successfully:
-ID: ${workflow.id}
-Name: ${workflow.name}
-Active: ${workflow.active ? 'Yes' : 'No'}
-Created: ${new Date(workflow.createdAt).toLocaleString()}
-Updated: ${new Date(workflow.updatedAt).toLocaleString()}
-Nodes: ${workflow.nodes?.length || 0}
-Connections: ${Object.keys(workflow.connections || {}).length}
-Tags: ${(workflow.tags || []).map((tag: any) => tag.name).join(', ') || 'None'}
-Owner: ${workflow.owner?.email || 'N/A'}`;
+      let n8nReachable = 'not-checked';
+      if (input.checkConnection === true) {
+        const service = await createN8nService();
+        const healthy = await service.healthCheck();
+        n8nReachable = healthy ? 'healthy' : 'unhealthy';
+      }
+
+      const response = {
+        valid: true,
+        name: payload.name,
+        nodeCount: payload.nodes.length,
+        connectionKeys: Object.keys(payload.connections || {}),
+        hasSettings: Object.keys(payload.settings || {}).length > 0,
+        hasShared: Array.isArray(payload.shared),
+        hasStaticData: payload.staticData !== undefined,
+        n8nConnection: n8nReachable,
+      };
 
       return {
         successBoolean: true,
-        responseString
+        responseString: JSON.stringify(response),
       };
     } catch (error) {
       return {
         successBoolean: false,
-        responseString: `Error creating workflow: ${(error as Error).message}`
+        responseString: `Workflow payload validation failed: ${(error as Error).message}`,
       };
     }
   }
 }
 
-// Export the complete tool registration with type enforcement
-export const createWorkflowRegistration: ToolRegistration = {
-  name: "create_workflow",
-  description: "Create a new workflow in n8n.",
+export const validateWorkflowPayloadRegistration: ToolRegistration = {
+  name: "validate_workflow_payload",
+  description: "Validate an n8n workflow payload (nodes/connections/settings) before create/update.",
   category: "n8n",
   schemaDef: {
     name: { type: 'string' as const, description: "Workflow name" },
     nodes: { type: 'array' as const, items: { type: 'object' as const }, description: "Workflow nodes as n8n node objects." },
     connections: { type: 'object' as const, description: "Workflow connections object keyed by source node name." },
-    settings: { type: 'object' as const, properties: {
-      saveExecutionProgress: { type: 'boolean' as const, optional: true },
-      saveManualExecutions: { type: 'boolean' as const, optional: true },
-      saveDataErrorExecution: { type: 'string' as const, optional: true },
-      saveDataSuccessExecution: { type: 'string' as const, optional: true },
-      executionTimeout: { type: 'number' as const, optional: true },
-      errorWorkflow: { type: 'string' as const, optional: true },
-      timezone: { type: 'string' as const, optional: true },
-      executionOrder: { type: 'string' as const, optional: true },
-      callerPolicy: { type: 'string' as const, optional: true },
-      callerIds: { type: 'string' as const, optional: true },
-      timeSavedPerExecution: { type: 'number' as const, optional: true },
-      availableInMCP: { type: 'boolean' as const, optional: true },
-    }, optional: true, default: {}, description: "Workflow settings" },
-    shared: { type: 'array' as const, items: { type: 'object' as const }, optional: true, description: "Shared users" },
-    staticData: { type: 'object' as const, optional: true, description: "Static data" },
+    settings: { type: 'object' as const, optional: true, default: {}, description: "Workflow settings object." },
+    shared: { type: 'array' as const, items: { type: 'object' as const }, optional: true, description: "Shared users array." },
+    staticData: { type: 'object' as const, optional: true, description: "Workflow staticData object." },
+    checkConnection: { type: 'boolean' as const, optional: true, default: true, description: "When true, also checks n8n API health connectivity." },
   },
-  workerClass: CreateWorkflowWorker,
+  workerClass: ValidateWorkflowPayloadWorker,
 };

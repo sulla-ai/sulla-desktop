@@ -10,6 +10,8 @@ import { abortIfSignalReceived, throwIfAborted } from '../services/AbortService'
 import { tools, toolRegistry } from '../tools';
 import { BaseTool } from '../tools/base';
 import { Article } from '../database/models/Article';
+import { ConversationSummaryService } from '../services/ConversationSummaryService';
+import { ObservationalSummaryService } from '../services/ObservationalSummaryService';
 
 // ============================================================================
 // DEFAULT SETTINGS
@@ -344,6 +346,11 @@ Content rules – enforced:
         return reply.content;
     }
 
+    protected triggerBackgroundStateMaintenance(state: BaseThreadState): void {
+        ConversationSummaryService.triggerBackgroundSummarization(state);
+        ObservationalSummaryService.triggerBackgroundTrimming(state);
+    }
+
     /**
      * Unified chat: takes state + new system prompt + user message.
      * - Replaces last system prompt (or appends new one)
@@ -424,6 +431,8 @@ Content rules – enforced:
                 await this.executeToolCalls(state, toolCalls);
             }
 
+            this.triggerBackgroundStateMaintenance(state);
+
             return reply;
         } catch (err) {
             if ((err as any)?.name === 'AbortError') throw err;
@@ -448,6 +457,7 @@ Content rules – enforced:
                         });
                         if (reply) {
                             this.appendResponse(state, reply.content);
+                            this.triggerBackgroundStateMaintenance(state);
                             return reply;
                         }
                     }

@@ -9,7 +9,15 @@ export class PgQueryWorker extends BaseTool {
   description: string = '';
   schemaDef: any = {};
   protected async _validatedCall(input: any): Promise<ToolResponse> {
-    const { sql, params = [] } = input;
+    const sql = String(input.sql ?? input.query ?? input.statement ?? '').trim();
+    const params = Array.isArray(input.params) ? input.params : [];
+
+    if (!sql) {
+      return {
+        successBoolean: false,
+        responseString: 'Missing SQL statement. Provide sql (preferred) or query/statement.',
+      };
+    }
 
     try {
       const result = await postgresClient.query(sql, params);
@@ -37,7 +45,9 @@ export const pgQueryRegistration: ToolRegistration = {
   description: "Execute a PostgreSQL query and return results.",
   category: "pg",
   schemaDef: {
-    sql: { type: 'string' as const, description: "The SQL query to execute" },
+    sql: { type: 'string' as const, optional: true, description: "The SQL query to execute" },
+    query: { type: 'string' as const, optional: true, description: "Alias for sql" },
+    statement: { type: 'string' as const, optional: true, description: "Alias for sql" },
     params: { type: 'array' as const, items: { type: 'string' as const }, optional: true, description: "Parameters for the query" },
   },
   workerClass: PgQueryWorker,

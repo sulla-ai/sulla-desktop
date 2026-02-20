@@ -8,10 +8,16 @@ export class DockerExecWorker extends BaseTool {
   name: string = '';
   description: string = '';
   schemaDef: any = {};
+
+  private buildExecArgs(container: string, command: string): string[] {
+    // Route through container shell so quoted values / spaces are preserved.
+    return ['exec', container, 'sh', '-lc', command];
+  }
+
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { container, command } = input;
 
-    const args = ['exec', container, ...command.split(' ')];
+    const args = this.buildExecArgs(container, command);
 
     try {
       const res = await runCommand('docker', args, { timeoutMs: 60000, maxOutputChars: 160_000 });

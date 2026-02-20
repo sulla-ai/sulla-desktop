@@ -19,6 +19,7 @@ import { searchTemplatesRegistration } from './search_templates';
 import { getTemplateWorkflowRegistration } from './get_template_workflow';
 import { getTemplateCollectionsRegistration } from './get_template_collections';
 import { getTemplateCategoriesRegistration } from './get_template_categories';
+import { validateWorkflowPayloadRegistration } from './validate_workflow_payload';
 
 // Export all n8n tool registrations as an array
 export const n8nToolRegistrations = [
@@ -42,4 +43,5 @@ export const n8nToolRegistrations = [
   getTemplateWorkflowRegistration,
   getTemplateCollectionsRegistration,
   getTemplateCategoriesRegistration,
+  validateWorkflowPayloadRegistration,
 ];

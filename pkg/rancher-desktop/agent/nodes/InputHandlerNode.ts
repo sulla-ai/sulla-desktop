@@ -21,8 +21,6 @@
 import type { BaseThreadState, NodeResult } from './Graph';
 import type { ChatMessage } from '../languagemodels/BaseLanguageModel';
 import { BaseNode, JSON_ONLY_RESPONSE_INSTRUCTIONS } from './BaseNode';
-import { ConversationSummaryService } from '../services/ConversationSummaryService';
-import { ObservationalSummaryService } from '../services/ObservationalSummaryService';
 
 // ============================================================================
 // CONFIGURATION
@@ -182,8 +180,8 @@ export class InputHandlerNode extends BaseNode {
     // ----------------------------------------------------------------
     // 0. OBSERVATIONAL MEMORY MANAGEMENT
     // ----------------------------------------------------------------
-    // Trigger background trimming of observational memory if needed
-    ObservationalSummaryService.triggerBackgroundTrimming(state);
+    // Trigger background conversation + observational maintenance.
+    this.triggerBackgroundStateMaintenance(state);
 
     // ----------------------------------------------------------------
     // 1. INPUT SANITIZATION
@@ -229,8 +227,6 @@ export class InputHandlerNode extends BaseNode {
     const needsBatchSummarization = state.messages.length > MAX_WINDOW_SIZE;
 
     if (needsBatchSummarization) {
-      // Trigger non-blocking background summarization
-      ConversationSummaryService.triggerBackgroundSummarization(state);
       diagnostics.summaryServiceTriggered = true;
       console.log(`[InputHandler] Triggered background summarization for ${state.messages.length} messages`);
     }

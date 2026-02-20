@@ -255,16 +255,34 @@ export class N8nService {
     name?: string;
     description?: string;
   }): Promise<any> {
+    const workflowId = String(id || '').trim();
+    if (!workflowId) {
+      throw new Error('Workflow ID is required for activation');
+    }
+
     const body = options ? {
       versionId: options.versionId || '',
       name: options.name || '',
       description: options.description || ''
     } : {};
 
-    return this.request(`/api/v1/workflows/${id}/activate`, {
-      method: 'POST',
-      body: JSON.stringify(body)
-    });
+    try {
+      return await this.request(`/api/v1/workflows/${workflowId}/activate`, {
+        method: 'POST',
+        body: JSON.stringify(body)
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (!message.includes('N8n API error 404')) {
+        throw error;
+      }
+
+      // Compatibility fallback for n8n variants that use update workflow active state
+      return this.request(`/api/v1/workflows/${workflowId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ active: true })
+      });
+    }
   }
 
   /**
