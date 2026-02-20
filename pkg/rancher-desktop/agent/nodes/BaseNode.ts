@@ -1134,22 +1134,26 @@ Content rules – enforced:
                     }
 
                     const result = await tool.invoke(args);
+                    const toolSuccess = result?.success === true;
+                    const toolError = typeof result?.error === 'string'
+                        ? result.error
+                        : (!toolSuccess && typeof result?.result === 'string' ? result.result : undefined);
 
-                    // Emit tool result event on success
-                    await this.emitToolResultEvent(state, toolRunId, true, undefined, result);
+                    await this.emitToolResultEvent(state, toolRunId, toolSuccess, toolError, result);
 
                     await this.appendToolResultMessage(state, toolName, {
                         toolName,
-                        success: true,
+                        success: toolSuccess,
                         result,
+                        error: toolError,
                         toolCallId: toolRunId
                     });
 
                     results.push({
                         toolName,
-                        success: true,
+                        success: toolSuccess,
                         result,
-                        error: undefined
+                        error: toolError
                     });
                 } catch (err: any) {
                     const error = err.message || String(err);
