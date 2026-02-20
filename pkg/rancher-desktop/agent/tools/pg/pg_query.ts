@@ -20,10 +20,20 @@ export class PgQueryWorker extends BaseTool {
     }
 
     try {
-      const result = await postgresClient.query(sql, params);
+      const rawResult = await postgresClient.query(sql, params);
+      const rows = Array.isArray(rawResult)
+        ? rawResult
+        : (rawResult === undefined || rawResult === null ? [] : [rawResult]);
+      let rowsJson = '[]';
+      try {
+        rowsJson = JSON.stringify(rows, null, 2);
+      } catch {
+        rowsJson = '[unserializable rows]';
+      }
 
       const responseString = `PostgreSQL Query Result:
-Rows Returned: ${result.length}
+Rows Returned: ${rows.length}
+Rows: ${rowsJson}
 Query Executed Successfully`;
 
       return {

@@ -3,9 +3,16 @@
  * Single test to verify basic intent classification works
  */
 
+import { TextDecoder, TextEncoder } from 'node:util';
+
+(globalThis as any).TextEncoder = TextEncoder;
+(globalThis as any).TextDecoder = TextDecoder;
+
 import { PlanRetrievalNode } from '../PlanRetrievalNode';
 import type { BaseThreadState } from '../Graph';
 import type { ChatMessage } from '../../languagemodels/BaseLanguageModel';
+
+const mockFindByTag = jest.fn(() => Promise.resolve([]));
 
 // Mock dependencies to avoid TypeScript compilation errors
 jest.mock('../../database/registry/ArticlesRegistry', () => ({
@@ -29,6 +36,12 @@ jest.mock('../../database/RedisClient', () => ({
     get: jest.fn(() => Promise.resolve(null)),
     set: jest.fn(() => Promise.resolve())
   }
+}));
+
+jest.mock('../../database/models/Article', () => ({
+  Article: {
+    findByTag: mockFindByTag,
+  },
 }));
 
 jest.mock('../ActivePlanManager', () => ({
@@ -76,6 +89,46 @@ jest.mock('../BaseNode', () => ({
 }));
 
 describe('PlanRetrievalNode Simple Test', () => {
+  beforeEach(() => {
+    mockFindByTag.mockReset();
+    mockFindByTag.mockResolvedValue([]);
+  });
+
+  test('should exclude skill-tagged articles that do not define real triggers', async () => {
+    const planRetrievalNode = new PlanRetrievalNode();
+
+    mockFindByTag.mockResolvedValueOnce([
+      {
+        attributes: {
+          slug: 'create-workflow',
+          title: 'Create Workflow',
+          document: '**Trigger**: create a workflow in n8n',
+        },
+      },
+      {
+        attributes: {
+          slug: 'test-the-three-previously-broken-n8n-functions-create-workflow-update-workflow-and-activate-workflow-tprd',
+          title: 'Technical Execution Brief',
+          document: '**Trigger**: No trigger defined',
+        },
+      },
+      {
+        attributes: {
+          slug: 'article-without-trigger-line',
+          title: 'General Article',
+          document: 'No trigger section in this document',
+        },
+      },
+    ] as any);
+
+    const skillList = await (planRetrievalNode as any).loadSkillTriggersFromDatabase('skills:key', 'skills:ts');
+
+    expect(skillList).toContain('Create Workflow');
+    expect(skillList).toContain('Trigger: create a workflow in n8n');
+    expect(skillList).not.toContain('Technical Execution Brief');
+    expect(skillList).not.toContain('No trigger defined');
+    expect(skillList).not.toContain('General Article');
+  });
   
   test('should classify a simple user question', async () => {
     const planRetrievalNode = new PlanRetrievalNode();

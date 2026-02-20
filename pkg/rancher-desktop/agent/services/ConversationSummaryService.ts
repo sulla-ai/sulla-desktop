@@ -132,7 +132,7 @@ export class ConversationSummaryService {
    */
   private calculateAgeScore(messageIndex: number, totalMessages: number, message: ChatMessage): number {
     // Position-based age (older position = higher score)
-    const positionScore = messageIndex / Math.max(totalMessages - 1, 1);
+    const positionScore = (totalMessages - 1 - messageIndex) / Math.max(totalMessages - 1, 1);
     
     // Time-based age (if timestamp available)
     let timeScore = 0;
@@ -318,22 +318,47 @@ export class ConversationSummaryService {
     
     // 3. Score all messages for age and relevancy
     const messageScores = this.scoreMessages(workingMessages);
+
+    // Protect system messages and the latest user message from summarization.
+    const latestUserIndex = (() => {
+      for (let i = workingMessages.length - 1; i >= 0; i--) {
+        if (workingMessages[i].role === 'user') return i;
+      }
+      return -1;
+    })();
+
+    const summarizableScores = messageScores.filter(score => {
+      if (score.message.role === 'system') return false;
+      if (latestUserIndex >= 0 && score.index === latestUserIndex) return false;
+      return true;
+    });
+
+    // Force summarization of everything that exceeds the trigger window budget.
+    // Account for insertion of a summary message when there isn't one yet.
+    const targetWindow = TRIGGER_WINDOW_SIZE - (hasExistingSummary ? 0 : 1);
+    const requiredRemovalCount = Math.max(0, state.messages.length - targetWindow);
+    const forcedOverflowScores = [...summarizableScores]
+      .sort((a, b) => a.index - b.index) // Oldest first
+      .slice(0, requiredRemovalCount);
+    const forcedOverflowSet = new Set(forcedOverflowScores);
     
     // 4. Select messages that exceed the summarization threshold
-    const candidateMessages = messageScores
+    const candidateMessages = summarizableScores
       .filter(score => score.combinedScore >= SCORING_CONFIG.SUMMARIZATION_THRESHOLD)
+      .filter(score => !forcedOverflowSet.has(score))
       .sort((a, b) => b.combinedScore - a.combinedScore) // Sort by score descending
       .slice(0, SCORING_CONFIG.MAX_BATCH_SIZE); // Cap at max batch size
     
     // 5. Ensure we have minimum batch size, add oldest messages if needed
-    const messagesToSummarize: ChatMessage[] = candidateMessages.map(score => score.message);
+    const messagesToSummarize: ChatMessage[] = forcedOverflowScores.map(score => score.message);
+    messagesToSummarize.push(...candidateMessages.map(score => score.message));
     
     if (messagesToSummarize.length < SCORING_CONFIG.MIN_BATCH_SIZE) {
       // Add oldest non-protected messages to reach minimum batch size
       const remainingMessages = workingMessages.filter(msg => 
         !messagesToSummarize.includes(msg) &&
         msg.role !== 'system' && 
-        !(msg.role === 'user' && workingMessages.indexOf(msg) === workingMessages.length - 1)
+        workingMessages.indexOf(msg) !== latestUserIndex
       );
       
       const additionalNeeded = SCORING_CONFIG.MIN_BATCH_SIZE - messagesToSummarize.length;
@@ -345,7 +370,7 @@ export class ConversationSummaryService {
       return;
     }
 
-    console.log(`[ConversationSummary] Selected ${messagesToSummarize.length} messages for summarization (${candidateMessages.length} exceeded threshold)`);
+    console.log(`[ConversationSummary] Selected ${messagesToSummarize.length} messages for summarization (${forcedOverflowScores.length} forced overflow, ${candidateMessages.length} exceeded threshold)`);
     
     // Log scoring details for debugging
     if (candidateMessages.length > 0) {

@@ -1,0 +1,78 @@
+import { TextDecoder, TextEncoder } from 'node:util';
+import { beforeAll, describe, expect, it, jest } from '@jest/globals';
+
+let ConversationSummaryServiceClass: any;
+
+describe('ConversationSummaryService overflow summarization', () => {
+  beforeAll(async () => {
+    (globalThis as any).TextEncoder = TextEncoder;
+    (globalThis as any).TextDecoder = TextDecoder;
+
+    jest.unstable_mockModule('../JsonParseService', () => ({
+      parseJson: (input: string) => {
+        try {
+          return JSON.parse(input);
+        } catch {
+          return null;
+        }
+      },
+    }));
+
+    const mod = await import('../ConversationSummaryService');
+    ConversationSummaryServiceClass = mod.ConversationSummaryService;
+  });
+
+  it('prioritizes older messages with higher age score', () => {
+    const service = new ConversationSummaryServiceClass() as any;
+    const total = 100;
+
+    const olderScore = service.calculateAgeScore(0, total, { role: 'assistant', content: 'old' });
+    const newerScore = service.calculateAgeScore(total - 1, total, { role: 'assistant', content: 'new' });
+
+    expect(olderScore).toBeGreaterThan(newerScore);
+  });
+
+  it('always summarizes enough overflow messages and includes tool/user/assistant roles', async () => {
+    const service = new ConversationSummaryServiceClass() as any;
+
+    const messages: any[] = [{ role: 'system', content: 'system prompt' }];
+
+    for (let i = 0; i < 109; i++) {
+      if (i % 3 === 0) {
+        messages.push({ role: 'user', content: `user ${i}` });
+      } else if (i % 3 === 1) {
+        messages.push({ role: 'assistant', content: `assistant ${i}` });
+      } else {
+        messages.push({ role: 'tool', content: `tool ${i}` });
+      }
+    }
+
+    const state: any = {
+      messages,
+      metadata: {
+        threadId: 'thread-overflow',
+        llmLocal: false,
+        llmModel: 'claude-3-haiku',
+      },
+    };
+
+    let capturedBatch: any[] = [];
+    service.summarizeBatch = async (_state: any, batch: any[]) => {
+      capturedBatch = batch;
+      return [{ priority: '🟡', content: 'compressed summary observation' }];
+    };
+
+    await service.performSummarization(state);
+
+    // From 110 messages with no existing summary, service should remove at least 31
+    // to bring conversation back within 80 after inserting the summary message.
+    expect(capturedBatch.length).toBeGreaterThanOrEqual(31);
+
+    const roles = new Set(capturedBatch.map(m => m.role));
+    expect(roles.has('user')).toBe(true);
+    expect(roles.has('assistant')).toBe(true);
+    expect(roles.has('tool')).toBe(true);
+
+    expect(state.messages.length).toBeLessThanOrEqual(80);
+  });
+});

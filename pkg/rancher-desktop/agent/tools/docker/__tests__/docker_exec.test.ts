@@ -27,4 +27,28 @@ describe('docker_exec argument handling', () => {
     expect(args[4]).toBe(command);
     expect(args.length).toBe(5);
   });
+
+  it('formats non-zero exit failures with exit code and fallback message when output is empty', () => {
+    const worker = new DockerExecWorker() as any;
+
+    const message = worker.formatFailure('sulla_redis', {
+      exitCode: 1,
+      stderr: '',
+      stdout: '',
+    });
+
+    expect(message).toBe('Error executing command in container sulla_redis (exit 1): (no stderr/stdout output)');
+  });
+
+  it('formats non-zero exit failures using stderr output when available', () => {
+    const worker = new DockerExecWorker() as any;
+
+    const message = worker.formatFailure('sulla_redis', {
+      exitCode: 1,
+      stderr: 'grep: no matches',
+      stdout: '',
+    });
+
+    expect(message).toBe('Error executing command in container sulla_redis (exit 1): grep: no matches');
+  });
 });

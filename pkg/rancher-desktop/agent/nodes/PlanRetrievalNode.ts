@@ -448,13 +448,20 @@ export class PlanRetrievalNode extends BaseNode {
 
           // Extract the **Trigger**: line from the document content
           const triggerMatch = doc.match(/\*\*Trigger\*\*\s*:\s*(.+)/i);
-          const trigger = triggerMatch ? triggerMatch[1].trim() : 'No trigger defined';
+          const trigger = triggerMatch ? triggerMatch[1].trim() : '';
+
+          // Only include true skills that define an actual trigger
+          if (!trigger || /^no\s+trigger\s+defined$/i.test(trigger)) {
+            continue;
+          }
 
           lines.push(`- **${title}** (slug: \`${slug}\`)\n  Trigger: ${trigger}`);
         }
 
-        result = lines.join('\n');
-        console.log(`[PlanRetrievalNode] Loaded ${articles.length} skills from database`);
+        result = lines.length > 0
+          ? lines.join('\n')
+          : '_No skills found in the knowledge base yet._';
+        console.log(`[PlanRetrievalNode] Loaded ${lines.length} triggered skills from ${articles.length} skill-tagged articles`);
       }
     } catch (error) {
       console.warn('[PlanRetrievalNode] Failed to load skill triggers from database:', error);

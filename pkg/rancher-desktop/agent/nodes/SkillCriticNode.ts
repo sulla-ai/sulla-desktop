@@ -85,8 +85,8 @@ export class SkillCriticNode extends BaseNode {
     const prompt = this.buildCriticPrompt(state);
 
     const enriched = await this.enrichPrompt(prompt, state, {
-      includeSoul: true,
-      includeAwareness: true,
+      includeSoul: false,
+      includeAwareness: false,
       includeMemory: false
     });
 

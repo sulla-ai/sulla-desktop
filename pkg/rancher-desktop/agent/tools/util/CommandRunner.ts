@@ -1,4 +1,7 @@
 import { spawn } from 'child_process';
+import os from 'os';
+import path from 'path';
+import fs from 'fs';
 
 export interface CommandRunnerOptions {
   timeoutMs?: number;
@@ -14,7 +17,50 @@ function quoteShellArg(value: string): string {
   if (/^[A-Za-z0-9_\-./:=@]+$/.test(value)) {
     return value;
   }
-  return `'${value.replace(/'/g, `'"'"'`)}'`;
+  return `'${value.replace(/'/g, `"'"'`)}'`;
+}
+
+export function shouldFallbackFromLimaShell(result: { stdout?: string; stderr?: string; exitCode: number }): boolean {
+  if (result.exitCode === 0) {
+    return false;
+  }
+
+  const combinedOutput = `${result.stderr || ''}\n${result.stdout || ''}`;
+  return /instance\s+"[^"]+"\s+does not exist/i.test(combinedOutput);
+}
+
+export function resolveLimaHome(options: CommandRunnerOptions): string {
+  return options.limaHome
+    || process.env.LIMA_HOME
+    || path.join(os.homedir(), 'Library/Application Support/rancher-desktop/lima');
+}
+
+export function resolveLimactlPath(options: CommandRunnerOptions): string {
+  if (options.limactlPath) {
+    return options.limactlPath;
+  }
+
+  if (process.env.LIMACTL_PATH) {
+    return process.env.LIMACTL_PATH;
+  }
+
+  const candidates = [
+    path.resolve(process.cwd(), 'resources/darwin/lima/bin/limactl'),
+    path.resolve(process.cwd(), 'pkg/rancher-desktop/resources/darwin/lima/bin/limactl'),
+  ];
+
+  if (typeof process.resourcesPath === 'string' && process.resourcesPath.length > 0) {
+    candidates.push(path.join(process.resourcesPath, 'darwin/lima/bin/limactl'));
+    candidates.push(path.join(process.resourcesPath, 'resources/darwin/lima/bin/limactl'));
+  }
+
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  return 'resources/darwin/lima/bin/limactl';
 }
 
 function executeSpawn(
@@ -107,8 +153,8 @@ export async function runCommand(
   options: CommandRunnerOptions = {},
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
   if (options.runInLimaShell) {
-    const limaHome = options.limaHome || process.env.LIMA_HOME || `${process.env.HOME || ''}/Library/Application Support/rancher-desktop/lima`;
-    const limactlPath = options.limactlPath || process.env.LIMACTL_PATH || 'resources/darwin/lima/bin/limactl';
+    const limaHome = resolveLimaHome(options);
+    const limactlPath = resolveLimactlPath(options);
     const limaInstance = options.limaInstance || '0';
 
     const script = args.length === 0
@@ -120,6 +166,10 @@ export async function runCommand(
 
     if (result.exitCode === 127) {
       result = await executeSpawn('env', [`LIMA_HOME=${limaHome}`, 'limactl', ...limactlArgs], options);
+    }
+
+    if (shouldFallbackFromLimaShell(result)) {
+      return executeSpawn('sh', ['-lc', script], options);
     }
 
     return result;

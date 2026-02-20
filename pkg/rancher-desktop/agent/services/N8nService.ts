@@ -213,6 +213,7 @@ export class N8nService {
    */
   async updateWorkflow(id: string, workflowData: {
     name: string;
+    active?: boolean;
     nodes: any[];
     connections: any;
     settings: {
@@ -252,36 +253,51 @@ export class N8nService {
    */
   async activateWorkflow(id: string, options?: {
     versionId?: string;
-    name?: string;
-    description?: string;
   }): Promise<any> {
     const workflowId = String(id || '').trim();
     if (!workflowId) {
       throw new Error('Workflow ID is required for activation');
     }
 
-    const body = options ? {
-      versionId: options.versionId || '',
-      name: options.name || '',
-      description: options.description || ''
-    } : {};
+    const versionId = options?.versionId ? String(options.versionId).trim() : '';
+    const body = versionId ? { versionId } : undefined;
+
+    const isNotFoundOrMethodError = (error: unknown): boolean => {
+      const message = error instanceof Error ? error.message : String(error);
+      return message.includes('N8n API error 404') || message.includes('N8n API error 405');
+    };
 
     try {
       return await this.request(`/api/v1/workflows/${workflowId}/activate`, {
         method: 'POST',
-        body: JSON.stringify(body)
+        ...(body ? { body: JSON.stringify(body) } : {})
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      if (!message.includes('N8n API error 404')) {
+      if (!isNotFoundOrMethodError(error)) {
         throw error;
       }
 
-      // Compatibility fallback for n8n variants that use update workflow active state
-      return this.request(`/api/v1/workflows/${workflowId}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ active: true })
-      });
+      try {
+        // Compatibility fallback for n8n variants that allow direct active state patch.
+        return await this.request(`/api/v1/workflows/${workflowId}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ active: true })
+        });
+      } catch (patchError) {
+        if (!isNotFoundOrMethodError(patchError)) {
+          throw patchError;
+        }
+
+        // Final fallback for n8n variants that require full workflow updates via PUT.
+        const existingWorkflow = await this.getWorkflow(workflowId);
+        return this.request(`/api/v1/workflows/${workflowId}`, {
+          method: 'PUT',
+          body: JSON.stringify({
+            ...existingWorkflow,
+            active: true,
+          })
+        });
+      }
     }
   }
 

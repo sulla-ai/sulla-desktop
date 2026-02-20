@@ -140,4 +140,30 @@ describe('n8n workflow payload tools', () => {
       expect(result.result as string).not.toContain('Input validation failed');
     }
   });
+
+  it('update_workflow preserves active field in validated payload', async () => {
+    const { updateModule } = await loadN8nTools();
+    const worker = configureWorker(new updateModule.UpdateWorkflowWorker(), updateModule.updateWorkflowRegistration) as any;
+
+    const parsed = worker.parseInput({
+      id: 'workflow-id-placeholder',
+      active: true,
+      ...validPayload,
+    });
+
+    expect(parsed.active).toBe(true);
+  });
+
+  it('update_workflow accepts minimal payload at schema layer (id only)', async () => {
+    const { updateModule } = await loadN8nTools();
+    const worker = configureWorker(new updateModule.UpdateWorkflowWorker(), updateModule.updateWorkflowRegistration) as any;
+
+    const parsed = worker.parseInput({
+      id: 'workflow-id-placeholder',
+    });
+
+    expect(parsed.id).toBe('workflow-id-placeholder');
+    expect(parsed.nodes).toBeUndefined();
+    expect(parsed.connections).toBeUndefined();
+  });
 });

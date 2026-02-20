@@ -9,16 +9,15 @@ export class ExecWorker extends BaseTool {
   description: string = '';
   schemaDef: any = {};
 
-  protected async _validatedCall(input: any): Promise<ToolResponse> {
-    const { command } = input;
-
-    // Guardrails: block dangerous commands
+  private getForbiddenPattern(command: string): RegExp | null {
+    // Guardrails: block dangerous commands only (avoid broad substring matches)
+    // like --format flags or "Content-Type: application/json".
     const forbiddenPatterns = [
       /rm\s+-rf/i,
       /sudo/i,
       /dd\s+/i,
-      /mkfs/i,
-      /format/i,
+      /\bmkfs(?:\.[a-z0-9_+-]+)?\b/i,
+      /\bformat(?:\.com)?\s+[a-z]:/i,
       /:(){.*:|\|:}/, // fork bomb
       /shutdown/i,
       /halt/i,
@@ -27,12 +26,21 @@ export class ExecWorker extends BaseTool {
     ];
 
     for (const pattern of forbiddenPatterns) {
-      if (pattern.test(command)) {
-        return {
-          successBoolean: false,
-          responseString: `ERROR: Command blocked for security reasons. Pattern: ${pattern.source}`
-        };
-      }
+      if (pattern.test(command)) return pattern;
+    }
+
+    return null;
+  }
+
+  protected async _validatedCall(input: any): Promise<ToolResponse> {
+    const { command } = input;
+
+    const blockedPattern = this.getForbiddenPattern(command);
+    if (blockedPattern) {
+      return {
+        successBoolean: false,
+        responseString: `ERROR: Command blocked for security reasons. Pattern: ${blockedPattern.source}`
+      };
     }
 
     try {

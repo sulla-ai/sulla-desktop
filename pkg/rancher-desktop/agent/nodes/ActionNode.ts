@@ -55,23 +55,6 @@ Key result: [one-line summary of accomplishment]
 
 {{technical_instructions}}
 
---- 
-
-You are the Execution Agent.
-
-**Inputs every cycle:**
-- Current Technical Execution Brief (your technical instructions for this cycle)
-- Previous action results / message history
-
-**Rules:**
-- Execute the steps outlined in the Technical Execution Brief.
-- Use tools aggressively and correctly to complete the work.
-- You may freely output text, observations, tool calls, results, and thinking as you progress.
-- Do NOT use the old rigid # Execution Report format.
-- When you believe the current cycle is fully complete, end your entire response with exactly this marker and nothing after:
-
-===EXECUTOR DONE===
-Key result: [one-line summary of accomplishment, point to facts for the critic]
 `;
 
 const EXECUTOR_DONE_MARKER_REGEX = /^\s*===EXECUTOR DONE===\s*$/m;

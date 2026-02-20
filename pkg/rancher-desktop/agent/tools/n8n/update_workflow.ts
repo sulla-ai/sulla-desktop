@@ -21,20 +21,43 @@ export class UpdateWorkflowWorker extends BaseTool {
     }
   }
 
-  private normalizeWorkflowPayload(input: any): { id: string; workflowData: any } {
+  private async normalizeWorkflowPayload(input: any, service: any): Promise<{ id: string; workflowData: any }> {
     const payload = { ...input };
+    const id = String(payload.id || '').trim();
 
-    payload.nodes = this.parseJsonIfString(payload.nodes, 'nodes');
-    payload.connections = this.parseJsonIfString(payload.connections, 'connections');
-    payload.settings = this.parseJsonIfString(payload.settings, 'settings') || {};
-    payload.shared = this.parseJsonIfString(payload.shared, 'shared');
-    payload.staticData = this.parseJsonIfString(payload.staticData, 'staticData');
+    if (!id) {
+      throw new Error('Workflow ID is required');
+    }
 
-    if (!Array.isArray(payload.nodes)) {
+    const existingWorkflow = await service.getWorkflow(id);
+
+    const name = payload.name ?? existingWorkflow?.name;
+    const active = payload.active ?? existingWorkflow?.active;
+    const nodes = payload.nodes === undefined
+      ? existingWorkflow?.nodes
+      : this.parseJsonIfString(payload.nodes, 'nodes');
+    const connections = payload.connections === undefined
+      ? existingWorkflow?.connections
+      : this.parseJsonIfString(payload.connections, 'connections');
+    const settings = payload.settings === undefined
+      ? (existingWorkflow?.settings || {})
+      : (this.parseJsonIfString(payload.settings, 'settings') || {});
+    const shared = payload.shared === undefined
+      ? existingWorkflow?.shared
+      : this.parseJsonIfString(payload.shared, 'shared');
+    const staticData = payload.staticData === undefined
+      ? existingWorkflow?.staticData
+      : this.parseJsonIfString(payload.staticData, 'staticData');
+
+    if (!name || typeof name !== 'string') {
+      throw new Error('Invalid workflow payload: name is required.');
+    }
+
+    if (!Array.isArray(nodes)) {
       throw new Error('Invalid workflow payload: nodes must be an array.');
     }
 
-    payload.nodes = payload.nodes.map((node: any, index: number) => {
+    const normalizedNodes = nodes.map((node: any, index: number) => {
       const parsedNode = this.parseJsonIfString(node, `nodes[${index}]`);
       if (typeof parsedNode !== 'object' || parsedNode === null || Array.isArray(parsedNode)) {
         throw new Error(`Invalid workflow payload: nodes[${index}] must be an object.`);
@@ -42,26 +65,42 @@ export class UpdateWorkflowWorker extends BaseTool {
       return parsedNode;
     });
 
-    if (typeof payload.connections !== 'object' || payload.connections === null || Array.isArray(payload.connections)) {
+    if (typeof connections !== 'object' || connections === null || Array.isArray(connections)) {
       throw new Error('Invalid workflow payload: connections must be an object.');
     }
 
-    if (typeof payload.settings !== 'object' || payload.settings === null || Array.isArray(payload.settings)) {
+    if (typeof settings !== 'object' || settings === null || Array.isArray(settings)) {
       throw new Error('Invalid workflow payload: settings must be an object.');
     }
 
-    if (payload.shared !== undefined && !Array.isArray(payload.shared)) {
+    if (shared !== undefined && !Array.isArray(shared)) {
       throw new Error('Invalid workflow payload: shared must be an array when provided.');
     }
 
-    const { id, ...workflowData } = payload;
+    const workflowData: any = {
+      name,
+      nodes: normalizedNodes,
+      connections,
+      settings,
+    };
+
+    if (active !== undefined) {
+      workflowData.active = active;
+    }
+    if (shared !== undefined) {
+      workflowData.shared = shared;
+    }
+    if (staticData !== undefined) {
+      workflowData.staticData = staticData;
+    }
+
     return { id, workflowData };
   }
 
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     try {
       const service = await createN8nService();
-      const { id, workflowData } = this.normalizeWorkflowPayload(input);
+      const { id, workflowData } = await this.normalizeWorkflowPayload(input, service);
       const workflow = await service.updateWorkflow(id, workflowData);
 
       const responseString = `Workflow updated successfully:
@@ -94,9 +133,10 @@ export const updateWorkflowRegistration: ToolRegistration = {
   category: "n8n",
   schemaDef: {
     id: { type: 'string' as const, description: "Workflow ID" },
-    name: { type: 'string' as const, description: "Workflow name" },
-    nodes: { type: 'array' as const, items: { type: 'object' as const }, description: "Workflow nodes as n8n node objects." },
-    connections: { type: 'object' as const, description: "Workflow connections object keyed by source node name." },
+    name: { type: 'string' as const, optional: true, description: "Workflow name (defaults to existing workflow name if omitted)" },
+    active: { type: 'boolean' as const, optional: true, description: "Set workflow active state on update" },
+    nodes: { type: 'array' as const, items: { type: 'object' as const }, optional: true, description: "Workflow nodes as n8n node objects. Defaults to existing workflow nodes if omitted." },
+    connections: { type: 'object' as const, optional: true, description: "Workflow connections object keyed by source node name. Defaults to existing connections if omitted." },
     settings: { type: 'object' as const, properties: {
       saveExecutionProgress: { type: 'boolean' as const, optional: true },
       saveManualExecutions: { type: 'boolean' as const, optional: true },
@@ -110,7 +150,7 @@ export const updateWorkflowRegistration: ToolRegistration = {
       callerIds: { type: 'string' as const, optional: true },
       timeSavedPerExecution: { type: 'number' as const, optional: true },
       availableInMCP: { type: 'boolean' as const, optional: true },
-    }, optional: true, default: {}, description: "Workflow settings" },
+    }, optional: true, description: "Workflow settings (defaults to existing workflow settings if omitted)" },
     shared: { type: 'array' as const, items: { type: 'object' as const }, optional: true, description: "Shared users" },
     staticData: { type: 'object' as const, optional: true, description: "Static data" },
   },

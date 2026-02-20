@@ -8,8 +8,25 @@ export class BrowseToolsWorker extends BaseTool {
   name: string = '';
   description: string = '';
   schemaDef: any = {};
+
+  private getToolSignature(tool: any): any {
+    try {
+      return tool?.jsonSchema ?? tool?.schemaDef ?? null;
+    } catch {
+      return tool?.schemaDef ?? null;
+    }
+  }
+
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { category, query } = input;
+    const availableCategories = toolRegistry.getCategories();
+
+    if (category && !availableCategories.includes(category)) {
+      return {
+        successBoolean: false,
+        responseString: `Invalid value for category: must be one of ${availableCategories.join(', ')}`,
+      };
+    }
 
     const tools = await toolRegistry.searchTools(query, category);
 
@@ -40,9 +57,16 @@ export class BrowseToolsWorker extends BaseTool {
       (this.state as any).llmTools = uniqueTools;
     }
 
+    const toolDetails = tools.map((tool: any) => ({
+      name: tool.name,
+      description: tool.description,
+      signature: this.getToolSignature(tool),
+    }));
+
     return {
       successBoolean: true,
-      responseString: `Found ${tools.length} tools${category ? ` in category "${category}"` : ""}${query ? ` matching "${query}"` : ""}.`
+      responseString: `Found ${tools.length} tools${category ? ` in category "${category}"` : ""}${query ? ` matching "${query}"` : ""}.
+${JSON.stringify(toolDetails, null, 2)}`
     };
   }
 }
@@ -53,7 +77,7 @@ export const browseToolsRegistration: ToolRegistration = {
   description: "List available tools by category or search term. Use this when you need a tool but don't know its exact name or category yet.",
   category: "meta",
   schemaDef: {
-    category: { type: 'enum' as const, enum: ["browser", "calendar", "docker", "github", "integrations", "lima", "memory", "kubectl", "n8n", "pg", "rdctl", "redis", "slack"], optional: true, description: "Specific category of tools" },
+    category: { type: 'string' as const, optional: true, description: "Specific category of tools (e.g. meta, workspace, slack, n8n)" },
     query: { type: 'string' as const, optional: true, description: "Keyword to filter tool names/descriptions" },
   },
   workerClass: BrowseToolsWorker,
