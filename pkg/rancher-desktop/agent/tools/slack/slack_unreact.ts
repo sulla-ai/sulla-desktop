@@ -14,6 +14,12 @@ export class SlackUnreactWorker extends BaseTool {
 
     try {
       const slack = await registry.get<SlackClient>('slack');
+      if (!slack) {
+        return {
+          successBoolean: false,
+          responseString: `Slack integration is not initialized for command ${this.name}`,
+        };
+      }
       await slack.removeReaction(channel, ts, reaction);
       return {
         successBoolean: true,

@@ -19,7 +19,7 @@ import { parseJson } from './JsonParseService';
 // ============================================================================
 
 /** Max messages before triggering background summarization */
-const TRIGGER_WINDOW_SIZE = 80;
+const TRIGGER_WINDOW_SIZE = 20;
 
 /** Percentage of oldest messages to batch-summarize */
 const BATCH_SUMMARY_PERCENT = 0.25;
@@ -132,7 +132,7 @@ export class ConversationSummaryService {
    */
   private calculateAgeScore(messageIndex: number, totalMessages: number, message: ChatMessage): number {
     // Position-based age (older position = higher score)
-    const positionScore = messageIndex / Math.max(totalMessages - 1, 1);
+    const positionScore = (totalMessages - 1 - messageIndex) / Math.max(totalMessages - 1, 1);
     
     // Time-based age (if timestamp available)
     let timeScore = 0;
@@ -225,11 +225,40 @@ export class ConversationSummaryService {
   }
 
   /**
+   * Build deterministic fallback observations when LLM summarization returns no observations.
+   */
+  private buildFallbackObservations(messages: ChatMessage[]): ObservationEntry[] {
+    const observations: ObservationEntry[] = [];
+
+    for (const message of messages) {
+      const content = typeof message.content === 'string'
+        ? message.content.trim()
+        : JSON.stringify(message.content || '').trim();
+
+      if (!content) {
+        continue;
+      }
+
+      observations.push({
+        priority: '🟡',
+        content: `${(message.role || 'unknown').toUpperCase()}: ${content.slice(0, 220)}`,
+      });
+
+      if (observations.length >= 8) {
+        break;
+      }
+    }
+
+    return observations;
+  }
+
+  /**
    * Trigger background summarization for a conversation thread.
    * Non-blocking: returns immediately, work happens asynchronously.
    */
   static triggerBackgroundSummarization(state: BaseThreadState): void {
     const threadId = state.metadata.threadId as string;
+    state.metadata.stateVersion ??= 0;
     
     // Skip if already processing this thread or any thread
     if (ConversationSummaryService.isProcessing || 
@@ -295,7 +324,11 @@ export class ConversationSummaryService {
    * Core summarization logic that updates the state object directly
    */
   private async performSummarization(state: BaseThreadState): Promise<void> {
-    const messages = state.messages;
+    state.metadata.stateVersion ??= 0;
+    const startVersion = state.metadata.stateVersion;
+    const messages = (typeof globalThis.structuredClone === 'function'
+      ? globalThis.structuredClone(state.messages)
+      : JSON.parse(JSON.stringify(state.messages))) as ChatMessage[];
     const batchSize = Math.floor(TRIGGER_WINDOW_SIZE * BATCH_SUMMARY_PERCENT);
 
     // 1. Check if oldest message is existing summary and extract its observations
@@ -318,22 +351,47 @@ export class ConversationSummaryService {
     
     // 3. Score all messages for age and relevancy
     const messageScores = this.scoreMessages(workingMessages);
+
+    // Protect system messages and the latest user message from summarization.
+    const latestUserIndex = (() => {
+      for (let i = workingMessages.length - 1; i >= 0; i--) {
+        if (workingMessages[i].role === 'user') return i;
+      }
+      return -1;
+    })();
+
+    const summarizableScores = messageScores.filter(score => {
+      if (score.message.role === 'system') return false;
+      if (latestUserIndex >= 0 && score.index === latestUserIndex) return false;
+      return true;
+    });
+
+    // Force summarization of everything that exceeds the trigger window budget.
+    // Account for insertion of a summary message when there isn't one yet.
+    const targetWindow = TRIGGER_WINDOW_SIZE - (hasExistingSummary ? 0 : 1);
+    const requiredRemovalCount = Math.max(0, state.messages.length - targetWindow);
+    const forcedOverflowScores = [...summarizableScores]
+      .sort((a, b) => a.index - b.index) // Oldest first
+      .slice(0, requiredRemovalCount);
+    const forcedOverflowSet = new Set(forcedOverflowScores);
     
     // 4. Select messages that exceed the summarization threshold
-    const candidateMessages = messageScores
+    const candidateMessages = summarizableScores
       .filter(score => score.combinedScore >= SCORING_CONFIG.SUMMARIZATION_THRESHOLD)
+      .filter(score => !forcedOverflowSet.has(score))
       .sort((a, b) => b.combinedScore - a.combinedScore) // Sort by score descending
       .slice(0, SCORING_CONFIG.MAX_BATCH_SIZE); // Cap at max batch size
     
     // 5. Ensure we have minimum batch size, add oldest messages if needed
-    const messagesToSummarize: ChatMessage[] = candidateMessages.map(score => score.message);
+    const messagesToSummarize: ChatMessage[] = forcedOverflowScores.map(score => score.message);
+    messagesToSummarize.push(...candidateMessages.map(score => score.message));
     
     if (messagesToSummarize.length < SCORING_CONFIG.MIN_BATCH_SIZE) {
       // Add oldest non-protected messages to reach minimum batch size
       const remainingMessages = workingMessages.filter(msg => 
         !messagesToSummarize.includes(msg) &&
         msg.role !== 'system' && 
-        !(msg.role === 'user' && workingMessages.indexOf(msg) === workingMessages.length - 1)
+        workingMessages.indexOf(msg) !== latestUserIndex
       );
       
       const additionalNeeded = SCORING_CONFIG.MIN_BATCH_SIZE - messagesToSummarize.length;
@@ -345,7 +403,7 @@ export class ConversationSummaryService {
       return;
     }
 
-    console.log(`[ConversationSummary] Selected ${messagesToSummarize.length} messages for summarization (${candidateMessages.length} exceeded threshold)`);
+    console.log(`[ConversationSummary] Selected ${messagesToSummarize.length} messages for summarization (${forcedOverflowScores.length} forced overflow, ${candidateMessages.length} exceeded threshold)`);
     
     // Log scoring details for debugging
     if (candidateMessages.length > 0) {
@@ -356,30 +414,42 @@ export class ConversationSummaryService {
     // 4. Generate new summary observations using LLM
     const newObservations = await this.summarizeBatch(state, messagesToSummarize);
     
-    if (newObservations.length === 0) {
-      console.warn('[ConversationSummary] No observations generated, skipping state update');
+    const effectiveObservations = newObservations.length > 0
+      ? newObservations
+      : this.buildFallbackObservations(messagesToSummarize);
+
+    if (effectiveObservations.length === 0) {
+      console.warn('[ConversationSummary] No observations generated, unable to build fallback summary');
       return;
     }
 
     // 5. Combine existing and new observations
-    const allObservations = [...existingObservations, ...newObservations];
+    const allObservations = [...existingObservations, ...effectiveObservations];
 
     // 6. Update state metadata with combined observations
     const metadata = state.metadata as any;
-    metadata.conversationSummaries = allObservations;
 
-    // 7. Remove summarized messages from state (but keep existing summary position)
+    if (state.metadata.stateVersion !== startVersion) {
+      console.log('[ConversationSummary] State advanced during processing, discarding');
+      return;
+    }
+
+    // 7. Remove summarized messages from snapshot (but keep existing summary position)
     const messagesToRemove = new Set(messagesToSummarize);
-    state.messages = state.messages.filter(msg => !messagesToRemove.has(msg));
+    let committedMessages = messages.filter(msg => !messagesToRemove.has(msg));
 
     // 8. Add/update comprehensive conversation summary as oldest message
     if (hasExistingSummary) {
       // Remove old summary (it's at index 0)
-      state.messages.shift();
+      committedMessages = committedMessages.slice(1);
     }
+
+    state.messages = committedMessages;
+    metadata.conversationSummaries = allObservations;
+    state.metadata.stateVersion = startVersion + 1;
     this.appendConversationSummary(state, allObservations);
 
-    console.log(`[ConversationSummary] Updated state: removed ${messagesToRemove.size} messages, combined ${existingObservations.length} existing + ${newObservations.length} new observations`);
+    console.log(`[ConversationSummary] Updated state: removed ${messagesToRemove.size} messages, combined ${existingObservations.length} existing + ${effectiveObservations.length} new observations`);
   }
 
   /**

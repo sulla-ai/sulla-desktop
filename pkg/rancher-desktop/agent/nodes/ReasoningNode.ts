@@ -169,8 +169,6 @@ export class ReasoningNode extends BaseNode {
           ...((state.metadata as any).reasoning || {}),
           tprd_slug: parsedTprd.meta.slug,
         };
-
-        void this.saveTprdArticleAsync(parsedTprd.meta, parsedTprd.document);
       }
 
       console.log(`[ReasoningNode] technical_instructions stored (${technicalInstructions.length} chars)`);
@@ -240,10 +238,6 @@ export class ReasoningNode extends BaseNode {
       defaultCategory: 'Projects',
       defaultTags: ['skill'],
     });
-  }
-
-  private async saveTprdArticleAsync(meta: Record<string, any>, document: string): Promise<void> {
-    await this.saveArticleAsync(meta, document, 'ReasoningNode');
   }
 
   // ======================================================================

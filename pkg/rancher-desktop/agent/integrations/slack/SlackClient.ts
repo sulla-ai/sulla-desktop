@@ -16,12 +16,14 @@ import {
   getIntegrationService,
   type IntegrationValue,
 } from '../../services/IntegrationService';
+import { withSuppressedConnectionStatus } from '../integrationFlags';
 import { incomingMessage } from './prompts/incoming_message';
 
 
 const INTEGRATION_ID = 'slack';
 const TOKEN_PROPERTY = 'bot_token';
 const APP_TOKEN_PROPERTY = 'scopes_token';
+const APP_TOKEN_FALLBACK_PROPERTIES = ['app_token', 'app_level_token'];
 
 const WS_SERVICE = WebSocketClientService.getInstance();
 const SLACK_EVENTS_CHANNEL = 'dreaming-protocol';
@@ -78,6 +80,10 @@ function extractMessageFacts(args: any): string[] {
 export class SlackClient {
   private app: App | null = null;
   private connected = false;
+  private initializePromise: Promise<boolean> | null = null;
+  private lastInitializeError: string | null = null;
+  private intentionallyClosed = false;
+  private eventsRegistered = false;
 
   private static instance: SlackClient | null = null;
 
@@ -92,13 +98,157 @@ export class SlackClient {
   private botToken?: string;
   private appToken?: string;
 
+  isConnected(): boolean {
+    return this.connected && this.app !== null;
+  }
+
+  getLastInitializeError(): string | null {
+    return this.lastInitializeError;
+  }
+
+  private normalizeTokens(botToken?: string, appToken?: string): { botToken: string; appToken: string } | null {
+    const bot = (botToken || '').trim();
+    const app = (appToken || '').trim();
+
+    if (!bot || !app) {
+      return null;
+    }
+
+    // Common misconfiguration: app/bot tokens entered in opposite fields.
+    if (bot.startsWith('xapp-') && app.startsWith('xoxb-')) {
+      return { botToken: app, appToken: bot };
+    }
+
+    return { botToken: bot, appToken: app };
+  }
+
   setTokens(botToken: string, appToken: string): void {
     this.botToken = botToken;
     this.appToken = appToken;
   }
 
+  /**
+   * Monitor Bolt's built-in SocketModeClient lifecycle events.
+   * We do NOT null out this.app or fight Bolt's auto-reconnect.
+   * We only track our connected flag for health reporting.
+   */
+  private bindSocketLifecycleHandlers(): void {
+    const socketClient = (this.app as any)?.receiver?.client;
+    if (!socketClient || typeof socketClient.on !== 'function') {
+      console.warn('[SlackClient] Could not bind socket lifecycle handlers — receiver.client not available');
+      return;
+    }
+
+    // Bolt's SocketModeClient emits these states as events
+    socketClient.on('connected', () => {
+      console.log('[SlackClient] SocketModeClient connected event');
+      this.connected = true;
+    });
+
+    socketClient.on('authenticated', () => {
+      console.log('[SlackClient] SocketModeClient authenticated event');
+    });
+
+    socketClient.on('reconnecting', () => {
+      console.warn('[SlackClient] SocketModeClient reconnecting...');
+      this.connected = false;
+    });
+
+    socketClient.on('disconnected', () => {
+      if (this.intentionallyClosed) return;
+      console.warn('[SlackClient] SocketModeClient disconnected event');
+      this.connected = false;
+    });
+
+    socketClient.on('close', () => {
+      if (this.intentionallyClosed) return;
+      console.warn('[SlackClient] SocketModeClient close event — Bolt will auto-reconnect');
+      this.connected = false;
+    });
+
+    socketClient.on('error', (error: unknown) => {
+      console.error('[SlackClient] SocketModeClient error:', error);
+    });
+  }
+
+  /**
+   * Register Bolt event/message handlers. Only done once per App instance.
+   */
+  private registerEventHandlers(): void {
+    if (this.eventsRegistered || !this.app) return;
+    this.eventsRegistered = true;
+
+    this.app.event(/.*/, async (args) => {
+      console.log('[SlackClient] Event received:', args.event.type, args.event);
+      WS_SERVICE.send(SLACK_EVENTS_CHANNEL, {
+        type: 'slack_event',
+        data: {
+          type: args.event.type || 'unknown',
+          event: args.event,
+          context: args.context,
+        },
+        id: generateUUID(),
+        timestamp: Date.now(),
+        channel: SLACK_EVENTS_CHANNEL,
+      });
+    });
+
+    this.app.message(async (args) => {
+      const event: any = args.event;
+      console.log('[SlackClient] Message landed', event.text);
+      if (args.message.subtype === 'bot_message') return;
+
+      const facts = extractMessageFacts(args);
+      const factsText = facts.map(fact => `- ${fact}`).join('\n');
+      const fullMessage = `${factsText}\n\n${incomingMessage}`;
+
+      WS_SERVICE.send(SLACK_EVENTS_CHANNEL, {
+        type: 'user_message',
+        data: { content: fullMessage },
+        id: generateUUID(),
+        timestamp: Date.now(),
+        channel: SLACK_EVENTS_CHANNEL,
+      });
+    });
+
+    this.app.error(async (error) => {
+      console.error('[SlackClient] Bolt error:', error);
+    });
+  }
+
   async initialize(): Promise<boolean> {
-    if (this.connected) return true;
+    if (this.connected && this.app) return true;
+    if (this.initializePromise) return this.initializePromise;
+
+    this.intentionallyClosed = false;
+    this.lastInitializeError = null;
+
+    this.initializePromise = this._doInitialize();
+
+    try {
+      return await this.initializePromise;
+    } catch (err) {
+      this.lastInitializeError = (err as Error)?.message || String(err);
+      throw err;
+    } finally {
+      this.initializePromise = null;
+    }
+  }
+
+  private async _doInitialize(): Promise<boolean> {
+    console.log('[SlackClient] _doInitialize() entered', {
+      hasApp: !!this.app,
+      connected: this.connected,
+      intentionallyClosed: this.intentionallyClosed,
+      hasInjectedBot: !!this.botToken,
+      hasInjectedApp: !!this.appToken,
+    });
+
+    // If we have a stale app instance, stop it cleanly first
+    if (this.app) {
+      console.log('[SlackClient] Stopping stale app instance before re-init');
+      await this.stopApp();
+    }
 
     const service = getIntegrationService();
     await service.initialize();
@@ -108,86 +258,92 @@ export class SlackClient {
     let appToken = this.appToken;
 
     if (!botToken || !appToken) {
-        const [botRow, appRow] = await Promise.all([
-            service.getIntegrationValue(INTEGRATION_ID, TOKEN_PROPERTY),
-            service.getIntegrationValue(INTEGRATION_ID, APP_TOKEN_PROPERTY),
-        ]);
+      console.log('[SlackClient] Tokens not injected, resolving from DB/env...');
+      const appRows = await Promise.all([
+        service.getIntegrationValue(INTEGRATION_ID, APP_TOKEN_PROPERTY),
+        ...APP_TOKEN_FALLBACK_PROPERTIES.map(property =>
+          service.getIntegrationValue(INTEGRATION_ID, property)
+        ),
+      ]);
+      const botRow = await service.getIntegrationValue(INTEGRATION_ID, TOKEN_PROPERTY);
 
-        botToken = botRow?.value;
-        appToken = appRow?.value;
+      botToken = botToken || botRow?.value || process.env.SLACK_BOT_TOKEN;
+      appToken = appToken || appRows.find(row => !!row?.value)?.value || process.env.SLACK_APP_TOKEN;
+      console.log('[SlackClient] Token resolution:', {
+        hasBotToken: !!botToken,
+        hasAppToken: !!appToken,
+        botPrefix: botToken ? botToken.substring(0, 5) : 'none',
+        appPrefix: appToken ? appToken.substring(0, 5) : 'none',
+      });
     }
 
-    if (!botToken || !appToken) {
-        console.error('[SlackClient] No Slack tokens available (injected or DB)');
-        return false;
+    const normalizedTokens = this.normalizeTokens(botToken, appToken);
+    if (!normalizedTokens) {
+      throw new Error('[SlackClient] No Slack tokens available (injected or DB)');
     }
 
+    botToken = normalizedTokens.botToken;
+    appToken = normalizedTokens.appToken;
+
+    if (!botToken.startsWith('xoxb-')) {
+      throw new Error('[SlackClient] Invalid Slack bot token format. Expected xoxb- token for Socket Mode bot auth.');
+    }
+
+    if (!appToken.startsWith('xapp-')) {
+      throw new Error('[SlackClient] Invalid Slack app token format. Expected xapp- token to enable Socket Mode.');
+    }
+
+    console.log('[SlackClient] Creating Bolt App with Socket Mode...');
     this.app = new App({
-        token: botToken,
-        appToken: appToken,
-        socketMode: true,
-        logLevel: LogLevel.INFO,
+      token: botToken,
+      appToken: appToken,
+      socketMode: true,
+      logLevel: LogLevel.INFO,
     });
 
-    this.app.error(async (error) => {
-      console.error('[SlackClient] Bolt error:', error);
-    });
+    // Register event/message handlers before start so they're ready
+    this.eventsRegistered = false;
+    this.registerEventHandlers();
+    this.bindSocketLifecycleHandlers();
 
     WS_SERVICE.connect(SLACK_EVENTS_CHANNEL);
 
     try {
+      console.log('[SlackClient] Calling app.start()...');
       await this.app.start();
       this.connected = true;
       console.log('[SlackClient] Socket Mode connected → forwarding to internal WS');
 
-      // Forward events
-      this.app.event(/.*/, async (args) => {
-        console.log('[SlackClient] Event received:', args.event.type, args.event);
-        WS_SERVICE.send(SLACK_EVENTS_CHANNEL, {
-          type: 'slack_event',
-          data: {
-            type: args.event.type || 'unknown',
-            event: args.event,
-            context: args.context,
-          },
-          id: generateUUID(),
-          timestamp: Date.now(),
-          channel: SLACK_EVENTS_CHANNEL,
-        });
-      });
-
-      this.app.message(async (args) => {
-        const event: any = args.event;
-        console.log('[SlackClient] Message landed', event.text);
-        if (args.message.subtype === 'bot_message') return;
-        
-        // Extract key facts from the message
-        const facts = extractMessageFacts(args);
-        const factsText = facts.map(fact => `- ${fact}`).join('\n');
-        
-        // Create the complete message with facts + prompt
-        const fullMessage = `${factsText}\n\n${incomingMessage}`;
-        
-        WS_SERVICE.send(SLACK_EVENTS_CHANNEL, {
-          type: 'user_message',
-          data: { 
-            content: fullMessage 
-          },
-          id: generateUUID(),
-          timestamp: Date.now(),
-          channel: SLACK_EVENTS_CHANNEL,
-        });
-      });
-
-      // Optional: set status in DB on successful connect
-      await service.setConnectionStatus(INTEGRATION_ID, true);
+      // Mark connection healthy in DB (suppress listener to avoid self-destructive reload)
+      try {
+        await withSuppressedConnectionStatus(() => service.setConnectionStatus(INTEGRATION_ID, true));
+      } catch (dbErr) {
+        console.warn('[SlackClient] Could not update connection_status in DB:', dbErr);
+      }
 
       return true;
     } catch (err) {
       console.error('[SlackClient] Startup failed:', err);
-      await service.setConnectionStatus(INTEGRATION_ID, false);
       this.connected = false;
-      return false;
+      await this.stopApp();
+      throw (err instanceof Error ? err : new Error(String(err)));
+    }
+  }
+
+  private async stopApp(): Promise<void> {
+    const appToStop = this.app;
+    this.app = null;
+    this.connected = false;
+    this.eventsRegistered = false;
+
+    if (!appToStop) return;
+
+    try {
+      // Bolt App.stop() calls receiver.stop() which calls SocketModeClient.disconnect()
+      await appToStop.stop();
+      console.log('[SlackClient] Bolt App stopped cleanly');
+    } catch (err) {
+      console.warn('[SlackClient] Bolt App stop error (non-fatal):', err);
     }
   }
 
@@ -280,6 +436,49 @@ export class SlackClient {
     return res.user;
   }
 
+  async apiCall(method: string, params: Record<string, any> = {}): Promise<any> {
+    await this.ensureConnected();
+    return this.app!.client.apiCall(method, params);
+  }
+
+  async searchUsers(query: string, limit = 10): Promise<any[]> {
+    await this.ensureConnected();
+
+    const q = String(query || '').trim().toLowerCase();
+    if (!q) {
+      return [];
+    }
+
+    let users: any[] = [];
+    let cursor: string | undefined;
+
+    do {
+      const response = await this.app!.client.users.list({
+        limit: 200,
+        cursor,
+      });
+
+      users = users.concat(response.members ?? []);
+      cursor = response.response_metadata?.next_cursor;
+
+      if (users.length >= 2000) {
+        break;
+      }
+    } while (cursor);
+
+    return users
+      .filter((user: any) => !user?.deleted && !user?.is_bot)
+      .filter((user: any) => {
+        const name = String(user?.name || '').toLowerCase();
+        const realName = String(user?.real_name || user?.profile?.real_name || '').toLowerCase();
+        const displayName = String(user?.profile?.display_name || '').toLowerCase();
+        const email = String(user?.profile?.email || '').toLowerCase();
+
+        return name.includes(q) || realName.includes(q) || displayName.includes(q) || email.includes(q);
+      })
+      .slice(0, Math.max(1, limit));
+  }
+
   async getChannelHistory(
     channel: string,
     limit = 50,
@@ -336,15 +535,9 @@ export class SlackClient {
   // Add more: app.event('channel_joined'), app.event('reaction_added'), etc.
 
   async close(): Promise<void> {
-    if (!this.connected) return;
-    try {
-      // Bolt Socket Mode doesn't have explicit .stop(), but we can disconnect
-      // Future versions may add cleaner shutdown; for now just mark
-      this.connected = false;
-      console.log('[SlackClient] Socket Mode connection marked closed');
-    } catch (err) {
-      console.error('[SlackClient] Shutdown error:', err);
-    }
+    this.intentionallyClosed = true;
+    console.log('[SlackClient] Intentional close requested');
+    await this.stopApp();
   }
 
   private async ensureConnected(): Promise<void> {

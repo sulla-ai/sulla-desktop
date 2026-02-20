@@ -6,6 +6,7 @@ import { metaToolRegistrations } from './meta';
 import { browserToolRegistrations } from './browser';
 import { calendarToolRegistrations } from './calendar';
 import { dockerToolRegistrations } from './docker';
+import { fsToolRegistrations } from './fs';
 import { githubToolRegistrations } from './github';
 import { kubectlToolRegistrations } from './kubectl';
 import { limaToolRegistrations } from './lima';
@@ -24,6 +25,7 @@ const allRegistrations = [
   ...browserToolRegistrations,
   ...calendarToolRegistrations,
   ...dockerToolRegistrations,
+  ...fsToolRegistrations,
   ...githubToolRegistrations,
   ...integrationToolRegistrations,
   ...kubectlToolRegistrations,

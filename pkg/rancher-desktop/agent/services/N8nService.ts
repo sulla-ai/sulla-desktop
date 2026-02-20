@@ -5,6 +5,7 @@ import { SullaSettingsModel } from '../database/models/SullaSettingsModel';
 import { N8nCredentialsEntityModel } from '../database/models/N8nCredentialsEntityModel';
 import { N8nUserModel } from '../database/models/N8nUserModel';
 import { N8nUserApiKeyModel } from '../database/models/N8nUserApiKeyModel';
+import { postgresClient } from '../database/PostgresClient';
 
 /**
  * N8n API Service
@@ -150,7 +151,82 @@ export class N8nService {
       url += '?' + queryParams.toString();
     }
 
-    return this.request(url);
+    const workflowId = String(id || '').trim();
+    let apiWorkflow: any = null;
+
+    try {
+      apiWorkflow = await this.request(url);
+    } catch (error) {
+      console.warn(`[N8nService] API getWorkflow failed for ${workflowId}, attempting Postgres fallback:`, error instanceof Error ? error.message : String(error));
+    }
+
+    let dbWorkflow: any = null;
+    try {
+      dbWorkflow = await this.getWorkflowFromPostgres(workflowId);
+    } catch (error) {
+      console.warn(`[N8nService] Postgres fallback query failed for ${workflowId}:`, error instanceof Error ? error.message : String(error));
+    }
+    const hasCompleteGraph = (candidate: any): boolean => {
+      return !!candidate && Array.isArray(candidate.nodes) && candidate.nodes.length > 0 && typeof candidate.connections === 'object' && candidate.connections !== null;
+    };
+
+    let mergedWorkflow = apiWorkflow;
+    if (!mergedWorkflow && dbWorkflow) {
+      mergedWorkflow = dbWorkflow;
+    } else if (mergedWorkflow && dbWorkflow && !hasCompleteGraph(mergedWorkflow)) {
+      mergedWorkflow = {
+        ...dbWorkflow,
+        ...mergedWorkflow,
+        nodes: Array.isArray(mergedWorkflow.nodes) && mergedWorkflow.nodes.length > 0 ? mergedWorkflow.nodes : dbWorkflow.nodes,
+        connections: mergedWorkflow.connections && Object.keys(mergedWorkflow.connections).length > 0 ? mergedWorkflow.connections : dbWorkflow.connections,
+        settings: mergedWorkflow.settings && Object.keys(mergedWorkflow.settings).length > 0 ? mergedWorkflow.settings : dbWorkflow.settings,
+        staticData: mergedWorkflow.staticData ?? dbWorkflow.staticData,
+        pinData: mergedWorkflow.pinData ?? dbWorkflow.pinData,
+      };
+    }
+
+    if (!mergedWorkflow) {
+      throw new Error(`Workflow ${workflowId} not found in API or Postgres`);
+    }
+
+    if (excludePinnedData === true && Object.prototype.hasOwnProperty.call(mergedWorkflow, 'pinData')) {
+      delete mergedWorkflow.pinData;
+    }
+
+    return mergedWorkflow;
+  }
+
+  /**
+   * Get full workflow payload plus credentials in parallel for editing workflows.
+   */
+  async getWorkflowWithCredentials(id: string, excludePinnedData?: boolean): Promise<any> {
+    const [workflow, credentials] = await Promise.all([
+      this.getWorkflow(id, excludePinnedData),
+      this.getCredentials(),
+    ]);
+
+    return {
+      ...workflow,
+      credentials,
+    };
+  }
+
+  private async getWorkflowFromPostgres(id: string): Promise<any | null> {
+    const workflowId = String(id || '').trim();
+    if (!workflowId) {
+      return null;
+    }
+
+    const row = await postgresClient.queryOne<any>(
+      `SELECT * FROM "workflow_entity" WHERE "id" = $1 LIMIT 1`,
+      [workflowId]
+    );
+
+    if (!row) {
+      return null;
+    }
+
+    return row;
   }
 
   /**
@@ -213,6 +289,7 @@ export class N8nService {
    */
   async updateWorkflow(id: string, workflowData: {
     name: string;
+    active?: boolean;
     nodes: any[];
     connections: any;
     settings: {
@@ -232,10 +309,43 @@ export class N8nService {
     shared?: any[];
     staticData?: any;
   }): Promise<any> {
-    return this.request(`/api/v1/workflows/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(workflowData)
-    });
+    const workflowId = String(id || '').trim();
+    if (!workflowId) {
+      throw new Error('Workflow ID is required');
+    }
+
+    const existingWorkflow = await this.getWorkflow(workflowId, true);
+    const wasActive = !!existingWorkflow?.active;
+
+    // n8n treats "active" as read-only on PUT /workflows/:id.
+    // Activation state is handled via activate/deactivate endpoints.
+    const { active: _ignoredActive, shared: _ignoredShared, ...updatableWorkflowData } = workflowData as any;
+
+    if (wasActive) {
+      await this.deactivateWorkflow(workflowId);
+    }
+
+    try {
+      const updatedWorkflow = await this.request(`/api/v1/workflows/${workflowId}`, {
+        method: 'PUT',
+        body: JSON.stringify(updatableWorkflowData)
+      });
+
+      if (wasActive) {
+        await this.activateWorkflow(workflowId);
+      }
+
+      return updatedWorkflow;
+    } catch (error) {
+      if (wasActive) {
+        try {
+          await this.activateWorkflow(workflowId);
+        } catch (reactivateError) {
+          console.warn('[N8nService] Failed to reactivate workflow after update failure:', reactivateError);
+        }
+      }
+      throw error;
+    }
   }
 
   /**
@@ -252,19 +362,52 @@ export class N8nService {
    */
   async activateWorkflow(id: string, options?: {
     versionId?: string;
-    name?: string;
-    description?: string;
   }): Promise<any> {
-    const body = options ? {
-      versionId: options.versionId || '',
-      name: options.name || '',
-      description: options.description || ''
-    } : {};
+    const workflowId = String(id || '').trim();
+    if (!workflowId) {
+      throw new Error('Workflow ID is required for activation');
+    }
 
-    return this.request(`/api/v1/workflows/${id}/activate`, {
-      method: 'POST',
-      body: JSON.stringify(body)
-    });
+    const versionId = options?.versionId ? String(options.versionId).trim() : '';
+    const body = versionId ? { versionId } : undefined;
+
+    const isNotFoundOrMethodError = (error: unknown): boolean => {
+      const message = error instanceof Error ? error.message : String(error);
+      return message.includes('N8n API error 404') || message.includes('N8n API error 405');
+    };
+
+    try {
+      return await this.request(`/api/v1/workflows/${workflowId}/activate`, {
+        method: 'POST',
+        ...(body ? { body: JSON.stringify(body) } : {})
+      });
+    } catch (error) {
+      if (!isNotFoundOrMethodError(error)) {
+        throw error;
+      }
+
+      try {
+        // Compatibility fallback for n8n variants that allow direct active state patch.
+        return await this.request(`/api/v1/workflows/${workflowId}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ active: true })
+        });
+      } catch (patchError) {
+        if (!isNotFoundOrMethodError(patchError)) {
+          throw patchError;
+        }
+
+        // Final fallback for n8n variants that require full workflow updates via PUT.
+        const existingWorkflow = await this.getWorkflow(workflowId);
+        return this.request(`/api/v1/workflows/${workflowId}`, {
+          method: 'PUT',
+          body: JSON.stringify({
+            ...existingWorkflow,
+            active: true,
+          })
+        });
+      }
+    }
   }
 
   /**

@@ -97,7 +97,9 @@ export class OutputNode extends BaseNode {
       includeKnowledgebasePlan: false,
     });
 
-    const summaryText = await this.chat(state, enriched);
+    const summaryText = await this.chat(state, enriched, {
+      disableTools: true,
+    });
 
     // Send the summary directly to user via WebSocket
     const wsChannel = (state.metadata as any).wsChannel;

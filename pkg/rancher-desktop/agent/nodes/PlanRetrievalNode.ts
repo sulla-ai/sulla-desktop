@@ -31,52 +31,33 @@ interface PlanRetrievalResponse {
 // PLAN RETRIEVAL PROMPT
 // ============================================================================
 
-const PLAN_RETRIEVAL_PROMPT = `You are a specialized planning and intent analysis system. Your job is to extract structured data from user messages and select the most appropriate skill for execution.
+const PLAN_RETRIEVAL_PROMPT = `You are a specialized planning and intent analysis system.
 
-Look at the users last message, think critically, think how would you handle the inquiry?
+Look ONLY at the user's last message.
 
 {{active_plans_context}}
 
-## Available Skills in Knowledge Base
-
+## Available Skills
 {{skills}}
 
-## Selection Guidelines
-- selected_skill_slug: exact slug ONLY if a skill trigger matches perfectly. Null for everything else (general chat, info requests, tool use).
-- memory_search: 1-3 keywords ONLY for historical references ("remember", "last time", "my previous", stored data). Empty [] otherwise.
+## Strict Complexity Rules (exact order)
 
-## Complexity Classification (strict order - follow exactly)
-1. Skill trigger matches? → selected_skill_slug = slug, complexity = "high"
-2. Else, requires ANY tool (web_search, browse_page, code_execution, API call, live data fetch) or info not in current context? → complexity = "medium"
+1. Skill trigger matches perfectly? → selected_skill_slug = slug, complexity = "high"
+
+2. ANY external action/tool/live data? → complexity = "medium"
+   - Check/test/verify status (Slack, API, connection, webhook, sync, etc.)
+   - "check the", "test the", "status of", "verify if", "how many currently"
+   - Fetch current info not in context
+   - Run code_execution, API call, browse, search
+
 3. Else → complexity = "low"
 
 Examples:
 - "how are you" → low
-- "check this API", "browse example.com", "current FB ad costs" → medium
-- "build lead scorer", "plan outbound campaign", "create workflow" → high
+- "check the slack connection", "test API status", "verify FB lead sync" → medium
+- "build lead scorer", "plan outbound campaign" → high
 
-${JSON_ONLY_RESPONSE_INSTRUCTIONS}
-{
-  "intent": "primary_intent_classification",
-  "goal": "clear_statement_of_what_user_wants_to_achieve",  
-  "selected_skill_slug": "exact_slug_of_best_matching_skill_or_null",
-  "complexity": "high" | "medium" | "low",
-  "memory_search": [],
-}
-
-## Selection Guidelines
-- selected_skill_slug: exact slug ONLY if a skill trigger matches perfectly. Null for everything else (general chat, info requests, tool use).
-- memory_search: 1-3 keywords ONLY for historical references ("remember", "last time", "my previous", stored data). Empty [] otherwise.
-
-## Complexity Classification (strict order - follow exactly)
-1. Skill trigger matches? → selected_skill_slug = slug, complexity = "high"
-2. Else, requires ANY tool (web_search, browse_page, code_execution, API call, live data fetch) or info not in current context? → complexity = "medium"
-3. Else → complexity = "low"
-
-Examples:
-- "how are you" → low
-- "check this API", "browse example.com", "current FB ad costs" → medium
-- "build lead scorer", "plan outbound campaign", "create workflow" → high
+memory_search: [] unless past reference.
 
 ${JSON_ONLY_RESPONSE_INSTRUCTIONS}
 {
@@ -386,9 +367,13 @@ export class PlanRetrievalNode extends BaseNode {
     const now = Math.floor(Date.now() / 1000);
     const cacheAge = now - cacheTimestamp;
     const isCacheStale = cacheAge > cacheTTL;
+    const hasPoisonedCache = !!cachedData && (
+      cachedData.includes('_No skills found in the knowledge base yet._') ||
+      cachedData.includes('_Failed to load skills from the knowledge base._')
+    );
     
     // Step 2: If we have cached data, return it immediately
-    if (cachedData) {
+    if (cachedData && !hasPoisonedCache) {
       console.log(`[PlanRetrievalNode] Retrieved skill triggers from cache (age: ${cacheAge}s)`);
       
       // Step 3: If cache is stale, trigger background refresh for next request
@@ -400,6 +385,11 @@ export class PlanRetrievalNode extends BaseNode {
       }
       
       return cachedData;
+    }
+
+    // If cache exists but only contains a negative/error sentinel, refresh immediately.
+    if (hasPoisonedCache) {
+      console.log('[PlanRetrievalNode] Cached skill triggers contain sentinel result; forcing synchronous refresh');
     }
     
     // Step 4: No cache exists - we need to load synchronously (first time only)
@@ -446,15 +436,20 @@ export class PlanRetrievalNode extends BaseNode {
           const title = article.attributes.title || slug;
           const doc = article.attributes.document || '';
 
-          // Extract the **Trigger**: line from the document content
-          const triggerMatch = doc.match(/\*\*Trigger\*\*\s*:\s*(.+)/i);
-          const trigger = triggerMatch ? triggerMatch[1].trim() : 'No trigger defined';
+          const trigger = this.extractSkillTrigger(doc);
+
+          // Only include true skills that define an actual trigger
+          if (!trigger || /^no\s+trigger\s+defined$/i.test(trigger)) {
+            continue;
+          }
 
           lines.push(`- **${title}** (slug: \`${slug}\`)\n  Trigger: ${trigger}`);
         }
 
-        result = lines.join('\n');
-        console.log(`[PlanRetrievalNode] Loaded ${articles.length} skills from database`);
+        result = lines.length > 0
+          ? lines.join('\n')
+          : '_No skills found in the knowledge base yet._';
+        console.log(`[PlanRetrievalNode] Loaded ${lines.length} triggered skills from ${articles.length} skill-tagged articles`);
       }
     } catch (error) {
       console.warn('[PlanRetrievalNode] Failed to load skill triggers from database:', error);
@@ -473,6 +468,36 @@ export class PlanRetrievalNode extends BaseNode {
     }
 
     return result;
+  }
+
+  private extractSkillTrigger(document: string): string {
+    const doc = String(document || '');
+
+    // 1) Canonical markdown format: **Trigger**: ...
+    let match = doc.match(/\*\*Trigger\*\*\s*:\s*(.+)/i);
+    if (match?.[1]) {
+      return match[1].trim().replace(/^['"]|['"]$/g, '');
+    }
+
+    // 2) Plain text format: Trigger: ...
+    match = doc.match(/(?:^|\n)\s*Trigger\s*:\s*(.+)/i);
+    if (match?.[1]) {
+      return match[1].trim().replace(/^['"]|['"]$/g, '');
+    }
+
+    // 3) Frontmatter format:
+    // ---
+    // trigger: ...
+    // ---
+    const fm = doc.match(/^---\s*\n([\s\S]*?)\n---/);
+    if (fm?.[1]) {
+      const triggerLine = fm[1].match(/(?:^|\n)\s*trigger\s*:\s*(.+)/i);
+      if (triggerLine?.[1]) {
+        return triggerLine[1].trim().replace(/^['"]|['"]$/g, '');
+      }
+    }
+
+    return '';
   }
 
   // ======================================================================
@@ -774,6 +799,7 @@ export class PlanRetrievalNode extends BaseNode {
     console.log('[PlanRetrievalNode] Completed plan retrieval with:', {
       intent: planData.intent,
       goal: planData.goal,
+      complexity: planData.complexity,
       selectedSkill: skillArticles.length > 0 ? skillArticles[0].slug : null,
       memoryKeywords: planData.memory_search.length,
       memoryArticles: memoryArticles.length,

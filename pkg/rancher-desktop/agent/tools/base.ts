@@ -53,9 +53,29 @@ export abstract class BaseTool<TState = any> {
   protected parseInput(raw: unknown): ParsedInput {
     const result: ParsedInput = {};
     const errors: string[] = [];
+    let source: any = raw;
+
+    if (typeof source === 'string') {
+      try {
+        source = JSON.parse(source);
+      } catch {
+        source = { raw: source };
+      }
+    }
+
+    if (source && typeof source === 'object' && !Array.isArray(source)) {
+      const nestedInput = source.input;
+      if (nestedInput && typeof nestedInput === 'object' && !Array.isArray(nestedInput)) {
+        const topLevelHasSchemaFields = Object.keys(this.schemaDef).some((key) => source[key] !== undefined);
+        const nestedHasSchemaFields = Object.keys(this.schemaDef).some((key) => nestedInput[key] !== undefined);
+        if (!topLevelHasSchemaFields && nestedHasSchemaFields) {
+          source = nestedInput;
+        }
+      }
+    }
 
     for (const [key, spec] of Object.entries(this.schemaDef)) {
-      const value = (raw as any)?.[key];
+      const value = source?.[key];
 
       if (value === undefined || value === null) {
         if (!spec.optional) errors.push(`Missing required field: ${key}`);
@@ -83,12 +103,34 @@ export abstract class BaseTool<TState = any> {
           result[key] = value;
           break;
         case 'array':
-          if (!Array.isArray(value)) errors.push(`Expected array for ${key}`);
-          result[key] = value;
+          {
+            let parsedArray: unknown = value;
+            if (typeof value === 'string') {
+              try {
+                parsedArray = JSON.parse(value);
+              } catch {
+                errors.push(`Invalid JSON array for ${key}`);
+              }
+            }
+            if (!Array.isArray(parsedArray)) errors.push(`Expected array for ${key}`);
+            result[key] = parsedArray;
+          }
           break;
         case 'object':
-          if (typeof value !== 'object' || value === null) errors.push(`Expected object for ${key}`);
-          result[key] = value;
+          {
+            let parsedObject: unknown = value;
+            if (typeof value === 'string') {
+              try {
+                parsedObject = JSON.parse(value);
+              } catch {
+                errors.push(`Invalid JSON object for ${key}`);
+              }
+            }
+            if (typeof parsedObject !== 'object' || parsedObject === null || Array.isArray(parsedObject)) {
+              errors.push(`Expected object for ${key}`);
+            }
+            result[key] = parsedObject;
+          }
           break;
       }
     }

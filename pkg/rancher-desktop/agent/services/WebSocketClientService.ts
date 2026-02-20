@@ -253,6 +253,10 @@ class WebSocketConnection {
     return this.ws?.readyState === WebSocket.OPEN;
   }
 
+  isConnecting(): boolean {
+    return this.ws?.readyState === WebSocket.CONNECTING;
+  }
+
   disconnect(): void {
     this.cleanup();
     this.pending.clear();
@@ -278,7 +282,11 @@ export class WebSocketClientService {
   connect(connectionId: string, url: string = DEFAULT_WS_URL): boolean {
     let conn = this.connections.get(connectionId);
     if (conn) {
-      if (conn.isConnected()) return true;
+      // Important: keep an in-flight connection attempt alive.
+      // Multiple startup callers (persona + frontend graph + scheduler) can call connect
+      // for the same channel during bootstrap; disconnecting CONNECTING sockets causes
+      // "WebSocket is closed before the connection is established" and first-message delays.
+      if (conn.isConnected() || conn.isConnecting()) return true;
       conn.disconnect();
     }
 

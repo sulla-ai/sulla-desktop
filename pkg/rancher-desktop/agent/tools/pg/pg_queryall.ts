@@ -13,9 +13,11 @@ export class PgQueryAllWorker extends BaseTool {
 
     try {
       const result = await postgresClient.queryAll(sql, params);
+      const rowsJson = JSON.stringify(result, null, 2);
 
       const responseString = `PostgreSQL QueryAll Result:
 Rows Returned: ${result.length}
+Rows: ${rowsJson}
 Query Executed Successfully`;
 
       return {

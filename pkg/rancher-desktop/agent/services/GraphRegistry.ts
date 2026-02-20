@@ -240,6 +240,7 @@ async function buildHierarchicalState(wsChannel: string, threadId?: string): Pro
 
       llmModel,
       llmLocal,
+      stateVersion: 0,
       options: { abort: undefined },
       currentNodeId: 'context_trimmer',
       consecutiveSameNode: 0,
@@ -345,6 +346,7 @@ async function buildSkillState(wsChannel: string, threadId?: string): Promise<Sk
 
       llmModel,
       llmLocal,
+      stateVersion: 0,
       options: { abort: undefined },
       currentNodeId: 'input_handler', // SkillGraph entry point
       consecutiveSameNode: 0,

@@ -11,19 +11,9 @@ export class GetWorkflowWorker extends BaseTool {
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     try {
       const service = await createN8nService();
-      const workflow = await service.getWorkflow(input.id, input.excludePinnedData);
+      const workflow = await service.getWorkflowWithCredentials(input.id, input.excludePinnedData);
 
-      const responseString = `Workflow Details:
-ID: ${workflow.id}
-Name: ${workflow.name}
-Active: ${workflow.active ? 'Yes' : 'No'}
-Created: ${new Date(workflow.createdAt).toLocaleString()}
-Updated: ${new Date(workflow.updatedAt).toLocaleString()}
-Nodes: ${workflow.nodes?.length || 0}
-Connections: ${Object.keys(workflow.connections || {}).length}
-Tags: ${(workflow.tags || []).map((tag: any) => tag.name).join(', ') || 'None'}
-Owner: ${workflow.owner?.email || 'N/A'}
-Settings: ${JSON.stringify(workflow.settings, null, 2)}`;
+      const responseString = JSON.stringify(workflow, null, 2);
 
       return {
         successBoolean: true,

@@ -15,6 +15,12 @@ export class SlackUserWorker extends BaseTool {
 
     try {
       const slack = await registry.get<SlackClient>('slack');
+      if (!slack) {
+        return {
+          successBoolean: false,
+          responseString: `Slack integration is not initialized for command ${this.name}`,
+        };
+      }
       const user = await slack.getUserInfo(userId);
       return {
         successBoolean: true,

@@ -12,7 +12,7 @@ export class GetWorkspacePathWorker extends BaseTool {
     const { name } = input;
     return {
       successBoolean: true,
-      responseString: `Workspace "${name}" path: /workspaces/${name}`
+      responseString: `workspaces/${name}`
     };
   }
 }
@@ -20,7 +20,7 @@ export class GetWorkspacePathWorker extends BaseTool {
 // Export the complete tool registration with type enforcement
 export const getWorkspacePathRegistration: ToolRegistration = {
   name: 'get_workspace_path',
-  description: 'Get the full path of a workspace in the Lima VM.',
+  description: 'Get the relative path of a workspace in the Rancher Desktop data directory.',
   category: "workspace",
   schemaDef: {
     name: { type: 'string' as const, description: 'The name of the workspace.' },

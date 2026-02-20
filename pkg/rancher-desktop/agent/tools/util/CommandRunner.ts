@@ -1,39 +1,88 @@
 import { spawn } from 'child_process';
+import os from 'os';
+import path from 'path';
+import fs from 'fs';
 
-export async function runCommand(
+export interface CommandRunnerOptions {
+  timeoutMs?: number;
+  maxOutputChars?: number;
+  stdin?: string;
+  runInLimaShell?: boolean;
+  limaInstance?: string;
+  limaHome?: string;
+  limactlPath?: string;
+}
+
+function quoteShellArg(value: string): string {
+  if (/^[A-Za-z0-9_\-./:=@]+$/.test(value)) {
+    return value;
+  }
+  return `'${value.replace(/'/g, `"'"'`)}'`;
+}
+
+export function shouldFallbackFromLimaShell(result: { stdout?: string; stderr?: string; exitCode: number }): boolean {
+  if (result.exitCode === 0) {
+    return false;
+  }
+
+  const combinedOutput = `${result.stderr || ''}\n${result.stdout || ''}`;
+  return /instance\s+"[^"]+"\s+does not exist/i.test(combinedOutput);
+}
+
+export function resolveLimaHome(options: CommandRunnerOptions): string {
+  return options.limaHome
+    || process.env.LIMA_HOME
+    || path.join(os.homedir(), 'Library/Application Support/rancher-desktop/lima');
+}
+
+export function resolveLimactlPath(options: CommandRunnerOptions): string {
+  if (options.limactlPath) {
+    return options.limactlPath;
+  }
+
+  if (process.env.LIMACTL_PATH) {
+    return process.env.LIMACTL_PATH;
+  }
+
+  const candidates = [
+    path.resolve(process.cwd(), 'resources/darwin/lima/bin/limactl'),
+    path.resolve(process.cwd(), 'pkg/rancher-desktop/resources/darwin/lima/bin/limactl'),
+  ];
+
+  if (typeof process.resourcesPath === 'string' && process.resourcesPath.length > 0) {
+    candidates.push(path.join(process.resourcesPath, 'darwin/lima/bin/limactl'));
+    candidates.push(path.join(process.resourcesPath, 'resources/darwin/lima/bin/limactl'));
+  }
+
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  return 'resources/darwin/lima/bin/limactl';
+}
+
+function executeSpawn(
   command: string,
   args: string[],
-  options: { timeoutMs?: number; maxOutputChars?: number; stdin?: string } = {},
+  options: CommandRunnerOptions,
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
-  const timeoutMs = options.timeoutMs ?? 30_000; // safer for complex scripts
+  const timeoutMs = options.timeoutMs ?? 30_000;
   const maxOutputChars = options.maxOutputChars ?? 200_000;
-
-  // Special handling for sh/bash -c full scripts
-  let finalCommand = command;
-  let finalArgs = [...args];
-
-  if (command === 'sh' && args.length >= 2 && args[0] === '-c') {
-    // Join remaining args as full script (preserves pipes, &&, redirects)
-    const script = args.slice(1).join(' ');
-    finalArgs = ['-c', script];
-  } else if (command === 'bash' || command === 'zsh') {
-    // Same logic for other shells
-    const script = args.join(' ');
-    finalArgs = ['-c', script];
-  }
 
   return new Promise(resolve => {
     let child;
     try {
-      child = spawn(finalCommand, finalArgs, {
+      child = spawn(command, args, {
         stdio: ['pipe', 'pipe', 'pipe'],
-        shell: false, // important: do NOT use shell: true — defeats purpose
+        shell: false,
       });
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
       resolve({
         stdout: '',
-        stderr: `Failed to spawn '${finalCommand}': ${errorMessage}`,
+        stderr: `Failed to spawn '${command}': ${errorMessage}`,
         exitCode: 127,
       });
       return;
@@ -96,4 +145,49 @@ export async function runCommand(
       child.stdin?.end();
     }
   });
+}
+
+export async function runCommand(
+  command: string,
+  args: string[],
+  options: CommandRunnerOptions = {},
+): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+  if (options.runInLimaShell) {
+    const limaHome = resolveLimaHome(options);
+    const limactlPath = resolveLimactlPath(options);
+    const limaInstance = options.limaInstance || '0';
+
+    const script = args.length === 0
+      ? command
+      : [command, ...args.map(arg => quoteShellArg(arg))].join(' ');
+
+    const limactlArgs = ['shell', limaInstance, '--', 'sh', '-lc', script];
+    let result = await executeSpawn('env', [`LIMA_HOME=${limaHome}`, limactlPath, ...limactlArgs], options);
+
+    if (result.exitCode === 127) {
+      result = await executeSpawn('env', [`LIMA_HOME=${limaHome}`, 'limactl', ...limactlArgs], options);
+    }
+
+    if (shouldFallbackFromLimaShell(result)) {
+      return executeSpawn('sh', ['-lc', script], options);
+    }
+
+    return result;
+  }
+
+  // Special handling for sh/bash -c full scripts
+  let finalCommand = command;
+  let finalArgs = [...args];
+
+  if (command === 'sh' && args.length >= 2 && args[0] === '-c') {
+    // Join remaining args as full script (preserves pipes, &&, redirects)
+    const script = args.slice(1).join(' ');
+    finalArgs = ['-c', script];
+  } else if (command === 'bash' || command === 'zsh') {
+    // Same logic for other shells
+    const script = args.join(' ');
+    finalArgs = ['-c', script];
+  }
+
+  return executeSpawn(finalCommand, finalArgs, options);
 }

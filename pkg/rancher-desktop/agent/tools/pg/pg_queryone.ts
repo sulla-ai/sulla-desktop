@@ -13,9 +13,11 @@ export class PgQueryOneWorker extends BaseTool {
 
     try {
       const result = await postgresClient.queryOne(sql, params);
+      const rowJson = result ? JSON.stringify(result, null, 2) : 'null';
 
       const responseString = `PostgreSQL QueryOne Result:
 Row Returned: ${result ? 'Yes' : 'No'}
+Row: ${rowJson}
 Query Executed Successfully`;
 
       return {

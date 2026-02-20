@@ -17,7 +17,9 @@ export class N8nCredentialsEntityModel extends BaseModel {
     'resolverId',
   ];
 
-  protected readonly timestamps = true;
+  // n8n credentials_entity uses camelCase timestamps (createdAt/updatedAt),
+  // not snake_case created_at/updated_at expected by BaseModel timestamps.
+  protected readonly timestamps = false;
 
   async save(): Promise<this> {
     if (!this.attributes.id) {

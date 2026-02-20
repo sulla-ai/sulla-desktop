@@ -14,6 +14,12 @@ export class SlackUpdateWorker extends BaseTool {
 
     try {
       const slack = await registry.get<SlackClient>('slack');
+      if (!slack) {
+        return {
+          successBoolean: false,
+          responseString: `Slack integration is not initialized for command ${this.name}`,
+        };
+      }
       const res = await slack.updateMessage(channel, ts, text);
       if (res.ok) {
         return {

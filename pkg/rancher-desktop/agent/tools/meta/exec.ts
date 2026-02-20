@@ -9,16 +9,15 @@ export class ExecWorker extends BaseTool {
   description: string = '';
   schemaDef: any = {};
 
-  protected async _validatedCall(input: any): Promise<ToolResponse> {
-    const { command } = input;
-
-    // Guardrails: block dangerous commands
+  private getForbiddenPattern(command: string): RegExp | null {
+    // Guardrails: block dangerous commands only (avoid broad substring matches)
+    // like --format flags or "Content-Type: application/json".
     const forbiddenPatterns = [
       /rm\s+-rf/i,
       /sudo/i,
       /dd\s+/i,
-      /mkfs/i,
-      /format/i,
+      /\bmkfs(?:\.[a-z0-9_+-]+)?\b/i,
+      /\bformat(?:\.com)?\s+[a-z]:/i,
       /:(){.*:|\|:}/, // fork bomb
       /shutdown/i,
       /halt/i,
@@ -27,16 +26,36 @@ export class ExecWorker extends BaseTool {
     ];
 
     for (const pattern of forbiddenPatterns) {
-      if (pattern.test(command)) {
-        return {
-          successBoolean: false,
-          responseString: `ERROR: Command blocked for security reasons. Pattern: ${pattern.source}`
-        };
-      }
+      if (pattern.test(command)) return pattern;
+    }
+
+    return null;
+  }
+
+  protected async _validatedCall(input: any): Promise<ToolResponse> {
+    const command = String(input.command ?? input.cmd ?? '').trim();
+
+    if (!command) {
+      return {
+        successBoolean: false,
+        responseString: 'Input validation failed: Missing required field: command (or cmd)'
+      };
+    }
+
+    const blockedPattern = this.getForbiddenPattern(command);
+    if (blockedPattern) {
+      return {
+        successBoolean: false,
+        responseString: `ERROR: Command blocked for security reasons. Pattern: ${blockedPattern.source}`
+      };
     }
 
     try {
-      const res = await runCommand(command, [], { timeoutMs: 30000, maxOutputChars: 160_000 });
+      const res = await runCommand(command, [], {
+        timeoutMs: 30000,
+        maxOutputChars: 160_000,
+        runInLimaShell: true,
+      });
 
       if (res.exitCode !== 0) {
         return {
@@ -64,7 +83,8 @@ export const execRegistration: ToolRegistration = {
   description: "Execute a shell command and return output. Use only when explicitly needed.",
   category: "meta",
   schemaDef: {
-    command: { type: 'string' as const, description: 'The exact shell command to run' },
+    command: { type: 'string' as const, optional: true, description: 'The exact shell command to run' },
+    cmd: { type: 'string' as const, optional: true, description: 'Alias for command' },
   },
   workerClass: ExecWorker,
 };

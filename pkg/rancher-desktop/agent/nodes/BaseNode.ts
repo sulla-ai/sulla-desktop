@@ -10,6 +10,8 @@ import { abortIfSignalReceived, throwIfAborted } from '../services/AbortService'
 import { tools, toolRegistry } from '../tools';
 import { BaseTool } from '../tools/base';
 import { Article } from '../database/models/Article';
+import { ConversationSummaryService } from '../services/ConversationSummaryService';
+import { ObservationalSummaryService } from '../services/ObservationalSummaryService';
 
 // ============================================================================
 // DEFAULT SETTINGS
@@ -86,7 +88,6 @@ async function getSoulPrompt(): Promise<string> {
 const ENVIRONMENT_PROMPT = `Core Identity & Principles and Environment & Tools
 
 ## Persistent Environment & Tools
-
 You operate inside a custom runtime with these built-in persistent systems. Use them proactively as first resort. Never improvise alternatives.
 
 You are a strategic autonomous agent. Make real progress. Use these environment resources relentlessly.
@@ -95,37 +96,37 @@ Current datetime: {{formattedTime}}
 Computers set time zone: {{timeZone}}
 
 ### Calendar System
-
 Single source of truth for time-based actions. Every reminder, meeting, recurring report, or scheduled task (e.g., "morning report at 7am") creates or updates a calendar event. Events auto-wake you at trigger time with full context prompt. Use for your own scheduling: daily reviews, follow-ups, recurring automations. Always check calendar before committing to deadlines.
 
 ### Memory Systems
-
 **Observational Memory** (short-term context): 
 Short-term context layer. On any trigger (preferences, commitments, patterns, breakthroughs, new artifacts), call add_observational_memory with one neutral sentence + slug linking to long-term items (workflow, calendar event, workspace, project doc). This bridges conversations.
 
 #### Long-term Memory (vector DB)
-
 Your core brain. Search it first on every task.  
 Your core knowledge and identity. Search it first on every task. Store and retrieve: SOPs (thousands of skills), project docs (solutions architect format: user stories, MoSCoW priorities, architecture, acceptance criteria), Wikipedia-style pages on everything you encounter, people, companies, projects, friends, customers, their businesses/families/events. When starting projects, create full project resource doc as source of truth. Extract SOPs from any learned skill/platform and store here. Always extend, tag, and categorize properly with accurate relationships.
 
 ### Workspaces
-
 Dedicated folders in user data dir for persistent files and dev work. Use create_workspace tool to make one per project. Store all code, assets, outputs here. Access via list/read tools. Execute commands only with full absolute paths (no ~ or relative). Ideal for software builds, downloads, data processing.
 
 ### Docker Environment
-
 You run on Docker with full host access. Launch any safe container/image from internet. For dev: always mount workspace dir into container via docker-compose for hot reload (e.g., Node.js changes appear instantly on refresh).
 
 ### Automation Workflows (n8n)
-
 Your hands and feet for external automation. Thousands of community templates available. Search templates first, import/adapt, or build custom. When user requests automation, create/maintain workflow, push to n8n, test, document in long-term memory with slug.
 
 ### Tools
-
 Use the built in tools to quickly and accurately accomplish tasks in their categories. If no tool exists, use the "exec" tool to run commands (be careful).
-
 Use the browse_tools to locate the other available tools.
 Available Tool Categories: {{tool_categories}}
+
+### You have an OpenAI compatible API
+You can configure other other services to communicate back to you, such as n8n workflows when setting up an AI node. To access your endpoint from the parent machine you can use http://localhost:3000
+When you need access from a container (from Docker/Kubernetes pods) use http://host.docker.internal:3000
+All endpoints are prefixed with /v1/.
+
+### Your codebase
+Here's your codebase https://github.com/sulla-ai/sulla-desktop you can check the doc folder to learn more about your architecture.
 
 `;
 
@@ -136,7 +137,7 @@ Available Tool Categories: {{tool_categories}}
 /**
  * 
  */
-export abstract class BaseNode {
+export abstract class BaseNode<T extends BaseThreadState = BaseThreadState> {
     id: string;
     name: string;
     protected llm: BaseLanguageModel | null = null;
@@ -146,7 +147,11 @@ export abstract class BaseNode {
         this.name = name;
     }
 
-    abstract execute(state: ThreadState): Promise<NodeResult<BaseThreadState>>;
+    abstract execute(state: T): Promise<NodeResult<T>>;
+
+    protected bumpStateVersion(state: BaseThreadState): void {
+        state.metadata.stateVersion = (state.metadata.stateVersion ?? 0) + 1;
+    }
 
     /**
      * 
@@ -239,6 +244,7 @@ export abstract class BaseNode {
                         timestamp: Date.now()
                     }
                 });
+                this.bumpStateVersion(state);
                 state.metadata.awarenessIncluded = true;
             }
 
@@ -284,6 +290,7 @@ Content rules – enforced:
                         timestamp: Date.now()
                     }
                 });
+                this.bumpStateVersion(state);
             }
         }
 
@@ -298,6 +305,7 @@ Content rules – enforced:
                         timestamp: Date.now()
                     }
                 });
+                this.bumpStateVersion(state);
             }
         }
 
@@ -342,6 +350,11 @@ Content rules – enforced:
             return parsedReply;
         }
         return reply.content;
+    }
+
+    protected triggerBackgroundStateMaintenance(state: BaseThreadState): void {
+        ConversationSummaryService.triggerBackgroundSummarization(state);
+        ObservationalSummaryService.triggerBackgroundTrimming(state);
     }
 
     /**
@@ -424,6 +437,8 @@ Content rules – enforced:
                 await this.executeToolCalls(state, toolCalls);
             }
 
+            this.triggerBackgroundStateMaintenance(state);
+
             return reply;
         } catch (err) {
             if ((err as any)?.name === 'AbortError') throw err;
@@ -448,6 +463,7 @@ Content rules – enforced:
                         });
                         if (reply) {
                             this.appendResponse(state, reply.content);
+                            this.triggerBackgroundStateMaintenance(state);
                             return reply;
                         }
                     }
@@ -844,6 +860,7 @@ Content rules – enforced:
                 timestamp: Date.now()
             }
         });
+        this.bumpStateVersion(state);
     }
 
     /**
@@ -1117,22 +1134,26 @@ Content rules – enforced:
                     }
 
                     const result = await tool.invoke(args);
+                    const toolSuccess = result?.success === true;
+                    const toolError = typeof result?.error === 'string'
+                        ? result.error
+                        : (!toolSuccess && typeof result?.result === 'string' ? result.result : undefined);
 
-                    // Emit tool result event on success
-                    await this.emitToolResultEvent(state, toolRunId, true, undefined, result);
+                    await this.emitToolResultEvent(state, toolRunId, toolSuccess, toolError, result);
 
                     await this.appendToolResultMessage(state, toolName, {
                         toolName,
-                        success: true,
+                        success: toolSuccess,
                         result,
+                        error: toolError,
                         toolCallId: toolRunId
                     });
 
                     results.push({
                         toolName,
-                        success: true,
+                        success: toolSuccess,
                         result,
-                        error: undefined
+                        error: toolError
                     });
                 } catch (err: any) {
                     const error = err.message || String(err);
@@ -1215,6 +1236,7 @@ Content rules – enforced:
                 timestamp: Date.now()
             }
         });
+        this.bumpStateVersion(state);
     }
 
     /**

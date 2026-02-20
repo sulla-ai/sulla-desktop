@@ -92,13 +92,56 @@ export class RemoteModelService extends BaseLanguageModel {
     }
 
     // Final fallback to Ollama
-    const ollama = await getOllamaService();
+    const ollama = await this.getFallbackLocalService();
     await ollama.initialize();
     if (ollama.isAvailable()) {
-      return ollama.chat(messages, options); // will normalize internally
+      const localModel = ollama.getModel();
+      const fallbackOptions = {
+        ...(options ?? {}),
+        model: localModel,
+      };
+
+      const localResponse = await ollama.chat(messages, fallbackOptions);
+      if (localResponse) {
+        return this.toOpenAiCompatibleRawResponse(localResponse, localModel);
+      }
     }
 
     throw lastError ?? new Error('All retries failed and Ollama unavailable');
+  }
+
+  protected async getFallbackLocalService() {
+    return getOllamaService();
+  }
+
+  private toOpenAiCompatibleRawResponse(localResponse: NormalizedResponse, model: string): any {
+    const toolCalls = localResponse.metadata.tool_calls?.map((tc) => ({
+      id: tc.id,
+      type: 'function',
+      function: {
+        name: tc.name,
+        arguments: JSON.stringify(tc.args ?? {}),
+      },
+    }));
+
+    return {
+      choices: [
+        {
+          message: {
+            content: localResponse.content,
+            ...(toolCalls?.length ? { tool_calls: toolCalls } : {}),
+          },
+          finish_reason: localResponse.metadata.finish_reason ?? FinishReason.Stop,
+        },
+      ],
+      usage: {
+        prompt_tokens: localResponse.metadata.prompt_tokens ?? 0,
+        completion_tokens: localResponse.metadata.completion_tokens ?? 0,
+        total_tokens: localResponse.metadata.tokens_used
+          ?? ((localResponse.metadata.prompt_tokens ?? 0) + (localResponse.metadata.completion_tokens ?? 0)),
+      },
+      model,
+    };
   }
 
   /**

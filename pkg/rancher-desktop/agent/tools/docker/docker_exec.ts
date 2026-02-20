@@ -8,10 +8,21 @@ export class DockerExecWorker extends BaseTool {
   name: string = '';
   description: string = '';
   schemaDef: any = {};
+
+  private formatFailure(container: string, res: { exitCode: number; stderr?: string; stdout?: string }): string {
+    const details = (res.stderr || res.stdout || '').trim() || '(no stderr/stdout output)';
+    return `Error executing command in container ${container} (exit ${res.exitCode}): ${details}`;
+  }
+
+  private buildExecArgs(container: string, command: string): string[] {
+    // Route through container shell so quoted values / spaces are preserved.
+    return ['exec', container, 'sh', '-lc', command];
+  }
+
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { container, command } = input;
 
-    const args = ['exec', container, ...command.split(' ')];
+    const args = this.buildExecArgs(container, command);
 
     try {
       const res = await runCommand('docker', args, { timeoutMs: 60000, maxOutputChars: 160_000 });
@@ -19,7 +30,7 @@ export class DockerExecWorker extends BaseTool {
       if (res.exitCode !== 0) {
         return {
           successBoolean: false,
-          responseString: `Error executing command in container ${container}: ${res.stderr || res.stdout}`
+          responseString: this.formatFailure(container, res)
         };
       }
 
