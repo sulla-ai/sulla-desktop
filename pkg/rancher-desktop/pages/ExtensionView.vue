@@ -68,6 +68,7 @@ onMounted(async () => {
   }
 
   const name = route.params.name as string;
+  const path = (route.params.path as string[]).join('/');
   const metadata = extensionService.getExtensionMetadata(name) ?? null;
 
   if (!metadata) {
@@ -78,7 +79,7 @@ onMounted(async () => {
   const extensionHex = hexEncode(metadata.id);
 
   extensionMetadata.value = metadata;
-  extensionContentUrl.value = `x-rd-extension://${ extensionHex }/ui/dashboard-tab/ui/index.html`;
+  extensionContentUrl.value = `x-rd-extension://${ extensionHex }/${ path }`;
   extensionIcon.value = `x-rd-extension://${ extensionHex }/icon.svg`;
 });
 </script>
