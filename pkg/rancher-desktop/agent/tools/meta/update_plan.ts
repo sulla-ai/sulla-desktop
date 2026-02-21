@@ -1,10 +1,27 @@
 import { BaseTool, ToolRegistration, ToolResponse } from "../base";
-import { HierarchicalThreadState } from '../../nodes/Graph';
+
+type MilestoneStatus = 'pending' | 'in_progress' | 'done' | 'blocked';
+
+interface FrontendMilestone {
+  id: string;
+  title: string;
+  description: string;
+  successcriteria?: string;
+  dependson?: string[];
+  orderIndex: number;
+  status: MilestoneStatus;
+  note?: string;
+}
+
+interface FrontendPlan {
+  id: string;
+  milestones: FrontendMilestone[];
+}
 
 /**
  * Update Plan Tool - Worker class for execution
  */
-export class UpdatePlanWorker extends BaseTool<HierarchicalThreadState> {
+export class UpdatePlanWorker extends BaseTool<any> {
   name: string = '';
   description: string = '';
   schemaDef: any = {};
@@ -12,7 +29,7 @@ export class UpdatePlanWorker extends BaseTool<HierarchicalThreadState> {
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { milestoneId, status, note } = input;
 
-    const plan = this.state!.metadata!.plan;
+    const plan = this.state!.metadata!.plan as FrontendPlan | undefined;
     if (!plan || !plan.milestones) {
       return {
         successBoolean: false,
@@ -20,37 +37,38 @@ export class UpdatePlanWorker extends BaseTool<HierarchicalThreadState> {
       };
     }
 
-    const milestone = plan.milestones.find((m) => m.model && m.model.id === milestoneId);
-    if (!milestone || !milestone.model) {
+    const milestone = plan.milestones.find((m: FrontendMilestone) => m.id === milestoneId);
+    if (!milestone) {
       return {
         successBoolean: false,
         responseString: `Milestone ${milestoneId} not found in active plan`
       };
     }
 
-    try {
-      milestone.model.status = status;
-      // Note: note property not implemented in AgentPlanTodoInterface yet
-      // if (note) milestone.model.note = note;
-      await milestone.model.save();
-
-      await this.emitProgressUpdate?.({
-        type: "plan_updated",
-        milestoneId: milestoneId,
-        status: status,
-        note: note,
-      });
-
-      return {
-        successBoolean: true,
-        responseString: `Milestone ${milestoneId} updated to ${status}`
-      };
-    } catch (e: any) {
-      return {
-        successBoolean: false,
-        responseString: `Failed to update milestone: ${e?.message}`
-      };
+    milestone.status = status as MilestoneStatus;
+    if (typeof note === 'string' && note.trim()) {
+      milestone.note = note;
     }
+
+    if (this.state) {
+      (this.state as any).metadata = (this.state as any).metadata || {};
+      (this.state as any).metadata.plan = plan;
+      (this.state as any).metadata.planTodos = plan.milestones;
+    }
+
+    await this.emitProgressUpdate?.({
+      type: "plan_updated",
+      planId: plan.id,
+      milestoneId,
+      status: milestone.status,
+      note: milestone.note,
+      milestone,
+    });
+
+    return {
+      successBoolean: true,
+      responseString: `Milestone ${milestoneId} updated to ${milestone.status}`
+    };
   }
 }
 

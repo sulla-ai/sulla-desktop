@@ -1,4 +1,4 @@
-import type { BaseThreadState, HierarchicalThreadState, NodeResult } from './Graph';
+import type { BaseThreadState, NodeResult } from './Graph';
 import type { ToolResult, ToolCall, ThreadState } from '../types';
 import type { WebSocketMessageHandler } from '../services/WebSocketClientService';
 import { getCurrentMode, getLocalService, getService } from '../languagemodels';

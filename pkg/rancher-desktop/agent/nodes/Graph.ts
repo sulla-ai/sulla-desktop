@@ -5,20 +5,9 @@ import type { AbortService } from '../services/AbortService';
 import { throwIfAborted } from '../services/AbortService';
 import { getWebSocketClientService } from '../services/WebSocketClientService';
 import type { ChatMessage } from '../languagemodels/BaseLanguageModel';
-import { AgentPlanInterface } from '../database/models/AgentPlan';
-import { AgentPlanTodoInterface } from '../database/models/AgentPlanTodo';
 import { SullaSettingsModel } from '../database/models/SullaSettingsModel';
-import { BaseNode } from './BaseNode';
 import { 
-  StrategicPlannerNode, 
-  TacticalPlannerNode, 
-  TacticalExecutorNode, 
-  TacticalCriticNode, 
-  StrategicCriticNode, 
-  SummaryNode,
   OverLordPlannerNode,
-  MemoryNode,
-  SimpleNode,
   InputHandlerNode,
   PlanRetrievalNode
 } from './index';
@@ -45,8 +34,6 @@ const DEFAULT_WS_CHANNEL = 'dreaming-protocol';
 const MAX_CONSECTUIVE_LOOP = 10;
 const MAX_MESSAGES_IN_THREAD = 120;
 
-const DEFAULT_MAX_ITERATIONS = 10;
-const DEFAULT_MAX_REVISION_COUNT = 3;
 // ============================================================================
 // THREAD STATE INTERFACES
 // ============================================================================
@@ -124,7 +111,7 @@ export interface SkillGraphState extends BaseThreadState {
 /**
  * Generic node interface for any graph execution.
  * Nodes MUST ONLY write facts/verdicts to state — no routing decisions.
- * @template TState - Specific state shape (HierarchicalThreadState, KnowledgeThreadState, etc.)
+ * @template TState - Specific state shape (BaseThreadState, OverlordThreadState, etc.)
  */
 export interface GraphNode<TState> {
   /** Unique node identifier (must be graph-unique, e.g. 'tactical_executor') */
@@ -220,7 +207,7 @@ export interface BaseThreadState {
     // any graph could technically call another graph, this is the format
     subGraph: {
       state: 'trigger_subgraph' | 'running' | 'completed' | 'failed';
-      name: 'hierarchical' | 'knowledge';
+      name: 'hierarchical';
       prompt: string;
       response: string;
     };
@@ -236,99 +223,6 @@ export interface BaseThreadState {
     datetimeIncluded?: boolean;
     hadToolCalls?: boolean;
     hadUserMessages?: boolean;
-  };
-}
-
-export interface KnowledgeThreadState extends BaseThreadState {
-  messages: ChatMessage[];
-
-  metadata: BaseThreadState['metadata'] & {
-    // Core context
-    kbArticleId?: string;
-    kbTopic: string;
-    kbGoal: string;
-
-    // Structured article metadata (collected/refined during process)
-    kbArticleSchema: {
-      schemaversion?: string;       // e.g. "1.0"
-      section?: string;
-      category?: string;
-      slug?: string;
-      title?: string;
-      tags?: string[];
-      order?: number;
-      locked?: boolean;             // default false
-      author?: string;
-      related_slugs?: string[];
-      mentions?: string[];
-      related_entities?: any[];
-    };
-
-    // Full serialized article data (JSON string or object)
-    // Use this for rich/complex data that doesn't fit schema (content blocks, sections, frontmatter)
-    kbFinalContent?: string;        // final markdown / rendered text
-    kbStatus: 'draft' | 'reviewed' | 'published' | 'failed';
-
-    // Planning
-    kbCurrentSteps: Array<{
-      description: string;
-      done: boolean;
-      resultSummary?: string;
-      completedAt?: string;
-    }>;
-
-    kbActiveStepIndex: number;
-
-    // Critic
-    kbCriticVerdict?: {
-      status: 'approve' | 'revise' | 'continue';
-      reason?: string;
-      at: number;
-    };
-  };
-}
-
-export interface HierarchicalThreadState extends BaseThreadState {
-  messages: ChatMessage[];
-
-  metadata: BaseThreadState['metadata'] & {
-    // Strategic
-    plan: {
-      model?: AgentPlanInterface;
-      milestones?: Array<{ 
-        model?: AgentPlanTodoInterface,
-      }>;
-      activeMilestoneIndex: number;
-      allMilestonesComplete: boolean;
-    };
-
-    // Tactical (current milestone only)
-    currentSteps: Array<{
-      id: string;
-      action: string;
-      description: string;
-      done: boolean;
-      resultSummary?: string;
-      toolHints?: string[];
-    }>;
-    activeStepIndex: number;
-
-    // Critic verdicts
-    tacticalCriticVerdict?: {
-      status: 'approve' | 'revise' | 'escalate';
-      reason?: string;
-      at: number;
-    };
-    strategicCriticVerdict?: {
-      status: 'approve' | 'revise';
-      confidence?: number;
-      reason?: string;
-      suggestions?: string;
-      triggerKnowledgeBase?: boolean;
-      killSwitch?: boolean;
-      at: number;
-    };
-
   };
 }
 
@@ -364,16 +258,14 @@ export interface OverlordThreadState extends BaseThreadState {
  * - Works standalone or as sub-graph (with returnTo flag)
  * 
  * Usage:
- *   const graph = new Graph<ThreadState>();
- *   graph.addNode(new StrategicPlannerNode());
- *   graph.addConditionalEdge('strategic_planner', state => 
- *     state.metadata.plan?.milestones?.length ? 'tactical_planner' : 'end'
- *   );
+ *   const graph = new Graph<BaseThreadState>();
+ *   graph.addNode(new InputHandlerNode());
+ *   graph.setEntryPoint('input_handler');
  *   const finalState = await graph.execute(initialState);
  * 
- * @template TState - State interface (ThreadState, KnowledgeThreadState, etc.)
+ * @template TState - State interface (ThreadState, BaseThreadState, etc.)
  */
-export class Graph<TState = HierarchicalThreadState> {
+export class Graph<TState = BaseThreadState> {
   private nodes: Map<string, GraphNode<TState>> = new Map();
   private edges: Map<string, GraphEdge<TState>[]> = new Map();
   private entryPoint: string | null = null;
@@ -500,8 +392,8 @@ export class Graph<TState = HierarchicalThreadState> {
         
         throwIfAborted(state, 'Graph execution aborted');
 
-        if ((state as any).metadata.waitingForUser && (state as any).metadata.currentNodeId === 'context_trimmer') {
-          console.log('[Graph] Waiting for user at context_trimmer → forcing end');
+        if ((state as any).metadata.waitingForUser && (state as any).metadata.currentNodeId === 'input_handler') {
+          console.log('[Graph] Waiting for user at input_handler → forcing end');
           break;
         }
 
@@ -627,80 +519,6 @@ export class Graph<TState = HierarchicalThreadState> {
 }
 
 /**
- * Async node that executes the requested sub-graph when triggered by OverLord.
- * Pulls subGraphName + subGraphPrompt from metadata.
- * Builds minimal sub-state, runs sub-graph, merges results back.
- * Returns control to overlord_planner.
- */
-export class SubgraphTriggerNode implements GraphNode<OverlordThreadState> {
-  id = 'subgraph_trigger';
-  name = 'Subgraph Trigger';
-
-  async execute(state: OverlordThreadState): Promise<NodeResult<OverlordThreadState>> {
-    const v = state.metadata.subGraph;
-
-    if (v?.state !== 'trigger_subgraph' || !v.name) {
-      console.warn('No valid sub-graph trigger');
-      return { state, decision: { type: 'next' } };
-    }
-
-    const subName = v.name;
-    const prompt = v.prompt || '';
-
-    let subGraph: Graph<any> | null = null;
-    let subState: any = null;
-
-    switch (subName) {
-      case 'hierarchical':
-        subGraph = createHierarchicalGraph();
-        subState = await createInitialThreadState<HierarchicalThreadState>(
-          prompt,
-          {
-            wsChannel: state.metadata.wsChannel,
-            llmModel: state.metadata.llmModel,
-            options: state.metadata.options
-          }
-        );
-        break;
-
-      case 'knowledge':
-        subGraph = await createKnowledgeGraph();
-        subState = await createInitialThreadState<KnowledgeThreadState>(
-          prompt,
-          {
-            wsChannel: state.metadata.wsChannel,
-            llmModel: state.metadata.llmModel,
-            options: state.metadata.options,
-            currentNodeId: 'knowledge_planner'  // KB entry point
-          }
-        );
-        break;
-
-      default:
-        console.warn(`Unsupported sub-graph: ${subName}`);
-        return { state, decision: { type: 'next' } };
-    }
-      
-    if (!subGraph || !subState) {
-      console.error(`Failed to initialize sub-graph: ${subName}`);
-      return { state, decision: { type: 'next' } };
-    }
-
-    // Trigger the subGraph with the Initial subState
-    const subResult = await subGraph.execute(subState);
-
-    // Merge back to original calling graph
-    state.metadata.subGraph.state = subResult.metadata.finalState;
-    state.metadata.subGraph.response = subResult.metadata.finalSummary;
-
-    // Reset trigger
-    state.metadata.subGraph.prompt = '';
-
-    return { state, decision: { type: 'next' } };
-  }
-}
-
-/**
  * Create initial thread state with first user message.
  * @param prompt - The initial user message content
  * @param metadata - Optional metadata for the message
@@ -727,7 +545,7 @@ export async function createInitialThreadState<T extends BaseThreadState>(
       cycleComplete: false,
       waitingForUser: false,
       options: overrides.options ?? { abort: undefined },
-      currentNodeId: overrides.currentNodeId ?? 'context_trimmer',
+      currentNodeId: overrides.currentNodeId ?? 'input_handler',
       consecutiveSameNode: 0,
       iterations: 0,
       revisionCount: 0,
@@ -779,20 +597,22 @@ export function nextThreadId(): string {
   return `thread_${Date.now()}_${++threadCounter}`;
 }
 
-export class ContextTrimmerNode<TState extends BaseThreadState = HierarchicalThreadState> extends BaseNode {
-  constructor() {
-    super('context_trimmer', 'Context Trimmer');
-  }
+class OverlordSkillGraphRunnerNode implements GraphNode<OverlordThreadState> {
+  id = 'skill_graph_runner';
+  name = 'Skill Graph Runner';
 
-  async execute(state: TState): Promise<NodeResult<TState>> {
-    if (state.messages.length > MAX_MESSAGES_IN_THREAD) {
-      state.messages = state.messages.slice(-MAX_MESSAGES_IN_THREAD);
-      console.log(`[ContextTrimmer] Trimmed to last ${MAX_MESSAGES_IN_THREAD} messages`);
-    }
+  async execute(state: OverlordThreadState): Promise<NodeResult<OverlordThreadState>> {
+    // Allow the delegated SkillGraph cycle to execute each loop.
+    state.metadata.cycleComplete = false;
+    state.metadata.waitingForUser = false;
+
+    const skillGraph = createSkillGraph();
+    await skillGraph.execute(state as unknown as SkillGraphState, 'input_handler');
+    await skillGraph.destroy();
+
     return { state, decision: { type: 'next' } };
   }
 }
-
 
 // ============================================================================
 //
@@ -803,305 +623,6 @@ export class ContextTrimmerNode<TState extends BaseThreadState = HierarchicalThr
 // ============================================================================
 
 /**
- * Creates a standalone micro-graph for Knowledge Base article creation.
- * 
- * This sub-graph runs independently or can be deferred to from primary graphs.
- * Flow:
- *   kb_planner → kb_executor (loops) → kb_critic → (revise → planner) or (approve → kb_writer) → end
- * 
- * Usage:
- *   - Standalone: await kbGraph.execute(state);
- *   - Deferred: trigger from strategic_planner via conditional edge
- *     if (milestone.generateKnowledgeBase) return 'kb_planner'
- *   - Return: kb_writer routes back via metadata.returnTo or clears sub-graph flag
- * 
- * State fields used (prefixed to avoid collision):
- *   - kbCurrentSteps: Array<{description: string, done: boolean, resultSummary?: string}>
- *   - kbActiveStepIndex: number
- *   - kbCriticVerdict: {status: 'approve'|'revise', reason?: string, at: number}
- * 
- * @returns {Graph} Fully configured knowledge base creation graph
- */
-export async function createKnowledgeGraph(): Promise<Graph<KnowledgeThreadState>> {
-  const {
-    MemoryNode,
-    KnowledgePlannerNode,
-    KnowledgeExecutorNode,
-    KnowledgeCriticNode,
-    KnowledgeWriterNode,
-    SummaryNode
-  } = await import('.');
-
-  const graph = new Graph<KnowledgeThreadState>();
-
-  graph.addNode(new MemoryNode() as any);
-  graph.addNode(new KnowledgePlannerNode());   // id: 'knowledge_planner'
-  graph.addNode(new KnowledgeExecutorNode());  // id: 'knowledge_executor'
-  graph.addNode(new KnowledgeCriticNode());    // id: 'knowledge_critic'
-  graph.addNode(new KnowledgeWriterNode());    // id: 'knowledge_writer'
-  graph.addNode(new SummaryNode() as any);
-
-  // Planner always starts executor
-  graph.addEdge('memory_recall', 'knowledge_planner');
-  graph.addEdge('knowledge_planner', 'knowledge_executor');
-
-  // Executor loops until steps complete
-  graph.addConditionalEdge('knowledge_executor', state =>
-    state.metadata.kbActiveStepIndex < (state.metadata.kbCurrentSteps?.length ?? 0) - 1
-      ? 'knowledge_executor'
-      : 'knowledge_critic'
-  );
-
-  // Critic decides: escelate, done, or approve(continue)
-  graph.addConditionalEdge('knowledge_critic', state => {
-    const v = state.metadata.kbCriticVerdict?.status;
-    const steps = state.metadata.kbCurrentSteps ?? [];
-    const idx = state.metadata.kbActiveStepIndex;
-    const schema = state.metadata.kbArticleSchema;
-    const hasContent = !!state.metadata.kbFinalContent?.trim();
-
-    // Required schema check
-    const schemaIncomplete = !schema.title?.trim() ||
-                            !schema.slug?.trim() ||
-                            !schema.tags?.length ||
-                            !schema.author?.trim();
-
-    // All steps complete?
-    const allStepsDone = steps.length > 0 && steps.every(s => s.done);
-
-    if (v === 'revise') {
-      // Major issues → replan
-      return 'knowledge_planner';
-    }
-
-    if (v === 'continue' || !allStepsDone || idx < steps.length - 1 || schemaIncomplete || !hasContent) {
-      // More work needed (steps left, schema gaps, no content)
-      return 'knowledge_executor';
-    }
-
-    // Approve: everything ready
-    if (allStepsDone && !schemaIncomplete && hasContent) {
-      state.metadata.kbStatus = 'reviewed';
-      return 'knowledge_writer';
-    }
-
-    // Fallback safety: incomplete but not explicit revise → replan
-    return 'knowledge_planner';
-  });
-
-  // Writer finishes article → end (or return to caller if sub-graph)
-  graph.addConditionalEdge('knowledge_writer', state => {
-    if (state.metadata.returnTo) {
-      const returnNode = state.metadata.returnTo;
-      state.metadata.returnTo = null;
-      return returnNode;
-    }
-    return 'end';
-  });
-
-  graph.setEntryPoint('knowledge_planner');
-  graph.setEndPoints('knowledge_writer');
-
-  return graph;
-}
-
-/**
- * Create the hierarchical planning graph
- * Flow: Memory → StrategicPlanner → [TacticalPlanner → Executor → Critic] → FinalCritic
- * 
- * Strategic Planner: Creates high-level goals and milestones (persisted to DB)
- * Tactical Planner: Creates micro-plans for each milestone (state-only)
- * Executor: Executes tactical steps with tools
- * Critic: Reviews tactical step execution, can request revision or advance
- */
-export function createHierarchicalGraph(): Graph<HierarchicalThreadState> {
-
-  const graph = new Graph<HierarchicalThreadState>();
-
-  // Add nodes
-  graph.addNode(new ContextTrimmerNode<HierarchicalThreadState>());
-  graph.addNode(new StrategicPlannerNode());
-  graph.addNode(new TacticalPlannerNode());
-  graph.addNode(new TacticalExecutorNode());
-  graph.addNode(new TacticalCriticNode());
-  graph.addNode(new StrategicCriticNode());
-  graph.addNode(new SummaryNode<HierarchicalThreadState>());
-
-  graph.addEdge('context_trimmer', 'strategic_planner');
-
-  // Conditional: StrategicPlanner → end (simple) or TacticalPlanner (complex)
-  graph.addConditionalEdge('strategic_planner', state => {
-    const hasPlan = !!state.metadata.plan?.model;
-    const hasMilestones = !!state.metadata.plan?.milestones?.length;
-
-    if (!hasPlan || !hasMilestones) {
-      return 'strategic_planner';
-    }
-
-    // Force tactical_planner even if activeMilestoneIndex is unset
-    state.metadata.plan.activeMilestoneIndex ??= 0;
-    return 'strategic_planner';
-  });
-
-  graph.addConditionalEdge('tactical_planner', state => {
-    const steps = state.metadata.currentSteps ?? [];
-    if (steps.length === 0) {
-      // No steps → milestone complete → check if all milestones done
-      return state.metadata.plan?.allMilestonesComplete
-        ? 'strategic_critic'
-        : 'tactical_planner';  // ← loop back to plan next milestone
-    }
-    return 'tactical_executor';
-  });
-
-  // Conditional edge from tactical_executor
-  graph.addConditionalEdge('tactical_executor', state => {
-    const steps = state.metadata.currentSteps ?? [];
-    const idx = state.metadata.activeStepIndex ?? 0;
-
-    // Safety: invalid state
-    if (idx >= steps.length || !steps[idx]) {
-      return 'tactical_critic'; // or 'summary'
-    }
-
-    const currentStep = steps[idx];
-
-    // Step not yet marked done → stay here (more tool calls needed)
-    if (!currentStep.done) {
-      return 'tactical_executor'; // continue same step
-    }
-
-    // Step done, but more steps remain → advance & continue executor
-    if (idx + 1 < steps.length) {
-      // activeStepIndex already incremented in node
-      return 'tactical_executor';
-    }
-
-    // All steps for this milestone done → go to critic
-    return 'tactical_critic';
-  });
-
-  // Conditional: TacticalCritic → revise to TacticalPlanner, approve: to TacticalExecutor (more steps) or StrategicCritic
-  graph.addConditionalEdge('tactical_critic', state => {
-    const v = state.metadata.tacticalCriticVerdict?.status;
-    const idx = state.metadata.activeStepIndex;
-    const steps = state.metadata.currentSteps ?? [];
-
-    if (v === 'revise') return 'tactical_executor';
-
-    if (v === 'escalate') return 'strategic_planner';
-
-    // approve: mark current step done + advance
-    if (steps[idx]) {
-      steps[idx].done = true;
-    }
-
-    // Mark current step done (already there)
-    if (steps[idx]) steps[idx].done = true;
-
-    // Advance step index
-    state.metadata.activeStepIndex = idx + 1;
-
-    if (state.metadata.activeStepIndex < steps.length) {
-      return 'tactical_executor'; // more steps in current milestone
-    }
-
-    // Milestone complete → advance milestone index
-    const plan = state.metadata.plan;
-    if (plan) {
-      plan.activeMilestoneIndex = (plan.activeMilestoneIndex ?? 0) + 1;
-      plan.allMilestonesComplete = 
-        plan.activeMilestoneIndex >= (plan.milestones?.length ?? 0);
-
-      // Reset tactical steps for next milestone
-      state.metadata.currentSteps = [];
-      state.metadata.activeStepIndex = 0;
-    }
-
-    // Always go back to tactical_planner to handle next milestone
-    return 'tactical_planner';
-  });
-
-  // Strategic Critic edge — now handles approve/revise/kill-switch fully
-  graph.addConditionalEdge('strategic_critic', state => {
-    const verdict = state.metadata.strategicCriticVerdict;
-
-    if (!verdict) {
-      console.warn('[Graph] No strategicCriticVerdict — fallback to summary');
-      return 'summary';
-    }
-
-    const plan = state.metadata.plan;
-
-    if (verdict.killSwitch === true) {
-      // Emergency stop — rare, irreversible
-      if (plan?.model) {
-        plan.model.setStatus('abandoned');
-        plan.model.save().catch(err => console.error('Kill-switch save failed:', err));
-      }
-      return 'end';  // true termination
-    }
-
-    if (verdict.status === 'approve' && (verdict.confidence ?? 0) >= 90) {
-      // Goal achieved — mark complete, clean up, go to summary
-      if (plan?.model) {
-        plan.model.setStatus('completed');
-        plan.model.save().catch(err => console.error('Approve save failed:', err));
-
-        // Clean up milestones & plan
-        console.log('[Graph] StrategicCritic approved — deleting milestones & plan');
-        for (const m of plan.milestones || []) {
-          m.model?.delete().catch(err => console.error('Milestone delete failed:', err));
-        }
-        plan.model.delete().catch(err => console.error('Plan delete failed:', err));
-      }
-
-      // Reset plan state for next cycle
-      state.metadata.plan = {
-        model: undefined,
-        milestones: [],
-        activeMilestoneIndex: 0,
-        allMilestonesComplete: false
-      };
-      state.metadata.currentSteps = [];
-      state.metadata.activeStepIndex = 0;
-      state.metadata.strategicCriticVerdict = undefined;
-      state.metadata.tacticalCriticVerdict = undefined;
-
-      // Optional: trigger KB async if requested
-      if (verdict.triggerKnowledgeBase === true) {
-        state.metadata.subGraph = {
-          state: 'trigger_subgraph',
-          name: 'knowledge',
-          prompt: `Document successful plan execution for goal: ${plan?.model?.attributes?.goal || 'unknown'}`,
-          response: ''
-        };
-      }
-
-      return 'summary';
-    }
-
-    // Revise — back to planner
-    if (verdict.status === 'revise') {
-      return 'strategic_planner';
-    }
-
-    // Fallback (low confidence, missing verdict, etc.)
-    console.warn('[Graph] StrategicCritic unclear verdict — fallback to summary');
-    return 'summary';
-  });
-
-  // allow looping over again
-  graph.addEdge('summary', 'context_trimmer');
-
-  // Set entry and end points
-  graph.setEntryPoint('context_trimmer');
-  graph.setEndPoints('summary');
-
-  return graph;
-}
-
-/**
  * Create a specialized graph for heartbeat-triggered OverLord planning
  * This graph handles autonomous strategic oversight during idle periods
  */
@@ -1110,56 +631,34 @@ export function createOverlordGraph(): Graph<OverlordThreadState> {
   // Create lightweight heartbeat graph with only core nodes
   const graph = new Graph<OverlordThreadState>();
 
-  graph.addNode(new ContextTrimmerNode<OverlordThreadState>());
+  graph.addNode(new InputHandlerNode<OverlordThreadState>());
   graph.addNode(new OverLordPlannerNode());  // id: 'overlord_planner'
-  graph.addNode(new SubgraphTriggerNode());
+  graph.addNode(new OverlordSkillGraphRunnerNode()); // id: 'skill_graph_runner'
 
   // Entry point
-  graph.addEdge('context_trimmer', 'overlord_planner');
+  graph.addEdge('input_handler', 'overlord_planner');
 
-  // OverLord core loop: think → trigger subgraph → loop or end
+  // OverLord core loop: think → run skill graph → loop or end
   graph.addConditionalEdge('overlord_planner', state => {
     const v = state.metadata;
+    const overlordLoopCount = (((v as any).overlordLoopCount ?? 0) + 1);
+    (v as any).overlordLoopCount = overlordLoopCount;
 
     // End if you want
     if (v?.projectState === 'end') return 'end';
 
-    // Trigger sub-graph
-    if (v?.subGraph.state === 'trigger_subgraph') return 'subgraph_trigger';
+    // Hard stop after 20 overlord recursions
+    if (overlordLoopCount >= 20) return 'end';
 
-    // Defer back to itself
-    return 'overlord_planner';
+    // Delegate one cycle to the SkillGraph each loop.
+    return 'skill_graph_runner';
   });
 
-  // Final edge: hierarchical returns here automatically via returnTo flag
-  // No need to add hierarchical nodes or edges — handled by sub-graph
-  // When hierarchical finishes, it routes back to 'overlord_planner'
+  // Skill graph execution returns control to overlord planner.
+  graph.addEdge('skill_graph_runner', 'overlord_planner');
 
-  graph.setEntryPoint('context_trimmer');
+  graph.setEntryPoint('input_handler');
   graph.setEndPoints('overlord_planner');
-
-  return graph;
-}
-
-
-
-/**
- * Create a specialized graph for heartbeat-triggered OverLord planning
- * This graph handles autonomous strategic oversight during idle periods
- */
-export function createSimpleGraph(): Graph<BaseThreadState> {
-
-  // Create lightweight heartbeat graph with only core nodes
-  const graph = new Graph<BaseThreadState>();
-
-  graph.addNode(new MemoryNode());           // id: 'memory_recall'
-  graph.addNode(new SimpleNode());  // id: 'simple'
-
-  // Entry point
-  graph.addEdge('memory_recall', 'simple');
-
-  graph.setEntryPoint('memory_recall');
-  graph.setEndPoints('simple');
 
   return graph;
 }

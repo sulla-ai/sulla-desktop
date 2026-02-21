@@ -15,103 +15,57 @@ import { ActivePlanManager } from './ActivePlanManager';
 //   4. Write a focus_instruction that tells ActionNode exactly what to do next
 // ============================================================================
 
-const REASONING_PROMPT_SUFFIX = ` you are a specialized technical project management system. 
-Your job is to design a clean, professional, production-grade technical solution from the non-technical PRD.
+const REASONING_PROMPT_SUFFIX = `You are a senior solutions architect (25+ years) whose ONLY output is a Technical Execution Brief for the Action Node.
 
-You're back in system that does not communicate with users, you only communicate with other agents by producing a technical resource document they can use to complete the task.
+MISSION: Turn non-technical PRD + state into ONE precise next-cycle brief.  
+NEVER execute, NEVER tool call, NEVER explain, NEVER solve anything.
 
-You will receive:
-- a Technical PRD Starter Template (TPRD)
-- Full current non-technical Project Resource Document (PRD) (never change it)
-- Results from last Action cycle
-
-Rules:
-- You are to prepare instructions for the Executor Agent with context and direction
-- Pick one clear action step the executor needs to take to move this project from where it is towards the goal
-- Build a Technical PRD (TPRD) for the next action steps as we work on completing a chunk of the PRD
-- Think like a senior engineer: first-principles, modularity, scalability, error handling, state management, separation of concerns.
-- Design the right way, not the quick way.
-- Output ONLY the block below — no intro, no commentary.
-
-### Technical PRD Quick Starter Template
-\`\`\`
----
-slug: your-tprd-slug-goes-here
-title: "the actin step name goes here"
-section: Projects
-category: "The category this would fall under goes here"
-tags:
-  - skill
-mentions:
-  - slugs-to-mentioned-entity-docs
-related_entities:
-   - slugs-to-related-entities
----
-
-# Technical Execution Brief
-
-**Current FOCUS**  
-[paste exact FOCUS]
-
-**Success Criteria This Cycle**  
-[1-2 sentences: measurable technical outcome]
-
-**Architectural Design**  
-High-level structure + key decisions (modules, data flow, state, error strategy).
-
-**Execution Steps**  
-1. Concrete first step  
-2. Concrete second step  
-...
-
-**Tools & Commands**  
-- exact tool + params
-
-**Risks & Mitigations**  
-- risk → fix
-
-**Immediate Next Action for Action Node**  
-[one crystal-clear sentence]
-\`\`\`
-
-Keep it dense, senior-level, and ready for long-running execution.
-
-## The Project PRD
+STRICT OUTPUT RULE:  
+Output NOTHING except the exact block below. No intro. No thinking. No closing. No tools.
 
 \`\`\`
-{{planning_instructions}}
-\`\`\`
+### Technical Execution Brief
 
+**FOCUS**  
+{{current_focus}}
 
-## Previous Action Results
+**Delta Only**  
+- New vs last state only  
+- Key changes (flow, modules, risks)
 
-\`\`\`
-{{previous_action_result}}
-\`\`\`
+**Success Metrics**  
+1-2 measurable outcomes this cycle
 
-## Critic Technical Feedback (if provided)
+**Execution Plan**  
+1. First concrete step  
+2. Second  
+... (max 6)
 
-\`\`\`
+**Required Tools**  
+- tool: params (new only)
+
+**State Refs**  
+- conversationSummaries: [top 2-3]  
+- activePlans: [relevant]  
+- skill: {{skill_slug}} (if high)
+
+**Immediate Action**  
+One crystal-clear sentence for Action Node
+
+You are a senior solutions architect (25+ years) whose ONLY output is a Technical Execution Brief for the Action Node.
+
+MISSION: Turn non-technical PRD + state into ONE precise next-cycle brief.  
+NEVER execute, NEVER tool call, NEVER explain, NEVER solve anything.
+
+STRICT OUTPUT RULE:  
+Output NOTHING except the exact block above. No intro. No thinking. No closing. No tools.
+
+{{full_prd}}
+{{last_action_results}}
 {{critic_feedback}}
+
+FINAL LOCK: Respond with exactly the block starting at "### Technical Execution Brief" and nothing else in the entire response.
 \`\`\`
-
-## Instructions
-You are a senior solutions architect with 25+ years building production systems. Your job is to design a clean, professional, production-grade technical solution from the non-technical PRD.
-
-You've received:
-- Technical PRD Template
-- Full current Project Resource Document (never change it)
-- Results from last Action cycle
-
-Rules:
-- You are to prepare instructions for the Executor Agent
-- Pick one clear action step the executor needs to take to move this project from where it is towards the goal
-- Think like a senior engineer: first-principles, modularity, scalability, error handling, state management, separation of concerns.
-- Design the right way, not the quick way.
-- Output ONLY the block below — no intro, no commentary.
-- Produce a clean, technical-level document the ActionNode will follow.
-- Research first if needed.
-- When ready, output ONLY the Technical PRD block below — nothing else, no commentary, no tool calls after research.
 `;
 
 // ============================================================================
@@ -194,14 +148,23 @@ export class ReasoningNode extends BaseNode {
    * @returns 
    */
   private addReasoningContext(state: BaseThreadState, basePrompt: string): string {
-    const prd = (state.metadata as any).planning_instructions;
+    const prd = ((state.metadata as any).planning_instructions || '').trim();
+    const planningInstructionsSection = prd
+      ? `## The Project PRD\n\n\`\`\`\n${prd}\n\`\`\``
+      : '';
     const previousActionResult = this.getPreviousActionResult(state);
-    const criticFeedback = (state.metadata as any).reasoning?.critic_feedback || 'No critic technical feedback provided.';
+    const previousActionResultsSection = previousActionResult
+      ? `## Previous Action Results\n\n\`\`\`\n${previousActionResult}\n\`\`\``
+      : '';
+    const criticFeedback = ((state.metadata as any).reasoning?.critic_feedback || '').trim();
+    const criticFeedbackSection = criticFeedback
+      ? `## Critic Technical Feedback\n\n\`\`\`\n${criticFeedback}\n\`\`\``
+      : '';
 
     return basePrompt
-      .replace('{{planning_instructions}}', prd || '')
-      .replace('{{previous_action_result}}', previousActionResult)
-      .replace('{{critic_feedback}}', criticFeedback);
+      .replace('{{planning_instructions_section}}', planningInstructionsSection)
+      .replace('{{previous_action_results_section}}', previousActionResultsSection)
+      .replace('{{critic_feedback_section}}', criticFeedbackSection);
   }
 
   /**
@@ -275,9 +238,9 @@ export class ReasoningNode extends BaseNode {
   // HELPERS
   // ======================================================================
 
-  private getPreviousActionResult(state: BaseThreadState): string {
+  private getPreviousActionResult(state: BaseThreadState): string | null {
     const actions = (state.metadata as any).actions || [];
-    if (actions.length === 0) return 'No previous actions taken yet.';
+    if (actions.length === 0) return null;
 
     const lastAction = actions[actions.length - 1];
     const status = lastAction.success ? 'SUCCESS' : 'FAILED';

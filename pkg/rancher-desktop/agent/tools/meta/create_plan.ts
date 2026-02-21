@@ -1,6 +1,40 @@
 import { BaseTool, ToolRegistration, ToolResponse } from "../base";
-import { AgentPlan } from '../../database/models/AgentPlan';
-import { AgentPlanTodo } from '../../database/models/AgentPlanTodo';
+import { getWebSocketClientService } from '../../services/WebSocketClientService';
+
+type PlanStatus = 'active' | 'completed';
+type MilestoneStatus = 'pending' | 'in_progress' | 'done' | 'blocked';
+
+interface InputMilestone {
+  id?: string;
+  title?: string;
+  description?: string;
+  successcriteria?: string;
+  dependson?: string[];
+}
+
+interface FrontendMilestone {
+  id: string;
+  title: string;
+  description: string;
+  successcriteria: string;
+  dependson: string[];
+  orderIndex: number;
+  status: MilestoneStatus;
+  note?: string;
+}
+
+interface FrontendPlan {
+  id: string;
+  threadId: string;
+  wsChannel: string;
+  goal: string;
+  goaldescription: string;
+  requirestools: boolean;
+  complexity: 'simple' | 'moderate' | 'complex';
+  status: PlanStatus;
+  createdAt: number;
+  milestones: FrontendMilestone[];
+}
 
 /**
  * Create Plan Tool - Worker class for execution
@@ -13,81 +47,65 @@ export class CreatePlanWorker extends BaseTool {
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     console.log('[CreatePlanTool] updatePlan started');
 
-    const threadId = (this.state as any).metadata?.threadId;
-    const wsChannel = (this.state as any).metadata?.wsChannel;
-    let plan;
-    let createdTodos = [];
+    const threadId = String((this.state as any).metadata?.threadId || 'unknown-thread');
+    const wsChannel = String((this.state as any).metadata?.wsChannel || 'unknown-channel');
+    const planId = `plan_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
-    try {
-      // AgentPlan fillable: thread_id, revision, status, goal, goaldescription, complexity, requirestools, wschannel
-      plan = await AgentPlan.create({
-        thread_id: threadId,
-        goal: input.goal,
-        goaldescription: input.goaldescription,
-        requirestools: input.requirestools,
-        complexity: input.estimatedcomplexity,
-        status: 'active',
-        wschannel: wsChannel,
-      });
-    } catch (e:any) {
-      return {
-        successBoolean: false,
-        responseString: `Plan creation failed: no id returned. e: ${e?.message}`
-      };
-    }
+    const milestonesInput: InputMilestone[] = Array.isArray(input?.milestones)
+      ? input.milestones
+      : [];
 
-    const planId = plan.attributes.id;
-    if (!planId) {
-      return {
-        successBoolean: false,
-        responseString: `Plan creation failed: no id returned.`
-      };
-    }
+    const milestones: FrontendMilestone[] = milestonesInput.map((milestone: InputMilestone, index: number) => ({
+      id: String(milestone.id || `milestone_${index + 1}`),
+      title: String(milestone.title || `Milestone ${index + 1}`),
+      description: String(milestone.description || ''),
+      successcriteria: String(milestone.successcriteria || ''),
+      dependson: Array.isArray(milestone.dependson) ? milestone.dependson.map(String) : [],
+      orderIndex: index,
+      status: 'pending',
+    }));
 
-    try {
-      // AgentPlanTodo fillable: plan_id, status, order_index, title, description, category_hints, wschannel
-      for (let i = 0; i < input.milestones.length; i++) {
-        const milestone = input.milestones[i];
-        const todo = await AgentPlanTodo.create({
-          plan_id: planId,
-          title: milestone.title,
-          description: milestone.description,
-          status: 'pending',
-          order_index: i,
-          wschannel: wsChannel,
-        });
-        createdTodos.push(todo);
-      }
-    } catch (e:any) {
-      return {
-        successBoolean: false,
-        responseString: `Plan creation failed: no id returned. e: ${e?.message}`
-      };
-    }
-
-    // Use the just-created todos
-    const milestones = createdTodos;
+    const plan: FrontendPlan = {
+      id: planId,
+      threadId,
+      wsChannel,
+      goal: String(input?.goal || ''),
+      goaldescription: String(input?.goaldescription || ''),
+      requirestools: Boolean(input?.requirestools),
+      complexity: (input?.estimatedcomplexity || 'moderate') as 'simple' | 'moderate' | 'complex',
+      status: 'active',
+      createdAt: Date.now(),
+      milestones,
+    };
 
     // Set plan in state
     if (this.state) {
       (this.state as any).metadata = (this.state as any).metadata || {};
       (this.state as any).metadata.plan = plan;
-      (this.state as any).metadata.planTodos = await AgentPlanTodo.findForPlan(planId);
+      (this.state as any).metadata.planTodos = milestones;
     }
 
     await this.emitProgressUpdate?.({
       type: "plan_created",
-      plan: {
-        id: planId,
-        goal: plan.attributes.goal,
-        status: plan.attributes.status,
-        milestones: milestones,
-      }
+      plan,
+    });
+
+    // Explicit legacy progress event for UI plan handlers (AgentPersonaModel expects data.phase)
+    await getWebSocketClientService().send(wsChannel, {
+      type: 'progress',
+      threadId,
+      data: {
+        phase: 'plan_created',
+        planId,
+        goal: plan.goal,
+        plan,
+      },
+      timestamp: Date.now(),
     });
 
     return {
       successBoolean: true,
-      responseString: `Plan created (id:${planId}) successfully with ${input.milestones.length} milestones`
+      responseString: `Plan created (id:${planId}) successfully with ${milestones.length} milestones`
     };
   }
 }

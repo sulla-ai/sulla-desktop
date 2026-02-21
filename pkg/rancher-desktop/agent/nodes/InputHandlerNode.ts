@@ -157,12 +157,12 @@ const CONTROL_CHAR_REGEX = /[\u200B-\u200F\u2028-\u202F\uFEFF\u0000-\u0008\u000B
  *
  * @extends BaseNode
  */
-export class InputHandlerNode extends BaseNode {
+export class InputHandlerNode<TState extends BaseThreadState = BaseThreadState> extends BaseNode {
   constructor() {
     super('input_handler', 'Input Handler');
   }
 
-  async execute(state: BaseThreadState): Promise<NodeResult<BaseThreadState>> {
+  async execute(state: TState): Promise<NodeResult<TState>> {
 
     // Initialize diagnostics metadata
     const diagnostics: Record<string, any> = {

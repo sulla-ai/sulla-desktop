@@ -166,8 +166,8 @@ export class ChatCompletionsServer {
   private async processUserInputDirect(messages: any): Promise<string> {
     const threadId = nextThreadId();
     
-    // Get or create persistent graph for this thread
-    const { graph, state } = await GraphRegistry.getOrCreateSimpleGraph(WS_CHANNEL, threadId);
+    // Get or create persistent SkillGraph for this thread
+    const { graph, state } = await GraphRegistry.getOrCreateSkillGraph(WS_CHANNEL, threadId);
 
     try {
       state.metadata.wsChannel = WS_CHANNEL;
@@ -180,10 +180,24 @@ export class ChatCompletionsServer {
       state.metadata.waitingForUser = false;
 
       // Execute on the persistent graph
-      await graph.execute(state, 'context_trimmer');
+      await graph.execute(state, 'input_handler');
 
-      // Return the combined response accumulated in state.metadata.totalSummary
-      return state.metadata.totalSummary?.trim() || '';
+      const finalSummary = state.metadata.finalSummary?.trim();
+      const outputSummary = (state.metadata as any).output?.summaryMessage?.trim?.();
+      const totalSummary = (state.metadata as any).totalSummary?.trim?.();
+
+      if (finalSummary) return finalSummary;
+      if (outputSummary) return outputSummary;
+      if (totalSummary) return totalSummary;
+
+      const latestAssistant = [...state.messages].reverse().find((msg: any) => msg.role === 'assistant');
+      if (latestAssistant?.content) {
+        return typeof latestAssistant.content === 'string'
+          ? latestAssistant.content
+          : JSON.stringify(latestAssistant.content);
+      }
+
+      return '';
 
     } catch (err: any) {
       console.error('[ChatCompletionsAPI] Error processing user input:', err);

@@ -18,12 +18,9 @@ This is your private time. No user is watching, output your thoughts and plans s
 
 ### Second
 - silently decide what will create the most value in the next cycle
-- use trigger_subgraph hierarchical, to launch the full planning + execution graph cycle; provide the graph with clear instructions
 
 You may take any of these actions (you are encouraged to be decisive):
 
-- "review_and_plan"      → Launch the full planning + execution graph cycle with clear instructions
-- "work_on_memory_article" → Create or update a knowledge base article (great for documenting lessons or research)
 - "use_tools"            → Directly call one or more tools right now (calendar, n8n, search, etc.)
 - "continue"             → Keep thinking / running another cycle (only if you have real work)
 - "end"                  → Go back to sleep (only when everything important is handled)

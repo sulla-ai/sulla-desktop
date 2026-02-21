@@ -50,9 +50,6 @@ const ACTION_PROMPT_SUFFIX = `You are the Execution Agent.
 Key result: [one-line summary of accomplishment]
 
 ---
-
-## Technical Execution Brief
-
 {{technical_instructions}}
 
 `;

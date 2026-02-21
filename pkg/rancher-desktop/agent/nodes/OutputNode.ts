@@ -107,6 +107,9 @@ export class OutputNode extends BaseNode {
       await this.wsChatMessage(state, summaryText.trim(), 'assistant');
     }
 
+    (state.metadata as any).finalSummary = summaryText.trim();
+    (state.metadata as any).totalSummary = summaryText.trim();
+
     // Mark task as complete and ready for user
     (state.metadata as any).cycleComplete = true;
     (state.metadata as any).waitingForUser = true;

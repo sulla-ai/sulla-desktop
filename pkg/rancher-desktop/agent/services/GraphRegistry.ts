@@ -1,4 +1,4 @@
-import { Graph, createOverlordGraph, OverlordThreadState, BaseThreadState, HierarchicalThreadState, createHierarchicalGraph, createSimpleGraph, createSkillGraph, SkillGraphState } from '../nodes/Graph';
+import { Graph, createOverlordGraph, OverlordThreadState, BaseThreadState, createSkillGraph, SkillGraphState } from '../nodes/Graph';
 import { SullaSettingsModel } from '../database/models/SullaSettingsModel';
 import { getCurrentModel, getCurrentMode } from '../languagemodels';
 
@@ -29,33 +29,12 @@ export const GraphRegistry = {
     threadId: string;
   }> {
     const threadId = nextThreadId();
-    const graph = createHierarchicalGraph();
+    const graph = createSkillGraph();
 
-    const state = await buildHierarchicalState(wsChannel, threadId);
+    const state = await buildSkillState(wsChannel, threadId);
 
     registry.set(threadId, { graph, state });
     return { graph, state, threadId };
-  },
-
-  /**
-   * Get or create — resumes if threadId exists, creates new if not.
-   * Use in normal message flow.
-   */
-  getOrCreateSimpleGraph: async function(wsChannel: string, threadId: string): Promise<{
-    graph: Graph<BaseThreadState>;
-    state: BaseThreadState;
-  }> {
-    if (registry.has(threadId)) {
-      return Promise.resolve(registry.get(threadId)!);
-    }
-
-    // No existing → create new under this threadId
-    const graph = createSimpleGraph();
-
-    const state = await buildSimpleState(wsChannel, threadId);
-
-    registry.set(threadId, { graph, state });
-    return { graph, state };
   },
 
   /**
@@ -84,17 +63,17 @@ export const GraphRegistry = {
    * Use in normal message flow.
    */
   getOrCreate: async function(wsChannel: string, threadId: string): Promise<{
-    graph: Graph<any>;
-    state: BaseThreadState;
+    graph: Graph<SkillGraphState>;
+    state: SkillGraphState;
   }> {
     if (registry.has(threadId)) {
       return Promise.resolve(registry.get(threadId)!);
     }
 
-    // No existing → create new under this threadId
-    const graph = createHierarchicalGraph();
+    // No existing → create new SkillGraph under this threadId
+    const graph = createSkillGraph();
 
-    const state = await buildHierarchicalState(wsChannel, threadId);
+    const state = await buildSkillState(wsChannel, threadId);
 
     registry.set(threadId, { graph, state });
     return { graph, state };
@@ -214,111 +193,6 @@ async function resolveIsLocal(setting: string): Promise<boolean> {
   return setting.startsWith('local:');
 }
 
-
-/**
- * 
- * @param wsChannel 
- * @param threadId 
- * @returns 
- */
-async function buildHierarchicalState(wsChannel: string, threadId?: string): Promise<HierarchicalThreadState> {
-  const id = threadId ?? nextThreadId();
-
-  const mode = await SullaSettingsModel.get('modelMode', 'local');
-  const llmModel = mode === 'remote' ? await SullaSettingsModel.get('remoteModel', 'grok-4-1-fast-reasoning') : await SullaSettingsModel.get('sullaModel', 'tinyllama:latest');
-  const llmLocal = mode === 'local';
-
-  return {
-    messages: [],
-    metadata: {
-      action: 'direct_answer',
-      threadId: id,
-      wsChannel: wsChannel,
-      
-      cycleComplete: false,
-      waitingForUser: false,
-
-      llmModel,
-      llmLocal,
-      stateVersion: 0,
-      options: { abort: undefined },
-      currentNodeId: 'context_trimmer',
-      consecutiveSameNode: 0,
-      iterations: 0,
-      revisionCount: 0,
-      maxIterationsReached: false,
-      memory: {
-        knowledgeBaseContext: '',
-        chatSummariesContext: ''
-      },
-      subGraph: {
-        state: 'completed',
-        name: 'hierarchical',
-        prompt: '',
-        response: ''
-      },
-      finalSummary: '',
-      finalState: 'running',
-      returnTo: null,
-      plan: {
-        model: undefined,
-        milestones: [],
-        activeMilestoneIndex: 0,
-        allMilestonesComplete: true
-      },
-      currentSteps: [],
-      activeStepIndex: 0
-    }
-  };
-}
-
-/**
- * 
- * @param wsChannel 
- * @param threadId 
- * @returns 
- */
-async function buildSimpleState(wsChannel: string, threadId?: string): Promise<BaseThreadState> {
-  const id = threadId ?? nextThreadId();
-
-  const mode = await SullaSettingsModel.get('modelMode', 'local');
-  const llmModel = mode === 'remote' ? await SullaSettingsModel.get('remoteModel', 'grok-4-1-fast-reasoning') : await SullaSettingsModel.get('sullaModel', 'tinyllama:latest');
-  const llmLocal = mode === 'local';
-
-  return {
-    messages: [],
-    metadata: {
-      action: 'direct_answer',
-      threadId: id,
-      wsChannel: wsChannel,
-      
-      cycleComplete: false,
-      waitingForUser: false,
-
-      llmModel,
-      llmLocal,
-      options: { abort: undefined },
-      currentNodeId: 'context_trimmer',
-      consecutiveSameNode: 0,
-      iterations: 0,
-      revisionCount: 0,
-      maxIterationsReached: false,
-      memory: {
-        knowledgeBaseContext: '',
-        chatSummariesContext: ''
-      },
-      subGraph: {
-        state: 'completed',
-        name: 'hierarchical',
-        prompt: '',
-        response: ''
-      },
-      finalSummary: '',
-      finalState: 'running',
-      returnTo: null,
-    }
-  };
-}
 
 /**
  * Build initial state for SkillGraph execution

@@ -4,7 +4,6 @@ import { browseToolsRegistration } from './browse_tools';
 import { createPlanRegistration } from './create_plan';
 import { execRegistration } from './exec';
 import { removeObservationalMemoryRegistration } from './remove_observational_memory';
-import { triggerSubgraphRegistration } from './trigger_subgraph';
 import { updatePlanRegistration } from './update_plan';
 
 // Export all meta tool registrations as an array
@@ -14,6 +13,5 @@ export const metaToolRegistrations = [
   createPlanRegistration,
   execRegistration,
   removeObservationalMemoryRegistration,
-  triggerSubgraphRegistration,
   updatePlanRegistration,
 ];

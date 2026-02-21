@@ -1,7 +1,5 @@
 // src/services/ThreadStateStore.ts
-import type { HierarchicalThreadState } from '../nodes/Graph';
-import { AgentPlan } from '../database/models/AgentPlan';
-import { AgentPlanTodo } from '../database/models/AgentPlanTodo';
+import type { BaseThreadState } from '../nodes/Graph';
 import Redis from 'ioredis';
 
 // Redis client for thread state persistence
@@ -24,7 +22,7 @@ function getRedisClient(): Redis {
 }
 
 // Fallback in-memory store for development/when Redis unavailable
-const threadStore = new Map<string, HierarchicalThreadState>();
+const threadStore = new Map<string, BaseThreadState>();
 
 // Check if Redis is available
 async function isRedisAvailable(): Promise<boolean> {
@@ -38,48 +36,11 @@ async function isRedisAvailable(): Promise<boolean> {
   }
 }
 
-// Helper to reconstruct class instances from plain objects
-async function reconstructState(state: HierarchicalThreadState): Promise<HierarchicalThreadState> {
-  const reconstructed = structuredClone(state);
-  
-  // Reconstruct AgentPlan instance if needed
-  if (reconstructed.metadata.plan?.model && !(reconstructed.metadata.plan.model instanceof AgentPlan)) {
-    console.log('[ThreadStateStore] Reconstructing AgentPlan from database');
-    const planId = reconstructed.metadata.plan.model.attributes?.id;
-    if (planId) {
-      const reloadedPlan = await AgentPlan.find(planId);
-      if (reloadedPlan) {
-        reconstructed.metadata.plan.model = reloadedPlan;
-      } else {
-        console.warn('[ThreadStateStore] Plan not found, using existing data');
-      }
-    }
-  }
-  
-  // Reconstruct AgentPlanTodo instances if needed  
-  if (reconstructed.metadata.plan?.milestones) {
-    reconstructed.metadata.plan.milestones = await Promise.all(
-      reconstructed.metadata.plan.milestones.map(async (milestone) => {
-        if (milestone.model && !(milestone.model instanceof AgentPlanTodo)) {
-          const todoId = (milestone.model as any).attributes?.id;
-          if (todoId) {
-            const reloadedTodo = await AgentPlanTodo.find(todoId);
-            if (reloadedTodo) {
-              milestone.model = reloadedTodo;
-            } else {
-              console.warn('[ThreadStateStore] Todo not found, using existing data');
-            }
-          }
-        }
-        return milestone;
-      })
-    );
-  }
-  
-  return reconstructed;
+async function reconstructState(state: BaseThreadState): Promise<BaseThreadState> {
+  return structuredClone(state);
 }
 
-export async function saveThreadState(state: HierarchicalThreadState): Promise<void> {
+export async function saveThreadState(state: BaseThreadState): Promise<void> {
   const threadId = state.metadata.threadId;
   const stateData = structuredClone(state); // deep copy
   
@@ -97,14 +58,14 @@ export async function saveThreadState(state: HierarchicalThreadState): Promise<v
   }
 }
 
-export async function loadThreadState(threadId: string): Promise<HierarchicalThreadState | null> {
+export async function loadThreadState(threadId: string): Promise<BaseThreadState | null> {
   if (await isRedisAvailable()) {
     try {
       const redis = getRedisClient();
       const stateJson = await redis.get(threadId);
       
       if (stateJson) {
-        const parsed = JSON.parse(stateJson) as HierarchicalThreadState;
+        const parsed = JSON.parse(stateJson) as BaseThreadState;
         console.log(`[ThreadStateStore] Loaded thread ${threadId} from Redis`);
         return await reconstructState(parsed);
       }

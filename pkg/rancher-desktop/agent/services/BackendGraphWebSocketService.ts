@@ -162,15 +162,23 @@ export class BackendGraphWebSocketService {
       console.log('[BackendGraphWS] Reset pause flags, starting graph execution');
 
       // Execute on the persistent graph
-      await graph.execute(state, 'context_trimmer');
+      await graph.execute(state, 'input_handler');
       console.log('[BackendGraphWS] Graph execution completed');
 
       // Build response from final state
-      const content = state.metadata.finalSummary?.trim() || (state.metadata as any).response?.trim() || '';
+      const summaryContent = state.metadata.finalSummary?.trim() || (state.metadata as any).response?.trim() || '';
+      const lastAssistantMessage = [...state.messages]
+        .reverse()
+        .find(msg => msg.role === 'assistant' && typeof msg.content === 'string' && msg.content.trim());
+      const content = summaryContent || (lastAssistantMessage?.content?.trim() || '');
       console.log('[BackendGraphWS] Generated response content length:', content.length);
 
-      console.log('[BackendGraphWS] Emitting assistant message');
-      this.emitAssistantMessage(content.trim());
+      if (content) {
+        console.log('[BackendGraphWS] Emitting assistant message');
+        this.emitAssistantMessage(content);
+      } else {
+        console.log('[BackendGraphWS] No assistant content to emit');
+      }
 
     } catch (err: any) {
       if (err.name === 'AbortError') {

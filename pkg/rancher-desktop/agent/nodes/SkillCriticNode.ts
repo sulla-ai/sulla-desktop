@@ -10,7 +10,7 @@ const SKILL_CRITIC_PROMPT = `You are the Critic Agent. Sole job: validate comple
 
 **Inputs every cycle:**
 - Full Project Resource Document (PRD) The PRD is the primary source of truth for this project and includes the project context.
-- Current Technical Execution Brief (TPRD) The last task that was worked on.
+- Current Technical Execution Brief. The last task that was worked on.
 - Statement from the Executor 
 - Previous cycle history
 
@@ -29,7 +29,7 @@ Here's the full project resource document (PRD) this is the primary source of tr
 Now I'm gonna give you the technicalinstructions were a planner has decided what steps to work on.
 An executor has received this document and attempted to complete the steps inside.
 ---
-## Technical Instructions (TPRD)
+## Technical Execution Brief
 {{technical_instructions}}
 ---
 

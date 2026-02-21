@@ -88,6 +88,11 @@ export class RemoteModelService extends BaseLanguageModel {
       } catch (err) {
         lastError = err;
         console.log(`[RemoteService] Error on attempt ${attempt}:`, err);
+
+        // Do not retry non-rate-limit 4xx client errors (invalid payload, auth, etc.)
+        if (err instanceof Error && /HTTP 4\d\d:/.test(err.message) && !err.message.startsWith('HTTP 429:')) {
+          break;
+        }
       }
     }
 
@@ -148,9 +153,16 @@ export class RemoteModelService extends BaseLanguageModel {
    * Build provider-specific request body.
    */
   private buildRequestBody(messages: ChatMessage[], options: any, overrides: any): any {
+    const sanitizedMessages = messages
+      .map(m => ({
+        ...m,
+        content: typeof m.content === 'string' ? m.content.trim() : String(m.content ?? '').trim(),
+      }))
+      .filter(m => m.content.length > 0);
+
     const baseBody: any = {
       model: options.model ?? this.model,
-      messages: messages.map(m => ({ role: m.role, content: m.content })),
+      messages: sanitizedMessages.map(m => ({ role: m.role, content: m.content })),
     };
 
     if (options.maxTokens) {
@@ -169,10 +181,10 @@ export class RemoteModelService extends BaseLanguageModel {
     // Anthropic shape (uses tools array differently)
     if (this.config.id === 'anthropic') {
       // Extract system message content for separate system parameter
-      const systemMessage = messages.find(m => m.role === 'system');
+      const systemMessage = sanitizedMessages.find(m => m.role === 'system');
       
       // Process messages for Anthropic
-      let processedMessages = messages
+      let processedMessages = sanitizedMessages
         .filter(m => m.role !== 'system') // Remove system messages from messages array
         .map(m => {
           // Anthropic only supports 'user' and 'assistant' roles in messages
@@ -239,7 +251,7 @@ export class RemoteModelService extends BaseLanguageModel {
     // Google (no native tools yet — skip or use extensions if needed)
     if (this.config.id === 'google') {
       return {
-        contents: messages.map(m => ({
+        contents: sanitizedMessages.map(m => ({
           role: m.role === 'assistant' ? 'model' : m.role,
           parts: [{ text: m.content }],
         })),

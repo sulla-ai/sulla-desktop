@@ -3,6 +3,7 @@ import type { SkillGraphState } from '../nodes/Graph';
 import { getWebSocketClientService, type WebSocketMessage } from './WebSocketClientService';
 import { AbortService } from './AbortService';
 import { GraphRegistry, nextThreadId, nextMessageId } from './GraphRegistry';
+import { SullaSettingsModel } from '../database/models/SullaSettingsModel';
 
 export type FrontendGraphWebSocketDeps = {
   currentThreadId: Ref<string | null>;
@@ -75,6 +76,14 @@ export class FrontendGraphWebSocketService {
     this.activeAbort = abort;
     state.metadata.options.abort = abort;
     state.metadata.stateVersion = state.metadata.stateVersion ?? 0;
+
+    // Always refresh model context from current settings so existing threads
+    // follow the currently selected frontend model/provider.
+    const mode = await SullaSettingsModel.get('modelMode', 'local');
+    state.metadata.llmLocal = mode === 'local';
+    state.metadata.llmModel = mode === 'remote'
+      ? await SullaSettingsModel.get('remoteModel', 'grok-4-1-fast-reasoning')
+      : await SullaSettingsModel.get('sullaModel', 'tinyllama:latest');
 
     try {
 
