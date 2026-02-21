@@ -75,7 +75,6 @@ export class FrontendGraphWebSocketService {
     const abort = new AbortService();
     this.activeAbort = abort;
     state.metadata.options.abort = abort;
-    state.metadata.stateVersion = state.metadata.stateVersion ?? 0;
 
     // Always refresh model context from current settings so existing threads
     // follow the currently selected frontend model/provider.
@@ -114,7 +113,6 @@ export class FrontendGraphWebSocketService {
         metadata: { source: 'user' }
       };
       state.messages.push(newMsg as any);
-      state.metadata.stateVersion = (state.metadata.stateVersion ?? 0) + 1;
 
       // Reset pause flags when real user input comes in
       state.metadata.cycleComplete = false;

@@ -3,8 +3,8 @@
 // by summarizing the oldest 25% of messages into observational memory format.
 //
 // Key Features:
-// - Non-blocking: triggered from InputHandlerNode but runs in background
-// - Single tenant: operates directly on state object references
+// - Supports immediate (awaited) and background (fire-and-forget) execution
+// - Single tenant: operates directly on live state object references
 // - Retry logic: failed summarizations are retried without breaking conversation
 // - Concurrency safe: only one summarization process at a time
 // - State coherent: updates immediately reflect across entire agent
@@ -253,39 +253,39 @@ export class ConversationSummaryService {
   }
 
   /**
-   * Trigger background summarization for a conversation thread.
-   * Non-blocking: returns immediately, work happens asynchronously.
+   * Run summarization immediately against the live state reference.
+   * This is the mandatory path when callers must enforce message trimming before continuing.
    */
-  static triggerBackgroundSummarization(state: BaseThreadState): void {
+  static async summarizeNow(state: BaseThreadState): Promise<void> {
     const threadId = state.metadata.threadId as string;
-    state.metadata.stateVersion ??= 0;
-    
-    // Skip if already processing this thread or any thread
-    if (ConversationSummaryService.isProcessing || 
+
+    if (ConversationSummaryService.isProcessing ||
         ConversationSummaryService.processingQueue.has(threadId)) {
       console.log(`[ConversationSummary] Skipping - already processing thread ${threadId}`);
       return;
     }
 
-    // Check if summarization is actually needed
     if (state.messages.length <= TRIGGER_WINDOW_SIZE) {
       return;
     }
 
-    // Queue the work asynchronously 
     ConversationSummaryService.processingQueue.add(threadId);
-    setTimeout(() => {
-      ConversationSummaryService.getInstance()
-        .processSummarization(state, threadId)
-        .catch(err => {
-          console.error(`[ConversationSummary] Fatal error for thread ${threadId}:`, err);
-        })
-        .finally(() => {
-          ConversationSummaryService.processingQueue.delete(threadId);
-        });
-    }, 0);
+    try {
+      await ConversationSummaryService.getInstance().processSummarization(state, threadId);
+    } finally {
+      ConversationSummaryService.processingQueue.delete(threadId);
+    }
+  }
 
-    console.log(`[ConversationSummary] Queued background summarization for thread ${threadId}`);
+  /**
+   * Trigger background summarization for a conversation thread.
+   * Non-blocking: returns immediately, work happens asynchronously.
+   */
+  static triggerBackgroundSummarization(state: BaseThreadState): void {
+    void ConversationSummaryService.summarizeNow(state).catch(err => {
+      const threadId = state.metadata.threadId as string;
+      console.error(`[ConversationSummary] Fatal error for thread ${threadId}:`, err);
+    });
   }
 
   /**
@@ -324,11 +324,7 @@ export class ConversationSummaryService {
    * Core summarization logic that updates the state object directly
    */
   private async performSummarization(state: BaseThreadState): Promise<void> {
-    state.metadata.stateVersion ??= 0;
-    const startVersion = state.metadata.stateVersion;
-    const messages = (typeof globalThis.structuredClone === 'function'
-      ? globalThis.structuredClone(state.messages)
-      : JSON.parse(JSON.stringify(state.messages))) as ChatMessage[];
+    const messages = state.messages;
     const batchSize = Math.floor(TRIGGER_WINDOW_SIZE * BATCH_SUMMARY_PERCENT);
 
     // 1. Check if oldest message is existing summary and extract its observations
@@ -429,11 +425,6 @@ export class ConversationSummaryService {
     // 6. Update state metadata with combined observations
     const metadata = state.metadata as any;
 
-    if (state.metadata.stateVersion !== startVersion) {
-      console.log('[ConversationSummary] State advanced during processing, discarding');
-      return;
-    }
-
     // 7. Remove summarized messages from snapshot (but keep existing summary position)
     const messagesToRemove = new Set(messagesToSummarize);
     let committedMessages = messages.filter(msg => !messagesToRemove.has(msg));
@@ -444,9 +435,8 @@ export class ConversationSummaryService {
       committedMessages = committedMessages.slice(1);
     }
 
-    state.messages = committedMessages;
+    state.messages.splice(0, state.messages.length, ...committedMessages);
     metadata.conversationSummaries = allObservations;
-    state.metadata.stateVersion = startVersion + 1;
     this.appendConversationSummary(state, allObservations);
 
     console.log(`[ConversationSummary] Updated state: removed ${messagesToRemove.size} messages, combined ${existingObservations.length} existing + ${effectiveObservations.length} new observations`);

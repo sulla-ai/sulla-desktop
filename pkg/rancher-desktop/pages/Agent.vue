@@ -923,3 +923,34 @@ watch(() => chatController.messages.value.length, (newLength, oldLength) => {
   console.log('[Agent] Current messages:', chatController.messages.value.map(m => ({ role: m.role, content: m.content.slice(0, 50) + '...' })));
 });
 </script>
+
+<style scoped>
+/* Match knowledgebase dark-mode scrollbar styling in chat interface */
+.dark #chat-scroll-container::-webkit-scrollbar,
+.dark #chat-scroll-container *::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.dark #chat-scroll-container::-webkit-scrollbar-track,
+.dark #chat-scroll-container *::-webkit-scrollbar-track {
+  background: #1e293b;
+  border-radius: 4px;
+}
+
+.dark #chat-scroll-container::-webkit-scrollbar-thumb,
+.dark #chat-scroll-container *::-webkit-scrollbar-thumb {
+  background: #475569;
+  border-radius: 4px;
+}
+
+.dark #chat-scroll-container::-webkit-scrollbar-thumb:hover,
+.dark #chat-scroll-container *::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}
+
+.dark #chat-scroll-container::-webkit-scrollbar-corner,
+.dark #chat-scroll-container *::-webkit-scrollbar-corner {
+  background: #1e293b;
+}
+</style>

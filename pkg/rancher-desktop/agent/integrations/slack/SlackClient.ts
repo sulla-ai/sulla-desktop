@@ -16,6 +16,9 @@ import {
   getIntegrationService,
   type IntegrationValue,
 } from '../../services/IntegrationService';
+import { GraphRegistry, nextMessageId } from '../../services/GraphRegistry';
+import { SullaSettingsModel } from '../../database/models/SullaSettingsModel';
+import type { SkillGraphState } from '../../nodes/Graph';
 import { withSuppressedConnectionStatus } from '../integrationFlags';
 import { incomingMessage } from './prompts/incoming_message';
 
@@ -26,7 +29,7 @@ const APP_TOKEN_PROPERTY = 'scopes_token';
 const APP_TOKEN_FALLBACK_PROPERTIES = ['app_token', 'app_level_token'];
 
 const WS_SERVICE = WebSocketClientService.getInstance();
-const SLACK_EVENTS_CHANNEL = 'dreaming-protocol';
+const SLACK_GRAPH_CHANNEL = 'slack-direct';
 
 function generateUUID(): string {
   const bytes = new Uint8Array(16);
@@ -171,6 +174,105 @@ export class SlackClient {
     });
   }
 
+  private buildSlackThreadGraphId(event: any): string {
+    const channel = String(event?.channel || 'unknown');
+    const threadTs = String(event?.thread_ts || event?.ts || Date.now());
+    return `slack_${channel}_${threadTs}`.replace(/[^a-zA-Z0-9_-]/g, '_');
+  }
+
+  private async executeSkillGraphForSlack(content: string, threadId: string): Promise<string> {
+    const { graph, state } = await GraphRegistry.getOrCreateSkillGraph(SLACK_GRAPH_CHANNEL, threadId) as {
+      graph: any;
+      state: SkillGraphState;
+    };
+
+    const mode = await SullaSettingsModel.get('modelMode', 'local');
+    state.metadata.llmLocal = mode === 'local';
+    state.metadata.llmModel = mode === 'remote'
+      ? await SullaSettingsModel.get('remoteModel', 'grok-4-1-fast-reasoning')
+      : await SullaSettingsModel.get('sullaModel', 'tinyllama:latest');
+
+    state.metadata.wsChannel = SLACK_GRAPH_CHANNEL;
+    state.messages.push({
+      id: nextMessageId(),
+      role: 'user',
+      content,
+      timestamp: Date.now(),
+      metadata: { source: 'slack' },
+    } as any);
+
+    state.metadata.cycleComplete = false;
+    state.metadata.waitingForUser = false;
+
+    try {
+      await graph.execute(state, 'input_handler');
+
+      const finalSummary = state.metadata.finalSummary?.trim();
+      const outputSummary = (state.metadata as any).output?.summaryMessage?.trim?.();
+      const totalSummary = (state.metadata as any).totalSummary?.trim?.();
+
+      if (finalSummary) return finalSummary;
+      if (outputSummary) return outputSummary;
+      if (totalSummary) return totalSummary;
+
+      const latestAssistant = [...state.messages].reverse().find((msg: any) => msg.role === 'assistant');
+      if (latestAssistant?.content) {
+        return typeof latestAssistant.content === 'string'
+          ? latestAssistant.content
+          : JSON.stringify(latestAssistant.content);
+      }
+
+      return '';
+    } finally {
+      state.metadata.consecutiveSameNode = 0;
+      state.metadata.iterations = 0;
+    }
+  }
+
+  private async handleAppMention(event: any): Promise<void> {
+    const mentionText = String(event?.text || '').trim();
+    const messageId = generateUUID();
+    const fullMessage = `
+SLACK APP MENTION
+- Channel: ${event?.channel || 'unknown'}
+- User ID: ${event?.user || 'unknown'}
+- Thread TS: ${event?.thread_ts || event?.ts || 'none'}
+- Message: ${mentionText || '(empty)'}
+
+${incomingMessage}`.trim();
+
+    console.log('[SlackClient] Running app_mention through SkillGraph directly', {
+      messageId,
+      slackChannel: event?.channel,
+      slackThreadTs: event?.thread_ts || event?.ts,
+      preview: mentionText.slice(0, 80),
+    });
+
+    const responseText = await this.executeSkillGraphForSlack(fullMessage, this.buildSlackThreadGraphId(event));
+    if (!responseText.trim()) {
+      console.warn('[SlackClient] Empty SkillGraph response for app_mention', { messageId });
+      return;
+    }
+
+    const channel = String(event?.channel || '').trim();
+    const threadTs = String(event?.thread_ts || event?.ts || '').trim();
+    if (!channel || !threadTs) {
+      console.warn('[SlackClient] Missing Slack channel/thread for app_mention reply', {
+        messageId,
+        channel,
+        threadTs,
+      });
+      return;
+    }
+
+    await this.replyInThread(channel, threadTs, responseText);
+    console.log('[SlackClient] Replied to Slack app_mention thread', {
+      messageId,
+      channel,
+      threadTs,
+    });
+  }
+
   /**
    * Register Bolt event/message handlers. Only done once per App instance.
    */
@@ -180,16 +282,34 @@ export class SlackClient {
 
     this.app.event(/.*/, async (args) => {
       console.log('[SlackClient] Event received:', args.event.type, args.event);
-      WS_SERVICE.send(SLACK_EVENTS_CHANNEL, {
+
+      const event: any = args.event;
+      if (event?.type === 'app_mention') {
+        try {
+          await this.handleAppMention(event);
+        } catch (error) {
+          console.error('[SlackClient] Failed processing app_mention directly', error);
+        }
+        return;
+      }
+
+      const slackEventForwardId = generateUUID();
+      console.log('[SlackClient] Forwarding slack_event to tasker channel', {
+        channel: SLACK_GRAPH_CHANNEL,
+        messageId: slackEventForwardId,
+        eventType: args.event.type || 'unknown',
+      });
+
+      WS_SERVICE.send(SLACK_GRAPH_CHANNEL, {
         type: 'slack_event',
         data: {
           type: args.event.type || 'unknown',
           event: args.event,
           context: args.context,
         },
-        id: generateUUID(),
+        id: slackEventForwardId,
         timestamp: Date.now(),
-        channel: SLACK_EVENTS_CHANNEL,
+        channel: SLACK_GRAPH_CHANNEL,
       });
     });
 
@@ -202,12 +322,12 @@ export class SlackClient {
       const factsText = facts.map(fact => `- ${fact}`).join('\n');
       const fullMessage = `${factsText}\n\n${incomingMessage}`;
 
-      WS_SERVICE.send(SLACK_EVENTS_CHANNEL, {
+      WS_SERVICE.send(SLACK_GRAPH_CHANNEL, {
         type: 'user_message',
         data: { content: fullMessage },
         id: generateUUID(),
         timestamp: Date.now(),
-        channel: SLACK_EVENTS_CHANNEL,
+        channel: SLACK_GRAPH_CHANNEL,
       });
     });
 
@@ -306,7 +426,7 @@ export class SlackClient {
     this.registerEventHandlers();
     this.bindSocketLifecycleHandlers();
 
-    WS_SERVICE.connect(SLACK_EVENTS_CHANNEL);
+    WS_SERVICE.connect(SLACK_GRAPH_CHANNEL);
 
     try {
       console.log('[SlackClient] Calling app.start()...');

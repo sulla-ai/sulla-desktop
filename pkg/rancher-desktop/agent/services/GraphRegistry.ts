@@ -220,7 +220,6 @@ async function buildSkillState(wsChannel: string, threadId?: string): Promise<Sk
 
       llmModel,
       llmLocal,
-      stateVersion: 0,
       options: { abort: undefined },
       currentNodeId: 'input_handler', // SkillGraph entry point
       consecutiveSameNode: 0,

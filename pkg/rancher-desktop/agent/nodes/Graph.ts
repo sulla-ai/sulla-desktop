@@ -176,7 +176,6 @@ export interface BaseThreadState {
 
     llmModel: string;
     llmLocal: boolean;
-    stateVersion?: number;
 
     cycleComplete: boolean;
     waitingForUser: boolean;

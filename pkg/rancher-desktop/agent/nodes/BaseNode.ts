@@ -149,8 +149,8 @@ export abstract class BaseNode<T extends BaseThreadState = BaseThreadState> {
 
     abstract execute(state: T): Promise<NodeResult<T>>;
 
-    protected bumpStateVersion(state: BaseThreadState): void {
-        state.metadata.stateVersion = (state.metadata.stateVersion ?? 0) + 1;
+    protected bumpStateVersion(_state: BaseThreadState): void {
+        // Version tracking removed: state mutations are applied on live references.
     }
 
     /**

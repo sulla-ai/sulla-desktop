@@ -1,6 +1,7 @@
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import { GraphRegistry, nextThreadId, nextMessageId } from '@pkg/agent/services/GraphRegistry';
+import { getWebSocketClientService, type WebSocketMessage } from '@pkg/agent/services/WebSocketClientService';
 import { SullaSettingsModel } from '@pkg/agent/database/models/SullaSettingsModel';
 import { getSettings } from '@pkg/config/settingsImpl';
 
@@ -10,10 +11,96 @@ const WS_CHANNEL = 'tasker';
 export class ChatCompletionsServer {
   private app = express();
   private server: any = null;
+  private readonly wsService = getWebSocketClientService();
+  private taskerUnsubscribe: (() => void) | null = null;
 
   constructor() {
+    this.initializeTaskerWebSocketListener();
     this.setupMiddleware();
     this.setupRoutes();
+  }
+
+  private initializeTaskerWebSocketListener(): void {
+    this.wsService.connect(WS_CHANNEL);
+    this.taskerUnsubscribe = this.wsService.onMessage(WS_CHANNEL, (msg: WebSocketMessage) => {
+      void this.handleTaskerInboundMessage(msg);
+    });
+  }
+
+  private async handleTaskerInboundMessage(msg: WebSocketMessage): Promise<void> {
+    this.logTaskerInboundMessage(msg);
+
+    if (msg.type !== 'user_message') {
+      return;
+    }
+
+    const payload = (msg.data && typeof msg.data === 'object') ? (msg.data as any) : null;
+    const content = typeof payload?.content === 'string' ? payload.content.trim() : '';
+    const metadata = payload?.metadata;
+
+    if (!content) {
+      return;
+    }
+
+    try {
+      const responseText = await this.processUserInputDirect([
+        {
+          id: nextMessageId(),
+          role: 'user',
+          content,
+          timestamp: Date.now(),
+          metadata: { source: 'tasker', origin: metadata?.origin || 'unknown' },
+        },
+      ]);
+
+      if (!responseText.trim()) {
+        return;
+      }
+
+      await this.wsService.send(WS_CHANNEL, {
+        type: 'assistant_message',
+        data: {
+          role: 'assistant',
+          content: responseText,
+          metadata: {
+            origin: 'tasker_router',
+            replyToId: msg.id,
+            requestOrigin: metadata?.origin,
+            requestEventType: metadata?.eventType,
+            slackChannel: metadata?.channel,
+            slackThreadTs: metadata?.threadTs,
+            slackUser: metadata?.user,
+          },
+        },
+        channel: WS_CHANNEL,
+      });
+    } catch (error) {
+      console.error('[ChatCompletionsAPI] Failed to process tasker user_message:', error);
+    }
+  }
+
+  private logTaskerInboundMessage(msg: WebSocketMessage): void {
+    const payload = (msg.data && typeof msg.data === 'object') ? (msg.data as any) : null;
+    const content = typeof payload?.content === 'string' ? payload.content.trim() : '';
+    const metadata = payload?.metadata;
+
+    console.log('[ChatCompletionsAPI] Tasker listener received message', {
+      type: msg.type,
+      id: msg.id,
+      channel: msg.channel,
+      contentPreview: content.slice(0, 80),
+      metadataOrigin: metadata?.origin,
+      metadataEventType: metadata?.eventType,
+    });
+
+    if (msg.type === 'user_message' && metadata?.origin === 'slack' && metadata?.eventType === 'app_mention') {
+      console.log('[ChatCompletionsAPI] Tasker listener received Slack app_mention trigger', {
+        id: msg.id,
+        slackChannel: metadata?.channel,
+        slackThreadTs: metadata?.threadTs,
+        slackUser: metadata?.user,
+      });
+    }
   }
 
   /**
@@ -514,6 +601,11 @@ export class ChatCompletionsServer {
   }
 
   stop(): void {
+    if (this.taskerUnsubscribe) {
+      this.taskerUnsubscribe();
+      this.taskerUnsubscribe = null;
+    }
+
     if (this.server) {
       console.log('[ChatCompletionsAPI] Stopping server...');
       this.server.close(() => {

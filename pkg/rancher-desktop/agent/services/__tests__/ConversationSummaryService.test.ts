@@ -103,34 +103,4 @@ describe('ConversationSummaryService overflow summarization', () => {
     expect((state.messages[0]?.metadata as any)?._conversationSummary).toBe(true);
   });
 
-  it('skips stale summarization apply when stateVersion changes during async summarize', async () => {
-    const service = new ConversationSummaryServiceClass() as any;
-
-    const messages: any[] = [{ role: 'system', content: 'system prompt' }];
-    for (let i = 0; i < 40; i++) {
-      messages.push({ role: i % 2 === 0 ? 'user' : 'assistant', content: `message ${i}` });
-    }
-
-    const state: any = {
-      messages,
-      metadata: {
-        threadId: 'thread-version-lock',
-        llmLocal: false,
-        llmModel: 'claude-3-haiku',
-        stateVersion: 0,
-      },
-    };
-
-    const originalLength = state.messages.length;
-
-    service.summarizeBatch = async (activeState: any) => {
-      activeState.metadata.stateVersion = (activeState.metadata.stateVersion ?? 0) + 1;
-      return [{ priority: '🟡', content: 'would be stale' }];
-    };
-
-    await service.performSummarization(state);
-
-    expect(state.messages.length).toBe(originalLength);
-    expect(state.metadata.conversationSummaries).toBeUndefined();
-  });
 });

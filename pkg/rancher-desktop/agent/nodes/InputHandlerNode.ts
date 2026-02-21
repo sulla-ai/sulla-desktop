@@ -178,9 +178,9 @@ export class InputHandlerNode<TState extends BaseThreadState = BaseThreadState> 
     };
 
     // ----------------------------------------------------------------
-    // 0. OBSERVATIONAL MEMORY MANAGEMENT
+    // 0. CONVERSATION TRIMMING MAINTENANCE
     // ----------------------------------------------------------------
-    // Trigger background conversation + observational maintenance.
+    // Trigger maintenance asynchronously so downstream execution is non-blocking.
     this.triggerBackgroundStateMaintenance(state);
 
     // ----------------------------------------------------------------
@@ -401,7 +401,6 @@ export class InputHandlerNode<TState extends BaseThreadState = BaseThreadState> 
     }
 
     state.messages = state.messages.filter(m => kept.has(m));
-    state.metadata.stateVersion = (state.metadata.stateVersion ?? 0) + 1;
     console.log(`[InputHandler] Token budget enforcement: ${totalTokens} → ${estimateTotalTokens(state.messages)} tokens`);
   }
 
