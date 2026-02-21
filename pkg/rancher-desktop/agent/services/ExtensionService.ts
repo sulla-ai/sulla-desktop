@@ -20,6 +20,7 @@ export interface LocalExtensionMetadata extends ExtensionMetadata {
     root: string;
     src: string;
     showInHeader?: boolean;
+    displayMode?: 'embedded' | 'iframe';
   }>;
   [key: string]: any;
 }
@@ -29,6 +30,7 @@ export interface HeaderMenuItem {
   root: string;
   src: string;
   link: string;
+  displayMode?: 'embedded' | 'iframe';
 }
 
 let extensionServiceInstance: ExtensionService | null = null;
@@ -117,6 +119,10 @@ export class ExtensionService {
 
   getHeaderMenuItems(): HeaderMenuItem[] {
     return this.headerMenuItems;
+  }
+
+  getHeaderMenuItemByLink(link: string): HeaderMenuItem | undefined {
+    return this.headerMenuItems.find(item => item.link === link);
   }
 
   getExtensionsMetadata(): LocalExtensionMetadata[] {

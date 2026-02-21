@@ -1,7 +1,7 @@
 <template>
-  <div class="min-h-screen bg-white text-sm text-[#0d0d0d] dark:bg-slate-900 dark:text-neutral-50 font-sans" :class="{ dark: isDark }">
+  <div class="min-h-screen bg-white text-sm text-[#0d0d0d] dark:bg-slate-900 dark:text-neutral-50 font-sans overflow-y-auto" :class="{ dark: isDark }">
     <PostHogTracker page-name="Extension" />
-    <div class="flex h-screen flex-col">
+    <div class="flex flex-col min-h-screen">
       <AgentHeader :is-dark="isDark" :toggle-theme="toggleTheme" />
 
       <div class="flex w-full flex-col">
@@ -31,7 +31,27 @@
         </div>
       </div>
 
-      <iframe :src="extensionContentUrl" class="w-full flex-1"></iframe>
+      <!-- Iframe Mode -->
+      <iframe v-if="extensionDisplayMode === 'iframe'" 
+        :src="extensionContentUrl" 
+        scrolling="no"
+        class="w-full border-0"
+        style="height: 100vh; overflow: hidden;">
+      </iframe>
+
+      <!-- Embedded Mode -->
+      <div v-else-if="extensionDisplayMode === 'embedded'" 
+        v-html="extensionContentHtml" 
+        class="w-full flex-1">
+      </div>
+
+      <!-- Loading State -->
+      <div v-else class="flex h-64 items-center justify-center">
+        <div class="text-center">
+          <div class="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-2 border-slate-300 border-t-blue-600"></div>
+          <p class="text-sm text-slate-600 dark:text-slate-400">Loading {{ extensionMetadata?.title || 'extension' }} details...</p>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -51,8 +71,10 @@ const router = useRouter();
 
 const extensionService = getExtensionService();
 const extensionMetadata = ref<LocalExtensionMetadata | null>(null);
-const extensionContentUrl = ref<string>('#');
 const extensionIcon = ref<string>('');
+const extensionDisplayMode = ref<'embedded' | 'iframe'>('iframe');
+const extensionContentUrl = ref<string>('');
+const extensionContentHtml = ref<string>('');
 
 const toggleTheme = () => {
   isDark.value = !isDark.value;
@@ -77,9 +99,24 @@ onMounted(async () => {
   }
 
   const extensionHex = hexEncode(metadata.id);
+  const headerMenuItem = extensionService.getHeaderMenuItemByLink(`/Extension/${metadata.name}/ui/${path}`);
 
   extensionMetadata.value = metadata;
-  extensionContentUrl.value = `x-rd-extension://${ extensionHex }/${ path }`;
   extensionIcon.value = `x-rd-extension://${ extensionHex }/icon.svg`;
+  extensionDisplayMode.value = headerMenuItem?.displayMode || 'iframe';
+  extensionContentUrl.value = `x-rd-extension://${ extensionHex }/${ path }`;
+
+  try {
+    const response = await fetch(`x-rd-extension://${ extensionHex }/${ path }`);
+    if (response.ok) {
+      extensionContentHtml.value = await response.text();
+    } else {
+      console.error('Failed to load extension content:', response.status);
+      extensionContentHtml.value = '<div class="p-4 text-red-600">Failed to load extension content.</div>';
+    }
+  } catch (error) {
+    console.error('Error fetching extension content:', error);
+    extensionContentHtml.value = '<div class="p-4 text-red-600">Error loading extension content.</div>';
+  }
 });
 </script>
