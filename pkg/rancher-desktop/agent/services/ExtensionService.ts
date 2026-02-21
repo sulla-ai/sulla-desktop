@@ -15,20 +15,22 @@ export interface LocalExtensionMetadata extends ExtensionMetadata {
   extensionScreenshots: any[];
   tags: string[];
   containers: any;
-  'ui-sulla'?: {
-    'header-menu'?: {
-      title: string;
-      link: string;
-      src: string;
-    };
-  };
+  ui: Record<string, {
+    title: string;
+    root: string;
+    src: string;
+    showInHeader?: boolean;
+    displayMode?: 'embedded' | 'iframe';
+  }>;
   [key: string]: any;
 }
 
 export interface HeaderMenuItem {
   title: string;
-  link: string;
+  root: string;
   src: string;
+  link: string;
+  displayMode?: 'embedded' | 'iframe';
 }
 
 let extensionServiceInstance: ExtensionService | null = null;
@@ -41,6 +43,7 @@ export function getExtensionService(): ExtensionService {
 }
 
 export class ExtensionService {
+  private backendUrl = 'http://127.0.0.1:6107';
   private extensionsMetadata: LocalExtensionMetadata[] = [];
   private headerMenuItems: HeaderMenuItem[] = [];
   private initialized = false;
@@ -67,29 +70,35 @@ export class ExtensionService {
 
   private async loadExtensionsFromAPI(): Promise<void> {
     try {
-      const statePath = path.join(paths.appHome, 'rd-engine.json');
-      const stateData = JSON.parse(await fs.promises.readFile(statePath, 'utf8'));
-      const password = stateData.password;
-      const auth = btoa(`user:${password}`);
-      const response = await fetch('http://127.0.0.1:6107/v1/extensions', {
-        headers: {
-          'Authorization': `Basic ${auth}`
-        }
+      const response = await fetch(`${this.backendUrl}/v1/extensions`, {
+        headers: this.getRequestHeaders()
       });
-      if (response.ok) {
-        const extensionsData: Record<string, { version: string, metadata: ExtensionMetadata, labels: Record<string, string> }> = await response.json();
-        this.extensionsMetadata = Object.entries(extensionsData).map(([key, ext]) => (
-          { ...ext.metadata, id: key } as LocalExtensionMetadata
-        ));
-        
-        for (const metadata of this.extensionsMetadata) {
-          const uiSulla = metadata['ui-sulla'];
-          if (uiSulla?.['header-menu']) {
-            this.headerMenuItems = [...this.headerMenuItems, uiSulla['header-menu']];
-          }
-        }
-      } else {
+
+      if (!response.ok) {
         console.error(`[ExtensionService] Failed to fetch extensions: ${response.status}`);
+        return;
+      }
+
+      const extensionsData: Record<string, { 
+        version: string, 
+        metadata: ExtensionMetadata, 
+        labels: Record<string, string> 
+      }> = await response.json();
+
+      this.extensionsMetadata = Object.entries(extensionsData).map(([key, ext]) => (
+        { ...ext.metadata, id: key } as LocalExtensionMetadata
+      ));
+      
+      for (const metadata of this.extensionsMetadata) {
+        const ui = metadata['ui'] || {};
+        const headerMenuItems = Object.entries(ui).filter(([_, item]) => item.showInHeader);
+
+        for (const [itemKey, item] of headerMenuItems) {
+          this.headerMenuItems.push({
+            ...item,
+            link: `/Extension/${metadata.name}/ui/${itemKey}/${item.root}/${item.src}`
+          });
+        }
       }
     } catch (error) {
       console.error('[ExtensionService] Failed to load extensions from API:', error);
@@ -98,8 +107,22 @@ export class ExtensionService {
     console.log('[ExtensionService] Initialization complete');
   }
 
+  private getRequestHeaders(): Record<string, string> {
+    const statePath = path.join(paths.appHome, 'rd-engine.json');
+    const stateData = JSON.parse(fs.readFileSync(statePath, 'utf8'));
+    const auth = btoa(`user:${ stateData.password }`);
+    
+    return {
+      'Authorization': `Basic ${auth}`
+    };
+  }
+
   getHeaderMenuItems(): HeaderMenuItem[] {
     return this.headerMenuItems;
+  }
+
+  getHeaderMenuItemByLink(link: string): HeaderMenuItem | undefined {
+    return this.headerMenuItems.find(item => item.link === link);
   }
 
   getExtensionsMetadata(): LocalExtensionMetadata[] {

@@ -1,7 +1,7 @@
 <template>
   <header class="sticky top-0 z-50 flex flex-none flex-wrap items-center justify-between bg-white px-4 py-5 shadow-md shadow-slate-900/5 transition duration-500 sm:px-6 lg:px-8 dark:shadow-none dark:bg-slate-900/95 dark:backdrop-blur-sm dark:[@supports(backdrop-filter:blur(0))]:bg-slate-900/75">
     <div class="mr-6 flex lg:hidden">
-      <button type="button" class="relative" aria-label="Open navigation">
+      <button type="button" class="relative" aria-label="Open navigation" @click="toggleMobileMenu">
         <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" class="h-6 w-6 stroke-slate-500">
           <path d="M4 7h16M4 12h16M4 17h16"></path>
         </svg>
@@ -32,7 +32,7 @@
         </svg>
       </a>
     </div>
-    <div class="-my-5 mr-6 sm:mr-8 md:mr-0">
+    <div class="-my-5 mr-6 sm:mr-8 md:mr-0 hidden lg:block">
       <nav class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center gap-x-6">
         <router-link
           to="/Chat"
@@ -97,10 +97,79 @@
       </a>
     </div>
   </header>
+
+  <!-- Mobile Menu Overlay -->
+  <div v-if="isMobileMenuOpen" class="fixed inset-0 z-40 lg:hidden">
+    <div class="fixed inset-0 bg-black/50 backdrop-blur-sm transition-opacity duration-300" @click="toggleMobileMenu"></div>
+    <div class="fixed top-0 left-0 right-0 bg-white dark:bg-slate-900 shadow-lg transform transition-transform duration-300 ease-in-out">
+      <div class="flex items-center justify-between px-4 py-5 border-b border-slate-200 dark:border-slate-700">
+        <a aria-label="Home page" href="#/" class="flex items-center" @click="toggleMobileMenu">
+          <svg aria-hidden="true" viewBox="0 0 32 33" fill="none" class="h-9 w-9">
+            <g fill="none" stroke="#38BDF8" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" transform="translate(0,4)">
+              <rect x="8" y="6" width="16" height="20" rx="8" />
+              <line x1="16" y1="6" x2="16" y2="1" />
+              <circle cx="16" cy="0" r="1.5" fill="#38BDF8" />
+              <rect x="11" y="12" width="10" height="4" rx="2" />
+              <line x1="12" y1="20" x2="20" y2="20" stroke-width="2.5" />
+            </g>
+          </svg>
+        </a>
+        <button type="button" class="relative" aria-label="Close navigation" @click="toggleMobileMenu">
+          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" class="h-6 w-6 stroke-slate-500">
+            <path d="M18 6L6 18M6 6l12 12"></path>
+          </svg>
+        </button>
+      </div>
+      <nav class="px-4 py-6 space-y-4">
+        <router-link
+          to="/Chat"
+          class="block py-3 px-4 text-base font-semibold rounded-lg transition-colors"
+          :class="route.path === '/Chat' ? 'text-[#0d0d0d] bg-slate-100 dark:text-white dark:bg-slate-800' : 'text-[#0d0d0d]/60 hover:text-[#0d0d0d] hover:bg-slate-50 dark:text-white/60 dark:hover:text-white dark:hover:bg-slate-800'"
+          @click="toggleMobileMenu"
+        >
+          Chat
+        </router-link>
+        <router-link
+          to="/Calendar"
+          class="block py-3 px-4 text-base font-semibold rounded-lg transition-colors"
+          :class="route.path === '/Calendar' ? 'text-[#0d0d0d] bg-slate-100 dark:text-white dark:bg-slate-800' : 'text-[#0d0d0d]/60 hover:text-[#0d0d0d] hover:bg-slate-50 dark:text-white/60 dark:hover:text-white dark:hover:bg-slate-800'"
+          @click="toggleMobileMenu"
+        >
+          Calendar
+        </router-link>
+        <router-link
+          to="/KnowledgeBase"
+          class="block py-3 px-4 text-base font-semibold rounded-lg transition-colors"
+          :class="route.path === '/KnowledgeBase' ? 'text-[#0d0d0d] bg-slate-100 dark:text-white dark:bg-slate-800' : 'text-[#0d0d0d]/60 hover:text-[#0d0d0d] hover:bg-slate-50 dark:text-white/60 dark:hover:text-white dark:hover:bg-slate-800'"
+          @click="toggleMobileMenu"
+        >
+          KnowledgeBase
+        </router-link>
+        <router-link
+          to="/Integrations"
+          class="block py-3 px-4 text-base font-semibold rounded-lg transition-colors"
+          :class="route.path === '/Integrations' ? 'text-[#0d0d0d] bg-slate-100 dark:text-white dark:bg-slate-800' : 'text-[#0d0d0d]/60 hover:text-[#0d0d0d] hover:bg-slate-50 dark:text-white/60 dark:hover:text-white dark:hover:bg-slate-800'"
+          @click="toggleMobileMenu"
+        >
+          Integrations
+        </router-link>
+        <router-link
+          v-for="item in extensionMenuItems"
+          :key="item.link"
+          :to="item.link"
+          class="block py-3 px-4 text-base font-semibold rounded-lg transition-colors"
+          :class="route.path === item.link ? 'text-[#0d0d0d] bg-slate-100 dark:text-white dark:bg-slate-800' : 'text-[#0d0d0d]/60 hover:text-[#0d0d0d] hover:bg-slate-50 dark:text-white/60 dark:hover:text-white dark:hover:bg-slate-800'"
+          @click="toggleMobileMenu"
+        >
+          {{ item.title }}
+        </router-link>
+      </nav>
+    </div>
+  </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import { getExtensionService } from '@pkg/agent';
 
@@ -114,4 +183,9 @@ defineProps<{
 const extensionMenuItems = computed(() => extensionService.getHeaderMenuItems());
 
 const route = useRoute();
+const isMobileMenuOpen = ref(false);
+
+const toggleMobileMenu = () => {
+  isMobileMenuOpen.value = !isMobileMenuOpen.value;
+};
 </script>

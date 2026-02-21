@@ -10,14 +10,14 @@
     com.docker.extension.changelog: <p>### Added  <ul><li>Voice AI
       functionality</li></ul></p><p>### Changed<ul><li>Updated
       UI</li></ul></p><p>### Fixed<ul><li>Metadata fixes</li></ul></p>
-    com.docker.extension.detailed-description: Extension provides Voice AI functionality for Rancher Desktop
+    com.docker.extension.detailed-description: Extension provides Voice AI functionality for Sulla
     com.docker.extension.publisher-url: https://github.com/sulla-ai/voice-ai
     com.docker.extension.screenshots: ""
     dev.chainguard.image.title: Voice AI
     dev.chainguard.package.main: ""
     org.opencontainers.image.authors: Sulla Team
     org.opencontainers.image.created: 2024-02-16T16:00:00Z
-    org.opencontainers.image.description: Extension provides Voice AI functionality for Rancher Desktop
+    org.opencontainers.image.description: Extension provides Voice AI functionality for Sulla
     org.opencontainers.image.source: https://github.com/sulla-ai/voice-ai
     org.opencontainers.image.title: Voice AI by Sulla
     org.opencontainers.image.url: https://hub.docker.com/r/alancarvalho/voice-ai
@@ -25,4 +25,4 @@
   title: Voice AI by Sulla
   logo: https://raw.githubusercontent.com/sulla-ai/sulla-desktop/main/pkg/rancher-desktop/assets/images/voice-ai-logo.svg
   publisher: Sulla
-  short_description: Extension provides Voice AI functionality for Rancher Desktop
+  short_description: Extension provides Voice AI functionality for Sulla
