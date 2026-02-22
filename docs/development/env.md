@@ -1,4 +1,4 @@
-# Internal Rancher Desktop environment variables
+# Internal Sulla Desktop environment variables
 
 These variables are used for build and development purposes; they are not meant to be set by users.
 

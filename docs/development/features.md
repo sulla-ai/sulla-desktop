@@ -1,6 +1,6 @@
-# Rancher Desktop Features
+# Sulla Desktop Features
 
-This document lists the high-level Rancher Desktop features and their current status.
+This document lists the high-level Sulla Desktop features and their current status.
 
 | Symbol | Description |
 | ------------- | ---------------- |
@@ -13,8 +13,8 @@ Note:
 - Items under the [later] milestone and any spillover items from the [next] milestone are targeted for the release after.
 - Items under the [next] and [later] milestones might change based on user feedback, technical challenges, etc.
 
-[next]: https://github.com/rancher-sandbox/rancher-desktop/projects/1?card_filter_query=milestone%3Anext
-[later]: https://github.com/rancher-sandbox/rancher-desktop/projects/1?card_filter_query=milestone%3Alater
+[next]: https://github.com/sulla-ai/sulla-desktop/projects?query=next
+[later]: https://github.com/sulla-ai/sulla-desktop/projects?query=later
 
 ### OS & Platform Support
 
@@ -116,7 +116,7 @@ Note:
 
 :heavy_check_mark: Auto updates
 
-:heavy_check_mark: Cluster exploration - Rancher Dashboard (Preview)
+:heavy_check_mark: Cluster exploration (Preview)
 
 :sun_with_face: Container Exploration
 
@@ -130,7 +130,7 @@ Note:
 
 :calendar: Offline (air gap) mode
 
-:heavy_check_mark: Rancher Desktop CLI aka rdctl (Preview)
+:heavy_check_mark: Sulla Desktop CLI (Preview)
 
 ### IDE Compatibility
 
@@ -140,11 +140,11 @@ Note:
 
 :sun_with_face: Eclipse (Needs Validation)
 
-### Integration with Other Rancher Projects
+### Integration with Other Sulla Projects
 
 :heavy_check_mark: k3s
 
-:calendar: Rancher Dashboard
+:calendar: Sulla Dashboard
 
 :sun_with_face: Epinio
 
