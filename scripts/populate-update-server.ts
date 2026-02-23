@@ -272,7 +272,7 @@ async function main() {
       1. Publish the release at ${ releaseURL }
       2. Configure \`resources\\app-update.yml\` to contain:
       \`\`\`yaml
-      upgradeServer: https://${ owner }.github.io/${ repo }/response.json
+      upgradeServer: https://desktop.version.sulladesktop.com/v1/checkupgrade
       owner: ${ owner }
       repo: ${ repo }
       \`\`\`

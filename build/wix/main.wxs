@@ -9,7 +9,7 @@
   <Product
     Id="*"
     Name="Sulla Desktop"
-    UpgradeCode="{1F717D5A-A55B-5FE2-9103-C0D74F7FBDE3}"
+    UpgradeCode="{34F2983A-47AF-4C98-B5C0-CB4036F7D6AB}"
     Version="{{appVersion}}"
     Language="1033"
     Codepage="65001"
@@ -32,7 +32,7 @@
     <Property Id="ARPNOMODIFY" Value="1" />
     <Property Id="ARPURLINFOABOUT" Value="https://sulladesktop.com/" />
 
-    <WixVariable Id="AppGUID" Value="358d85cc-bb94-539e-a3cd-9231b877c7a4" />
+    <WixVariable Id="AppGUID" Value="8bf93c3e-b6d3-4da4-bac3-bb95f6bca8ed" />
 
     <DirectoryRef Id="TARGETDIR" />
 

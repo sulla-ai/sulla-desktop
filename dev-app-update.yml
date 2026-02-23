@@ -2,5 +2,5 @@ owner: sulla-ai
 repo: sulla-desktop
 updaterCacheDirName: sulla-desktop
 provider: custom
-upgradeServer: https://desktop.version.rancher.io/v1/checkupgrade
+upgradeServer: https://desktop.version.sulladesktop.com/v1/checkupgrade
 vPrefixedTagName: true
