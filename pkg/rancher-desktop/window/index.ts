@@ -131,7 +131,7 @@ export function openMain() {
       width:          defaultWidth,
       height:         defaultHeight,
       resizable:      !process.env.RD_MOCK_FOR_SCREENSHOTS, // remove window's shadows while taking screenshots
-      icon:           path.join(paths.resources, 'icons', 'sulla-icon.svg'),
+      icon:           path.join(paths.resources, 'icons', 'sulla-app-icon.png'),
       webPreferences: {
         devTools:         !app.isPackaged,
         nodeIntegration:  true,
@@ -218,7 +218,7 @@ export function openDockerDashboard() {
       width:          defaultWidth,
       height:         defaultHeight,
       resizable:      true,
-      icon:           path.join(paths.resources, 'icons', 'sulla-icon.svg'),
+      icon:           path.join(paths.resources, 'icons', 'sulla-app-icon.png'),
       webPreferences: {
         devTools:         !app.isPackaged,
         nodeIntegration:  true,
@@ -250,7 +250,7 @@ export function openLanguageModelSettings() {
       width:          defaultWidth,
       height:         defaultHeight,
       resizable:      true,
-      icon:           path.join(paths.resources, 'icons', 'sulla-icon.svg'),
+      icon:           path.join(paths.resources, 'icons', 'sulla-app-icon.png'),
       webPreferences: {
         devTools:         !app.isPackaged,
         nodeIntegration:  true,
@@ -686,7 +686,7 @@ export async function openFirstRunDialog() {
       width:          defaultWidth,
       height:         defaultHeight,
       resizable:      !process.env.RD_MOCK_FOR_SCREENSHOTS, // remove window's shadows while taking screenshots
-      icon:           path.join(paths.resources, 'icons', 'sulla-icon.svg'),
+      icon:           path.join(paths.resources, 'icons', 'sulla-app-icon.png'),
       closable:       true,
       webPreferences: {
         devTools:         !app.isPackaged,

@@ -209,7 +209,7 @@ function getHelpMenu(isMac: boolean): MenuItem {
     {
       label: isMac ? 'Sulla Desktop &Help' : 'Get &Help',
       click: async() => {
-        shell.openExternal(await versionedDocsUrl());
+        shell.openExternal('https://sulladesktop.com/support');
       },
     },
     {

@@ -9,27 +9,16 @@
     </div>
     <div class="relative flex grow basis-0 items-center">
       <a aria-label="Home page" href="#/">
-        <svg aria-hidden="true" viewBox="0 0 32 33" fill="none" class="h-9 w-9 lg:hidden">
-          <g fill="none" stroke="#38BDF8" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" transform="translate(0,4)">
-            <rect x="8" y="6" width="16" height="20" rx="8" />
-            <line x1="16" y1="6" x2="16" y2="1" />
-            <circle cx="16" cy="0" r="1.5" fill="#38BDF8" />
-            <rect x="11" y="12" width="10" height="4" rx="2" />
-            <line x1="12" y1="20" x2="20" y2="20" stroke-width="2.5" />
-          </g>
-        </svg>
-        <svg aria-hidden="true" viewBox="0 0 200 33" class="hidden h-9 w-auto text-slate-900 lg:block dark:text-white">
-          <g fill="none" stroke="#38BDF8" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" transform="translate(0,4)">
-            <rect x="8" y="6" width="16" height="20" rx="8" />
-            <line x1="16" y1="6" x2="16" y2="1" />
-            <circle cx="16" cy="0" r="1.5" fill="#38BDF8" />
-            <rect x="11" y="12" width="10" height="4" rx="2" />
-            <line x1="12" y1="20" x2="20" y2="20" stroke-width="2.5" />
-          </g>
-
-          <text x="33" y="26" font-family="Arial, sans-serif" font-size="20" font-weight="bold" fill="currentColor">SULLA</text>
-          <text x="33" y="26" font-family="Arial, sans-serif" font-size="20" font-weight="bold" fill="currentColor" dx="70">DESKTOP</text>
-        </svg>
+        <img
+          :src="logoLightUrl"
+          alt="Sulla Desktop"
+          class="h-9 w-auto dark:hidden"
+        >
+        <img
+          :src="logoDarkUrl"
+          alt="Sulla Desktop"
+          class="hidden h-9 w-auto dark:block"
+        >
       </a>
     </div>
     <div class="-my-5 mr-6 sm:mr-8 md:mr-0 hidden lg:block">
@@ -104,15 +93,16 @@
     <div class="fixed top-0 left-0 right-0 bg-white dark:bg-slate-900 shadow-lg transform transition-transform duration-300 ease-in-out">
       <div class="flex items-center justify-between px-4 py-5 border-b border-slate-200 dark:border-slate-700">
         <a aria-label="Home page" href="#/" class="flex items-center" @click="toggleMobileMenu">
-          <svg aria-hidden="true" viewBox="0 0 32 33" fill="none" class="h-9 w-9">
-            <g fill="none" stroke="#38BDF8" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" transform="translate(0,4)">
-              <rect x="8" y="6" width="16" height="20" rx="8" />
-              <line x1="16" y1="6" x2="16" y2="1" />
-              <circle cx="16" cy="0" r="1.5" fill="#38BDF8" />
-              <rect x="11" y="12" width="10" height="4" rx="2" />
-              <line x1="12" y1="20" x2="20" y2="20" stroke-width="2.5" />
-            </g>
-          </svg>
+          <img
+            :src="logoLightUrl"
+            alt="Sulla Desktop"
+            class="h-8 w-auto dark:hidden"
+          >
+          <img
+            :src="logoDarkUrl"
+            alt="Sulla Desktop"
+            class="hidden h-8 w-auto dark:block"
+          >
         </a>
         <button type="button" class="relative" aria-label="Close navigation" @click="toggleMobileMenu">
           <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" class="h-6 w-6 stroke-slate-500">
@@ -184,6 +174,8 @@ const extensionMenuItems = computed(() => extensionService.getHeaderMenuItems())
 
 const route = useRoute();
 const isMobileMenuOpen = ref(false);
+const logoLightUrl = new URL('../../../../resources/icons/logo-sulla-desktop-nobg.png', import.meta.url).toString();
+const logoDarkUrl = new URL('../../../../resources/icons/logo-sulla-desktop-dark-nobg.png', import.meta.url).toString();
 
 const toggleMobileMenu = () => {
   isMobileMenuOpen.value = !isMobileMenuOpen.value;

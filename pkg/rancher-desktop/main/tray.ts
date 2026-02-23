@@ -15,6 +15,7 @@ import { Settings } from '@pkg/config/settings';
 import { getIpcMainProxy } from '@pkg/main/ipcMain';
 import mainEvents from '@pkg/main/mainEvents';
 import { checkConnectivity } from '@pkg/main/networking';
+import setupUpdate from '@pkg/main/update';
 import Logging from '@pkg/utils/logging';
 import { networkStatus } from '@pkg/utils/networks';
 import paths from '@pkg/utils/paths';
@@ -43,16 +44,76 @@ export class Tray {
   protected contextMenuItems: Electron.MenuItemConstructorOptions[] = [
     {
       id:    'main',
-      label: 'Open agent window',
+      label: 'Open Sulla',
+      icon:  path.join(paths.resources, 'icons', 'logo-tray-Template@2x.png'),
       type:  'normal',
       click() {
         openMain();
       },
     },
+    {
+      id:    'automations',
+      label: 'Open Automations',
+      icon:  path.join(paths.resources, 'icons', 'automation-play.png'),
+      type:  'normal',
+      click() {
+        void Electron.shell.openExternal('http://127.0.0.1:30119');
+      },
+    },
     { type: 'separator' },
     {
+      id:    'help',
+      label: 'Help',
+      icon:  path.join(paths.resources, 'icons', 'help-circle-16.png'),
+      submenu: [
+        {
+          id:    'premium-support',
+          label: 'Premium Support',
+          icon:  path.join(paths.resources, 'icons', 'star-16.png'),
+          click() {
+            void Electron.shell.openExternal('https://www.skool.com/book-more-appointments-8103');
+          },
+        },
+        {
+          id:    'documentation',
+          label: 'Documentation',
+          icon:  path.join(paths.resources, 'icons', 'book-open-16.png'),
+          click() {
+            void Electron.shell.openExternal('https://sulladesktop.com/docs');
+          },
+        },
+        {
+          id:    'discussions',
+          label: 'Discussions',
+          icon:  path.join(paths.resources, 'icons', 'messages-circle-16.png'),
+          click() {
+            void Electron.shell.openExternal('https://github.com/sulla-ai/sulla-desktop/discussions');
+          },
+        },
+        { type: 'separator' },
+        {
+          id:    'issues',
+          label: 'Issues',
+          icon:  path.join(paths.resources, 'icons', 'issue-opened-16.png'),
+          click() {
+            void Electron.shell.openExternal('https://github.com/sulla-ai/sulla-desktop/issues');
+          },
+        },
+        { type: 'separator' },
+        {
+          id:    'check-for-updates',
+          label: 'Check updates',
+          icon:  path.join(paths.resources, 'icons', 'refresh-cw-16.png'),
+          click: async() => {
+            await setupUpdate(true, false);
+          },
+        },
+      ],
+    },
+    {
       id:    'quit',
-      label: 'Quit Sulla Desktop',
+      label: 'Quit',
+      icon:  path.join(paths.resources, 'icons', 'thin-x-16.png'),
       role:  'quit',
       type:  'normal',
     },

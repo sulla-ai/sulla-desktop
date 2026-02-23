@@ -465,7 +465,7 @@ async function initUI() {
     copyright:          'Copyright © 2026 Jonathon Byrdziak',
     applicationName:    `${ Electron.app.name } by Jonathon Byrdziak`,
     applicationVersion: `Version ${ await getVersion() }`,
-    iconPath:           path.join(paths.resources, 'icons', 'logo-square-512.png'),
+    iconPath:           path.join(paths.resources, 'icons', 'sulla-app-icon.png'),
   });
 
   if (!cfg.application.hideNotificationIcon) {

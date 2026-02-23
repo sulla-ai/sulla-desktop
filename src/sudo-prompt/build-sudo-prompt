@@ -15,6 +15,6 @@ osacompile -o "$APP" sudo-prompt.applescript
 
 # Don't put the script into ${CONTENTS}/MacOS/ because that breaks signing the applet
 cp sudo-prompt-script "${CONTENTS}/Resources/Scripts/"
-sips -s format icns "${RESOURCES}/icons/mac-icon.png" --out "${CONTENTS}/Resources/applet.icns"
+sips -s format icns "${RESOURCES}/icons/sulla-app-icon.png" --out "${CONTENTS}/Resources/applet.icns"
 
 plutil -replace CFBundleName -string "Rancher Desktop Password Prompt" "${CONTENTS}/Info.plist"

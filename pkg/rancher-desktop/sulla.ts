@@ -112,10 +112,6 @@ export async function instantiateSullaStart(): Promise<void> {
         await heartbeatService.initialize();
         console.log('[Background] HeartbeatService initialized - periodic tasks will run in background');
 
-        const integrationService = getIntegrationService();
-        await integrationService.initialize();
-        console.log('[Background] IntegrationService initialized - integration tasks will run in background');
-
         // Start the chat completions API server
         console.log('[Background] Starting chat completions API server...');
         try {
