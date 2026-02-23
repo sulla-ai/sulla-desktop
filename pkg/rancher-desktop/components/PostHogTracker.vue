@@ -14,7 +14,12 @@ const trackedPages = new Set<string>();
 function trackPageView() {
   if (enabled.value && !trackedPages.has(props.pageName)) {
     trackedPages.add(props.pageName);
-    capture('$pageview', { page: props.pageName });
+    const normalizedPage = props.pageName.trim().toLowerCase().replace(/\s+/g, '-');
+    capture('$pageview', {
+      page: props.pageName,
+      $screen_name: props.pageName,
+      $current_url: `app://sulla-desktop/${normalizedPage}`,
+    });
   }
 }
 

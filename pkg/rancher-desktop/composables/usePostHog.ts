@@ -8,6 +8,11 @@ import { SullaSettingsModel } from '@pkg/agent/database/models/SullaSettingsMode
 
 const POSTHOG_API_KEY = 'phc_gXH23UnL6M7IbHXBfLEjMi555TwCKvyTkLLCE8mEECL';
 const POSTHOG_HOST = 'https://us.i.posthog.com';
+const DESKTOP_CONTEXT_PROPERTIES = {
+  app_platform: 'desktop',
+  app_name: 'sulla-desktop',
+  app_environment: 'electron-renderer',
+};
 
 let sharedClient: PostHog | null = null;
 
@@ -53,7 +58,10 @@ export function usePostHog() {
     client.capture({
       distinctId,
       event:      eventName,
-      properties,
+      properties: {
+        ...DESKTOP_CONTEXT_PROPERTIES,
+        ...(properties || {}),
+      },
     });
   }
 
