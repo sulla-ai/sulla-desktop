@@ -66,7 +66,7 @@ function git(...args: string[]): 0 | null;
 function git(returnStatus: true, ...args: string[]): number | null;
 function git(returnOrArg: string | true, ...args: string[]): number | null {
   const name = 'Rancher Desktop Dependency Manager';
-  const email = 'donotuse@rancherdesktop.io';
+  const email = 'donotuse@sulladesktop.com';
 
   if (typeof returnOrArg === 'string') {
     args.unshift(returnOrArg);

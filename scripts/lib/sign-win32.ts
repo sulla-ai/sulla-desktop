@@ -36,7 +36,7 @@ const REQUIRED_WINDOWS_CONFIG = {
  */
 const DEFAULT_WINDOWS_CONFIG = {
   certificateSha1:        '', // set via CSC_FINGERPRINT
-  rfc3161TimeStampServer: 'http://timestamp.digicert.com',
+  rfc3161TimeStampServer: 'https://timestamp.digicert.com',
 };
 
 interface ElectronBuilderConfiguration {
@@ -81,7 +81,7 @@ export async function sign(workDir: string): Promise<string[]> {
     '/fd', 'SHA256',
     '/td', 'SHA256',
     '/tr', config.win.rfc3161TimeStampServer!,
-    '/du', 'https://rancherdesktop.io',
+    '/du', 'https://sulladesktop.com',
     '/d', versionedAppName,
   ];
 
