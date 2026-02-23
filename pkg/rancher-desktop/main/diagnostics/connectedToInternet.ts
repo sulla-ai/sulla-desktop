@@ -32,7 +32,7 @@ mainEvents.on('settings-update', settings => {
 async function checkNetworkConnectivity(): Promise<boolean> {
   const request = net.request({
     method:      'HEAD',
-    url:         'https://docs.rancherdesktop.io/',
+    url:         'https://sulladesktop.com/docs/',
     credentials: 'omit',
     cache:       'no-cache',
   });

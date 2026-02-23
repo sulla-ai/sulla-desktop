@@ -1,23 +1,20 @@
 import { shell } from 'electron';
 
 import { TransientSettings } from '@pkg/config/transientSettings';
-import { parseDocsVersion } from '@pkg/utils/version';
 
 type Paths = Record<string, string>;
 
 class Url {
-  private readonly baseUrl = 'https://docs.rancherdesktop.io';
+  private readonly baseUrl = 'https://sulladesktop.com/docs';
   private paths: Paths = {};
 
   constructor(paths: Paths) {
     this.paths = paths;
   }
 
-  buildUrl(key: string | undefined, version: string): string {
+  buildUrl(key: string | undefined, _version: string): string {
     if (key) {
-      const docsVersion = parseDocsVersion(version);
-
-      return `${ this.baseUrl }/${ docsVersion }/${ this.paths[key] }`;
+      return `${ this.baseUrl }/${ this.paths[key] }`;
     }
 
     return '';

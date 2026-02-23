@@ -7,24 +7,14 @@ import { State } from '@pkg/backend/k8s';
 import { Settings } from '@pkg/config/settings';
 import mainEvents from '@pkg/main/mainEvents';
 import paths from '@pkg/utils/paths';
-import { getVersion, parseDocsVersion } from '@pkg/utils/version';
 import { openDockerDashboard, openLanguageModelSettings, openMain } from '@pkg/window';
 import { openDashboard } from '@pkg/window/dashboard';
 import { openPreferences } from '@pkg/window/preferences';
-
-const baseUrl = `https://docs.rancherdesktop.io`;
 
 // State for dynamic menu updates
 let kubernetesState: State = State.STOPPED;
 let networkStatus = 'checking';
 let containerEngine = 'moby';
-
-async function versionedDocsUrl() {
-  const version = await getVersion();
-  const parsed = parseDocsVersion(version);
-
-  return `${ baseUrl }/${ parsed }`;
-}
 
 export default function buildApplicationMenu(): void {
   const menuItems: MenuItem[] = getApplicationMenu();
@@ -215,13 +205,13 @@ function getHelpMenu(isMac: boolean): MenuItem {
     {
       label: 'File a &Bug',
       click() {
-        shell.openExternal('https://github.com/sulla-ai/desktop/issues');
+        shell.openExternal('https://github.com/sulla-ai/sulla-desktop/issues');
       },
     },
     {
       label: '&Project Page',
       click() {
-        shell.openExternal('https://github.com/sulla-ai/desktop');
+        shell.openExternal('https://github.com/sulla-ai/sulla-desktop');
       },
     },
     {

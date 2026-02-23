@@ -4888,7 +4888,7 @@ troubleshooting:
         checkboxLabel: Keep cached Kubernetes images
         ok: Factory Reset
         cancel: Cancel
-  needHelp: 'Still having problems? Start a discussion in the <b>#sulla-desktop</b> channel on the <a href="https://github.com/sulla-ai/desktop/discussions">Sulla Users Slack</a>.'
+  needHelp: 'Still having problems? Start a discussion in <a href="https://github.com/sulla-ai/sulla-desktop/discussions">GitHub Discussions</a>.'
 
 ##############################
 ### Diagnostics Page

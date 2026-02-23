@@ -3,11 +3,11 @@
     <PostHogTracker page-name="General" />
     <div>
       <ul>
-        <li>Project Discussions: <b>#sulla-desktop</b> in <a href="https://github.com/sulla-ai/desktop/discussions">Sulla Desktop</a> Github</li>
+        <li>Project Discussions: <b>#sulla-desktop</b> in <a href="https://github.com/sulla-ai/sulla-desktop/discussions">Sulla Desktop</a> Github</li>
         <li class="project-links">
           <span>Project Links:</span>
-          <a href="https://github.com/rancher-sandbox/rancher-desktop">Homepage</a>
-          <a href="https://github.com/rancher-sandbox/rancher-desktop/issues">Issues</a>
+          <a href="https://github.com/sulla-ai/sulla-desktop">Homepage</a>
+          <a href="https://github.com/sulla-ai/sulla-desktop/issues">Issues</a>
         </li>
       </ul>
     </div>

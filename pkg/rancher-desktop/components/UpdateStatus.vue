@@ -72,7 +72,7 @@
         <br>
         <p>
           For more information please see
-          <a href="https://docs.rancherdesktop.io/getting-started/installation">the installation documentation</a>.
+          <a href="https://sulladesktop.com/docs/getting-started/installation">the installation documentation</a>.
         </p>
       </template>
       <template #actions>
