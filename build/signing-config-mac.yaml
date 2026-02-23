@@ -29,12 +29,12 @@ entitlements:
     entitlements:
     - com.apple.security.cs.allow-unsigned-executable-memory
   - paths:
-    - Contents/Frameworks/Rancher Desktop Helper (GPU).app
-    - Contents/Frameworks/Rancher Desktop Helper (Renderer).app
+    - Contents/Frameworks/Sulla Desktop Helper (GPU).app
+    - Contents/Frameworks/Sulla Desktop Helper (Renderer).app
     entitlements:
     - com.apple.security.cs.allow-jit
   - paths:
-    - Contents/Frameworks/Rancher Desktop Helper (Plugin).app
+    - Contents/Frameworks/Sulla Desktop Helper (Plugin).app
     entitlements:
     - com.apple.security.cs.allow-unsigned-executable-memory
     - com.apple.security.cs.disable-library-validation

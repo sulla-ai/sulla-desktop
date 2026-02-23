@@ -125,9 +125,9 @@ async function getOctokit(): Promise<Octokit> {
 
 async function updateRelease(octokit: Octokit, owner: string, repo: string, tag: string) {
   const files = {
-    msi:    await getChecksum('RD_SETUP_MSI', `Rancher.Desktop.Setup.${ tag }.msi`),
-    macx86: await getChecksum('RD_MACX86_ZIP', `Rancher.Desktop-${ tag }-mac.x86_64.zip`),
-    macarm: await getChecksum('RD_MACARM_ZIP', `Rancher.Desktop-${ tag }-mac.aarch64.zip`),
+    msi:    await getChecksum('RD_SETUP_MSI', `Sulla.Desktop.Setup.${ tag }.msi`),
+    macx86: await getChecksum('RD_MACX86_ZIP', `Sulla.Desktop-${ tag }-mac.x86_64.zip`),
+    macarm: await getChecksum('RD_MACARM_ZIP', `Sulla.Desktop-${ tag }-mac.aarch64.zip`),
   };
 
   console.log(`Updating release with files:\n${ yaml.stringify(files) }`);

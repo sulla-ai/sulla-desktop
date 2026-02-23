@@ -159,7 +159,7 @@ export default async function generateFileList(rootPath: string): Promise<string
 
   const specialComponents: Record<string, (d: directory, f: { name: string, id: string }) => Element | null> = {
     // @ts-ignore
-    'Rancher Desktop.exe': (d, f) => {
+    'Sulla Desktop.exe': (d, f) => {
       return <Component>
         <File
           Name={f.name}
@@ -170,20 +170,20 @@ export default async function generateFileList(rootPath: string): Promise<string
           <Shortcut
             Id="desktopShortcut"
             Directory="DesktopFolder"
-            Name="Rancher Desktop"
+            Name="Sulla Desktop"
             WorkingDirectory="APPLICATIONFOLDER"
             Advertise="yes"
-            Icon="RancherDesktopIcon.exe" />
+            Icon="SullaDesktopIcon.exe" />
           <Shortcut
             Id="startMenuShortcut"
             Directory="ProgramMenuFolder"
-            Name="Rancher Desktop"
+            Name="Sulla Desktop"
             WorkingDirectory="APPLICATIONFOLDER"
             Advertise="yes"
-            Icon="RancherDesktopIcon.exe">
+            Icon="SullaDesktopIcon.exe">
             <ShortcutProperty
               Key="System.AppUserModel.ID"
-              Value="io.rancherdesktop.app" />
+              Value="io.sulla.desktop" />
           </Shortcut>
         </File>
       </Component>;
@@ -204,7 +204,7 @@ export default async function generateFileList(rootPath: string): Promise<string
   const jsxElement = (<Fragment>
     <Directory Id="TARGETDIR" Name="SourceDir">
       <Directory Id="ProgramFiles64Folder">
-        <Directory Id="APPLICATIONFOLDER" Name="Rancher Desktop">
+        <Directory Id="APPLICATIONFOLDER" Name="Sulla Desktop">
           {(() => {
             function emit(d: directory) {
               return d.directories.map(subdir => <Directory Id={subdir.id} Name={path.basename(subdir.name)}>

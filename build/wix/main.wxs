@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  - Main WiX source for the Rancher Desktop Installer
+  - Main WiX source for the Sulla Desktop Installer
   -
   - This file is a Mustache template that is rendered via installer-win32.ts.
   -->
@@ -8,12 +8,12 @@
   xmlns:fire="http://schemas.microsoft.com/wix/FirewallExtension">
   <Product
     Id="*"
-    Name="Rancher Desktop"
+    Name="Sulla Desktop"
     UpgradeCode="{1F717D5A-A55B-5FE2-9103-C0D74F7FBDE3}"
     Version="{{appVersion}}"
     Language="1033"
     Codepage="65001"
-    Manufacturer="SUSE">
+    Manufacturer="Merchant Protocol LLC">
     <Package Compressed="yes" InstallerVersion="500" />
     <!-- As of Windows 10/11, msiexec.exe is manifested for Windows 8.1 -->
     <Condition Message="Windows 10 and above is required">
@@ -26,11 +26,11 @@
     <MediaTemplate CompressionLevel="high" EmbedCab="yes" />
     <UIRef Id="WixUI_RD" />
 
-    <Property Id="ApplicationFolderName" Value="Rancher Desktop" />
-    <Icon Id="RancherDesktopIcon.exe" SourceFile="$(var.iconPath)" />
-    <Property Id="ARPPRODUCTICON" Value="RancherDesktopIcon.exe" />
+    <Property Id="ApplicationFolderName" Value="Sulla Desktop" />
+    <Icon Id="SullaDesktopIcon.exe" SourceFile="$(var.iconPath)" />
+    <Property Id="ARPPRODUCTICON" Value="SullaDesktopIcon.exe" />
     <Property Id="ARPNOMODIFY" Value="1" />
-    <Property Id="ARPURLINFOABOUT" Value="https://rancherdesktop.io/" />
+    <Property Id="ARPURLINFOABOUT" Value="https://sulladesktop.com/" />
 
     <WixVariable Id="AppGUID" Value="358d85cc-bb94-539e-a3cd-9231b877c7a4" />
 
@@ -77,7 +77,7 @@
       </Custom>
     </InstallExecuteSequence>
 
-    <!-- Check if the NSIS-based Rancher Desktop is installed, and uninstall if yes. -->
+    <!-- Check if the NSIS-based Sulla Desktop is installed, and uninstall if yes. -->
     <Property Id="NSISUNINSTALLCOMMAND">
       <RegistrySearch
         Id="NSISInstalled"
@@ -167,7 +167,7 @@
       </Condition>
       <RegistryValue
         Root="HKLM"
-        Key='SOFTWARE\SUSE\RancherDesktop'
+        Key='SOFTWARE\Merchant Protocol LLC\SullaDesktop'
         Name="AdminInstall"
         Value="true"
         Type="string"
@@ -182,16 +182,16 @@
       </Condition>
       <fire:FirewallException
         Id="HostSwitchFirewallPrivateException"
-        Name="Rancher Desktop Networking Private Exception"
-        Description="Rancher Desktop host-switch.exe profile exception for private networks"
+        Name="Sulla Desktop Networking Private Exception"
+        Description="Sulla Desktop host-switch.exe profile exception for private networks"
         Program="[APPLICATIONFOLDER]resources\resources\win32\internal\host-switch.exe"
         Profile="private"
         Scope="any"
         Protocol="tcp" />
       <fire:FirewallException
         Id="HostSwitchFirewallDomainException"
-        Name="Rancher Desktop Networking Domain Exception"
-        Description="Rancher Desktop host-switch.exe profile exception for domain networks"
+        Name="Sulla Desktop Networking Domain Exception"
+        Description="Sulla Desktop host-switch.exe profile exception for domain networks"
         Program="[APPLICATIONFOLDER]resources\resources\win32\internal\host-switch.exe"
         Profile="domain"
         Scope="any"

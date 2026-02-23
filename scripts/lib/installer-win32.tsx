@@ -64,7 +64,7 @@ export async function buildCustomAction(): Promise<string> {
 export default async function buildInstaller(workDir: string, appDir: string, outFile = ''): Promise<string> {
   const appVersion = getAppVersion(appDir);
 
-  outFile ||= path.join(process.cwd(), 'dist', `Rancher.Desktop.Setup.${ appVersion }.msi`);
+  outFile ||= path.join(process.cwd(), 'dist', `Sulla.Desktop.Setup.${ appVersion }.msi`);
 
   await writeUpdateConfig(appDir);
   const fileList = await generateFileList(appDir);

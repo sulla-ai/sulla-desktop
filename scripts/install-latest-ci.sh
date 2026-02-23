@@ -109,20 +109,20 @@ install_application() {
         if [ "$(uname -m)" = "arm64" ]; then
             ARCH=aarch64
         fi
-        archive="Rancher Desktop-mac.$ARCH.zip"
+        archive="Sulla Desktop-mac.$ARCH.zip"
         ;;
     win32)
         case $INSTALL_MODE in
         zip)
-            archive="Rancher Desktop-win.zip"
+            archive="Sulla Desktop-win.zip"
             ;;
         installer)
-            archive="Rancher Desktop Setup.msi"
+            archive="Sulla Desktop Setup.msi"
             ;;
         esac
         ;;
     linux)
-        archive="Rancher Desktop-linux.zip"
+        archive="Sulla Desktop-linux.zip"
         ;;
     esac
     gh run download --repo "$OWNER/$REPO" "$ID" --dir "$workdir" --name "$archive"
@@ -152,14 +152,14 @@ install_application() {
             dest="$HOME/$dest"
         fi
 
-        local app="Rancher Desktop.app"
+        local app="Sulla Desktop.app"
         rm -rf "${dest:?}/$app"
         unzip -o "$zip_abspath" "$app/*" -d "$dest" >/dev/null
         ;;
     win32)
         case $INSTALL_MODE in
         zip)
-            local app='Rancher Desktop'
+            local app='Sulla Desktop'
             case "$RD_LOCATION" in
             system)
                 dest="$(wslpath_from_win32_env ProgramFiles)";;

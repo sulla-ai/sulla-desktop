@@ -35,8 +35,8 @@ class Builder {
 
   protected get electronBinary() {
     const platformPath = {
-      darwin: [`mac-${ buildUtils.arch }`, 'Rancher Desktop.app/Contents/MacOS/Rancher Desktop'],
-      win32:  ['win-unpacked', 'Rancher Desktop.exe'],
+      darwin: [`mac-${ buildUtils.arch }`, 'Sulla Desktop.app/Contents/MacOS/Sulla Desktop'],
+      win32:  ['win-unpacked', 'Sulla Desktop.exe'],
     }[process.platform as string];
 
     if (!platformPath) {
@@ -226,7 +226,7 @@ class Builder {
   async buildInstaller(config: CliOptions) {
     const appDir = path.join(buildUtils.distDir, 'win-unpacked');
     const { version } = (config.config as any).extraMetadata;
-    const installerPath = path.join(buildUtils.distDir, `Rancher.Desktop.Setup.${ version }.msi`);
+    const installerPath = path.join(buildUtils.distDir, `Sulla.Desktop.Setup.${ version }.msi`);
 
     if (config.win && !process.argv.includes('--zip')) {
       // Only build installer if we're not asked not to.

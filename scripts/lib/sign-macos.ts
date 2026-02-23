@@ -45,7 +45,7 @@ export async function sign(workDir: string): Promise<string[]> {
   }
 
   const unpackedDir = path.join(workDir, 'unpacked');
-  const appDir = path.join(unpackedDir, 'Rancher Desktop.app');
+  const appDir = path.join(unpackedDir, 'Sulla Desktop.app');
   const configPath = path.join(appDir, 'Contents/electron-builder.yml');
   const configText = await fs.promises.readFile(configPath, 'utf-8');
   const config: Configuration = yaml.parse(configText);
