@@ -4,33 +4,6 @@
     <div class="flex flex-col min-h-screen">
       <AgentHeader :is-dark="isDark" :toggle-theme="toggleTheme" />
 
-      <div class="flex w-full flex-col">
-        <div class="overflow-hidden bg-slate-900 dark:-mt-19 dark:-mb-32 dark:pt-19 dark:pb-32">
-          <div class="py-16 sm:px-2 lg:relative lg:px-0 lg:py-20">
-            <div class="mx-auto flex flex-row items-center gap-x-8 gap-y-10 px-4 md:px-6 lg:px-8 xl:gap-x-16">
-              <div class="relative z-10">
-                <img v-if="extensionMetadata?.icon" 
-                  :src="extensionIcon" 
-                  :alt="extensionMetadata?.title" class="h-16 w-16 rounded-lg" />
-              </div>
-              <div class="relative z-10 md:text-center lg:text-left">
-                <div class="relative">
-                  <p class="inline bg-linear-to-r from-indigo-200 via-sky-400 to-indigo-200 bg-clip-text font-display text-5xl tracking-tight text-transparent">
-                    {{ extensionMetadata?.title }}
-                  </p>
-                  <p class="mt-3 text-2xl tracking-tight text-slate-400">
-                    {{ extensionMetadata?.description }}
-                  </p>
-                  <p class="mt-2 text-lg text-slate-500">
-                    Version {{ extensionMetadata?.version }}
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
       <!-- Iframe Mode -->
       <iframe v-if="extensionDisplayMode === 'iframe'" 
         :src="extensionContentUrl" 
