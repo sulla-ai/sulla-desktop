@@ -34,28 +34,16 @@ interface ActionResult {
 // The technical_instructions tell the action agent exactly what to do this cycle.
 // ============================================================================
 
-const ACTION_PROMPT_SUFFIX = `You are the Execution Agent.
+const ACTION_PROMPT_SUFFIX = `You're job right now is to act as the Action Agent in a ReAct graph loop.
+We have prepared a Technical Execution Brief for you to tackle.
 
-**Inputs every cycle:**
-- Current Technical Execution Brief (your technical instructions for this cycle)
-- Previous action results / message history
-
-**Rules:**
-- Execute the steps outlined in the Technical Execution Brief.
-- Use tools aggressively and correctly to complete the work.
-- You may freely output text, observations, tool calls, results, and thinking as you progress.
-- Do NOT use the old rigid # Execution Report format.
-- When you believe the current cycle is fully complete, end your entire response with exactly this marker and nothing after:
-
-===EXECUTOR DONE===
-Key result: [one-line summary of accomplishment]
-
----
-{{technical_instructions}}
-
+<EXECUTOR_DONE>
+<KEY_RESULT>[one-line summary of accomplishment]</KEY_RESULT>
+</EXECUTOR_DONE>
 `;
 
-const EXECUTOR_DONE_MARKER_REGEX = /^\s*===EXECUTOR DONE===\s*$/m;
+const EXECUTOR_DONE_XML_REGEX = /<EXECUTOR_DONE>([\s\S]*?)<\/EXECUTOR_DONE>/i;
+const KEY_RESULT_XML_REGEX = /<KEY_RESULT>([\s\S]*?)<\/KEY_RESULT>/i;
 
 // ============================================================================
 // ACTION NODE
@@ -226,19 +214,23 @@ export class ActionNode extends BaseNode {
   }
 
   private extractActionResponse(actionResultText: string): string | null {
-    const markerMatch = EXECUTOR_DONE_MARKER_REGEX.exec(actionResultText);
-
-    if (!markerMatch) {
+    const doneMatch = EXECUTOR_DONE_XML_REGEX.exec(actionResultText);
+    if (!doneMatch) {
       return null;
     }
 
-    const afterMarker = actionResultText.slice(markerMatch.index + markerMatch[0].length).trim();
-
-    if (!afterMarker) {
+    const doneBlock = String(doneMatch[1] || '').trim();
+    if (!doneBlock) {
       return null;
     }
 
-    const firstLine = afterMarker
+    const keyResultMatch = KEY_RESULT_XML_REGEX.exec(doneBlock);
+    if (keyResultMatch) {
+      const keyResult = String(keyResultMatch[1] || '').trim();
+      return keyResult || null;
+    }
+
+    const firstLine = doneBlock
       .split('\n')
       .map(line => line.trim())
       .find(Boolean);

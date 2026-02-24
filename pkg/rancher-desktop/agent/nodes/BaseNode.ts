@@ -9,7 +9,6 @@ import { BaseLanguageModel, ChatMessage, NormalizedResponse } from '../languagem
 import { abortIfSignalReceived, throwIfAborted } from '../services/AbortService';
 import { tools, toolRegistry } from '../tools';
 import { BaseTool } from '../tools/base';
-import type { ToolOperation } from '../tools/base';
 import { Article } from '../database/models/Article';
 import { ConversationSummaryService } from '../services/ConversationSummaryService';
 import { ObservationalSummaryService } from '../services/ObservationalSummaryService';
@@ -70,7 +69,6 @@ export interface LLMCallOptions {
       userMessages?: ChatMessage[];
       systemPrompt?: string;
     };
-    allowedToolOperations?: ToolOperation[];
     allowedToolCategories?: string[];
     allowedToolNames?: string[];
 }
@@ -422,7 +420,6 @@ export abstract class BaseNode<T extends BaseThreadState = BaseThreadState> {
         });
 
         const callToolAccessPolicy = this.buildToolAccessPolicyForCall(options);
-        this.injectToolOperationModeGuidance(nodeRunContext.messages, callToolAccessPolicy);
         const messages = [...nodeRunContext.messages];
 
         // Check for abort before making LLM calls
@@ -533,13 +530,9 @@ export abstract class BaseNode<T extends BaseThreadState = BaseThreadState> {
     }
 
     private buildToolAccessPolicyForCall(options: LLMCallOptions): {
-        allowedOperations: ToolOperation[] | null;
         allowedCategories: string[] | null;
         allowedToolNames: string[] | null;
     } {
-        const allowedOperations = options.allowedToolOperations?.length
-            ? [...new Set(options.allowedToolOperations)]
-            : null;
         const allowedCategories = options.allowedToolCategories?.length
             ? [...new Set(options.allowedToolCategories)]
             : null;
@@ -548,41 +541,8 @@ export abstract class BaseNode<T extends BaseThreadState = BaseThreadState> {
             : null;
 
         return {
-            allowedOperations,
             allowedCategories,
             allowedToolNames,
-        };
-    }
-
-    private injectToolOperationModeGuidance(
-        messages: ChatMessage[],
-        policy: {
-            allowedOperations: ToolOperation[] | null;
-            allowedCategories: string[] | null;
-            allowedToolNames: string[] | null;
-        },
-    ): void {
-        const allowedOperations = policy.allowedOperations;
-        if (!allowedOperations?.length) {
-            return;
-        }
-
-        const systemIndex = messages.findIndex((msg) => msg.role === 'system');
-        if (systemIndex < 0) {
-            return;
-        }
-
-        const modeText = allowedOperations.join(', ');
-        const guidance = [
-            '## Tool Operation Mode',
-            `You are currently in operation mode: ${modeText}.`,
-            'You can see all available tools for planning awareness.',
-            `While in planning mode don't call tools whose operation types include one of: ${modeText}.`,
-        ].join('\n');
-
-        messages[systemIndex] = {
-            ...messages[systemIndex],
-            content: `${String(messages[systemIndex].content || '').trim()}\n\n${guidance}`,
         };
     }
 
@@ -1706,7 +1666,6 @@ export abstract class BaseNode<T extends BaseThreadState = BaseThreadState> {
 
     private async getToolPolicyBlockReason(state: BaseThreadState, toolName: string): Promise<string | null> {
         const policy = (state.metadata as any).__toolAccessPolicy as {
-            allowedOperations: ToolOperation[] | null;
             allowedCategories: string[] | null;
             allowedToolNames: string[] | null;
         } | undefined;
@@ -1731,14 +1690,6 @@ export abstract class BaseNode<T extends BaseThreadState = BaseThreadState> {
         const allowedCategories = policy.allowedCategories;
         if (allowedCategories?.length && !allowedCategories.includes(category)) {
             return `Tool category not allowed in this node: ${toolName} (category: ${category || 'unknown'})`;
-        }
-
-        const operationTypes = Array.isArray(toolInstance?.metadata?.operationTypes)
-            ? toolInstance.metadata.operationTypes
-            : toolRegistry.getToolOperations(toolName);
-        const allowedOperations = policy.allowedOperations;
-        if (allowedOperations?.length && !operationTypes.some((op: ToolOperation) => allowedOperations.includes(op))) {
-            return `Tool operation not allowed in this node: ${toolName} (operations: ${operationTypes.join(', ') || 'unknown'}, allowed: ${allowedOperations.join(', ')})`;
         }
 
         return null;

@@ -23,9 +23,10 @@ const REASONING_PROMPT_SUFFIX = `Your only job is to output a Technical Executio
 
 MISSION: Turn non-technical PRD + state into ONE precise next-cycle brief.
 NEVER execute, NEVER tool call, NEVER explain, NEVER solve anything.
+Plan to get as much work done as possible by avoiding blockers and completing as much as you can.
+Make sure the project owner is aware of the blockers and can begin working on them.
 
-STRICT OUTPUT RULE:
-Output NOTHING except the exact block below. No intro. No thinking. No closing. No tools.
+OUTPUT RULE: When ready output the technical execution brief wthin these xml tags 
 
 <TECHNICAL_EXECUTION_BRIEF>
 ### Technical Execution Brief
@@ -170,6 +171,8 @@ export class ReasoningNode extends BaseNode {
       console.log(`[ReasoningNode] technical_instructions stored (${technicalInstructions.length} chars)`);
     }
 
+    this.finalizeReasoningMessagesInGraphState(state, technicalInstructions);
+
     // ----------------------------------------------------------------
     // 4. LOG
     // ----------------------------------------------------------------
@@ -234,7 +237,6 @@ export class ReasoningNode extends BaseNode {
       maxTokens: 4096,
       nodeRunPolicy: policy,
       nodeRunMessages: nodeMessages,
-      allowedToolOperations: ['read'],
     });
 
     if (!content) {
@@ -268,15 +270,54 @@ export class ReasoningNode extends BaseNode {
     }
 
     if (lastBlockContent) {
-      return lastBlockContent;
+      return this.stripTechnicalExecutionBriefXml(lastBlockContent);
     }
 
     const fallbackMatch = output.match(/###\s+Technical\s+Execution\s+Brief[\s\S]*/i);
     if (fallbackMatch && String(fallbackMatch[0] || '').trim()) {
-      return String(fallbackMatch[0]).trim();
+      return this.stripTechnicalExecutionBriefXml(String(fallbackMatch[0]).trim());
     }
 
     return null;
+  }
+
+  private stripTechnicalExecutionBriefXml(content: string): string {
+    return String(content || '')
+      .replace(/<\/?TECHNICAL_EXECUTION_BRIEF>/gi, '')
+      .trim();
+  }
+
+  private finalizeReasoningMessagesInGraphState(state: BaseThreadState, technicalInstructions: string | null): void {
+    const originalMessages = Array.isArray(state.messages) ? state.messages : [];
+    const filteredMessages = originalMessages.filter((message: any) => {
+      const metadata = message?.metadata || {};
+      const nodeId = String(metadata?.nodeId || '').trim().toLowerCase();
+      const nodeName = String(metadata?.nodeName || '').trim().toLowerCase();
+
+      if (nodeId === 'reasoning' || nodeName === 'reasoning') {
+        return false;
+      }
+
+      return true;
+    });
+
+    if (technicalInstructions && technicalInstructions.trim()) {
+      filteredMessages.push({
+        role: 'assistant',
+        content: technicalInstructions.trim(),
+        metadata: {
+          nodeId: this.id,
+          nodeName: this.name,
+          kind: 'technical_execution_brief',
+          timestamp: Date.now(),
+        },
+      } as ChatMessage);
+    }
+
+    if (filteredMessages.length !== originalMessages.length || (technicalInstructions && technicalInstructions.trim())) {
+      state.messages = filteredMessages;
+      this.bumpStateVersion(state);
+    }
   }
 
   private async buildReasoningNodeMessages(_state: BaseThreadState, policy: Required<NodeRunPolicy>): Promise<{
@@ -307,7 +348,11 @@ export class ReasoningNode extends BaseNode {
 
     const reasoningHistoryMessages = (((_state.metadata as any).reasoning?.messages || []) as ChatMessage[])
       .filter((message) => message.role === 'assistant' && String(message.content || '').trim().length > 0)
-      .map((message) => ({ ...message }));
+      .map((message) => ({
+        ...message,
+        content: this.stripTechnicalExecutionBriefXml(String(message.content || '')),
+      }))
+      .filter((message) => String(message.content || '').trim().length > 0);
 
     const userDirective: ChatMessage = {
       role: 'user',

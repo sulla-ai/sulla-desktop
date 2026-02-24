@@ -96,6 +96,8 @@ export class PlannerNode extends BaseNode {
       console.warn('[PlannerNode] PRD generation failed — graph will retry');
     }
 
+    this.prunePlannerMessagesFromGraphState(state);
+
     return {
       state,
       decision: { type: 'next' },
@@ -182,7 +184,6 @@ export class PlannerNode extends BaseNode {
       maxTokens: 6144,
       nodeRunPolicy: policy,
       nodeRunMessages: nodeMessages,
-      allowedToolOperations: ['read'],
     });
 
     if (!reply) {
@@ -619,6 +620,25 @@ export class PlannerNode extends BaseNode {
     } catch (error) {
       console.warn('[PlannerNode] Failed to read observational memory snapshot:', error);
       return 'Observational memory unavailable due to parse/read error.';
+    }
+  }
+
+  private prunePlannerMessagesFromGraphState(state: BaseThreadState): void {
+    const originalMessages = Array.isArray(state.messages) ? state.messages : [];
+    const filteredMessages = originalMessages.filter((message: any) => {
+      const metadata = message?.metadata || {};
+      const nodeId = String(metadata?.nodeId || '').trim().toLowerCase();
+      const nodeName = String(metadata?.nodeName || '').trim().toLowerCase();
+
+      if (nodeId === 'planner' || nodeName === 'planner') {
+        return false;
+      }
+
+      return true;
+    });
+
+    if (filteredMessages.length !== originalMessages.length) {
+      state.messages = filteredMessages;
     }
   }
 

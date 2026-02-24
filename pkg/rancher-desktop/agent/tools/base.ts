@@ -7,7 +7,7 @@ export interface ToolMetadata extends Record<string, unknown> {
   category: string;
   requiresApproval?: boolean;
   isReadOnly?: boolean;
-  operationTypes: ToolOperation[];
+  operationTypes?: ToolOperation[];
 }
 
 type FieldType = 'string' | 'number' | 'boolean' | 'enum' | 'array' | 'object';
@@ -40,7 +40,7 @@ export type ToolRegistration = {
   category: string;
   schemaDef: InputSchemaDef;
   workerClass: new () => BaseTool;
-  operationTypes: ToolOperation[];
+  operationTypes?: ToolOperation[];
 };
 
 export abstract class BaseTool<TState = any> {
@@ -48,7 +48,7 @@ export abstract class BaseTool<TState = any> {
   abstract description: string;
   abstract schemaDef: InputSchemaDef;
 
-  metadata: ToolMetadata = { category: "general", operationTypes: [] };
+  metadata: ToolMetadata = { category: "general" };
 
   // ─────────────────────────────────────────────────────────────
   // Runtime validation + JSON schema generation

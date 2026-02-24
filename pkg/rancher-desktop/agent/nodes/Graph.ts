@@ -790,8 +790,8 @@ export function createSkillGraph(): Graph<SkillGraphState> {
       return 'skill_critic';
     }
 
-    console.log(`[SkillGraph] Action completed (cycle ${newLoopCount}) - returning to reasoning`);
-    return 'reasoning';
+    console.log(`[SkillGraph] Action completed (cycle ${newLoopCount}) - continuing action loop`);
+    return 'action';
   });
   
   // Critic evaluation → routing based on technical/project completion

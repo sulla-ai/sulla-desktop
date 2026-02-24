@@ -30,19 +30,10 @@ export class BrowseToolsWorker extends BaseTool {
 
     const tools = await toolRegistry.searchTools(query, category);
     const accessPolicy = (this.state?.metadata as any)?.__toolAccessPolicy || {};
-    const allowedOperations = Array.isArray(accessPolicy.allowedOperations) ? new Set(accessPolicy.allowedOperations) : null;
     const allowedCategories = Array.isArray(accessPolicy.allowedCategories) ? new Set(accessPolicy.allowedCategories) : null;
     const allowedToolNames = Array.isArray(accessPolicy.allowedToolNames) ? new Set(accessPolicy.allowedToolNames) : null;
 
     const filteredTools = tools.filter((tool: any) => {
-      const operationTypes = Array.isArray(tool.metadata?.operationTypes)
-        ? tool.metadata.operationTypes
-        : toolRegistry.getToolOperations(tool.name);
-
-      if (allowedOperations && !operationTypes.some((operation: string) => allowedOperations.has(operation))) {
-        return false;
-      }
-
       if (allowedCategories && !allowedCategories.has(tool.metadata?.category || tool.category)) {
         return false;
       }
@@ -85,9 +76,6 @@ export class BrowseToolsWorker extends BaseTool {
       name: tool.name,
       description: tool.description,
       category: tool.metadata?.category || tool.category,
-      operationTypes: Array.isArray(tool.metadata?.operationTypes)
-        ? tool.metadata.operationTypes
-        : toolRegistry.getToolOperations(tool.name),
       signature: this.getToolSignature(tool),
     }));
 
