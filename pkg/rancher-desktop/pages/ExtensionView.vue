@@ -6,7 +6,9 @@
 
       <!-- Iframe Mode -->
       <iframe v-if="extensionDisplayMode === 'iframe'" 
+        ref="iframeRef"
         :src="extensionContentUrl" 
+        @load="onIframeLoad"
         scrolling="no"
         class="w-full border-0"
         style="height: 100vh; overflow: hidden;">
@@ -32,7 +34,7 @@
 <script setup lang="ts">
 import AgentHeader from './agent/AgentHeader.vue';
 import PostHogTracker from '@pkg/components/PostHogTracker.vue';
-import { onMounted, ref } from 'vue';
+import { onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { getExtensionService, LocalExtensionMetadata } from '@pkg/agent';
 import { hexEncode } from '@pkg/utils/string-encode';
@@ -48,11 +50,36 @@ const extensionIcon = ref<string>('');
 const extensionDisplayMode = ref<'embedded' | 'iframe'>('iframe');
 const extensionContentUrl = ref<string>('');
 const extensionContentHtml = ref<string>('');
+const iframeRef = ref<HTMLIFrameElement | null>(null);
 
 const toggleTheme = () => {
   isDark.value = !isDark.value;
   localStorage.setItem(THEME_STORAGE_KEY, isDark.value ? 'dark' : 'light');
 };
+
+const onIframeLoad = () => {
+  const iframe = iframeRef.value;
+  if (iframe && iframe.contentWindow) {
+    try {
+      const height = iframe.contentWindow.document.body.scrollHeight;
+      iframe.style.height = height + 'px';
+    } catch (e) {
+      console.error('Failed to resize iframe:', e);
+    }
+    // Send theme to iframe
+    console.log('Sending initial theme to iframe:', isDark.value);
+    iframe.contentWindow.postMessage({ type: 'theme', isDark: isDark.value }, '*');
+  }
+};
+
+watch(isDark, (newVal) => {
+  console.log('Theme changed to:', newVal);
+  const iframe = iframeRef.value;
+  if (iframe && iframe.contentWindow) {
+    console.log('Sending theme update to iframe:', newVal);
+    iframe.contentWindow.postMessage({ type: 'theme', isDark: newVal }, '*');
+  }
+});
 
 onMounted(async () => {
   try {
