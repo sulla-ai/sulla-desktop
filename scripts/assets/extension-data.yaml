@@ -8,4 +8,4 @@
 # - `logo`: Overrides the logo URL.
 # - `github_repo`: GitHub repository, used for version updates.
 
-docker.io/alancarvalho/voice-ai:0.0.1: {}
+docker.io/alancarvalho/voice-ai:2.1.0: {}
