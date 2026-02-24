@@ -49,6 +49,7 @@ export const gitHubAddRemoteRegistration: ToolRegistration = {
   name: "github_add_remote",
   description: "Add a remote repository to an existing git repository.",
   category: "github",
+  operationTypes: ['create'],
   schemaDef: {
     absolutePath: { type: 'string' as const, description: "Absolute path to the git repository" },
     remoteName: { type: 'string' as const, description: "Name of the remote (usually 'origin')" },

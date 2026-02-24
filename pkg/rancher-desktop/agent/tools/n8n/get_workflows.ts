@@ -51,6 +51,7 @@ export const getWorkflowsRegistration: ToolRegistration = {
   name: "get_workflows",
   description: "Get all workflows from n8n with optional filtering.",
   category: "n8n",
+  operationTypes: ['read'],
   schemaDef: {
     active: { type: 'boolean' as const, optional: true, description: "Filter by active status" },
     tags: { type: 'string' as const, optional: true, description: "Filter by tags" },

@@ -41,6 +41,7 @@ export const rdctlSnapshotRegistration: ToolRegistration = {
   name: "rdctl_snapshot",
   description: "Manage Sulla Desktop snapshots.",
   category: "rdctl",
+  operationTypes: ['execute'],
   schemaDef: {
     subcommand: { type: 'string' as const, description: "Snapshot subcommand, e.g., list, create, delete" },
     args: { type: 'array' as const, items: { type: 'string' as const }, optional: true, description: "Arguments for the subcommand" },

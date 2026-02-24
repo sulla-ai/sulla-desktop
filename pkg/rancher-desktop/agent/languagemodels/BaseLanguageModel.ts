@@ -176,6 +176,8 @@ export abstract class BaseLanguageModel {
       signal?: AbortSignal;
       timeoutSeconds?: number;
       tools?: any;
+      conversationId?: string;
+      nodeName?: string;
     } = {}
   ): Promise<NormalizedResponse | null> {
     const startTime = performance.now();

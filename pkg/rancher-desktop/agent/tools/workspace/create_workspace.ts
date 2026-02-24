@@ -36,6 +36,7 @@ export const createWorkspaceRegistration: ToolRegistration = {
   name: 'create_workspace',
   description: 'Create a new workspace directory in the Lima VM.',
   category: "workspace",
+  operationTypes: ['create'],
   schemaDef: {
     name: { type: 'string' as const, description: 'The name of the workspace to create.' },
   },

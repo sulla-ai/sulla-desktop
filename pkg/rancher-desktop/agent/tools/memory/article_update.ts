@@ -104,6 +104,7 @@ export const articleUpdateRegistration: ToolRegistration = {
   name: "article_update",
   description: "Update an existing article's metadata. Note: content updates require full replacement.",
   category: "memory",
+  operationTypes: ['update'],
   schemaDef: {
     slug: { type: 'string' as const, description: "Slug of the article to update" },
     title: { type: 'string' as const, optional: true, description: "New title for the article" },

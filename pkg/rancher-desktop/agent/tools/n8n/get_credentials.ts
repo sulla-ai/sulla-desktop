@@ -46,6 +46,7 @@ export const getCredentialsRegistration: ToolRegistration = {
   name: "get_credentials",
   description: "Get all credentials from n8n with optional filtering.",
   category: "n8n",
+  operationTypes: ['read'],
   schemaDef: {
     limit: { type: 'number' as const, optional: true, description: "Maximum number of results" },
     cursor: { type: 'string' as const, optional: true, description: "Cursor for pagination" },

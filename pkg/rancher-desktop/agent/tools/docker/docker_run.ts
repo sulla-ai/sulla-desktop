@@ -52,6 +52,7 @@ export const dockerRunRegistration: ToolRegistration = {
   name: "docker_run",
   description: "Run a Docker container.",
   category: "docker",
+  operationTypes: ['create', 'update', 'execute'],
   schemaDef: {
     image: { type: 'string' as const, description: "Docker image to run" },
     name: { type: 'string' as const, optional: true, description: "Container name" },

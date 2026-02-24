@@ -49,6 +49,7 @@ export const activateWorkflowRegistration: ToolRegistration = {
   name: "activate_workflow",
   description: "Activate a workflow in n8n.",
   category: "n8n",
+  operationTypes: ['update','create'],
   schemaDef: {
     id: { type: 'string' as const, description: "Workflow ID" },
     versionId: { type: 'string' as const, optional: true, description: "Version ID to activate" },

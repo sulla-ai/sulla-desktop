@@ -40,6 +40,7 @@ export const slackUserRegistration: ToolRegistration = {
   name: "slack_user",
   description: "Get information about a Slack user.",
   category: "slack",
+  operationTypes: ['read'],
   schemaDef: {
     userId: { type: 'string' as const, description: "User ID to get info for" },
   },

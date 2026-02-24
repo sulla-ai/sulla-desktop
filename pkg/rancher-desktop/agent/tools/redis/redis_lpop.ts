@@ -32,6 +32,7 @@ export const redisLpopRegistration: ToolRegistration = {
   name: "redis_lpop",
   description: "Remove and return the first element of a Redis list.",
   category: "redis",
+  operationTypes: ['execute'],
   schemaDef: {
     key: { type: 'string' as const, description: "The Redis list key" },
   },

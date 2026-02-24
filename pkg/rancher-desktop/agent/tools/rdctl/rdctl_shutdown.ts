@@ -37,6 +37,7 @@ export const rdctlShutdownRegistration: ToolRegistration = {
   name: "rdctl_shutdown",
   description: "Shuts down the running Sulla Desktop application.",
   category: "rdctl",
+  operationTypes: ['execute'],
   schemaDef: {},
   workerClass: RdctlShutdownWorker,
 };

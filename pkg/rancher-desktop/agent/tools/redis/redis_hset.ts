@@ -32,6 +32,7 @@ export const redisHsetRegistration: ToolRegistration = {
   name: "redis_hset",
   description: "Set the value of a field in a Redis hash.",
   category: "redis",
+  operationTypes: ['execute'],
   schemaDef: {
     key: { type: 'string' as const, description: "The Redis hash key" },
     field: { type: 'string' as const, description: "The field in the hash" },

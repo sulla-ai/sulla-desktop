@@ -1,5 +1,6 @@
 import { SullaSettingsModel } from '../database/models/SullaSettingsModel';
 import { BaseLanguageModel, type ChatMessage, type NormalizedResponse } from './BaseLanguageModel';
+import { writeLLMConversationEvent } from './LLMConversationFileLogger';
 
 /**
  * Ollama local LLM provider.
@@ -92,6 +93,17 @@ export class OllamaService extends BaseLanguageModel {
    */
   protected async sendRawRequest(messages: ChatMessage[], options: any): Promise<any> {
     const body = this.buildRequestBody(messages, options);
+    const conversationId = typeof options?.conversationId === 'string' ? options.conversationId : undefined;
+    const nodeName = typeof options?.nodeName === 'string' ? options.nodeName : undefined;
+    writeLLMConversationEvent({
+      direction: 'request',
+      provider: 'ollama',
+      model: options.model ?? this.model,
+      endpoint: '/api/chat',
+      nodeName,
+      conversationId,
+      payload: body,
+    });
     console.log('[OllamaService] Sending request to Ollama:', body);
     
     const res = await fetch(`${this.baseUrl}/api/chat`, this.buildFetchOptions(body, options.signal));
@@ -105,8 +117,32 @@ export class OllamaService extends BaseLanguageModel {
     console.log('[OllamaService] Raw response text:', responseText);
     
     try {
-      return JSON.parse(responseText);
+      const parsed = JSON.parse(responseText);
+      writeLLMConversationEvent({
+        direction: 'response',
+        provider: 'ollama',
+        model: options.model ?? this.model,
+        endpoint: '/api/chat',
+        nodeName,
+        conversationId,
+        payload: parsed,
+      });
+
+      return parsed;
     } catch (e) {
+      writeLLMConversationEvent({
+        direction: 'error',
+        provider: 'ollama',
+        model: options.model ?? this.model,
+        endpoint: '/api/chat',
+        nodeName,
+        conversationId,
+        payload: {
+          message: 'Failed to parse Ollama response as JSON',
+          rawResponse: responseText,
+          error: e instanceof Error ? e.message : String(e),
+        },
+      });
       throw new Error(`Failed to parse Ollama response as JSON: ${e}`);
     }
   }

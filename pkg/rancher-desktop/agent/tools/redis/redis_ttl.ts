@@ -32,6 +32,7 @@ export const redisTtlRegistration: ToolRegistration = {
   name: "redis_ttl",
   description: "Get the time to live (TTL) of a Redis key.",
   category: "redis",
+  operationTypes: ['execute'],
   schemaDef: {
     key: { type: 'string' as const, description: "The Redis key to check TTL for" },
   },

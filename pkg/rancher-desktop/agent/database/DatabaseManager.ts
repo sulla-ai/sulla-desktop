@@ -7,6 +7,7 @@ import { migrationsRegistry } from './migrations';
 import { seedersRegistry } from './seeders';
 import { SullaSettingsModel } from './models/SullaSettingsModel';
 import { VectorBaseModel } from './VectorBaseModel';
+import { skillsRegistry } from './registry/SkillsRegistry';
 
 const MIGRATIONS_TABLE = 'sulla_migrations';
 const SEEDERS_TABLE   = 'sulla_seeders';
@@ -64,6 +65,13 @@ export class DatabaseManager {
 
         // settings are ready to be used in seeding
         await this.runSeeders();
+
+        // warm skills registry cache immediately after DB+seed initialization
+        try {
+          await skillsRegistry.initialize();
+        } catch (error) {
+          console.warn('[DB] SkillsRegistry warm initialization failed:', error);
+        }
 
         console.log('[DB] Database fully initialized');
         return;

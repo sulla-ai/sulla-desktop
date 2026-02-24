@@ -335,9 +335,41 @@ export class Neo4jDB implements IVectorDatabase {
   async deleteDocuments(collectionName: string, ids?: string[], where?: any): Promise<any> {
     const session = await this.getSession();
     try {
+      const conditions: string[] = [];
+      const params: Record<string, any> = {};
+
       if (ids?.length) {
-        await session.run(`MATCH (d:Document) WHERE d.id IN $ids DETACH DELETE d`, { ids });
+        conditions.push('d.id IN $ids');
+        params.ids = ids;
       }
+
+      if (where && typeof where === 'object') {
+        for (const [key, condition] of Object.entries(where)) {
+          if (!condition || typeof condition !== 'object') continue;
+
+          if ('$eq' in condition) {
+            const paramKey = `where_eq_${key}`;
+            conditions.push(`d.${key} = $${paramKey}`);
+            params[paramKey] = (condition as any).$eq;
+          }
+
+          if ('$startsWith' in condition) {
+            const paramKey = `where_starts_${key}`;
+            conditions.push(`d.${key} STARTS WITH $${paramKey}`);
+            params[paramKey] = (condition as any).$startsWith;
+          }
+        }
+      }
+
+      if (conditions.length === 0) return;
+
+      const query = `
+        MATCH (d:Document)
+        WHERE ${conditions.join(' OR ')}
+        DETACH DELETE d
+      `;
+
+      await session.run(query, params);
     } finally {
       await session.close();
     }

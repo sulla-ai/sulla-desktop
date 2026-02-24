@@ -60,6 +60,17 @@ function scopeToToolName(scope: string): string {
   return `slack_${scope.replace(/[^a-z0-9]+/gi, '_').replace(/^_+|_+$/g, '').toLowerCase()}`;
 }
 
+function inferOperationType(name: string): 'read' | 'create' | 'update' | 'delete' | 'execute' {
+  const normalized = (name || '').toLowerCase();
+  const hasAny = (terms: string[]): boolean => terms.some(term => normalized.includes(term));
+
+  if (hasAny(['delete', 'remove', 'drop', 'purge'])) return 'delete';
+  if (hasAny(['create', 'add', 'mkdir', 'new'])) return 'create';
+  if (hasAny(['update', 'edit', 'patch', 'modify', 'set_', '_set', 'write', 'append', 'move', 'copy', 'upload', 'activate', 'deactivate', 'post', 'execute', 'run_', '_run', 'open', 'join', 'invite'])) return 'update';
+  if (hasAny(['get', 'list', 'read', 'search', 'find', 'check', 'status', 'info', 'history', 'path_info', 'browse'])) return 'read';
+  return 'execute';
+}
+
 const TOOL_TO_SCOPE = new Map<string, ScopeConfig>(
   SCOPE_CONFIGS.map(scopeConfig => [scopeToToolName(scopeConfig.scope), scopeConfig])
 );
@@ -114,6 +125,7 @@ export const slackScopeToolRegistrations: ToolRegistration[] = SCOPE_CONFIGS.map
     apiMethod: { type: 'string' as const, description: 'Slack Web API method name to call (example: conversations.history, users.list, chat.postMessage)' },
     params: { type: 'object' as const, optional: true, description: 'Parameters object for the Slack Web API method' },
   },
+  operationTypes: [scopeConfig.scope.includes('read') || scopeConfig.scope.includes('history') ? 'read' : 'update'],
   workerClass: SlackScopeCommandWorker,
 }));
 
@@ -223,5 +235,6 @@ export const slackApiMethodToolRegistrations: ToolRegistration[] = API_COMMAND_C
   schemaDef: {
     params: { type: 'object' as const, optional: true, description: `Parameters for Slack API method ${command.apiMethod}` },
   },
+  operationTypes: [inferOperationType(command.name)],
   workerClass: SlackApiCommandWorker,
 }));

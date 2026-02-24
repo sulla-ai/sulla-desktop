@@ -115,6 +115,7 @@ export const createPlanRegistration: ToolRegistration = {
   name: "create_plan",
   description: "Create a structured, trackable plan with milestones. The UI will show it as a live checklist.",
   category: "meta",
+  operationTypes: ['read','create','update','delete'],
   schemaDef: {
     goal: { type: 'string' as const, description: "Short title of the overall goal" },
     goaldescription: { type: 'string' as const, description: "1-2 sentence description of what success looks like" },

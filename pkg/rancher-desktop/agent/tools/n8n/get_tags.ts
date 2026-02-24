@@ -47,6 +47,7 @@ export const getTagsRegistration: ToolRegistration = {
   name: "get_tags",
   description: "Get all tags from n8n.",
   category: "n8n",
+  operationTypes: ['read'],
   schemaDef: {},
   workerClass: GetTagsWorker,
 };

@@ -92,6 +92,7 @@ export const createWorkflowRegistration: ToolRegistration = {
   name: "create_workflow",
   description: "Create a new workflow in n8n.",
   category: "n8n",
+  operationTypes: ['create'],
   schemaDef: {
     name: { type: 'string' as const, description: "Workflow name" },
     nodes: { type: 'array' as const, items: { type: 'object' as const }, description: "Workflow nodes as n8n node objects." },

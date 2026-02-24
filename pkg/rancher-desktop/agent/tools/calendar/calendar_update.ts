@@ -51,6 +51,7 @@ export const calendarUpdateRegistration: ToolRegistration = {
   name: "calendar_update",
   description: "Update an existing calendar event.",
   category: "calendar",
+  operationTypes: ['update'],
   schemaDef: {
     eventId: { type: 'number' as const, description: "The ID of the calendar event to update" },
     title: { type: 'string' as const, optional: true, description: "New event title" },

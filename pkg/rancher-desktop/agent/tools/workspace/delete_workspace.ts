@@ -36,6 +36,7 @@ export const deleteWorkspaceRegistration: ToolRegistration = {
   name: 'delete_workspace',
   description: 'Delete an existing workspace directory in the Rancher Desktop data directory.',
   category: "workspace",
+  operationTypes: ['delete'],
   schemaDef: {
     name: { type: 'string' as const, description: 'The name of the workspace to delete.' },
   },

@@ -32,6 +32,7 @@ export const redisIncrRegistration: ToolRegistration = {
   name: "redis_incr",
   description: "Increment the integer value of a Redis key by one.",
   category: "redis",
+  operationTypes: ['execute'],
   schemaDef: {
     key: { type: 'string' as const, description: "The Redis key to increment" },
   },

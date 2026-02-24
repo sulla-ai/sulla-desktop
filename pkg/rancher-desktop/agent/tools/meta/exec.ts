@@ -82,6 +82,7 @@ export const execRegistration: ToolRegistration = {
   name: "exec",
   description: "Execute a shell command and return output. Use only when explicitly needed.",
   category: "meta",
+  operationTypes: ['execute'],
   schemaDef: {
     command: { type: 'string' as const, optional: true, description: 'The exact shell command to run' },
     cmd: { type: 'string' as const, optional: true, description: 'Alias for command' },

@@ -47,6 +47,7 @@ export const kubectlDescribeRegistration: ToolRegistration = {
   name: "kubectl_describe",
   description: "Describe Kubernetes resources.",
   category: "kubectl",
+  operationTypes: ['read'],
   schemaDef: {
     resource: { type: 'string' as const, description: "The resource type, e.g., pods, services" },
     name: { type: 'string' as const, description: "Specific resource name" },

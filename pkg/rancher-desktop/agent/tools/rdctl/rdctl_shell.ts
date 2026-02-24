@@ -45,6 +45,7 @@ export const rdctlShellRegistration: ToolRegistration = {
   name: "rdctl_shell",
   description: "Run an interactive shell or a command in a Sulla Desktop-managed VM.",
   category: "rdctl",
+  operationTypes: ['execute'],
   schemaDef: {
     command: { type: 'string' as const, optional: true, description: "Command to execute in the VM shell" },
   },

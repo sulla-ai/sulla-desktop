@@ -39,6 +39,7 @@ export const dockerStopRegistration: ToolRegistration = {
   name: "docker_stop",
   description: "Stop a running Docker container.",
   category: "docker",
+  operationTypes: ['execute', 'delete'],
   schemaDef: {
     container: { type: 'string' as const, description: "Container name or ID to stop" },
   },

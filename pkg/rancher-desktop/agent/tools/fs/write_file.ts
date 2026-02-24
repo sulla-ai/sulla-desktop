@@ -36,6 +36,7 @@ export const fsWriteFileRegistration: ToolRegistration = {
   name: 'fs_write_file',
   description: 'Write text content to a file.',
   category: 'fs',
+  operationTypes: ['update', 'create'],
   schemaDef: {
     path: { type: 'string' as const, description: 'File path to write.' },
     content: { type: 'string' as const, description: 'Content to write to file.' },

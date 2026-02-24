@@ -50,6 +50,7 @@ export const articleRelatedRegistration: ToolRegistration = {
   name: "article_related",
   description: "Get related articles by graph relationship.",
   category: "memory",
+  operationTypes: ['read'],
   schemaDef: {
     slug: { type: 'string' as const, description: "The slug of the article" },
     relationship: { type: 'string' as const, optional: true, description: "Relationship type (default: MENTIONS)" },

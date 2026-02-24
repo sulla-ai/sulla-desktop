@@ -1,5 +1,6 @@
 // src/tools/index.ts
 import { toolRegistry } from './registry';
+import type { ToolRegistration } from './base';
 
 // Import all tool registration arrays from categories
 import { metaToolRegistrations } from './meta';
@@ -20,7 +21,7 @@ import { workspaceToolRegistrations } from './workspace';
 import { integrationToolRegistrations } from './integrations';
 
 // Combine all registrations and register them
-const allRegistrations = [
+const allRegistrationsRaw: ToolRegistration[] = [
   ...metaToolRegistrations,
   ...browserToolRegistrations,
   ...calendarToolRegistrations,
@@ -40,7 +41,7 @@ const allRegistrations = [
 ];
 
 // Register all tools with the registry
-toolRegistry.registerAllRegistrations(allRegistrations);
+toolRegistry.registerAllRegistrations(allRegistrationsRaw);
 
 // Export convenience helpers (now async!)
 export const getTool = (name: string) => toolRegistry.getTool(name);

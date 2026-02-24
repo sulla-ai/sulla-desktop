@@ -36,6 +36,7 @@ export const fsMovePathRegistration: ToolRegistration = {
   name: 'fs_move_path',
   description: 'Move or rename a file/directory path.',
   category: 'fs',
+  operationTypes: ['update'],
   schemaDef: {
     sourcePath: { type: 'string' as const, description: 'Source file or directory path.' },
     destinationPath: { type: 'string' as const, description: 'Destination file or directory path.' },

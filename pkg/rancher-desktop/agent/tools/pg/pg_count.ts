@@ -33,6 +33,7 @@ export const pgCountRegistration: ToolRegistration = {
   name: "pg_count",
   description: "Execute a PostgreSQL count query and return the count.",
   category: "pg",
+  operationTypes: ['read'],
   schemaDef: {
     sql: { type: 'string' as const, description: "The SQL count query to execute" },
     params: { type: 'array' as const, items: { type: 'string' as const }, optional: true, description: "Parameters for the query" },

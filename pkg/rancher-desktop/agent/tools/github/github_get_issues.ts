@@ -74,6 +74,7 @@ export const gitHubGetIssuesRegistration: ToolRegistration = {
   name: "github_get_issues",
   description: "Get issues from a GitHub repository.",
   category: "github",
+  operationTypes: ['read'],
   schemaDef: {
     owner: { type: 'string' as const, description: "Repository owner (username or organization)" },
     repo: { type: 'string' as const, description: "Repository name" },

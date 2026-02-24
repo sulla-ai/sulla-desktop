@@ -22,8 +22,8 @@ import { OutputNode } from './OutputNode';
 // ============================================================================
 
 // SkillGraph retry configuration
-const MAX_PLANNER_RETRIES = 10; // Total attempts: 3 (0, 1, 2)
-const MAX_REASONING_RETRIES = 10;
+const MAX_PLANNER_RETRIES = 15;
+const MAX_REASONING_RETRIES = 15;
 const MAX_ACTION_LOOPS = 20;
 
 // ============================================================================
@@ -31,7 +31,7 @@ const MAX_ACTION_LOOPS = 20;
 // ============================================================================
 
 const DEFAULT_WS_CHANNEL = 'dreaming-protocol';
-const MAX_CONSECTUIVE_LOOP = 10;
+const MAX_CONSECTUIVE_LOOP = 15;
 const MAX_MESSAGES_IN_THREAD = 120;
 
 // ============================================================================

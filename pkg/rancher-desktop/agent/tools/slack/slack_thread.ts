@@ -46,6 +46,7 @@ export const slackThreadRegistration: ToolRegistration = {
   name: "slack_thread",
   description: "Get replies in a Slack thread.",
   category: "slack",
+  operationTypes: ['read'],
   schemaDef: {
     channel: { type: 'string' as const, description: "Channel ID where the thread is" },
     ts: { type: 'string' as const, description: "Timestamp of the parent message" },

@@ -38,6 +38,7 @@ export const createCredentialRegistration: ToolRegistration = {
   name: "create_credential",
   description: "Create a new credential in n8n.",
   category: "n8n",
+  operationTypes: ['create'],
   schemaDef: {
     name: { type: 'string' as const, description: "Credential name" },
     type: { type: 'string' as const, description: "Credential type" },

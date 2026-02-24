@@ -44,6 +44,7 @@ export const duckDuckGoSearchRegistration: ToolRegistration = {
   name: "duckduckgo_search",
   description: "Search the web using DuckDuckGo for privacy-focused and comprehensive results.",
   category: "browser",
+  operationTypes: ['read'],
   schemaDef: {
     query: { type: 'string' as const, description: "The search query to execute" },
     maxResults: { type: 'number' as const, optional: true, default: 10, description: "Maximum number of search results to return" },

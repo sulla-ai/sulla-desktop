@@ -21,6 +21,7 @@ import { getTemplateCollectionsRegistration } from './get_template_collections';
 import { getTemplateCategoriesRegistration } from './get_template_categories';
 import { validateWorkflowPayloadRegistration } from './validate_workflow_payload';
 import { getWorkflowNodeRegistration } from './get_workflow_node';
+import { getWorkflowNodeListRegistration } from './get_workflow_node_list';
 import { addWorkflowNodeRegistration } from './add_workflow_node';
 import { updateWorkflowNodeRegistration } from './update_workflow_node';
 import { removeWorkflowNodeRegistration } from './remove_workflow_node';
@@ -49,6 +50,7 @@ export const n8nToolRegistrations = [
   getTemplateCategoriesRegistration,
   validateWorkflowPayloadRegistration,
   getWorkflowNodeRegistration,
+  getWorkflowNodeListRegistration,
   addWorkflowNodeRegistration,
   updateWorkflowNodeRegistration,
   removeWorkflowNodeRegistration,

@@ -55,6 +55,7 @@ export const calendarListUpcomingRegistration: ToolRegistration = {
   name: "calendar_list_upcoming",
   description: "List upcoming calendar events for the next specified number of days.",
   category: "calendar",
+  operationTypes: ['read'],
   schemaDef: {
     days: { type: 'number' as const, default: 7, description: "Number of days from now to list upcoming events" },
   },

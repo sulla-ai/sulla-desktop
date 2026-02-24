@@ -38,6 +38,7 @@ export const healthCheckRegistration: ToolRegistration = {
   name: "health_check",
   description: "Check if n8n API is accessible and healthy.",
   category: "n8n",
+  operationTypes: ['read'],
   schemaDef: {},
   workerClass: HealthCheckWorker,
 };

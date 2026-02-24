@@ -47,6 +47,7 @@ export const limaListRegistration: ToolRegistration = {
   name: "lima_list",
   description: "List Lima virtual machine instances.",
   category: "lima",
+  operationTypes: ['read'],
   schemaDef: {
     json: { type: 'boolean' as const, optional: true, description: "Output in JSON format" },
   },

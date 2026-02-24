@@ -10,9 +10,6 @@ import { dockerBasics } from './Introduction/docker-basics';
 import { gettingStarted } from './Introduction/gettingstarted';
 import { kubernetesBasics } from './Introduction/kubernetes-basics';
 
-import { sopSoftwareDevelopment } from './skills/skill-software-development';
-import { sopN8nWorkflowCreation } from './skills/skill-n8n-workflow-creation';
-
 export const seedPedia = {
   architectureOverview,
   dockerBasics,
@@ -25,7 +22,4 @@ export const seedPedia = {
   toolsAndCapabilities,
   troubleshooting,
   welcome,
-
-  sopSoftwareDevelopment,
-  sopN8nWorkflowCreation,
 };

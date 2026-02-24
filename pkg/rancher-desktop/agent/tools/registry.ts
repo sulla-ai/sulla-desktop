@@ -1,5 +1,7 @@
 // src/tools/registry.ts
 
+import type { ToolOperation } from './base';
+
 type ToolLoader = () => Promise<any>;
 
 export interface ToolEntry {
@@ -15,6 +17,7 @@ export interface ToolRegistration {
   category: string;
   schemaDef: any;
   workerClass: new () => any;
+  operationTypes: ToolOperation[];
 }
 
 export class ToolRegistry {
@@ -70,16 +73,28 @@ export class ToolRegistry {
 
   registerAllRegistrations(registrations: ToolRegistration[]) {
     const entries = registrations.map((reg, index) => {
+      const operationTypes = Array.isArray(reg.operationTypes) && reg.operationTypes.length > 0
+        ? reg.operationTypes
+        : this.getToolOperations(reg.name);
+      const operationSuffix = ` Operation types: ${operationTypes.join(', ')}.`;
+      const descriptionWithOperationTypes = `${reg.description}${operationSuffix}`;
+
       const entry = {
         name: reg.name,
-        description: reg.description,
+        description: descriptionWithOperationTypes,
         category: reg.category,
         loader: async () => {
           const instance = new reg.workerClass();
           instance.schemaDef = reg.schemaDef;
           instance.name = reg.name;
-          instance.description = reg.description;
+          instance.description = descriptionWithOperationTypes;
           instance.metadata.category = reg.category;
+          const existingOperationTypes = Array.isArray(instance.metadata.operationTypes)
+            ? instance.metadata.operationTypes
+            : [];
+          instance.metadata.operationTypes = reg.operationTypes.length > 0
+            ? reg.operationTypes
+            : existingOperationTypes;
           return instance;
         },
       };
@@ -150,6 +165,67 @@ export class ToolRegistry {
 
   getToolNames(): string[] {
     return Array.from(this.loaders.keys());
+  }
+
+  getToolOperation(name: string): ToolOperation {
+    const normalized = (name || '').toLowerCase();
+
+    const hasAny = (terms: string[]): boolean => terms.some(term => normalized.includes(term));
+
+    if (hasAny(['delete', 'remove', 'drop', 'purge'])) {
+      return 'delete';
+    }
+
+    if (hasAny(['create', 'add', 'mkdir', 'new'])) {
+      return 'create';
+    }
+
+    if (hasAny([
+      'update',
+      'edit',
+      'patch',
+      'modify',
+      'set_',
+      '_set',
+      'write',
+      'append',
+      'move',
+      'copy',
+      'upload',
+      'activate',
+      'deactivate',
+      'post',
+      'execute',
+      'run_',
+      '_run',
+      'open',
+      'join',
+      'invite',
+    ])) {
+      return 'update';
+    }
+
+    if (hasAny([
+      'get',
+      'list',
+      'read',
+      'search',
+      'find',
+      'check',
+      'status',
+      'info',
+      'history',
+      'path_info',
+      'browse',
+    ])) {
+      return 'read';
+    }
+
+    return 'execute';
+  }
+
+  getToolOperations(name: string): ToolOperation[] {
+    return [this.getToolOperation(name)];
   }
 
   // For browse_tools — cheap metadata only, no loading instances or schemas

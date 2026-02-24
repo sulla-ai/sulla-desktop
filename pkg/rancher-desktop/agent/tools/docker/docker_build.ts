@@ -45,6 +45,7 @@ export const dockerBuildRegistration: ToolRegistration = {
   name: "docker_build",
   description: "Build a Docker image from a Dockerfile.",
   category: "docker",
+  operationTypes: ['create', 'update', 'execute'],
   schemaDef: {
     path: { type: 'string' as const, description: "Path to the directory containing the Dockerfile" },
     tag: { type: 'string' as const, description: "Tag for the built image" },

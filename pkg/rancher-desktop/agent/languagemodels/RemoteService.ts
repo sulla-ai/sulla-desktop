@@ -1,5 +1,6 @@
 import { BaseLanguageModel, type ChatMessage, type NormalizedResponse, type RemoteProviderConfig, FinishReason } from './BaseLanguageModel';
 import { getOllamaService } from './OllamaService';
+import { writeLLMConversationEvent } from './LLMConversationFileLogger';
 
 /**
  * Remote LLM provider service (OpenAI-compatible + Anthropic + others).
@@ -60,6 +61,8 @@ export class RemoteModelService extends BaseLanguageModel {
     const url = `${this.baseUrl}${endpoint}`;
 
     const body: any = this.buildRequestBody(messages, options, overrides);
+    const conversationId = typeof options?.conversationId === 'string' ? options.conversationId : undefined;
+    const nodeName = typeof options?.nodeName === 'string' ? options.nodeName : undefined;
 
     let lastError: unknown = null;
 
@@ -72,6 +75,17 @@ export class RemoteModelService extends BaseLanguageModel {
           await new Promise(r => setTimeout(r, Math.pow(2, attempt - 1) * 1000));
         }
 
+        writeLLMConversationEvent({
+          direction: 'request',
+          provider: this.config.id,
+          model: options.model ?? this.model,
+          endpoint,
+          nodeName,
+          conversationId,
+          attempt,
+          payload: body,
+        });
+
         console.log('[RemoteService:sendRawRequest] body:', body);
         const payload = this.buildFetchOptions(body, options?.signal);
         const res = await fetch(url, payload);
@@ -83,11 +97,32 @@ export class RemoteModelService extends BaseLanguageModel {
           }
           throw new Error(`HTTP ${res.status}: ${text || res.statusText}`);
         }
+        const rawResponse = await res.json();
+        writeLLMConversationEvent({
+          direction: 'response',
+          provider: this.config.id,
+          model: options.model ?? this.model,
+          endpoint,
+          nodeName,
+          conversationId,
+          attempt,
+          payload: rawResponse,
+        });
 
-        return await res.json();
+        return rawResponse;
       } catch (err) {
         lastError = err;
         console.log(`[RemoteService] Error on attempt ${attempt}:`, err);
+        writeLLMConversationEvent({
+          direction: 'error',
+          provider: this.config.id,
+          model: options.model ?? this.model,
+          endpoint,
+          nodeName,
+          conversationId,
+          attempt,
+          payload: err instanceof Error ? { message: err.message, stack: err.stack } : err,
+        });
 
         // Do not retry non-rate-limit 4xx client errors (invalid payload, auth, etc.)
         if (err instanceof Error && /HTTP 4\d\d:/.test(err.message) && !err.message.startsWith('HTTP 429:')) {

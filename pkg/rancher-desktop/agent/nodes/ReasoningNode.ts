@@ -1,6 +1,10 @@
-import { BaseNode } from './BaseNode';
+import { BaseNode, ENVIRONMENT_PROMPT, NodeRunPolicy, OBSERVATIONAL_MEMORY_SOP } from './BaseNode';
 import type { BaseThreadState, NodeResult } from './Graph';
 import { ActivePlanManager } from './ActivePlanManager';
+import type { ChatMessage } from '../languagemodels/BaseLanguageModel';
+import { SullaSettingsModel } from '../database/models/SullaSettingsModel';
+import { skillsRegistry } from '../database/registry/SkillsRegistry';
+import { toolRegistry } from '../tools';
 
 // ============================================================================
 // REASONING PROMPT
@@ -15,57 +19,43 @@ import { ActivePlanManager } from './ActivePlanManager';
 //   4. Write a focus_instruction that tells ActionNode exactly what to do next
 // ============================================================================
 
-const REASONING_PROMPT_SUFFIX = `You are a senior solutions architect (25+ years) whose ONLY output is a Technical Execution Brief for the Action Node.
+const REASONING_PROMPT_SUFFIX = `Your only job is to output a Technical Execution Brief for the Action Node.
 
-MISSION: Turn non-technical PRD + state into ONE precise next-cycle brief.  
+MISSION: Turn non-technical PRD + state into ONE precise next-cycle brief.
 NEVER execute, NEVER tool call, NEVER explain, NEVER solve anything.
 
-STRICT OUTPUT RULE:  
+STRICT OUTPUT RULE:
 Output NOTHING except the exact block below. No intro. No thinking. No closing. No tools.
 
-\`\`\`
+<TECHNICAL_EXECUTION_BRIEF>
 ### Technical Execution Brief
 
-**FOCUS**  
+**FOCUS**
 {{current_focus}}
 
-**Delta Only**  
-- New vs last state only  
+**Delta Only**
+- New vs last state only
 - Key changes (flow, modules, risks)
 
-**Success Metrics**  
+**Success Metrics**
 1-2 measurable outcomes this cycle
 
-**Execution Plan**  
-1. First concrete step  
-2. Second  
+**Execution Plan**
+1. First concrete step
+2. Second
 ... (max 6)
 
-**Required Tools**  
+**Required Tools**
 - tool: params (new only)
 
-**State Refs**  
-- conversationSummaries: [top 2-3]  
-- activePlans: [relevant]  
+**State Refs**
+- conversationSummaries: [top 2-3]
+- activePlans: [relevant]
 - skill: {{skill_slug}} (if high)
 
-**Immediate Action**  
+**Immediate Action**
 One crystal-clear sentence for Action Node
-
-You are a senior solutions architect (25+ years) whose ONLY output is a Technical Execution Brief for the Action Node.
-
-MISSION: Turn non-technical PRD + state into ONE precise next-cycle brief.  
-NEVER execute, NEVER tool call, NEVER explain, NEVER solve anything.
-
-STRICT OUTPUT RULE:  
-Output NOTHING except the exact block above. No intro. No thinking. No closing. No tools.
-
-{{full_prd}}
-{{last_action_results}}
-{{critic_feedback}}
-
-FINAL LOCK: Respond with exactly the block starting at "### Technical Execution Brief" and nothing else in the entire response.
-\`\`\`
+</TECHNICAL_EXECUTION_BRIEF>
 `;
 
 // ============================================================================
@@ -89,6 +79,57 @@ export class ReasoningNode extends BaseNode {
     super('reasoning', 'Reasoning');
   }
 
+  private buildEnvironmentContextAssistantMessage(): string {
+    let environmentContext = ENVIRONMENT_PROMPT;
+
+    const categoriesWithDesc = toolRegistry.getCategoriesWithDescriptions();
+    const categoriesText = categoriesWithDesc
+      .map(({ category, description }) => `- ${category}: ${description}`)
+      .join('\n');
+    environmentContext = environmentContext.replace('{{tool_categories}}', categoriesText);
+
+    const formattedTime = new Date().toLocaleString('en-US', {
+      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: true,
+    });
+    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'unknown';
+
+    environmentContext = environmentContext.replace('{{formattedTime}}', formattedTime);
+    environmentContext = environmentContext.replace('{{timeZone}}', timeZone);
+
+    return environmentContext.trim();
+  }
+
+  private async getObservationalMemorySnapshot(): Promise<string> {
+    try {
+      const observationalMemory = await SullaSettingsModel.get('observationalMemory', {});
+      const raw =
+        typeof observationalMemory === 'string'
+          ? JSON.parse(observationalMemory || '[]')
+          : observationalMemory;
+
+      if (!Array.isArray(raw) || raw.length === 0) {
+        return 'No observational memory entries available.';
+      }
+
+      return raw
+        .slice(-10)
+        .map((entry: any) => `${entry?.priority || ''} ${entry?.timestamp || ''} ${entry?.content || ''}`.trim())
+        .filter((line: string) => Boolean(line))
+        .join('\n');
+    } catch (error) {
+      console.warn('[ReasoningNode] Failed to read observational memory snapshot:', error);
+      return 'Observational memory unavailable due to parse/read error.';
+    }
+  }
+
   async execute(state: BaseThreadState): Promise<NodeResult<BaseThreadState>> {
     // Clear previous technical instructions so routing only proceeds on fresh output.
     delete (state.metadata as any).technical_instructions;
@@ -104,8 +145,9 @@ export class ReasoningNode extends BaseNode {
     const systemPrompt = this.addReasoningContext(state, REASONING_PROMPT_SUFFIX);
 
     const enrichedPrompt = await this.enrichPrompt(systemPrompt, state, {
-      includeSoul: false,
-      includeAwareness: true,
+      includeSoul: true,
+      includeAwareness: false,
+      includeEnvironment: false,
       includeMemory: false
     });
 
@@ -174,10 +216,25 @@ export class ReasoningNode extends BaseNode {
    * @returns 
    */
   private async generateTechnicalInstructions(state: BaseThreadState, systemPrompt: string): Promise<string | null> {
+    const policy: Required<NodeRunPolicy> = {
+      messageSource: 'custom',
+      persistAssistantToGraph: false,
+      persistToolResultsToGraph: false,
+      persistAssistantToNodeState: true,
+      persistToolResultsToNodeState: false,
+      nodeStateNamespace: 'reasoning',
+      includeGraphAssistantMessages: false,
+      includeGraphUserMessages: false,
+    };
+
+    const nodeMessages = await this.buildReasoningNodeMessages(state, policy);
+
     const content = await this.chat(state, systemPrompt, {
-      disableTools: true,
       temperature: 0.2,
       maxTokens: 4096,
+      nodeRunPolicy: policy,
+      nodeRunMessages: nodeMessages,
+      allowedToolOperations: ['read'],
     });
 
     if (!content) {
@@ -185,7 +242,125 @@ export class ReasoningNode extends BaseNode {
       return null;
     }
 
-    return typeof content === 'string' ? content.trim() : String(content).trim();
+    const contentStr = typeof content === 'string' ? content.trim() : String(content).trim();
+    const extractedBrief = this.extractTechnicalExecutionBriefContent(contentStr);
+    if (!extractedBrief) {
+      console.warn('[ReasoningNode] LLM response did not contain a TECHNICAL_EXECUTION_BRIEF block');
+      return null;
+    }
+
+    return extractedBrief;
+  }
+
+  private extractTechnicalExecutionBriefContent(rawOutput: string): string | null {
+    const output = String(rawOutput || '').trim();
+    if (!output) {
+      return null;
+    }
+
+    const xmlBlockRegex = /<TECHNICAL_EXECUTION_BRIEF>([\s\S]*?)<\/TECHNICAL_EXECUTION_BRIEF>/gi;
+    let lastBlockContent: string | null = null;
+    for (const match of output.matchAll(xmlBlockRegex)) {
+      const block = String(match?.[1] || '').trim();
+      if (block) {
+        lastBlockContent = block;
+      }
+    }
+
+    if (lastBlockContent) {
+      return lastBlockContent;
+    }
+
+    const fallbackMatch = output.match(/###\s+Technical\s+Execution\s+Brief[\s\S]*/i);
+    if (fallbackMatch && String(fallbackMatch[0] || '').trim()) {
+      return String(fallbackMatch[0]).trim();
+    }
+
+    return null;
+  }
+
+  private async buildReasoningNodeMessages(_state: BaseThreadState, policy: Required<NodeRunPolicy>): Promise<{
+    assistantMessages: ChatMessage[];
+    userMessages: ChatMessage[];
+  }> {
+    const selectedSkillEnvironmentMessage = await this.getSelectedSkillEnvironmentAssistantMessage(_state);
+    const planningInstructions = String((_state.metadata as any).planning_instructions || '').trim();
+    const planningInstructionsMessage: ChatMessage | null = planningInstructions
+      ? {
+          role: 'assistant',
+          content: `Project Resource Document (planning instructions):\n${planningInstructions}`,
+        }
+      : null;
+
+    const environmentContextMessage: ChatMessage = {
+      role: 'assistant',
+      content: `Environment systems and tools context:\n${this.buildEnvironmentContextAssistantMessage()}`,
+    };
+    const observationalMemoryMessage: ChatMessage = {
+      role: 'assistant',
+      content: `Observational memory snapshot:\n${await this.getObservationalMemorySnapshot()}`,
+    };
+    const observationalMemorySopMessage: ChatMessage = {
+      role: 'assistant',
+      content: OBSERVATIONAL_MEMORY_SOP,
+    };
+
+    const reasoningHistoryMessages = (((_state.metadata as any).reasoning?.messages || []) as ChatMessage[])
+      .filter((message) => message.role === 'assistant' && String(message.content || '').trim().length > 0)
+      .map((message) => ({ ...message }));
+
+    const userDirective: ChatMessage = {
+      role: 'user',
+      content: 'Generate the Technical Execution Brief for the logical next steps in this project.',
+    };
+
+    const assistantMessages = this.buildAssistantMessagesForNode(_state, policy, [
+      environmentContextMessage,
+      observationalMemoryMessage,
+      observationalMemorySopMessage,
+      ...(selectedSkillEnvironmentMessage ? [selectedSkillEnvironmentMessage] : []),
+      ...(planningInstructionsMessage ? [planningInstructionsMessage] : []),
+      ...reasoningHistoryMessages,
+    ]);
+    const userMessages = this.buildUserMessagesForNode(_state, policy, [userDirective]);
+
+    return {
+      assistantMessages,
+      userMessages,
+    };
+  }
+
+  private async getSelectedSkillEnvironmentAssistantMessage(state: BaseThreadState): Promise<ChatMessage | null> {
+    const selectedSkillSlug = String((state.metadata as any).planRetrieval?.selected_skill_slug || '').trim();
+    if (!selectedSkillSlug) {
+      return null;
+    }
+
+    const skill = await skillsRegistry.getSkill(selectedSkillSlug);
+    if (!skill) {
+      return null;
+    }
+
+    const loadedResources = await skill.loadPlannerResources();
+    const environmentResource = loadedResources.find((resource) => {
+      const resourceType = String(resource.type || '').trim().toLowerCase();
+      const normalizedContent = String(resource.content || '').trim().toLowerCase();
+      const contentLooksLikeEnvironment =
+        normalizedContent.startsWith('# environment')
+        || normalizedContent.startsWith('## environment')
+        || normalizedContent.startsWith('## dev environment');
+
+      return resourceType === 'environment' || contentLooksLikeEnvironment;
+    });
+
+    if (!environmentResource?.content) {
+      return null;
+    }
+
+    return {
+      role: 'assistant',
+      content: String(environmentResource.content || '').trim(),
+    };
   }
 
   private extractTprdFrontmatter(

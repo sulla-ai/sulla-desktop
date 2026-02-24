@@ -1,10 +1,13 @@
 // src/tools/base.ts
 import { ToolResult } from "../types";
 
+export type ToolOperation = 'read' | 'create' | 'update' | 'delete' | 'execute';
+
 export interface ToolMetadata extends Record<string, unknown> {
   category: string;
   requiresApproval?: boolean;
   isReadOnly?: boolean;
+  operationTypes: ToolOperation[];
 }
 
 type FieldType = 'string' | 'number' | 'boolean' | 'enum' | 'array' | 'object';
@@ -37,6 +40,7 @@ export type ToolRegistration = {
   category: string;
   schemaDef: InputSchemaDef;
   workerClass: new () => BaseTool;
+  operationTypes: ToolOperation[];
 };
 
 export abstract class BaseTool<TState = any> {
@@ -44,7 +48,7 @@ export abstract class BaseTool<TState = any> {
   abstract description: string;
   abstract schemaDef: InputSchemaDef;
 
-  metadata: ToolMetadata = { category: "general" };
+  metadata: ToolMetadata = { category: "general", operationTypes: [] };
 
   // ─────────────────────────────────────────────────────────────
   // Runtime validation + JSON schema generation

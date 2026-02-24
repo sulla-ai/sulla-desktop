@@ -77,6 +77,7 @@ export const updatePlanRegistration: ToolRegistration = {
   name: "update_plan",
   description: "Mark milestones as complete, add notes, or update progress on the current plan.",
   category: "meta",
+  operationTypes: ['read','create','update','delete'],
   schemaDef: {
     milestoneId: { type: 'string' as const },
     status: { type: 'enum' as const, enum: ["done", "in_progress", "blocked", "pending"], default: "done" },

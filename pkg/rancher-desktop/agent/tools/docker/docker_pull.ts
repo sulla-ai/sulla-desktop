@@ -39,6 +39,7 @@ export const dockerPullRegistration: ToolRegistration = {
   name: "docker_pull",
   description: "Pull a Docker image from a registry.",
   category: "docker",
+  operationTypes: ['create', 'update'],
   schemaDef: {
     image: { type: 'string' as const, description: "Docker image to pull" },
   },

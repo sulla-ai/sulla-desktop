@@ -342,10 +342,18 @@ export class ArticlesRegistry {
   }
 
   async deleteArticle(slug: string): Promise<boolean> {
-    const article = await Article.find(slug);
-    if (!article) return false;
+    const baseSlug = String(slug || '').trim();
+    if (!baseSlug) return false;
 
-    await article.delete();
+    const chunkIds = await VectorBaseModel.findAllChunkIds(this.collectionName, baseSlug);
+    const idsToDelete = Array.from(new Set([baseSlug, ...chunkIds]));
+
+    await VectorBaseModel.vectorDB.deleteDocuments(
+      this.collectionName,
+      idsToDelete,
+      { id: { $startsWith: `${baseSlug}_` } },
+    );
+
     return true;
   }
 

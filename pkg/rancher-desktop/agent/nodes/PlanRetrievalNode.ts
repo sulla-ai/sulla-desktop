@@ -10,10 +10,11 @@
 // - JSON-only response with no tools
 
 import type { BaseThreadState, NodeResult } from './Graph';
-import { BaseNode, JSON_ONLY_RESPONSE_INSTRUCTIONS } from './BaseNode';
-import { articlesRegistry, type ArticleListItem } from '../database/registry/ArticlesRegistry';
-import { redisClient } from '../database/RedisClient';
+import { BaseNode, JSON_ONLY_RESPONSE_INSTRUCTIONS, NodeRunPolicy } from './BaseNode';
+import { articlesRegistry } from '../database/registry/ArticlesRegistry';
+import { skillsRegistry } from '../database/registry/SkillsRegistry';
 import { ActivePlanManager } from './ActivePlanManager';
+import type { ChatMessage } from '../languagemodels/BaseLanguageModel';
 
 // ============================================================================
 // INTERFACES
@@ -27,6 +28,13 @@ interface PlanRetrievalResponse {
   memory_search: string[];
 }
 
+interface SkillSummaryEntry {
+  slug: string;
+  name: string;
+  triggers: string[];
+  description: string;
+}
+
 // ============================================================================
 // PLAN RETRIEVAL PROMPT
 // ============================================================================
@@ -35,10 +43,7 @@ const PLAN_RETRIEVAL_PROMPT = `You are a specialized planning and intent analysi
 
 Look ONLY at the user's last message.
 
-{{active_plans_context}}
-
-## Available Skills
-{{skills}}
+Available skills are provided as assistant messages. Use them to select selected_skill_slug.
 
 ## Strict Complexity Rules (exact order)
 
@@ -92,11 +97,49 @@ export class PlanRetrievalNode extends BaseNode {
     super('plan_retrieval', 'Plan Retrieval');
   }
 
+  private buildPlanRetrievalNodeMessages(
+    state: BaseThreadState,
+    policy: Required<NodeRunPolicy>,
+    availableSkills: SkillSummaryEntry[],
+  ): {
+    assistantMessages: ChatMessage[];
+    userMessages: ChatMessage[];
+  } {
+    const skillAssistantMessages: ChatMessage[] = availableSkills.map((skill) => ({
+      role: 'assistant',
+      content: [
+        `${skill.name || 'unknown'}`,
+        `slug: ${skill.slug || 'unknown'}`,
+        `trigger: ${(Array.isArray(skill.triggers) ? skill.triggers : []).join(' | ') || 'none'}`,
+        `description: ${skill.description || ''}`,
+      ].join('\n'),
+    }));
+
+    const lastUserMessage = this.findLatestUserMessage(state.messages || []);
+    const latestUserContent = typeof lastUserMessage?.content === 'string'
+      ? lastUserMessage.content
+      : String(lastUserMessage?.content || '');
+
+    const directive: ChatMessage = {
+      role: 'user',
+      content: latestUserContent || 'No user message provided.',
+    };
+
+    const assistantMessages = this.buildAssistantMessagesForNode(state, policy, skillAssistantMessages);
+    const userMessages = this.buildUserMessagesForNode(state, policy, [directive]);
+
+    return {
+      assistantMessages,
+      userMessages,
+    };
+  }
+
   async execute(state: BaseThreadState): Promise<NodeResult<BaseThreadState>> {
 
     // Initialize diagnostics metadata
     const diagnostics: Record<string, any> = {
       skillsLoaded: false,
+      skillCount: 0,
       analysisCompleted: false,
       skillArticlesFound: 0,
       memoryArticlesFound: 0,
@@ -106,9 +149,10 @@ export class PlanRetrievalNode extends BaseNode {
     // ----------------------------------------------------------------
     // 1. LOAD AVAILABLE SKILLS (NO FILTERING - ALLOW PLAN MONITORING)
     // ----------------------------------------------------------------
-    const availableSkills = await this.loadSkillTriggers();
+    const availableSkills = await this.loadAvailableSkills();
     const activePlanCount = await this.getActivePlanCount(state);
     diagnostics.skillsLoaded = true;
+    diagnostics.skillCount = availableSkills.length;
     diagnostics.activePlansFound = activePlanCount;
 
     // ----------------------------------------------------------------
@@ -134,21 +178,20 @@ export class PlanRetrievalNode extends BaseNode {
     // ----------------------------------------------------------------
     // 4. PERFORM VECTOR DATABASE SEARCHES
     // ----------------------------------------------------------------
-    const { skillArticles, memoryArticles } = await this.performVectorSearches(planData);
-    diagnostics.skillArticlesFound = skillArticles.length;
+    const { memoryArticles } = await this.performVectorSearches(planData);
+    diagnostics.skillArticlesFound = 0;
     diagnostics.memoryArticlesFound = memoryArticles.length;
 
     // ----------------------------------------------------------------
     // 5. STORE RESULTS AND APPEND TOOL MESSAGES
     // ----------------------------------------------------------------
     this.storeMetadata(state, planData);
-    await this.appendSelectedSkillMessage(state, skillArticles);
     await this.appendMemoryResults(state, memoryArticles, planData);
 
     // ----------------------------------------------------------------
     // 6. LOG COMPLETION SUMMARY
     // ----------------------------------------------------------------
-    this.logCompletionSummary(planData, skillArticles, memoryArticles);
+    this.logCompletionSummary(planData, memoryArticles);
 
     // Persist diagnostics on state for downstream inspection
     (state.metadata as any).planRetrieval.diagnostics = diagnostics;
@@ -171,7 +214,7 @@ export class PlanRetrievalNode extends BaseNode {
    * - NO potential skill trigger matches (defers to LLM if skills might apply)
    * - Recognizable patterns (greetings, simple questions)
    */
-  private tryRuleBasedIntentDetection(state: BaseThreadState, availableSkills: string): PlanRetrievalResponse | null {
+  private tryRuleBasedIntentDetection(state: BaseThreadState, availableSkills: SkillSummaryEntry[]): PlanRetrievalResponse | null {
     const messages = state.messages;
     const lastUserMessage = this.findLatestUserMessage(messages);
     
@@ -262,32 +305,24 @@ export class PlanRetrievalNode extends BaseNode {
    * Returns true if LLM should analyze (potential skill match found)
    * Returns false if safe to proceed with rule-based patterns
    */
-  private messageMatchesSkillTriggers(messageContent: string, availableSkills: string): boolean {
-    // If no skills available, no match possible
-    if (!availableSkills || availableSkills.includes('_No skills found')) {
+  private messageMatchesSkillTriggers(messageContent: string, availableSkills: SkillSummaryEntry[]): boolean {
+    if (!Array.isArray(availableSkills) || availableSkills.length === 0) {
       return false;
     }
-    
-    // Extract trigger phrases from skill list (look for "Trigger:" lines)
-    const triggerMatches = availableSkills.match(/Trigger:\s*([^\n]+)/gi);
-    if (!triggerMatches || triggerMatches.length === 0) {
-      return false; // No triggers found in skills
-    }
-    
-    // Extract trigger keywords/phrases
+
     const triggerKeywords: string[] = [];
-    for (const match of triggerMatches) {
-      const triggerText = match.replace(/Trigger:\s*/i, '').toLowerCase().trim();
-      // Split on common delimiters and extract meaningful terms
-      const words = triggerText.split(/[,;\s]+/).filter(word => word.length > 2);
-      triggerKeywords.push(...words);
+    for (const skill of availableSkills) {
+      if (!Array.isArray(skill.triggers)) continue;
+      for (const triggerText of skill.triggers) {
+        const words = String(triggerText || '').toLowerCase().split(/[,;\s]+/).filter(word => word.length > 2);
+        triggerKeywords.push(...words);
+      }
     }
-    
+
     if (triggerKeywords.length === 0) {
-      return false; // No meaningful trigger keywords found
+      return false;
     }
-    
-    // Check user message for trigger keyword matches
+
     const userWords = messageContent.toLowerCase().split(/\s+/).filter(word => word.length > 2);
     const messageText = messageContent.toLowerCase();
     
@@ -342,162 +377,15 @@ export class PlanRetrievalNode extends BaseNode {
     }
   }
 
-  /**
-   * Load skill triggers with cache-first approach and background refresh.
-   * Never blocks streaming - returns cached data immediately, then refreshes in background if stale.
-   */
-  private async loadSkillTriggers(): Promise<string> {
-    const cacheKey = 'sulla:skills:triggers';
-    const cacheTimestampKey = 'sulla:skills:triggers:timestamp';
-    const cacheTTL = 3600; // 1 hour in seconds
-    
-    let cachedData: string | null = null;
-    let cacheTimestamp: number = 0;
-    
-    // Step 1: Always try to get cached data first
+  private async loadAvailableSkills(): Promise<SkillSummaryEntry[]> {
     try {
-      await redisClient.initialize();
-      cachedData = await redisClient.get(cacheKey);
-      const timestampStr = await redisClient.get(cacheTimestampKey);
-      cacheTimestamp = timestampStr ? parseInt(timestampStr, 10) : 0;
+      const skills = await skillsRegistry.getPlanRetrievalSkillList();
+      if (!Array.isArray(skills)) return [];
+      return skills;
     } catch (error) {
-      console.warn('[PlanRetrievalNode] Redis cache read failed:', error);
+      console.warn('[PlanRetrievalNode] Failed to load skills from skills registry:', error);
+      return [];
     }
-    
-    const now = Math.floor(Date.now() / 1000);
-    const cacheAge = now - cacheTimestamp;
-    const isCacheStale = cacheAge > cacheTTL;
-    const hasPoisonedCache = !!cachedData && (
-      cachedData.includes('_No skills found in the knowledge base yet._') ||
-      cachedData.includes('_Failed to load skills from the knowledge base._')
-    );
-    
-    // Step 2: If we have cached data, return it immediately
-    if (cachedData && !hasPoisonedCache) {
-      console.log(`[PlanRetrievalNode] Retrieved skill triggers from cache (age: ${cacheAge}s)`);
-      
-      // Step 3: If cache is stale, trigger background refresh for next request
-      if (isCacheStale) {
-        console.log('[PlanRetrievalNode] Cache is stale, triggering background refresh');
-        this.refreshSkillTriggersInBackground(cacheKey, cacheTimestampKey).catch(err => {
-          console.warn('[PlanRetrievalNode] Background skill refresh failed:', err);
-        });
-      }
-      
-      return cachedData;
-    }
-
-    // If cache exists but only contains a negative/error sentinel, refresh immediately.
-    if (hasPoisonedCache) {
-      console.log('[PlanRetrievalNode] Cached skill triggers contain sentinel result; forcing synchronous refresh');
-    }
-    
-    // Step 4: No cache exists - we need to load synchronously (first time only)
-    console.log('[PlanRetrievalNode] No cache found, loading skills synchronously (first time)');
-    return this.loadSkillTriggersFromDatabase(cacheKey, cacheTimestampKey);
-  }
-
-  /**
-   * Background refresh of skill triggers cache (non-blocking)
-   */
-  private async refreshSkillTriggersInBackground(cacheKey: string, timestampKey: string): Promise<void> {
-    try {
-      const freshData = await this.loadSkillTriggersFromDatabase(cacheKey, timestampKey);
-      console.log('[PlanRetrievalNode] Background refresh completed successfully');
-    } catch (error) {
-      console.warn('[PlanRetrievalNode] Background refresh failed:', error);
-    }
-  }
-
-  /**
-   * Load skill triggers from database and update cache
-   */
-  private async loadSkillTriggersFromDatabase(cacheKey: string, timestampKey: string): Promise<string> {
-    let result: string;
-    
-    try {
-      const { Article } = await import('../database/models/Article');
-      const articles = await Article.findByTag('skill');
-
-      if (!articles || articles.length === 0) {
-        result = '_No skills found in the knowledge base yet._';
-        console.log('[PlanRetrievalNode] No skills found in database');
-      } else {
-        const lines: string[] = [];
-        const seenSlugs = new Set<string>();
-
-        for (const article of articles) {
-          const slug = article.attributes.slug || 'unknown';
-          if (seenSlugs.has(slug)) {
-            continue; // Skip duplicates
-          }
-          seenSlugs.add(slug);
-
-          const title = article.attributes.title || slug;
-          const doc = article.attributes.document || '';
-
-          const trigger = this.extractSkillTrigger(doc);
-
-          // Only include true skills that define an actual trigger
-          if (!trigger || /^no\s+trigger\s+defined$/i.test(trigger)) {
-            continue;
-          }
-
-          lines.push(`- **${title}** (slug: \`${slug}\`)\n  Trigger: ${trigger}`);
-        }
-
-        result = lines.length > 0
-          ? lines.join('\n')
-          : '_No skills found in the knowledge base yet._';
-        console.log(`[PlanRetrievalNode] Loaded ${lines.length} triggered skills from ${articles.length} skill-tagged articles`);
-      }
-    } catch (error) {
-      console.warn('[PlanRetrievalNode] Failed to load skill triggers from database:', error);
-      result = '_Failed to load skills from the knowledge base._';
-    }
-
-    // ALWAYS cache the result - whether skills exist, don't exist, or failed to load
-    // This ensures streaming never waits for database queries
-    const timestamp = Math.floor(Date.now() / 1000);
-    try {
-      await redisClient.set(cacheKey, result);
-      await redisClient.set(timestampKey, timestamp.toString());
-      console.log('[PlanRetrievalNode] Cached skill triggers result (ensures no future blocking)');
-    } catch (error) {
-      console.warn('[PlanRetrievalNode] Redis cache write failed:', error);
-    }
-
-    return result;
-  }
-
-  private extractSkillTrigger(document: string): string {
-    const doc = String(document || '');
-
-    // 1) Canonical markdown format: **Trigger**: ...
-    let match = doc.match(/\*\*Trigger\*\*\s*:\s*(.+)/i);
-    if (match?.[1]) {
-      return match[1].trim().replace(/^['"]|['"]$/g, '');
-    }
-
-    // 2) Plain text format: Trigger: ...
-    match = doc.match(/(?:^|\n)\s*Trigger\s*:\s*(.+)/i);
-    if (match?.[1]) {
-      return match[1].trim().replace(/^['"]|['"]$/g, '');
-    }
-
-    // 3) Frontmatter format:
-    // ---
-    // trigger: ...
-    // ---
-    const fm = doc.match(/^---\s*\n([\s\S]*?)\n---/);
-    if (fm?.[1]) {
-      const triggerLine = fm[1].match(/(?:^|\n)\s*trigger\s*:\s*(.+)/i);
-      if (triggerLine?.[1]) {
-        return triggerLine[1].trim().replace(/^['"]|['"]$/g, '');
-      }
-    }
-
-    return '';
   }
 
   // ======================================================================
@@ -507,36 +395,33 @@ export class PlanRetrievalNode extends BaseNode {
   /**
    * Analyze user intent using LLM with available skills context and active plan awareness
    */
-  private async analyzeUserIntent(state: BaseThreadState, availableSkills: string): Promise<PlanRetrievalResponse | null> {
-    // Get active plans context
-    const threadId = (state.metadata as any).threadId;
-    const activePlanManager = ActivePlanManager.getInstance();
-    const activePlanSummary = await activePlanManager.getActivePlanSummary(threadId);
-    
-    // Build active plans context for plan status awareness
-    let activePlansContext = '';
-    if (activePlanSummary !== 'No active plans currently running.') {
-      activePlansContext = `## Currently Active Plans\n${activePlanSummary}\n\n**Plan Selection Options**:\n- Select a DIFFERENT skill if you want to start a new parallel plan\n- Select the SAME skill as an active plan if you want to monitor/check status of that existing plan\n- All skills remain available - choose based on user intent`;
-    } else {
-      activePlansContext = `## Currently Active Plans\nNo active plans currently running - all skills are available for new plans.`;
-    }
-    
-    // Replace placeholders with actual data
-    const analysisPrompt = PLAN_RETRIEVAL_PROMPT
-      .replace('{{skills}}', availableSkills)
-      .replace('{{active_plans_context}}', activePlansContext);
+  private async analyzeUserIntent(state: BaseThreadState, availableSkills: SkillSummaryEntry[]): Promise<PlanRetrievalResponse | null> {
+    const policy: Required<NodeRunPolicy> = {
+      messageSource: 'custom',
+      persistAssistantToGraph: false,
+      persistToolResultsToGraph: false,
+      persistAssistantToNodeState: false,
+      persistToolResultsToNodeState: false,
+      nodeStateNamespace: '',
+      includeGraphAssistantMessages: false,
+      includeGraphUserMessages: false,
+    };
 
-    console.log('[PlanRetrievalNode] Analyzing messages for intent and planning data with available skills');
+    const nodeMessages = this.buildPlanRetrievalNodeMessages(state, policy, availableSkills);
+
+    console.log(`[PlanRetrievalNode] Analyzing messages for intent and planning data with ${availableSkills.length} available skills`);
 
     // Use low temperature for consistent extraction
     const extractionResult = await this.chat(
       state,
-      analysisPrompt,
+      PLAN_RETRIEVAL_PROMPT,
       {
         temperature: 0.1, // Low temperature for consistency
         maxTokens: 500,   // Keep response concise
         format: 'json',   // JSON-only response
-        disableTools: true // No tools needed for intent analysis
+        disableTools: true,
+        nodeRunPolicy: policy,
+        nodeRunMessages: nodeMessages,
       }
     );
 
@@ -619,67 +504,23 @@ export class PlanRetrievalNode extends BaseNode {
   /**
    * Perform vector database searches for skills and memories in parallel with timeout protection
    */
-  private async performVectorSearches(planData: PlanRetrievalResponse): Promise<{skillArticles: any[], memoryArticles: any[]}> {
+  private async performVectorSearches(planData: PlanRetrievalResponse): Promise<{ memoryArticles: any[] }> {
     console.log('[PlanRetrievalNode] Performing parallel vector database searches with timeout protection');
     
     try {
       // Run both searches in parallel for optimal streaming performance
-      const [skillArticles, memoryArticles] = await Promise.allSettled([
-        this.loadSelectedSkillWithTimeout(planData.selected_skill_slug),
+      const [memoryArticles] = await Promise.allSettled([
         this.searchMemoriesWithTimeout(planData.memory_search)
       ]);
       
       return {
-        skillArticles: skillArticles.status === 'fulfilled' ? skillArticles.value : [],
         memoryArticles: memoryArticles.status === 'fulfilled' ? memoryArticles.value : []
       };
       
     } catch (error) {
       console.warn('[PlanRetrievalNode] Vector database search failed:', error);
       // Continue with empty results rather than failing
-      return { skillArticles: [], memoryArticles: [] };
-    }
-  }
-
-  /**
-   * Load a specific skill by slug if selected (with timeout protection)
-   */
-  private async loadSelectedSkillWithTimeout(skillSlug: string | null, timeoutMs: number = 3000): Promise<any[]> {
-    if (!skillSlug) {
-      console.log('[PlanRetrievalNode] No skill selected - using memory search for general assistance');
-      return [];
-    }
-
-    console.log(`[PlanRetrievalNode] Loading selected skill: ${skillSlug}`);
-    
-    // Add timeout protection for database query
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      setTimeout(() => reject(new Error(`Skill loading timeout after ${timeoutMs}ms`)), timeoutMs);
-    });
-    
-    try {
-      const selectedSkill = await Promise.race([
-        articlesRegistry.getBySlug(skillSlug),
-        timeoutPromise
-      ]);
-      
-      if (selectedSkill) {
-        console.log(`[PlanRetrievalNode] Successfully loaded selected skill: ${skillSlug}`);
-        return [{
-          slug: selectedSkill.slug,
-          title: selectedSkill.title,
-          category: selectedSkill.category,
-          tags: selectedSkill.tags,
-          excerpt: selectedSkill.excerpt,
-          document: selectedSkill.document
-        }];
-      } else {
-        console.warn(`[PlanRetrievalNode] Selected skill not found: ${skillSlug}`);
-        return [];
-      }
-    } catch (error) {
-      console.warn(`[PlanRetrievalNode] Failed to load skill ${skillSlug}:`, error instanceof Error ? error.message : String(error));
-      return [];
+      return { memoryArticles: [] };
     }
   }
 
@@ -745,27 +586,6 @@ export class PlanRetrievalNode extends BaseNode {
     };
   }
 
-  private async appendSelectedSkillMessage(state: BaseThreadState, skillArticles: any[]): Promise<void> {
-    if (skillArticles.length === 0) {
-      console.log('[PlanRetrievalNode] No selected skill to append as assistant message');
-      return;
-    }
-
-    const skill = skillArticles[0];
-    const payload = {
-      slug: skill.slug,
-      title: skill.title,
-      excerpt: skill.excerpt || '',
-      document: skill.document || '',
-      category: skill.category || '',
-      tags: Array.isArray(skill.tags) ? skill.tags : [],
-      selectedAt: Date.now(),
-    };
-
-    await this.appendResponse(state, `PLAN_RETRIEVAL_SKILL_CONTEXT\n${JSON.stringify(payload)}`);
-    console.log(`[PlanRetrievalNode] Appended selected skill context as assistant message: ${skill.slug}`);
-  }
-
   /**
    * Append memory results as tool result messages (skill context is appended as assistant message)
    */
@@ -795,12 +615,12 @@ export class PlanRetrievalNode extends BaseNode {
   /**
    * Log completion summary with key metrics
    */
-  private logCompletionSummary(planData: PlanRetrievalResponse, skillArticles: any[], memoryArticles: any[]): void {
+  private logCompletionSummary(planData: PlanRetrievalResponse, memoryArticles: any[]): void {
     console.log('[PlanRetrievalNode] Completed plan retrieval with:', {
       intent: planData.intent,
       goal: planData.goal,
       complexity: planData.complexity,
-      selectedSkill: skillArticles.length > 0 ? skillArticles[0].slug : null,
+      selectedSkill: planData.selected_skill_slug || null,
       memoryKeywords: planData.memory_search.length,
       memoryArticles: memoryArticles.length,
     });

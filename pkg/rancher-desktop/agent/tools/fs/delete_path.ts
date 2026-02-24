@@ -32,6 +32,7 @@ export const fsDeletePathRegistration: ToolRegistration = {
   name: 'fs_delete_path',
   description: 'Delete a file or directory path.',
   category: 'fs',
+  operationTypes: ['delete'],
   schemaDef: {
     path: { type: 'string' as const, description: 'File or directory path to delete.' },
     recursive: { type: 'boolean' as const, optional: true, description: 'Required for directory trees. Default false.' },

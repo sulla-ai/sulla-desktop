@@ -37,6 +37,7 @@ export const rdctlVersionRegistration: ToolRegistration = {
   name: "rdctl_version",
   description: "Shows the CLI version.",
   category: "rdctl",
+  operationTypes: ['read'],
   schemaDef: {},
   workerClass: RdctlVersionWorker,
 };

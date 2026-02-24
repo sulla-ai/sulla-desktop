@@ -46,6 +46,7 @@ export const slackUpdateRegistration: ToolRegistration = {
   name: "slack_update",
   description: "Update an existing Slack message.",
   category: "slack",
+  operationTypes: ['read'],
   schemaDef: {
     channel: { type: 'string' as const, description: "Channel ID where the message is" },
     ts: { type: 'string' as const, description: "Timestamp of the message to update" },

@@ -82,6 +82,7 @@ export const addObservationalMemoryRegistration: ToolRegistration = {
   name: "add_observational_memory",
   description: "Use this tool to store the observations you make into long-term memory.",
   category: "meta",
+  operationTypes: ['create','read','update','delete'],
   schemaDef: {
     priority: { type: 'enum' as const, enum: ["🔴", "🟡", "⚪"], default: "🟡" },
     content: { type: 'string' as const, description: "One sentence only — extremely concise, always include the context" },

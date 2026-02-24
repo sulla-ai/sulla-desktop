@@ -46,6 +46,7 @@ export const fsPathInfoRegistration: ToolRegistration = {
   name: 'fs_path_info',
   description: 'Get metadata for a filesystem path.',
   category: 'fs',
+  operationTypes: ['read'],
   schemaDef: {
     path: { type: 'string' as const, description: 'Path to inspect.' },
   },

@@ -55,6 +55,7 @@ export const kubectlDeleteRegistration: ToolRegistration = {
   name: "kubectl_delete",
   description: "Delete Kubernetes resources.",
   category: "kubectl",
+  operationTypes: ['delete'],
   schemaDef: {
     resource: { type: 'string' as const, description: "The resource type, e.g., pods, services" },
     name: { type: 'string' as const, description: "Specific resource name" },

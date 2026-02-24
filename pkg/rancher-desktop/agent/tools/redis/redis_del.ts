@@ -32,6 +32,7 @@ export const redisDelRegistration: ToolRegistration = {
   name: "redis_del",
   description: "Delete one or more Redis keys.",
   category: "redis",
+  operationTypes: ['execute'],
   schemaDef: {
     keys: { type: 'array' as const, items: { type: 'string' as const }, description: "The Redis keys to delete" },
   },

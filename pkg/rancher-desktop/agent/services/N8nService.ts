@@ -1114,7 +1114,58 @@ export class N8nService {
    * Get a single n8n template workflow by ID
    */
   async getTemplateWorkflow(id: number): Promise<any> {
-    return this.publicRequest(`/templates/workflows/${id}`);
+    const templateId = Number(id);
+    if (!Number.isFinite(templateId) || templateId <= 0) {
+      throw new Error(`Invalid template workflow ID: ${id}`);
+    }
+
+    const unwrapTemplatePayload = (payload: any): any | null => {
+      const candidates = [
+        payload?.workflow,
+        payload?.template,
+        payload?.data?.workflow,
+        payload?.data?.template,
+        payload?.data,
+        payload?.item,
+        Array.isArray(payload?.items) ? payload.items[0] : null,
+        payload,
+      ];
+
+      for (const candidate of candidates) {
+        if (candidate && typeof candidate === 'object' && !Array.isArray(candidate) && Object.keys(candidate).length > 0) {
+          return candidate;
+        }
+      }
+
+      return null;
+    };
+
+    const endpoints = [
+      `/templates/workflows/${templateId}`,
+      `/templates/${templateId}`,
+    ];
+
+    let lastError: Error | null = null;
+    for (const endpoint of endpoints) {
+      try {
+        const payload = await this.publicRequest(endpoint);
+        const template = unwrapTemplatePayload(payload);
+        if (template) {
+          return template;
+        }
+
+        console.warn(`[N8nService] Empty template workflow payload from ${endpoint}`);
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+        console.warn(`[N8nService] Failed to fetch template workflow via ${endpoint}: ${lastError.message}`);
+      }
+    }
+
+    if (lastError) {
+      throw new Error(`Unable to fetch template workflow ${templateId}: ${lastError.message}`);
+    }
+
+    throw new Error(`Template workflow ${templateId} returned empty payload from all public endpoints.`);
   }
 
   /**

@@ -38,6 +38,7 @@ export const calendarDeleteRegistration: ToolRegistration = {
   name: "calendar_delete",
   description: "Delete a calendar event by ID.",
   category: "calendar",
+  operationTypes: ['delete'],
   schemaDef: {
     eventId: { type: 'number' as const, description: "The ID of the calendar event to delete" },
   },

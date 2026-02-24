@@ -38,6 +38,7 @@ export const pgQueryAllRegistration: ToolRegistration = {
   name: "pg_queryall",
   description: "Execute a PostgreSQL query and return all result rows.",
   category: "pg",
+  operationTypes: ['read'],
   schemaDef: {
     sql: { type: 'string' as const, description: "The SQL query to execute" },
     params: { type: 'array' as const, items: { type: 'string' as const }, optional: true, description: "Parameters for the query" },

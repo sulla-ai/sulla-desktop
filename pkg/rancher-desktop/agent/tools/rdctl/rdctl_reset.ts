@@ -37,6 +37,7 @@ export const rdctlResetRegistration: ToolRegistration = {
   name: "rdctl_reset",
   description: "Reset Sulla Desktop.",
   category: "rdctl",
+  operationTypes: ['execute'],
   schemaDef: {},
   workerClass: RdctlResetWorker,
 };

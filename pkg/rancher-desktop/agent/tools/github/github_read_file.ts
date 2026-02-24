@@ -74,6 +74,7 @@ export const gitHubReadFileRegistration: ToolRegistration = {
   name: "github_read_file",
   description: "Read the contents of a file from a GitHub repository.",
   category: "github",
+  operationTypes: ['read'],
   schemaDef: {
     owner: { type: 'string' as const, description: "Repository owner (username or organization)" },
     repo: { type: 'string' as const, description: "Repository name" },

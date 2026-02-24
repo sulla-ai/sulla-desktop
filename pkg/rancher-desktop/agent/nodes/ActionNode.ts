@@ -1,6 +1,7 @@
-import { BaseNode } from './BaseNode';
+import { BaseNode, NodeRunPolicy } from './BaseNode';
 import type { BaseThreadState, NodeResult } from './Graph';
 import { ActivePlanManager } from './ActivePlanManager';
+import type { ChatMessage } from '../languagemodels/BaseLanguageModel';
 
 // Types for evidence collection
 interface ActionEvidence {
@@ -154,9 +155,24 @@ export class ActionNode extends BaseNode {
     startTime: number
   ): Promise<ActionResult> {
     try {
+      const policy: Required<NodeRunPolicy> = {
+        messageSource: 'custom',
+        persistAssistantToGraph: false,
+        persistToolResultsToGraph: false,
+        persistAssistantToNodeState: false,
+        persistToolResultsToNodeState: false,
+        nodeStateNamespace: '',
+        includeGraphAssistantMessages: false,
+        includeGraphUserMessages: false,
+      };
+
+      const nodeMessages = this.buildActionNodeMessages(state, policy);
+
       const chatResult = await this.chat(state, systemPrompt, {
         temperature: 0.2,
         // Tools enabled — action agent has full tool access
+        nodeRunPolicy: policy,
+        nodeRunMessages: nodeMessages,
       });
 
       const resultContent = chatResult || 'Action completed';
@@ -186,6 +202,27 @@ export class ActionNode extends BaseNode {
         timestamp: Date.now(),
       };
     }
+  }
+
+  private buildActionNodeMessages(state: BaseThreadState, policy: Required<NodeRunPolicy>): {
+    assistantMessages: ChatMessage[];
+    userMessages: ChatMessage[];
+  } {
+    const technicalInstructions = String((state.metadata as any).technical_instructions || '').trim();
+    const userDirective: ChatMessage = {
+      role: 'user',
+      content: technicalInstructions
+        ? `Execute this cycle only based on the technical brief:\n${technicalInstructions}`
+        : 'Execute the current technical brief for this cycle.',
+    };
+
+    const assistantMessages = this.buildAssistantMessagesForNode(state, policy, []);
+    const userMessages = this.buildUserMessagesForNode(state, policy, [userDirective]);
+
+    return {
+      assistantMessages,
+      userMessages,
+    };
   }
 
   private extractActionResponse(actionResultText: string): string | null {

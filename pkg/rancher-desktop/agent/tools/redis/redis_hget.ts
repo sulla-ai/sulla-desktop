@@ -32,6 +32,7 @@ export const redisHgetRegistration: ToolRegistration = {
   name: "redis_hget",
   description: "Get the value of a field in a Redis hash.",
   category: "redis",
+  operationTypes: ['read'],
   schemaDef: {
     key: { type: 'string' as const, description: "The Redis hash key" },
     field: { type: 'string' as const, description: "The field in the hash" },

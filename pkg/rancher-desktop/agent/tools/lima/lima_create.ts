@@ -47,6 +47,7 @@ export const limaCreateRegistration: ToolRegistration = {
   name: "lima_create",
   description: "Create a Lima virtual machine instance.",
   category: "lima",
+  operationTypes: ['create'],
   schemaDef: {
     template: { type: 'string' as const, optional: true, description: "Absolute path to YAML file" },
   },

@@ -56,6 +56,7 @@ export const gitHubCommentOnIssueRegistration: ToolRegistration = {
   name: "github_comment_on_issue",
   description: "Add a comment to a GitHub issue.",
   category: "github",
+  operationTypes: ['execute', 'create'],
   schemaDef: {
     owner: { type: 'string' as const, description: "Repository owner (username or organization)" },
     repo: { type: 'string' as const, description: "Repository name" },

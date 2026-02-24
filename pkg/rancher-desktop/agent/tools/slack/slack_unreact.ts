@@ -39,6 +39,7 @@ export const slackUnreactRegistration: ToolRegistration = {
   name: "slack_unreact",
   description: "Remove a reaction emoji from a Slack message.",
   category: "slack",
+  operationTypes: ['read'],
   schemaDef: {
     channel: { type: 'string' as const, description: "Channel ID where the message is" },
     ts: { type: 'string' as const, description: "Timestamp of the message" },

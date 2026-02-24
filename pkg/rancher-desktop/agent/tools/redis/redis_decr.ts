@@ -32,6 +32,7 @@ export const redisDecrRegistration: ToolRegistration = {
   name: "redis_decr",
   description: "Decrement the integer value of a Redis key by one.",
   category: "redis",
+  operationTypes: ['execute'],
   schemaDef: {
     key: { type: 'string' as const, description: "The Redis key to decrement" },
   },
