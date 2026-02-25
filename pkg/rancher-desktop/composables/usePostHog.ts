@@ -89,30 +89,32 @@ async function getDistinctId(): Promise<string> {
     return cachedDistinctId;
   }
 
-  // First try to get the cached ID from localStorage
-  cachedDistinctId = localStorage.getItem('posthog_distinct_id');
+  const storedDistinctId = localStorage.getItem('posthog_distinct_id');
 
-  if (!cachedDistinctId) {
-    try {
-      // Try to get the user's email from settings
-      const loadedEmail = await SullaSettingsModel.get('sullaEmail');
+  try {
+    // Prefer deterministic distinct id derived from user email.
+    // This links sessions together even across reinstalls/devices.
+    const loadedEmail = await SullaSettingsModel.get('sullaEmail');
 
-      if (loadedEmail && typeof loadedEmail === 'string' && loadedEmail.trim()) {
-        // MD5 hash the email for privacy while maintaining consistency
-        cachedDistinctId = createHash('md5').update(loadedEmail.trim().toLowerCase()).digest('hex');
+    if (loadedEmail && typeof loadedEmail === 'string' && loadedEmail.trim()) {
+      cachedDistinctId = createHash('md5').update(loadedEmail.trim().toLowerCase()).digest('hex');
+      if (storedDistinctId !== cachedDistinctId) {
+        localStorage.setItem('posthog_distinct_id', cachedDistinctId);
       }
-    } catch (error) {
-      console.warn('Failed to load user email for PostHog distinct ID:', error);
+      return cachedDistinctId;
     }
-
-    // Fallback to random UUID if no email available
-    if (!cachedDistinctId) {
-      cachedDistinctId = randomUUID();
-    }
-
-    // Cache the distinct ID
-    localStorage.setItem('posthog_distinct_id', cachedDistinctId);
+  } catch (error) {
+    console.warn('Failed to load user email for PostHog distinct ID:', error);
   }
+
+  // Fallback: retain existing local distinct id when email is missing
+  if (storedDistinctId) {
+    cachedDistinctId = storedDistinctId;
+    return cachedDistinctId;
+  }
+
+  cachedDistinctId = randomUUID();
+  localStorage.setItem('posthog_distinct_id', cachedDistinctId);
 
   return cachedDistinctId;
 }

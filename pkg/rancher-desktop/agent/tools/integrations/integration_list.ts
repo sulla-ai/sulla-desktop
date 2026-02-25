@@ -10,8 +10,7 @@ export class IntegrationListWorker extends BaseTool {
   description: string = '';
   schemaDef: any = {};
 
-  protected async _validatedCall(input: any): Promise<ToolResponse> {
-    const { filter_by_enabled = true } = input;
+  protected async _validatedCall(_input: any): Promise<ToolResponse> {
 
     try {
       const service = getIntegrationService();
@@ -30,14 +29,12 @@ export class IntegrationListWorker extends BaseTool {
         }),
       );
 
-      const results = filter_by_enabled
-        ? allIntegrations.filter((integration) => integration.enabled)
-        : allIntegrations;
+      const results = allIntegrations;
 
       if (results.length === 0) {
         return {
           successBoolean: true,
-          responseString: 'No integrations matched the provided filter.',
+          responseString: 'No integrations found.',
         };
       }
 
@@ -68,16 +65,9 @@ export class IntegrationListWorker extends BaseTool {
 
 export const integrationListRegistration: ToolRegistration = {
   name: "integration_list",
-  description: "List integrations and their connection status. Use filter_by_enabled=true to return only enabled integrations.",
+  description: "List all integrations and their connection status, including whether each integration is enabled.",
   category: "integrations",
   operationTypes: ['read'],
-  schemaDef: {
-    filter_by_enabled: {
-      type: 'boolean' as const,
-      description: 'When true, only returns integrations that are enabled (connected).',
-      default: true,
-      optional: true,
-    },
-  },
+  schemaDef: {},
   workerClass: IntegrationListWorker,
 };

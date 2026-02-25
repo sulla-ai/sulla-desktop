@@ -1,10 +1,7 @@
-import { BaseNode, ENVIRONMENT_PROMPT, NodeRunPolicy, OBSERVATIONAL_MEMORY_SOP } from './BaseNode';
+import { BaseNode, NodeRunPolicy } from './BaseNode';
 import type { BaseThreadState, NodeResult } from './Graph';
 import { ActivePlanManager } from './ActivePlanManager';
 import type { ChatMessage } from '../languagemodels/BaseLanguageModel';
-import { SullaSettingsModel } from '../database/models/SullaSettingsModel';
-import { skillsRegistry } from '../database/registry/SkillsRegistry';
-import { toolRegistry } from '../tools';
 
 // ============================================================================
 // REASONING PROMPT
@@ -19,20 +16,58 @@ import { toolRegistry } from '../tools';
 //   4. Write a focus_instruction that tells ActionNode exactly what to do next
 // ============================================================================
 
-const REASONING_PROMPT_SUFFIX = `Your only job is to output a Technical Execution Brief for the Action Node.
+const REASONING_PROMPT_SUFFIX = `Your job is to create a Technical Execution Brief (TEB) for the Action Node.
 
-MISSION: Turn non-technical PRD + state into ONE precise next-cycle brief.
+You are the incremental manager walking the Action Node through the PRD step-by-step using ONLY the "Execution Steps" section in the PRD as your master roadmap.
+
+You break every PRD into the smallest possible verifiable chunks so the Action Node is never overwhelmed.
+
+Your TEB will have one clear and concise focus and will advance exactly ONE checkbox from the PRD’s Execution Steps list.
+
+MISSION: Turn the PRD + current state into ONE precise next-cycle brief for the Action Node.
 NEVER execute, NEVER tool call, NEVER explain, NEVER solve anything.
-Plan to get as much work done as possible by avoiding blockers and completing as much as you can.
-Make sure the project owner is aware of the blockers and can begin working on them.
+
+## Incremental Execution Strategy (highest priority — never violate)
+- ALWAYS look at the "## Execution Steps" section in the PRD.
+- Identify the next logical step.
+- Create a TEB that advances ONLY that one next logical step (checkbox).
+- The graph will return to you after the Action Node completes the step so you can pick the next unchecked checkbox.
+- One TEB = one checkbox advancement. Never bundle multiple checkboxes into a single TEB.
+- The number of steps will vary (3–25) — always choose the smallest high-value next step that can be fully built and verified in one cycle.
+- If a step has a known blocker, create a TEB that implements the fallback defined in the PRD and clearly documents the blocker for the human.
+
+ONE-SHOT RULES (strict):
+- This is a one-shot TEB writer, not a researcher.
+- Use only the context already present in messages/state and the PRD.
+- Do NOT add new PRD scope, new architecture, or speculative context.
+- Do NOT request discovery/research in this step.
+- Do NOT propose re-checking tools/integrations unless explicitly marked unknown in existing context.
+
+CONTEXT TRANSFER RULES (strict):
+- Assume ActionNode should NOT need to re-search for information that is already known.
+- If discovery was already done, include the concrete results in the TEB.
+- If credential/integration checks were already done, include exactly what is known and what is missing.
+- Convert PRD context + prior tool results into explicit, actionable instructions and facts.
+- Always prefer execution using known facts over introducing new information requests.
+- Explicitly state: "No additional discovery required for this cycle." unless existing context explicitly marks a hard blocker as unknown.
 
 OUTPUT RULE: When ready output the technical execution brief wthin these xml tags 
 
 <TECHNICAL_EXECUTION_BRIEF>
 ### Technical Execution Brief
 
-**FOCUS**
-{{current_focus}}
+**GOAL**
+This is the goal of this step: we want [clear one-sentence goal of this specific step].
+
+**Goal & Required Properties**
+This step must deliver these exact things so later steps work correctly:
+
+- [short description of property 1]
+- [short description of property 2]
+- [short description of property 3]
+- [etc.]
+
+This is the required outcome defined in the PRD so the next steps can proceed safely.
 
 **Delta Only**
 - New vs last state only
@@ -41,21 +76,15 @@ OUTPUT RULE: When ready output the technical execution brief wthin these xml tag
 **Success Metrics**
 1-2 measurable outcomes this cycle
 
-**Execution Plan**
-1. First concrete step
-2. Second
-... (max 6)
-
-**Required Tools**
-- tool: params (new only)
-
-**State Refs**
-- conversationSummaries: [top 2-3]
-- activePlans: [relevant]
-- skill: {{skill_slug}} (if high)
+**Execution Context (Required)**
+- Discovery already completed: [key findings ActionNode should trust and reuse]
+- Credentials/integrations status: [ready/missing + exact details relevant to this cycle]
+- Artifacts/templates already chosen: [ids/slugs/names and why]
+- Known blockers + dependencies: [only concrete blockers]
+- Re-check policy: [what must NOT be re-checked this cycle]
 
 **Immediate Action**
-One crystal-clear sentence for Action Node
+One crystal-clear sentence for Action Node describing the one step to execute now
 </TECHNICAL_EXECUTION_BRIEF>
 `;
 
@@ -78,57 +107,6 @@ One crystal-clear sentence for Action Node
 export class ReasoningNode extends BaseNode {
   constructor() {
     super('reasoning', 'Reasoning');
-  }
-
-  private buildEnvironmentContextAssistantMessage(): string {
-    let environmentContext = ENVIRONMENT_PROMPT;
-
-    const categoriesWithDesc = toolRegistry.getCategoriesWithDescriptions();
-    const categoriesText = categoriesWithDesc
-      .map(({ category, description }) => `- ${category}: ${description}`)
-      .join('\n');
-    environmentContext = environmentContext.replace('{{tool_categories}}', categoriesText);
-
-    const formattedTime = new Date().toLocaleString('en-US', {
-      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: true,
-    });
-    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'unknown';
-
-    environmentContext = environmentContext.replace('{{formattedTime}}', formattedTime);
-    environmentContext = environmentContext.replace('{{timeZone}}', timeZone);
-
-    return environmentContext.trim();
-  }
-
-  private async getObservationalMemorySnapshot(): Promise<string> {
-    try {
-      const observationalMemory = await SullaSettingsModel.get('observationalMemory', {});
-      const raw =
-        typeof observationalMemory === 'string'
-          ? JSON.parse(observationalMemory || '[]')
-          : observationalMemory;
-
-      if (!Array.isArray(raw) || raw.length === 0) {
-        return 'No observational memory entries available.';
-      }
-
-      return raw
-        .slice(-10)
-        .map((entry: any) => `${entry?.priority || ''} ${entry?.timestamp || ''} ${entry?.content || ''}`.trim())
-        .filter((line: string) => Boolean(line))
-        .join('\n');
-    } catch (error) {
-      console.warn('[ReasoningNode] Failed to read observational memory snapshot:', error);
-      return 'Observational memory unavailable due to parse/read error.';
-    }
   }
 
   async execute(state: BaseThreadState): Promise<NodeResult<BaseThreadState>> {
@@ -226,7 +204,7 @@ export class ReasoningNode extends BaseNode {
       persistAssistantToNodeState: true,
       persistToolResultsToNodeState: false,
       nodeStateNamespace: 'reasoning',
-      includeGraphAssistantMessages: false,
+      includeGraphAssistantMessages: true,
       includeGraphUserMessages: false,
     };
 
@@ -235,6 +213,7 @@ export class ReasoningNode extends BaseNode {
     const content = await this.chat(state, systemPrompt, {
       temperature: 0.2,
       maxTokens: 4096,
+      disableTools: true,
       nodeRunPolicy: policy,
       nodeRunMessages: nodeMessages,
     });
@@ -324,7 +303,7 @@ export class ReasoningNode extends BaseNode {
     assistantMessages: ChatMessage[];
     userMessages: ChatMessage[];
   }> {
-    const selectedSkillEnvironmentMessage = await this.getSelectedSkillEnvironmentAssistantMessage(_state);
+    const executionReadinessContextMessage = this.buildExecutionReadinessContextMessage(_state);
     const planningInstructions = String((_state.metadata as any).planning_instructions || '').trim();
     const planningInstructionsMessage: ChatMessage | null = planningInstructions
       ? {
@@ -333,21 +312,31 @@ export class ReasoningNode extends BaseNode {
         }
       : null;
 
-    const environmentContextMessage: ChatMessage = {
-      role: 'assistant',
-      content: `Environment systems and tools context:\n${this.buildEnvironmentContextAssistantMessage()}`,
-    };
-    const observationalMemoryMessage: ChatMessage = {
-      role: 'assistant',
-      content: `Observational memory snapshot:\n${await this.getObservationalMemorySnapshot()}`,
-    };
-    const observationalMemorySopMessage: ChatMessage = {
-      role: 'assistant',
-      content: OBSERVATIONAL_MEMORY_SOP,
-    };
-
     const reasoningHistoryMessages = (((_state.metadata as any).reasoning?.messages || []) as ChatMessage[])
-      .filter((message) => message.role === 'assistant' && String(message.content || '').trim().length > 0)
+      .filter((message) => {
+        if (message.role !== 'assistant') {
+          return false;
+        }
+
+        const kind = String((message as any)?.metadata?.kind || '').trim();
+        if (kind.startsWith('shared_context_')) {
+          return false;
+        }
+
+        const content = String(message.content || '').trim();
+        if (!content.length) {
+          return false;
+        }
+
+        const normalizedContent = content.toLowerCase();
+        const isContextReplay = normalizedContent.startsWith('project resource document (planning instructions):')
+          || normalizedContent.startsWith('execution-readiness snapshot from prior cycles')
+          || normalizedContent.startsWith('environment systems and tools context:')
+          || normalizedContent.startsWith('observational memory snapshot:')
+          || normalizedContent.startsWith('# environment');
+
+        return !isContextReplay;
+      })
       .map((message) => ({
         ...message,
         content: this.stripTechnicalExecutionBriefXml(String(message.content || '')),
@@ -359,52 +348,16 @@ export class ReasoningNode extends BaseNode {
       content: 'Generate the Technical Execution Brief for the logical next steps in this project.',
     };
 
-    const assistantMessages = this.buildAssistantMessagesForNode(_state, policy, [
-      environmentContextMessage,
-      observationalMemoryMessage,
-      observationalMemorySopMessage,
-      ...(selectedSkillEnvironmentMessage ? [selectedSkillEnvironmentMessage] : []),
+    const assistantMessages = this.dedupeReasoningAssistantMessages([
+      ...(executionReadinessContextMessage ? [executionReadinessContextMessage] : []),
       ...(planningInstructionsMessage ? [planningInstructionsMessage] : []),
       ...reasoningHistoryMessages,
     ]);
-    const userMessages = this.buildUserMessagesForNode(_state, policy, [userDirective]);
+    const userMessages = [userDirective];
 
     return {
       assistantMessages,
       userMessages,
-    };
-  }
-
-  private async getSelectedSkillEnvironmentAssistantMessage(state: BaseThreadState): Promise<ChatMessage | null> {
-    const selectedSkillSlug = String((state.metadata as any).planRetrieval?.selected_skill_slug || '').trim();
-    if (!selectedSkillSlug) {
-      return null;
-    }
-
-    const skill = await skillsRegistry.getSkill(selectedSkillSlug);
-    if (!skill) {
-      return null;
-    }
-
-    const loadedResources = await skill.loadPlannerResources();
-    const environmentResource = loadedResources.find((resource) => {
-      const resourceType = String(resource.type || '').trim().toLowerCase();
-      const normalizedContent = String(resource.content || '').trim().toLowerCase();
-      const contentLooksLikeEnvironment =
-        normalizedContent.startsWith('# environment')
-        || normalizedContent.startsWith('## environment')
-        || normalizedContent.startsWith('## dev environment');
-
-      return resourceType === 'environment' || contentLooksLikeEnvironment;
-    });
-
-    if (!environmentResource?.content) {
-      return null;
-    }
-
-    return {
-      role: 'assistant',
-      content: String(environmentResource.content || '').trim(),
     };
   }
 
@@ -469,5 +422,117 @@ export class ReasoningNode extends BaseNode {
       : JSON.stringify(lastAction.result || '').substring(0, 500);
 
     return `Last action [${status}]: ${lastAction.action_type || 'unknown'}\nResult: ${result}`;
+  }
+
+  private buildExecutionReadinessContextMessage(state: BaseThreadState): ChatMessage | null {
+    const metadataAny = state.metadata as any;
+    const toolRuns = Array.isArray(metadataAny?.__toolRuns) ? metadataAny.__toolRuns : [];
+    if (toolRuns.length === 0) {
+      return null;
+    }
+
+    const latestRuns = [...toolRuns]
+      .sort((a: any, b: any) => Number(a?.timestamp || 0) - Number(b?.timestamp || 0))
+      .slice(-40);
+
+    const discoveryRuns = latestRuns.filter((run: any) => {
+      const toolName = String(run?.toolName || '').toLowerCase();
+      return (
+        toolName.includes('search')
+        || toolName.includes('list')
+        || toolName.includes('browse')
+        || toolName.includes('template')
+        || toolName.includes('workflow')
+      );
+    });
+
+    const credentialRuns = latestRuns.filter((run: any) => {
+      const toolName = String(run?.toolName || '').toLowerCase();
+      return (
+        toolName.includes('credential')
+        || toolName.includes('integration')
+      );
+    });
+
+    const formatRuns = (runs: any[]): string[] => runs.map((run: any) => {
+      const toolName = String(run?.toolName || 'unknown_tool');
+      const args = run?.args && typeof run.args === 'object' ? JSON.stringify(run.args) : '{}';
+      const status = run?.success ? 'ok' : 'failed';
+      const rawResult = run?.success ? run?.result : run?.error;
+      const resultText = String(typeof rawResult === 'string' ? rawResult : JSON.stringify(rawResult || ''))
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 220);
+      return `- ${toolName} ${args} => ${status}${resultText ? ` | ${resultText}` : ''}`;
+    });
+
+    const sharedContextMessages = (Array.isArray(state.messages) ? state.messages : [])
+      .filter((message: any) => {
+        if (message?.role !== 'assistant') return false;
+        const kind = String(message?.metadata?.kind || '').trim();
+        return kind.startsWith('shared_context_');
+      })
+      .slice(-8)
+      .map((message: any) => String(message?.content || '').trim())
+      .filter((content: string) => content.length > 0)
+      .map((content: string) => `- ${content.replace(/\s+/g, ' ').slice(0, 240)}`);
+
+    const lines: string[] = [
+      'Execution-readiness snapshot from prior cycles (reuse these results; avoid redundant lookups):',
+      'Shared context messages:',
+      ...(sharedContextMessages.length > 0 ? sharedContextMessages : ['- none']),
+      'Discovery/tooling checks already performed:',
+      ...(discoveryRuns.length > 0 ? formatRuns(discoveryRuns) : ['- none']),
+      'Credential/integration checks already performed:',
+      ...(credentialRuns.length > 0 ? formatRuns(credentialRuns) : ['- none']),
+      'When writing TEB, treat successful checks above as known facts unless newer contradictory evidence exists.',
+    ];
+
+    return {
+      role: 'assistant',
+      content: lines.join('\n'),
+    };
+  }
+
+  private dedupeReasoningAssistantMessages(messages: ChatMessage[]): ChatMessage[] {
+    const seenKeys = new Set<string>();
+    const result: ChatMessage[] = [];
+
+    for (const message of messages) {
+      if (message.role !== 'assistant') {
+        result.push(message);
+        continue;
+      }
+
+      const kind = String((message as any)?.metadata?.kind || '').trim();
+      const content = String(message.content || '').trim();
+      const normalizedContent = content.toLowerCase();
+
+      let key = '';
+      if (kind.startsWith('shared_context_')) {
+        key = kind;
+      } else if (normalizedContent.startsWith('environment systems and tools context:')) {
+        key = 'shared_context_environment';
+      } else if (normalizedContent.startsWith('observational memory snapshot:')) {
+        key = 'shared_context_observational_memory';
+      } else if (normalizedContent.startsWith('# environment')) {
+        key = 'shared_context_skill_environment';
+      } else if (normalizedContent.startsWith('project resource document (planning instructions):')) {
+        key = 'planning_instructions_message';
+      } else if (normalizedContent.startsWith('execution-readiness snapshot from prior cycles')) {
+        key = 'execution_readiness_snapshot';
+      }
+
+      if (key) {
+        if (seenKeys.has(key)) {
+          continue;
+        }
+        seenKeys.add(key);
+      }
+
+      result.push(message);
+    }
+
+    return result;
   }
 }

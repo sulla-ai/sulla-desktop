@@ -85,6 +85,26 @@ None documented in current context or memory.
 ## Workflow Details
 - **Workflow name**: workflow-stripe-invoice-reminder
 - **High-level node flow**: Stripe Webhook → Check Invoice Status → Conditional Delay (7/14/21 days) → Send Reminder Email → Update Google Sheet → Log Action
-- **Nodes**: 8 | **Connections**: 11 (based on selected template + 2 added nodes)
+
+## Execution Steps (Incremental Build Plan for ReAct loop)
+
+The Technical Execution Briefs MUST build this workflow in small, verifiable increments. 
+The following steps represent a single TEB and ReAct loop.
+Check off each step as it is completed:
+
+- [ ] 1. Create the empty workflow \`workflow-stripe-invoice-reminder\` with basic settings (name, active schedule off, error/success data settings).
+- [ ] 2. Add Stripe Webhook trigger (invoice.created + invoice.payment_failed) + verify webhook fires.
+- [ ] 3. Add Set/Code node to calculate days overdue and determine reminder tier (7/14/21).
+- [ ] 4. Add IF nodes for the three reminder branches + Delay nodes (7 days, 14 days, 21 days).
+- [ ] 5. Add Gmail Send Email node for reminders (with conditional tone based on tier) + attach invoice PDF.
+- [ ] 6. Add Google Sheets node to update master sheet with current payment status.
+- [ ] 7. Add full audit logging (Set node → Data Table or long-term memory write).
+- [ ] 8. Add Error Trigger / Catch nodes + fallback alert to #finance-alerts (email + Slack stub).
+- [ ] 9. Validate full payload with \`validate_workflow_payload\`, save workflow, activate it, and run one manual test with a test invoice.
+- [ ] 10. Add AI personalized text, daily summary report, auto-archive, or Slack high-value alerts.
+
+**Note**: All steps 1–9 can be completed and fully tested immediately (all credentials are Ready). The workflow will be production-ready after step 9 with core reminders and logging active.
+
+Each step must be completed, verified with \`get_workflow\` / \`get_workflow_node_list\`, and confirmed working before the next step begins.
 </FINAL_PRD>
 `;

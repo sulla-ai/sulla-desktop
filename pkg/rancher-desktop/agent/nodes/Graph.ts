@@ -772,7 +772,15 @@ export function createSkillGraph(): Graph<SkillGraphState> {
   
   // Action completes → always route through critic for verification (no bypasses)
   graph.addConditionalEdge('action', state => {
-    const actionResponse = (state.metadata as any).action?.response;
+    const actionMeta = (state.metadata as any).action || {};
+    const actionStatus = String(actionMeta.status || '').trim().toLowerCase();
+    const actionResponse = actionMeta.response;
+
+    if (actionStatus === 'blocked') {
+      console.log('[SkillGraph] Action reported BLOCKED - routing back to reasoning and skipping critic');
+      (state.metadata as any).reactLoopCount = 0;
+      return 'reasoning';
+    }
 
     if (actionResponse) {
       console.log('[SkillGraph] Action response captured - sending to critic for verification');

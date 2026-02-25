@@ -1,9 +1,8 @@
-import { BaseNode, ENVIRONMENT_PROMPT, NodeRunPolicy, OBSERVATIONAL_MEMORY_SOP } from './BaseNode';
+import { BaseNode, NodeRunPolicy } from './BaseNode';
 import { BaseThreadState, NodeResult } from './Graph';
 import type { ChatMessage } from '../languagemodels/BaseLanguageModel';
-import { SullaSettingsModel } from '../database/models/SullaSettingsModel';
 import { skillsRegistry } from '../database/registry/SkillsRegistry';
-import { toolRegistry } from '../tools';
+import { toolRegistry } from '../tools/registry';
 
 type PlannerContext = {
   goal: string;
@@ -12,7 +11,6 @@ type PlannerContext = {
   criticTprd: string;
   selectedSkillSlug: string;
   existingPrd: string;
-  observationalMemorySnapshot: string;
 };
 
 // ============================================================================
@@ -33,13 +31,30 @@ const PRD_PROMPT = `Your job right now is Project Manager + Solutions Architect 
 Your sole responsibility is to create a Project Resource Document (PRD) that will be used
 by the graph to complete the users request.
 
-Always explain what you have to do before producing the PRD and what you're working on
+## Progress Communication Rules (strict)
 
-## PRD Output Rules (strict)
-When you have finalized the PRD:
-- First, show your complete transparent reasoning: credential checks, research, gaps, decisions, flow, blockers, etc.
-- The <FINAL_PRD> block must contain the complete, ready-to-use PRD only.
-- After you have finished ALL thinking and are ready to deliver, output the PRD using this exact wrapper — nothing else after it:
+- While working, you MUST communicate your progress in clear, deterministic language.
+- Every loop you MUST explicitly state:
+  • What you have just done
+  • What you plan to do next
+  • Any blockers or decisions
+- Use short, direct sentences.
+- However, when the entire task is finished you MUST stop all explanation and output ONLY the final wrapper block with nothing after it.
+
+## Tool Call Strategy (strict - highest priority)
+
+- In your VERY FIRST response you MUST make ONE single large parallel batch containing EVERY tool call you believe is needed to achieve complete understanding and create the full PRD.
+- You are allowed and encouraged to call up to 50 tools in parallel in that first batch.
+- Do NOT make small incremental calls (no 1-2 tools at a time).
+- Critical: As soon as you've got everything you need from the context, stop and create the PRD, Time is of the essence.
+
+## Rules (must follow)
+
+- Read the assistant messages for tool results and do not repeatedly call tools like "integration_list", "get_credentials" and "browse_tools" as the results are stored in the assistant messages.
+- Wrap the finalized PRD in the <FINAL_PRD> block
+- The <FINAL_PRD> block must contain the complete, ready-to-use PRD only
+
+## Example PRD:
 
 <FINAL_PRD>
 {{SKILL_PRD}}
@@ -75,6 +90,8 @@ export class PlannerNode extends BaseNode {
     // ----------------------------------------------------------------
     const planningContext = await this.getPlanningContext(state);
     const prompt = await this.buildPromptWithSkillContext(PRD_PROMPT, planningContext.selectedSkillSlug);
+    await this.appendSelectedSkillEnvironmentContextToGraphState(state, planningContext.selectedSkillSlug);
+    await this.preloadPlannerReadOperationTools(state);
 
     // ----------------------------------------------------------------
     // 2. GENERATE PRD — LLM is the only author
@@ -104,6 +121,24 @@ export class PlannerNode extends BaseNode {
     };
   }
 
+  private async preloadPlannerReadOperationTools(state: BaseThreadState): Promise<void> {
+    try {
+      const browseTools = await toolRegistry.getTool('browse_tools');
+      const result = await browseTools.invoke({ operationType: 'read' }, state);
+      if (!result?.success) {
+        console.warn('[PlannerNode] Failed to preload read-operation tools via browse_tools:', result?.error || result?.result);
+      }
+    } catch (error) {
+      console.warn('[PlannerNode] Error preloading read-operation tools:', error);
+    }
+  }
+
+  private getPlannerAllowedToolNames(): string[] {
+    return toolRegistry
+      .getToolNames()
+      .filter((toolName) => toolName !== 'browse_tools');
+  }
+
   // ======================================================================
   // CONTEXT EXTRACTION
   // ======================================================================
@@ -130,7 +165,6 @@ export class PlannerNode extends BaseNode {
     const criticTprd = plannerMeta.critic_tprd || '';
     const selectedSkillSlug = planRetrieval.selected_skill_slug || 'No selected skill slug provided.';
     const existingPrd = (state.metadata as any).planning_instructions || '';
-    const observationalMemorySnapshot = await this.getObservationalMemorySnapshot();
 
     console.log(`[PlannerNode] Goal: "${goal}"`);
 
@@ -141,7 +175,6 @@ export class PlannerNode extends BaseNode {
       criticTprd,
       selectedSkillSlug,
       existingPrd,
-      observationalMemorySnapshot,
     };
   }
 
@@ -171,11 +204,12 @@ export class PlannerNode extends BaseNode {
       persistAssistantToNodeState: true,
       persistToolResultsToNodeState: true,
       nodeStateNamespace: 'planner',
-      includeGraphAssistantMessages: false,
+      includeGraphAssistantMessages: true,
       includeGraphUserMessages: false,
     };
 
     const nodeMessages = await this.buildPlannerNodeMessages(state, policy, planningContext);
+    const allowedToolNames = this.getPlannerAllowedToolNames();
 
     // Tools are intentionally ENABLED — the LLM researches the environment
     // then produces the PRD as its final response when done with tool calls.
@@ -184,6 +218,7 @@ export class PlannerNode extends BaseNode {
       maxTokens: 6144,
       nodeRunPolicy: policy,
       nodeRunMessages: nodeMessages,
+      allowedToolNames,
     });
 
     if (!reply) {
@@ -209,7 +244,7 @@ export class PlannerNode extends BaseNode {
   }
 
   private extractFinalPrdContent(rawOutput: string): string {
-    const output = String(rawOutput || '').trim();
+    const output = this.ensureFinalPrdWrapperClosed(rawOutput);
     const wrapperRegex = /<FINAL_PRD>([\s\S]*?)<\/FINAL_PRD>/gi;
     let lastMatchContent: string | null = null;
 
@@ -224,16 +259,32 @@ export class PlannerNode extends BaseNode {
   }
 
   private extractNonFinalPlannerChatter(rawOutput: string): string {
-    const output = String(rawOutput || '').trim();
+    const output = this.ensureFinalPrdWrapperClosed(rawOutput);
     if (!output.length) {
       return '';
     }
 
     const withoutFinalPrdBlocks = output
       .replace(/<FINAL_PRD>[\s\S]*?<\/FINAL_PRD>/gi, '')
+      .replace(/<FINAL_PRD>[\s\S]*$/gi, '')
       .trim();
 
     return withoutFinalPrdBlocks;
+  }
+
+  private ensureFinalPrdWrapperClosed(rawOutput: string): string {
+    const output = String(rawOutput || '').trim();
+    if (!output.length) {
+      return '';
+    }
+
+    const hasOpenTag = /<FINAL_PRD>/i.test(output);
+    const hasCloseTag = /<\/FINAL_PRD>/i.test(output);
+    if (hasOpenTag && !hasCloseTag) {
+      return `${output}\n</FINAL_PRD>`;
+    }
+
+    return output;
   }
 
   private isArticleYamlCompatible(rawOutput: string): boolean {
@@ -308,23 +359,9 @@ export class PlannerNode extends BaseNode {
       criticTprd,
       selectedSkillSlug,
       existingPrd,
-      observationalMemorySnapshot,
     } = planningContext;
 
-    const plannerContextMessages: ChatMessage[] = [
-      {
-        role: 'assistant',
-        content: `Environment systems and tools context:\n${this.buildEnvironmentContextAssistantMessage()}`,
-      },
-      {
-        role: 'assistant',
-        content: `Observational memory snapshot:\n${observationalMemorySnapshot}`,
-      },
-      {
-        role: 'assistant',
-        content: OBSERVATIONAL_MEMORY_SOP,
-      },
-    ];
+    const plannerContextMessages: ChatMessage[] = [];
 
     const selectedSkillContextMessages = await this.buildSelectedSkillAssistantMessages(selectedSkillSlug);
     plannerContextMessages.push(...selectedSkillContextMessages);
@@ -336,8 +373,21 @@ export class PlannerNode extends BaseNode {
           return false;
         }
 
+        const kind = String((message as any)?.metadata?.kind || '').trim();
+        if (kind.startsWith('shared_context_')) {
+          return false;
+        }
+
         const content = String(message.content || '').trim();
         if (!content.length) {
+          return false;
+        }
+
+        const lowerContent = content.toLowerCase();
+        const isLegacySharedContext = lowerContent.startsWith('environment systems and tools context:')
+          || lowerContent.startsWith('observational memory snapshot:')
+          || lowerContent.startsWith('# environment');
+        if (isLegacySharedContext) {
           return false;
         }
 
@@ -345,7 +395,7 @@ export class PlannerNode extends BaseNode {
           return true;
         }
 
-        const normalizedContent = content.toLowerCase();
+        const normalizedContent = lowerContent;
         const isGoalEcho = normalizedContent === normalizedGoal
           || normalizedContent.startsWith(`${normalizedGoal}\nslug:`)
           || normalizedContent.startsWith(`goal:\n${normalizedGoal}`);
@@ -387,13 +437,51 @@ export class PlannerNode extends BaseNode {
       });
     }
 
-    const assistantMessages = this.buildAssistantMessagesForNode(state, policy, plannerContextMessages);
-    const userMessages = this.buildUserMessagesForNode(state, policy, [plannerDirective]);
+    const assistantMessages = this.dedupePlannerSharedContextAssistantMessages(plannerContextMessages);
+    const userMessages = [plannerDirective];
 
     return {
       assistantMessages,
       userMessages,
     };
+  }
+
+  private dedupePlannerSharedContextAssistantMessages(messages: ChatMessage[]): ChatMessage[] {
+    const seenSharedContextKeys = new Set<string>();
+    const result: ChatMessage[] = [];
+
+    for (const message of messages) {
+      if (message.role !== 'assistant') {
+        result.push(message);
+        continue;
+      }
+
+      const kind = String((message as any)?.metadata?.kind || '').trim();
+      const content = String(message.content || '').trim();
+      const normalizedContent = content.toLowerCase();
+
+      let sharedContextKey = '';
+      if (kind.startsWith('shared_context_')) {
+        sharedContextKey = kind;
+      } else if (normalizedContent.startsWith('environment systems and tools context:')) {
+        sharedContextKey = 'shared_context_environment';
+      } else if (normalizedContent.startsWith('observational memory snapshot:')) {
+        sharedContextKey = 'shared_context_observational_memory';
+      } else if (normalizedContent.startsWith('# environment')) {
+        sharedContextKey = 'shared_context_skill_environment';
+      }
+
+      if (sharedContextKey) {
+        if (seenSharedContextKeys.has(sharedContextKey)) {
+          continue;
+        }
+        seenSharedContextKeys.add(sharedContextKey);
+      }
+
+      result.push(message);
+    }
+
+    return result;
   }
 
   private buildCompletedChecksAssistantMessage(state: BaseThreadState): ChatMessage | null {
@@ -524,10 +612,15 @@ export class PlannerNode extends BaseNode {
     const nonPrdResources = loadedResources.filter((resource: any) => {
       const resourcePath = String(resource?.path || '').trim().toLowerCase();
       const resourceType = String(resource?.type || '').trim().toLowerCase();
+      const normalizedContent = String(resource?.content || '').trim().toLowerCase();
       const isPrdTemplatePath = resourcePath.includes('/templates/prd.') || resourcePath.endsWith('/templates/prd.ts');
       const isPrdTemplateType = resourceType === 'template' && resourcePath.includes('/templates/');
+      const isEnvironmentResource = resourceType === 'environment'
+        || normalizedContent.startsWith('# environment')
+        || normalizedContent.startsWith('## environment')
+        || normalizedContent.startsWith('## dev environment');
 
-      return !(isPrdTemplatePath || isPrdTemplateType);
+      return !(isPrdTemplatePath || isPrdTemplateType || isEnvironmentResource);
     });
 
     const resourceMessages: ChatMessage[] = nonPrdResources.map((resource: any) => ({
@@ -536,6 +629,62 @@ export class PlannerNode extends BaseNode {
     }));
 
     return [manifestMessage, ...resourceMessages];
+  }
+
+  private async appendSelectedSkillEnvironmentContextToGraphState(
+    state: BaseThreadState,
+    selectedSkillSlug: string,
+  ): Promise<void> {
+    const existingMessages = Array.isArray(state.messages) ? state.messages : [];
+    const retainedMessages = existingMessages.filter((message: any) => {
+      const metadata = message?.metadata || {};
+      const kind = String(metadata?.kind || '').trim();
+      return kind !== 'shared_context_skill_environment';
+    });
+
+    const skill = await this.resolveSkillBySelectedSlug(selectedSkillSlug);
+    if (!skill) {
+      if (retainedMessages.length !== existingMessages.length) {
+        state.messages = retainedMessages;
+        this.bumpStateVersion(state);
+      }
+      return;
+    }
+
+    const loadedResources = await skill.loadPlannerResources();
+    const environmentResource = loadedResources.find((resource: any) => {
+      const resourceType = String(resource?.type || '').trim().toLowerCase();
+      const normalizedContent = String(resource?.content || '').trim().toLowerCase();
+      return resourceType === 'environment'
+        || normalizedContent.startsWith('# environment')
+        || normalizedContent.startsWith('## environment')
+        || normalizedContent.startsWith('## dev environment');
+    });
+
+    const environmentContent = String(environmentResource?.content || '').trim();
+    if (!environmentContent) {
+      if (retainedMessages.length !== existingMessages.length) {
+        state.messages = retainedMessages;
+        this.bumpStateVersion(state);
+      }
+      return;
+    }
+
+    state.messages = [
+      ...retainedMessages,
+      {
+        role: 'assistant',
+        content: environmentContent,
+        metadata: {
+          nodeId: this.id,
+          nodeName: this.name,
+          kind: 'shared_context_skill_environment',
+          selectedSkillSlug: String(selectedSkillSlug || '').trim(),
+          timestamp: Date.now(),
+        },
+      } as ChatMessage,
+    ];
+    this.bumpStateVersion(state);
   }
 
   private async resolveSkillBySelectedSlug(selectedSkillSlug: string): Promise<any | null> {
@@ -570,57 +719,6 @@ export class PlannerNode extends BaseNode {
       .find((msg) => msg.role === 'user' && String(msg.content || '').trim());
 
     return latestUserMessage ? String(latestUserMessage.content).trim() : '';
-  }
-
-  private buildEnvironmentContextAssistantMessage(): string {
-    let environmentContext = ENVIRONMENT_PROMPT;
-
-    const categoriesWithDesc = toolRegistry.getCategoriesWithDescriptions();
-    const categoriesText = categoriesWithDesc
-      .map(({ category, description }) => `- ${category}: ${description}`)
-      .join('\n');
-    environmentContext = environmentContext.replace('{{tool_categories}}', categoriesText);
-
-    const formattedTime = new Date().toLocaleString('en-US', {
-      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: true,
-    });
-    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'unknown';
-
-    environmentContext = environmentContext.replace('{{formattedTime}}', formattedTime);
-    environmentContext = environmentContext.replace('{{timeZone}}', timeZone);
-
-    return environmentContext.trim();
-  }
-
-  private async getObservationalMemorySnapshot(): Promise<string> {
-    try {
-      const observationalMemory = await SullaSettingsModel.get('observationalMemory', {});
-      const raw =
-        typeof observationalMemory === 'string'
-          ? JSON.parse(observationalMemory || '[]')
-          : observationalMemory;
-
-      if (!Array.isArray(raw) || raw.length === 0) {
-        return 'No observational memory entries available.';
-      }
-
-      return raw
-        .slice(-10)
-        .map((entry: any) => `${entry?.priority || ''} ${entry?.timestamp || ''} ${entry?.content || ''}`.trim())
-        .filter((line: string) => Boolean(line))
-        .join('\n');
-    } catch (error) {
-      console.warn('[PlannerNode] Failed to read observational memory snapshot:', error);
-      return 'Observational memory unavailable due to parse/read error.';
-    }
   }
 
   private prunePlannerMessagesFromGraphState(state: BaseThreadState): void {

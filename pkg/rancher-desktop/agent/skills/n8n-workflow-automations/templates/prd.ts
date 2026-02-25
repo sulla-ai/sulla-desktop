@@ -145,4 +145,23 @@ Schedule Trigger (6AM PT)
 | 16 | \`Post to Slack\` | Slack | Post digest to designated channel |
 | 17 | \`Error Accumulator\` | Set | Collect any source errors |
 | 18 | \`Slack Error Alert\` | Slack | Alert to #automation-alerts on total failure |
+
+## Execution Steps (Incremental Build Plan for ReAct loop)
+
+The Technical Execution Briefs MUST build this workflow in small, verifiable increments. 
+The following steps represent a single TEB and ReAct loop.
+Check off each step as it is completed:
+
+- [ ] 1. Create the empty workflow \`workflow-daily-sales-summary\` with basic settings (name, timezone, saveDataErrorExecution: all, saveDataSuccessExecution: last).
+- [ ] 2. Add Schedule Trigger node (daily at 08:00 America/Los_Angeles) + verify with manual trigger.
+- [ ] 3. Add Stripe node (or HTTP Request) to fetch today's sales data + Set node to normalize output.
+- [ ] 4. Add Google Sheets node to pull additional sales data + Merge node to combine both sources.
+- [ ] 5. Add Code node to calculate key metrics (revenue, orders, top products, growth %) + Set node for summary data.
+- [ ] 6. Add HTML node (or Set + Function) to generate formatted email body with tables/charts.
+- [ ] 7. Add Gmail Send Email node (to defined recipients) + attach CSV export of raw data.
+- [ ] 8. Wrap all data-fetch nodes in Try/Catch (Error Trigger + IF) + fallback alert email to admin on failure.
+- [ ] 9. Validate full payload with validate_workflow_payload, activate workflow, and run one manual test.
+- [ ] 10. (Later cycles) Add trend analysis, AI executive summary, Slack notification, or weekly roll-up.
+
+Each step must be completed, verified with \`get_workflow\` / \`get_workflow_node_list\`, and confirmed working before the next step begins.
 `;

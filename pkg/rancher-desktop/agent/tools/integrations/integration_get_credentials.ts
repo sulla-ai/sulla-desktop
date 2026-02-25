@@ -51,7 +51,7 @@ Last sync at: ${status.last_sync_at ? new Date(status.last_sync_at).toLocaleStri
 
 Credentials:\n`;
       credentials.forEach(cred => {
-        responseString += `- ${cred.title} (${cred.key}): ${cred.has_value ? '[SET]' : '[NOT SET]'} (${cred.required ? 'Required' : 'Optional'})\n`;
+        responseString += `- ${cred.title} (${cred.key}): ${cred.has_value ? String(cred.value) : '[NOT SET]'} (${cred.required ? 'Required' : 'Optional'})\n`;
       });
 
       return {

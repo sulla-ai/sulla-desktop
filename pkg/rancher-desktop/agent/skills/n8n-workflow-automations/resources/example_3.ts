@@ -82,6 +82,22 @@ None documented in current context or memory.
 ## Workflow Details
 - **Workflow name**: workflow-daily-team-performance-report
 - **High-level node flow**: Schedule Trigger → Read Google Sheet → Calculate Metrics → Format Report → Post to Slack → Send Email
-- **Nodes**: 7 | **Connections**: 9 (based on selected template + custom calculation node)
+
+## Execution Steps (Incremental Build Plan for ReAct loop)
+
+The Technical Execution Briefs MUST build this workflow in small, verifiable increments. 
+The number of steps will vary (3–25) depending on workflow complexity — always choose the smallest logical chunks that can be fully built and tested in one cycle.
+Check off each step as it is completed:
+
+- [ ] 1. Create the empty workflow \`workflow-daily-team-performance-report\` with basic settings.
+- [ ] 2. Add Schedule Trigger node (daily at 07:30 America/Los_Angeles) + verify with manual trigger.
+- [ ] 3. Add Google Sheets node to read master performance data + normalize output.
+- [ ] 4. Add Code node to calculate all key metrics and highlight top/bottom performers.
+- [ ] 5. Add formatting + Slack Post Message + Gmail Send Email nodes with CSV attachment.
+- [ ] 6. Add Error Trigger / Catch nodes + fallback alert, then validate, activate, and run one manual test.
+
+**Note**: The exact number of steps will always match what is needed to keep each increment small and testable. All steps above can be completed immediately since credentials are Ready.
+
+Each step must be completed, verified with \`get_workflow\` / \`get_workflow_node_list\`, and confirmed working before the next step begins.
 </FINAL_PRD>
 `;

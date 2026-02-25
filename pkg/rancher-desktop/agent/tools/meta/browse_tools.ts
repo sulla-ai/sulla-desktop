@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from "../base";
+import { BaseTool, ToolRegistration, ToolResponse, ToolOperation } from "../base";
 import { toolRegistry } from "../registry";
 
 /**
@@ -18,8 +18,9 @@ export class BrowseToolsWorker extends BaseTool {
   }
 
   protected async _validatedCall(input: any): Promise<ToolResponse> {
-    const { category, query } = input;
+    const { category, query, operationType, operationTypes } = input;
     const availableCategories = toolRegistry.getCategories();
+    const requestedOperationTypes = this.normalizeOperationTypes(operationType, operationTypes);
 
     if (category && !availableCategories.includes(category)) {
       return {
@@ -42,13 +43,20 @@ export class BrowseToolsWorker extends BaseTool {
         return false;
       }
 
+      if (requestedOperationTypes.length > 0) {
+        const toolOperationTypes = this.normalizeOperationTypes(undefined, tool?.metadata?.operationTypes);
+        if (!toolOperationTypes.some((type) => requestedOperationTypes.includes(type))) {
+          return false;
+        }
+      }
+
       return true;
     });
 
     if (filteredTools.length === 0) {
       return {
         successBoolean: false,
-        responseString: `No tools found${category ? ` in category "${category}"` : ""}${query ? ` matching "${query}"` : ""}.\n\nAvailable categories: ${toolRegistry.getCategories().join(", ")}`
+        responseString: `No tools found${category ? ` in category "${category}"` : ""}${query ? ` matching "${query}"` : ""}${requestedOperationTypes.length ? ` for operation type(s) "${requestedOperationTypes.join(', ')}"` : ''}.\n\nAvailable categories: ${toolRegistry.getCategories().join(", ")}`
       }
     }
 
@@ -81,9 +89,35 @@ export class BrowseToolsWorker extends BaseTool {
 
     return {
       successBoolean: true,
-      responseString: `Found ${filteredTools.length} tools${category ? ` in category "${category}"` : ""}${query ? ` matching "${query}"` : ""}.
+      responseString: `Found ${filteredTools.length} tools${category ? ` in category "${category}"` : ""}${query ? ` matching "${query}"` : ""}${requestedOperationTypes.length ? ` for operation type(s) "${requestedOperationTypes.join(', ')}"` : ''}.
 ${JSON.stringify(toolDetails, null, 2)}`
     };
+  }
+
+  private normalizeOperationTypes(single?: unknown, many?: unknown): ToolOperation[] {
+    const allowed: ToolOperation[] = ['read', 'create', 'update', 'delete', 'execute'];
+    const set = new Set<ToolOperation>();
+
+    const normalize = (value: unknown): ToolOperation | null => {
+      const normalized = String(value || '').trim().toLowerCase();
+      return (allowed as string[]).includes(normalized) ? normalized as ToolOperation : null;
+    };
+
+    const singleNormalized = normalize(single);
+    if (singleNormalized) {
+      set.add(singleNormalized);
+    }
+
+    if (Array.isArray(many)) {
+      for (const value of many) {
+        const normalized = normalize(value);
+        if (normalized) {
+          set.add(normalized);
+        }
+      }
+    }
+
+    return Array.from(set);
   }
 }
 
@@ -96,6 +130,8 @@ export const browseToolsRegistration: ToolRegistration = {
   schemaDef: {
     category: { type: 'string' as const, optional: true, description: "Specific category of tools (e.g. meta, fs, workspace, slack, n8n)" },
     query: { type: 'string' as const, optional: true, description: "Keyword to filter tool names/descriptions" },
+    operationType: { type: 'enum' as const, optional: true, enum: ['read', 'create', 'update', 'delete', 'execute'], description: "Filter tools by a single operation type." },
+    operationTypes: { type: 'array' as const, optional: true, description: "Filter tools by multiple operation types.", items: { type: 'enum' as const, enum: ['read', 'create', 'update', 'delete', 'execute'] } },
   },
   workerClass: BrowseToolsWorker,
 };

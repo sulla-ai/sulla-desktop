@@ -143,46 +143,61 @@ async function getSoulPrompt(): Promise<string> {
 
 export const ENVIRONMENT_PROMPT = `Core Identity & Principles and Environment & Tools
 
-## Persistent Environment & Tools
-You operate inside a custom runtime with these built-in persistent systems. Use them proactively as first resort. Never improvise alternatives.
+## Tool responses
+Tool responses are delivered back as assistant messages.
 
-You are a strategic autonomous agent. Make real progress. Use these environment resources relentlessly.
+## Persistent Environment & Tools
+The agent operates inside a custom runtime that contains the following built-in persistent systems.
 
 Current datetime: {{formattedTime}}
-Computers set time zone: {{timeZone}}
+Computer time zone: {{timeZone}}
 
 ### Calendar System
-Single source of truth for time-based actions. Every reminder, meeting, recurring report, or scheduled task (e.g., "morning report at 7am") creates or updates a calendar event. Events auto-wake you at trigger time with full context prompt. Use for your own scheduling: daily reviews, follow-ups, recurring automations. Always check calendar before committing to deadlines.
+The calendar system is the single source of truth for all time-based actions. Reminders, meetings, recurring reports, and scheduled tasks are stored as calendar events. Events automatically trigger at the scheduled time and provide full context.
 
-### Memory Systems
-**Observational Memory** (short-term context): 
-Short-term context layer. On any trigger (preferences, commitments, patterns, breakthroughs, new artifacts), call add_observational_memory with one neutral sentence + slug linking to long-term items (workflow, calendar event, workspace, project doc). This bridges conversations.
+### Observational Memory (short-term context layer)
+Observational Memory is the short-term context layer. It consists of timestamped snapshot entries delivered as assistant messages.
 
-#### Long-term Memory (vector DB)
-Your core brain. Search it first on every task.  
-Your core knowledge and identity. Search it first on every task. Store and retrieve: SOPs (thousands of skills), project docs (solutions architect format: user stories, MoSCoW priorities, architecture, acceptance criteria), Wikipedia-style pages on everything you encounter, people, companies, projects, friends, customers, their businesses/families/events. When starting projects, create full project resource doc as source of truth. Extract SOPs from any learned skill/platform and store here. Always extend, tag, and categorize properly with accurate relationships.
+Each entry follows this exact structure:
+- A UTC timestamp in ISO format (YYYY-MM-DDTHH:MM:SS.sssZ)
+- A status indicator (🔴 for significant or confirmed events, 🟡 for finalized or completed milestones)
+- One or more neutral factual sentences that record user requests, confirmations, formal submissions, or task state changes
+- Optional reference slugs that link to related long-term memory items
+
+The current Observational Memory snapshot contains repeated chronological records of user confirmations and formal requests for the specific n8n workflow PRD titled “daily X/Twitter + RSS + GitHub AI intelligence monitor” that uses Sulla’s local AI endpoint[](http://host.docker.internal:3000/v1/chat/completions), stores curated dated reports to long-term memory, and delivers a Slack digest for YouTube topic ideation.
+
+Additional entries are created automatically when significant user interactions, repeated confirmations, finalized requests, or major progress milestones occur. The full current snapshot is always included in the context for continuity.
+
+### Long-term Memory (vector database)
+Long-term Memory is the core knowledge base and identity store. It contains:
+- SOPs and skills
+- Project documentation in solutions-architect format (user stories, MoSCoW priorities, architecture, acceptance criteria)
+- Wikipedia-style reference pages on people, companies, projects, friends, customers, businesses, families, and events
+- Project resource documents that serve as the source of truth for each active project
 
 ### Workspaces
-Dedicated folders in user data dir for persistent files and dev work. Use create_workspace tool to make one per project. Store all code, assets, outputs here. Access via list/read tools. Execute commands only with full absolute paths (no ~ or relative). Ideal for software builds, downloads, data processing.
+Workspaces are dedicated folders in the user data directory for persistent files and development work. One workspace exists per project. They store code, assets, and outputs. Access occurs via list and read tools. Commands execute with full absolute paths.
 
 ### Docker Environment
-You run on Docker with full host access. Launch any safe container/image from internet. For dev: always mount workspace dir into container via docker-compose for hot reload (e.g., Node.js changes appear instantly on refresh).
+The runtime runs on Docker with full host access. Safe containers and images from the internet can be launched. Workspace directories are mounted into containers via docker-compose for hot reloading.
 
 ### Automation Workflows (n8n)
-Your hands and feet for external automation. Thousands of community templates available. Search templates first, import/adapt, or build custom. When user requests automation, create/maintain workflow, push to n8n, test, document in long-term memory with slug.
+n8n is the automation workflow engine. It includes access to thousands of community templates.
 
 ### Tools
-Use the built in tools to quickly and accurately accomplish tasks in their categories. If no tool exists, use the "exec" tool to run commands (be careful).
-Use the browse_tools to locate the other available tools.
-Available Tool Categories: {{tool_categories}}
+Built-in tools exist across multiple categories: {{tool_categories}}.  
+The browse_tools tool lists all available tools.  
+The exec tool runs system commands when no dedicated tool exists.
 
-### You have an OpenAI compatible API
-You can configure other other services to communicate back to you, such as n8n workflows when setting up an AI node. To access your endpoint from the parent machine you can use http://localhost:3000
-When you need access from a container (from Docker/Kubernetes pods) use http://host.docker.internal:3000
+### OpenAI Compatible API
+An OpenAI-compatible API server runs locally in this environment.
+- From the parent machine: http://localhost:3000
+- From inside Docker containers: http://host.docker.internal:3000
 All endpoints are prefixed with /v1/.
 
-### Your codebase
-Here's your codebase https://github.com/sulla-ai/sulla-desktop you can check the doc folder to learn more about your architecture.
+### Codebase
+Your agent codebase is located at https://github.com/sulla-ai/sulla-desktop.  
+Architecture and system documentation reside in the /doc folder.
 
 `;
 
@@ -624,6 +639,8 @@ export abstract class BaseNode<T extends BaseThreadState = BaseThreadState> {
             return;
         }
 
+        this.ensureNodeMessageLaneInitializedFromGraph(state, namespace);
+
         const shouldPersist = messageType === 'assistant'
             ? (policy.persistAssistantToNodeState || !policy.persistAssistantToGraph)
             : (policy.persistToolResultsToNodeState || !policy.persistToolResultsToGraph);
@@ -656,13 +673,43 @@ export abstract class BaseNode<T extends BaseThreadState = BaseThreadState> {
         this.bumpStateVersion(state);
     }
 
+    private ensureNodeMessageLaneInitializedFromGraph(state: BaseThreadState, namespace: string): void {
+        const metadataAny = state.metadata as any;
+        if (!metadataAny[namespace] || typeof metadataAny[namespace] !== 'object') {
+            metadataAny[namespace] = {};
+        }
+
+        if (metadataAny[namespace].graphSeedInitialized === true) {
+            if (!Array.isArray(metadataAny[namespace].messages)) {
+                metadataAny[namespace].messages = [];
+            }
+            return;
+        }
+
+        const graphMessages = Array.isArray(state.messages)
+            ? state.messages.map((msg) => ({ ...msg }))
+            : [];
+
+        metadataAny[namespace].messages = graphMessages;
+        metadataAny[namespace].graphSeedInitialized = true;
+    }
+
     protected buildAssistantMessagesForNode(
         state: BaseThreadState,
         policy: Required<NodeRunPolicy>,
         override?: ChatMessage[],
     ): ChatMessage[] {
         if (override) {
-            return override.filter(msg => msg.role === 'assistant').map(msg => ({ ...msg }));
+            const overrideAssistant = override.filter(msg => msg.role === 'assistant').map(msg => ({ ...msg }));
+            if (!policy.includeGraphAssistantMessages) {
+                return overrideAssistant;
+            }
+
+            const graphAssistant = (state.messages || [])
+                .filter(msg => msg.role === 'assistant')
+                .map(msg => ({ ...msg }));
+
+            return [...graphAssistant, ...overrideAssistant];
         }
 
         if (!policy.includeGraphAssistantMessages) {
@@ -680,7 +727,16 @@ export abstract class BaseNode<T extends BaseThreadState = BaseThreadState> {
         override?: ChatMessage[],
     ): ChatMessage[] {
         if (override) {
-            return override.filter(msg => msg.role === 'user').map(msg => ({ ...msg }));
+            const overrideUser = override.filter(msg => msg.role === 'user').map(msg => ({ ...msg }));
+            if (!policy.includeGraphUserMessages) {
+                return overrideUser;
+            }
+
+            const graphUser = (state.messages || [])
+                .filter(msg => msg.role === 'user')
+                .map(msg => ({ ...msg }));
+
+            return [...graphUser, ...overrideUser];
         }
 
         if (!policy.includeGraphUserMessages) {
@@ -715,6 +771,14 @@ export abstract class BaseNode<T extends BaseThreadState = BaseThreadState> {
             ...defaults,
             ...(input.policy || {}),
         };
+
+        let namespace = String(policy.nodeStateNamespace || '').trim();
+        if (!namespace) {
+            namespace = `__messages_${this.id}`;
+        }
+        if (namespace) {
+            this.ensureNodeMessageLaneInitializedFromGraph(state, namespace);
+        }
 
         const systemMessage = this.buildSystemPromptForNode(input.systemPrompt, input.systemMessageOverride);
         let mergedMessages: ChatMessage[] = [];
@@ -1433,9 +1497,7 @@ export abstract class BaseNode<T extends BaseThreadState = BaseThreadState> {
 
         const namespace = String(this.currentNodeRunContext.policy.nodeStateNamespace || '').trim();
         if (namespace) {
-            if (!metadataAny[namespace] || typeof metadataAny[namespace] !== 'object') {
-                metadataAny[namespace] = {};
-            }
+            this.ensureNodeMessageLaneInitializedFromGraph(state, namespace);
 
             if (!Array.isArray(metadataAny[namespace].toolRuns)) {
                 metadataAny[namespace].toolRuns = [];

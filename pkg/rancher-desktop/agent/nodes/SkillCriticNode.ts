@@ -33,6 +33,10 @@ An executor has received this document and attempted to complete the steps insid
 {{technical_instructions}}
 ---
 
+## Action Conversation Transcript (direct from Action node-local history)
+{{action_transcript}}
+---
+
 Now you have in the message history all of the steps taken by the executor in order to attempt to complete the technical instructions.
 I want you to review the work that's been done against the technical instructions having the full project context you need to determine if this technical resource document and the steps inside it has been completed satisfactorally.
 It's likely that you will need to disregard much of what the executor says they have done and look to see what they actually have done from the tool calls to find factual evidence that this technical resource has been completed satisfactorally.
@@ -139,6 +143,13 @@ export class SkillCriticNode extends BaseNode {
       evaluatedAt: Date.now(),
     };
 
+    this.appendNegativeCriticFeedbackToGraphState(state, {
+      technicalCompleted,
+      technicalFeedback: (data.technical_feedback || '').trim(),
+      projectComplete,
+      projectFeedback: (data.project_feedback || '').trim(),
+    });
+
     console.log(`[SkillCritic] technical_completed=${technicalCompleted} project_complete=${projectComplete}`);
 
     return { state, decision: { type: 'next' } };
@@ -147,9 +158,82 @@ export class SkillCriticNode extends BaseNode {
   private buildCriticPrompt(state: BaseThreadState): string {
     const planningInstructions = (state.metadata as any).planning_instructions || 'No planning instructions available.';
     const technicalInstructions = (state.metadata as any).technical_instructions || 'No technical instructions available.';
+    const actionTranscript = this.buildActionTranscript(state);
 
     return SKILL_CRITIC_PROMPT
       .replace('{{planning_instructions}}', planningInstructions)
-      .replace('{{technical_instructions}}', technicalInstructions);
+      .replace('{{technical_instructions}}', technicalInstructions)
+      .replace('{{action_transcript}}', actionTranscript);
+  }
+
+  private buildActionTranscript(state: BaseThreadState): string {
+    const actionMessages = (((state.metadata as any).__messages_action?.messages || []) as Array<{
+      role?: string;
+      content?: unknown;
+      metadata?: Record<string, any>;
+    }>);
+
+    if (!actionMessages.length) {
+      return 'No action node-local message history available.';
+    }
+
+    return actionMessages
+      .map((message, index) => {
+        const role = String(message?.role || 'assistant').trim() || 'assistant';
+        const content = String(message?.content || '').trim();
+        const metadata = message?.metadata || {};
+        const toolName = String(metadata?.toolName || '').trim();
+        const toolRunId = String(metadata?.toolRunId || '').trim();
+        const label = toolName
+          ? `tool=${toolName}${toolRunId ? ` run_id=${toolRunId}` : ''}`
+          : role;
+
+        return `[#${index + 1}] ${label}\n${content || '[empty message]'}`;
+      })
+      .join('\n\n');
+  }
+
+  private appendNegativeCriticFeedbackToGraphState(
+    state: BaseThreadState,
+    decision: {
+      technicalCompleted: boolean;
+      technicalFeedback: string;
+      projectComplete: boolean;
+      projectFeedback: string;
+    }
+  ): void {
+    if (decision.technicalCompleted && decision.projectComplete) {
+      return;
+    }
+
+    const feedbackParts: string[] = [];
+    if (!decision.technicalCompleted && decision.technicalFeedback) {
+      feedbackParts.push(`Technical completion failed: ${decision.technicalFeedback}`);
+    }
+    if (!decision.projectComplete && decision.projectFeedback) {
+      feedbackParts.push(`Project completion failed: ${decision.projectFeedback}`);
+    }
+
+    const content = feedbackParts.join('\n\n').trim();
+    if (!content) {
+      return;
+    }
+
+    if (!Array.isArray(state.messages)) {
+      state.messages = [];
+    }
+
+    state.messages.push({
+      role: 'assistant',
+      content,
+      metadata: {
+        nodeId: this.id,
+        nodeName: this.name,
+        kind: 'critic_negative_feedback',
+        timestamp: Date.now(),
+      },
+    });
+
+    this.bumpStateVersion(state);
   }
 }
