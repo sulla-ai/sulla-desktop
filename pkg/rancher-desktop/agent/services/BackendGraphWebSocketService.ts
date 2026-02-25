@@ -155,12 +155,17 @@ export class BackendGraphWebSocketService {
       console.log('[BackendGraphWS] Added user message to state, total messages:', state.messages.length);
 
       // Reset pause flags when real user input comes in
+      const resumeNodeId = state.metadata.waitingForUser === true
+        ? String(state.metadata.currentNodeId || '').trim()
+        : '';
+      const shouldResumeFromCurrentNode = !!resumeNodeId && resumeNodeId !== 'input_handler';
+
       state.metadata.cycleComplete = false;
       state.metadata.waitingForUser = false;
       console.log('[BackendGraphWS] Reset pause flags, starting graph execution');
 
       // Execute on the persistent graph
-      await graph.execute(state, 'input_handler');
+      await graph.execute(state, shouldResumeFromCurrentNode ? resumeNodeId : 'input_handler');
       console.log('[BackendGraphWS] Graph execution completed');
 
       // Build response from final state

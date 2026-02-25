@@ -115,12 +115,17 @@ export class FrontendGraphWebSocketService {
       state.messages.push(newMsg as any);
 
       // Reset pause flags when real user input comes in
+      const resumeNodeId = state.metadata.waitingForUser === true
+        ? String(state.metadata.currentNodeId || '').trim()
+        : '';
+      const shouldResumeFromCurrentNode = !!resumeNodeId && resumeNodeId !== 'input_handler';
+
       state.metadata.cycleComplete = false;
       state.metadata.waitingForUser = false;
 
       // Execute on the persistent SkillGraph starting from input_handler
       // The graph nodes (especially OutputNode) will send WebSocket messages directly
-      await graph.execute(state, 'input_handler');
+      await graph.execute(state, shouldResumeFromCurrentNode ? resumeNodeId : 'input_handler');
     } catch (err: any) {
       if (err.name === 'AbortError') {
         console.log('[FrontendGraphWS] Execution aborted');

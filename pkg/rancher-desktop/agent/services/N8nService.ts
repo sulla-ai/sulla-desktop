@@ -265,7 +265,7 @@ export class N8nService {
       saveExecutionProgress?: boolean;
       saveManualExecutions?: boolean;
       saveDataErrorExecution?: string;
-      saveDataSuccessExecution?: string;
+      saveDataSuccessExecution?: 'none' | 'all';
       executionTimeout?: number;
       errorWorkflow?: string;
       timezone?: string;
@@ -296,7 +296,7 @@ export class N8nService {
       saveExecutionProgress?: boolean;
       saveManualExecutions?: boolean;
       saveDataErrorExecution?: string;
-      saveDataSuccessExecution?: string;
+      saveDataSuccessExecution?: 'none' | 'all';
       executionTimeout?: number;
       errorWorkflow?: string;
       timezone?: string;
@@ -417,6 +417,70 @@ export class N8nService {
     return this.request(`/api/v1/workflows/${id}/deactivate`, {
       method: 'POST'
     });
+  }
+
+  /**
+   * Set workflow archived state
+   */
+  async setWorkflowArchived(id: string, archived: boolean): Promise<any> {
+    const workflowId = String(id || '').trim();
+    if (!workflowId) {
+      throw new Error('Workflow ID is required for archive state change');
+    }
+
+    const archiveState = archived === true;
+    const endpoint = archiveState ? 'archive' : 'unarchive';
+
+    const isNotFoundOrMethodError = (error: unknown): boolean => {
+      const message = error instanceof Error ? error.message : String(error);
+      return message.includes('N8n API error 404') || message.includes('N8n API error 405');
+    };
+
+    try {
+      return await this.request(`/api/v1/workflows/${workflowId}/${endpoint}`, {
+        method: 'POST'
+      });
+    } catch (error) {
+      if (!isNotFoundOrMethodError(error)) {
+        throw error;
+      }
+
+      try {
+        // Compatibility fallback for n8n variants that allow direct archived state patch.
+        return await this.request(`/api/v1/workflows/${workflowId}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ archived: archiveState })
+        });
+      } catch (patchError) {
+        if (!isNotFoundOrMethodError(patchError)) {
+          throw patchError;
+        }
+
+        // Final fallback for n8n variants that require full workflow updates via PUT.
+        const existingWorkflow = await this.getWorkflow(workflowId);
+        return this.request(`/api/v1/workflows/${workflowId}`, {
+          method: 'PUT',
+          body: JSON.stringify({
+            ...existingWorkflow,
+            archived: archiveState,
+          })
+        });
+      }
+    }
+  }
+
+  /**
+   * Archive a workflow
+   */
+  async archiveWorkflow(id: string): Promise<any> {
+    return this.setWorkflowArchived(id, true);
+  }
+
+  /**
+   * Unarchive a workflow
+   */
+  async unarchiveWorkflow(id: string): Promise<any> {
+    return this.setWorkflowArchived(id, false);
   }
 
   // ========== EXECUTIONS ==========

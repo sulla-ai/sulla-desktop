@@ -410,14 +410,21 @@ export class Graph<TState = BaseThreadState> {
         // yield to event loop
         await new Promise(r => setTimeout(r, 0));
 
-        const nextId = this.resolveNext((state as any).metadata.currentNodeId, result.decision, state);
+        const currentNodeId = String((state as any).metadata.currentNodeId || '');
+        let nextId = this.resolveNext(currentNodeId, result.decision, state);
         console.log(`[Graph] ${result.decision.type} → ${nextId}`);
 
-        if (nextId === (state as any).metadata.currentNodeId) {
+        if (nextId === currentNodeId) {
           (state as any).metadata.consecutiveSameNode++;
           if ((state as any).metadata.consecutiveSameNode >= MAX_CONSECTUIVE_LOOP) {
-            console.warn(`Max consecutive loop — forcing end`);
-            break;
+            if (currentNodeId === 'action') {
+              console.warn('Max consecutive loop on action — forcing critic review');
+              (state as any).metadata.consecutiveSameNode = 0;
+              nextId = 'skill_critic';
+            } else {
+              console.warn(`Max consecutive loop — forcing end`);
+              break;
+            }
           }
         } else {
           (state as any).metadata.consecutiveSameNode = 0;
@@ -829,14 +836,13 @@ export function createSkillGraph(): Graph<SkillGraphState> {
       return 'reasoning';
     }
 
-    console.log('[SkillGraph] Critic: Technical complete but project incomplete - returning to planner with project feedback');
+    console.log('[SkillGraph] Critic: Technical complete but project incomplete - returning to reasoning with project feedback');
     (state.metadata as any).reactLoopCount = 0;
-    (state.metadata as any).planner = {
-      ...((state.metadata as any).planner || {}),
+    (state.metadata as any).reasoning = {
+      ...((state.metadata as any).reasoning || {}),
       critic_feedback: criticData.project_feedback || '',
-      critic_tprd: (state.metadata as any).technical_instructions || '',
     };
-    return 'planner';
+    return 'reasoning';
   });
 
   // Output can loop back to input for continued work

@@ -15,6 +15,7 @@ import { getVariablesRegistration } from './get_variables';
 import { getTagsRegistration } from './get_tags';
 import { activateWorkflowRegistration } from './activate_workflow';
 import { deactivateWorkflowRegistration } from './deactivate_workflow';
+import { archiveWorkflowRegistration } from './archive_workflow';
 import { searchTemplatesRegistration } from './search_templates';
 import { getTemplateWorkflowRegistration } from './get_template_workflow';
 import { getTemplateCollectionsRegistration } from './get_template_collections';
@@ -44,6 +45,7 @@ export const n8nToolRegistrations = [
   getTagsRegistration,
   activateWorkflowRegistration,
   deactivateWorkflowRegistration,
+  archiveWorkflowRegistration,
   searchTemplatesRegistration,
   getTemplateWorkflowRegistration,
   getTemplateCollectionsRegistration,
