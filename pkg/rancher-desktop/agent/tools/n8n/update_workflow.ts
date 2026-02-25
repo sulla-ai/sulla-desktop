@@ -153,6 +153,7 @@ export const updateWorkflowRegistration: ToolRegistration = {
   name: "update_workflow",
   description: "Update an existing workflow in n8n.",
   category: "n8n",
+  operationTypes: ['update'],
   schemaDef: {
     id: { type: 'string' as const, description: "Workflow ID" },
     name: { type: 'string' as const, optional: true, description: "Workflow name (defaults to existing workflow name if omitted)" },

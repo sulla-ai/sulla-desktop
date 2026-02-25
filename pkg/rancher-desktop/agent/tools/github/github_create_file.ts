@@ -59,6 +59,7 @@ export const gitHubCreateFileRegistration: ToolRegistration = {
   name: "github_create_file",
   description: "Create a new file in a GitHub repository.",
   category: "github",
+  operationTypes: ['create'],
   schemaDef: {
     owner: { type: 'string' as const, description: "Repository owner (username or organization)" },
     repo: { type: 'string' as const, description: "Repository name" },

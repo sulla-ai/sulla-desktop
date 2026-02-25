@@ -64,6 +64,7 @@ export const gitHubListBranchesRegistration: ToolRegistration = {
   name: "github_list_branches",
   description: "List branches in a GitHub repository.",
   category: "github",
+  operationTypes: ['read'],
   schemaDef: {
     owner: { type: 'string' as const, description: "Repository owner (username or organization)" },
     repo: { type: 'string' as const, description: "Repository name" },

@@ -52,6 +52,7 @@ export const articleSearchRegistration: ToolRegistration = {
   name: "article_search",
   description: "Perform semantic search on articles by query. Returns matching articles with metadata and relevance scores.",
   category: "memory",
+  operationTypes: ['read'],
   schemaDef: {
     query: { type: 'string' as const, description: "The search query to find relevant articles" },
     limit: { type: 'number' as const, optional: true, default: 5, description: "Maximum number of results to return" },

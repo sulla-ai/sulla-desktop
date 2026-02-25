@@ -314,6 +314,7 @@ import PostHogTracker from '@pkg/components/PostHogTracker.vue';
 import DOMPurify from 'dompurify';
 import { marked } from 'marked';
 import { Article } from '../agent/database/models/Article';
+import { articlesRegistry } from '../agent/database/registry/ArticlesRegistry';
 import { useRoute, useRouter } from 'vue-router';
 
 const router = useRouter();
@@ -355,10 +356,7 @@ const confirmDelete = async () => {
 
   deleting.value = true;
   try {
-    const article = await Article.find(pageSlug.value);
-    if (article) {
-      await article.delete();
-    }
+    await articlesRegistry.deleteArticle(pageSlug.value);
     closeDeleteModal();
     router.push('/KnowledgeBase');
   } catch (error) {

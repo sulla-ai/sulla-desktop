@@ -55,6 +55,7 @@ export const pgTransactionRegistration: ToolRegistration = {
   name: "pg_transaction",
   description: "Execute multiple PostgreSQL statements in a transaction.",
   category: "pg",
+  operationTypes: ['execute'],
   schemaDef: {
     sql: { type: 'string' as const, description: "SQL statements separated by semicolons to execute in a transaction" },
   },

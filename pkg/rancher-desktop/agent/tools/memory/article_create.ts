@@ -83,6 +83,7 @@ export const articleCreateRegistration: ToolRegistration = {
   name: "article_create",
   description: "Create a new article in the knowledge base with the specified content and metadata.",
   category: "memory",
+  operationTypes: ['create'],
   schemaDef: {
     slug: { type: 'string' as const, description: "Unique slug identifier for the article" },
     title: { type: 'string' as const, description: "Title of the article" },

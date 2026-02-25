@@ -281,6 +281,7 @@ export const slackConnectionHealthRegistration: ToolRegistration = {
   name: "slack_connection_health",
   description: "Check Slack integration health and auto-reinitialize if disconnected/unhealthy.",
   category: "slack",
+  operationTypes: ['read'],
   schemaDef: {
     reinitializeIfNeeded: {
       type: 'boolean' as const,

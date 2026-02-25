@@ -39,6 +39,7 @@ export const createVariableRegistration: ToolRegistration = {
   name: "create_variable",
   description: "Create a new variable in n8n.",
   category: "n8n",
+  operationTypes: ['create'],
   schemaDef: {
     key: { type: 'string' as const, description: "Variable key" },
     value: { type: 'string' as const, description: "Variable value" },

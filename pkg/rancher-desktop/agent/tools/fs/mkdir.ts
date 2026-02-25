@@ -31,6 +31,7 @@ export const fsMkdirRegistration: ToolRegistration = {
   name: 'fs_mkdir',
   description: 'Create a directory.',
   category: 'fs',
+  operationTypes: ['create'],
   schemaDef: {
     path: { type: 'string' as const, description: 'Directory path to create.' },
     recursive: { type: 'boolean' as const, optional: true, description: 'Create nested directories. Default true.' },

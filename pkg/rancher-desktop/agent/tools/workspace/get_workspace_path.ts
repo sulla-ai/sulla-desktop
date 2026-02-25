@@ -22,6 +22,7 @@ export const getWorkspacePathRegistration: ToolRegistration = {
   name: 'get_workspace_path',
   description: 'Get the relative path of a workspace in the Rancher Desktop data directory.',
   category: "workspace",
+  operationTypes: ['read'],
   schemaDef: {
     name: { type: 'string' as const, description: 'The name of the workspace.' },
   },

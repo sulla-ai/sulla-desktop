@@ -45,6 +45,7 @@ export const dockerRmRegistration: ToolRegistration = {
   name: "docker_rm",
   description: "Remove one or more Docker containers.",
   category: "docker",
+  operationTypes: ['delete'],
   schemaDef: {
     container: { type: 'string' as const, description: "Container name or ID to remove" },
     force: { type: 'boolean' as const, optional: true, description: "Force removal of running containers" },

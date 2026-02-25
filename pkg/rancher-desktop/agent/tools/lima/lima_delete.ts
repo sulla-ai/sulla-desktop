@@ -47,6 +47,7 @@ export const limaDeleteRegistration: ToolRegistration = {
   name: "lima_delete",
   description: "Delete a Lima virtual machine instance.",
   category: "lima",
+  operationTypes: ['delete'],
   schemaDef: {
     instance: { type: 'string' as const, description: "Name of the Lima instance" },
     force: { type: 'boolean' as const, optional: true, description: "Force deletion without confirmation" },

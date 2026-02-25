@@ -61,6 +61,7 @@ export const removeWorkflowNodeRegistration: ToolRegistration = {
   name: 'remove_workflow_node',
   description: 'Remove a single node from an n8n workflow and clean related connections.',
   category: 'n8n',
+  operationTypes: ['delete','update'],
   schemaDef: {
     workflowId: { type: 'string' as const, description: 'Workflow ID' },
     nodeId: { type: 'string' as const, optional: true, description: 'Node ID (preferred)' },

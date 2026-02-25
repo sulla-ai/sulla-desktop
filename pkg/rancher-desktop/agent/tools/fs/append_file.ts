@@ -36,6 +36,7 @@ export const fsAppendFileRegistration: ToolRegistration = {
   name: 'fs_append_file',
   description: 'Append text content to a file.',
   category: 'fs',
+  operationTypes: ['update'],
   schemaDef: {
     path: { type: 'string' as const, description: 'File path to append to.' },
     content: { type: 'string' as const, description: 'Content to append to file.' },

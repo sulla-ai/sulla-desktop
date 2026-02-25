@@ -37,6 +37,7 @@ export const viewWorkspaceFilesRegistration: ToolRegistration = {
   name: "view_workspace_files",
   description: "List files in a workspace directory in the Rancher Desktop data directory.",
   category: "workspace",
+  operationTypes: ['read'],
   schemaDef: {
     name: { type: 'string' as const, description: 'The name of the workspace to view.' },
   },

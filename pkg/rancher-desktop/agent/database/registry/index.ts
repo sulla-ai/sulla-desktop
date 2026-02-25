@@ -5,3 +5,5 @@ export type {
   ArticleListItem, 
   ArticleWithContent 
 } from './ArticlesRegistry';
+export { SkillsRegistry, skillsRegistry } from './SkillsRegistry';
+export type { SkillRegistryInitOptions } from './SkillsRegistry';

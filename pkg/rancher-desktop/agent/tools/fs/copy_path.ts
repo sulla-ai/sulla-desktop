@@ -38,6 +38,7 @@ export const fsCopyPathRegistration: ToolRegistration = {
   name: 'fs_copy_path',
   description: 'Copy a file or directory path.',
   category: 'fs',
+  operationTypes: ['update', 'create'],
   schemaDef: {
     sourcePath: { type: 'string' as const, description: 'Source file or directory path.' },
     destinationPath: { type: 'string' as const, description: 'Destination file or directory path.' },

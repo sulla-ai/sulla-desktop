@@ -37,6 +37,7 @@ export const rdctlStartRegistration: ToolRegistration = {
   name: "rdctl_start",
   description: "Start up Sulla Desktop, or update its settings.",
   category: "rdctl",
+  operationTypes: ['execute'],
   schemaDef: {},
   workerClass: RdctlStartWorker,
 };

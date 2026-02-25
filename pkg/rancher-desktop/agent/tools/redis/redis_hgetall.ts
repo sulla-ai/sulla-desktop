@@ -43,6 +43,7 @@ export const redisHgetallRegistration: ToolRegistration = {
   name: "redis_hgetall",
   description: "Get all fields and values from a Redis hash.",
   category: "redis",
+  operationTypes: ['read'],
   schemaDef: {
     key: { type: 'string' as const, description: "The Redis hash key" },
   },

@@ -52,6 +52,7 @@ export const dockerExecRegistration: ToolRegistration = {
   name: "docker_exec",
   description: "Execute a command in a running Docker container.",
   category: "docker",
+  operationTypes: ['execute'],
   schemaDef: {
     container: { type: 'string' as const, description: "Container name or ID" },
     command: { type: 'string' as const, description: "Command to execute in the container" },

@@ -49,6 +49,7 @@ export const calendarCreateRegistration: ToolRegistration = {
   name: "calendar_create",
   description: "Create a new calendar event or reminder.",
   category: "calendar",
+  operationTypes: ['create'],
   schemaDef: {
     title: { type: 'string' as const, description: "Event title" },
     start: { type: 'string' as const, description: "Start time in ISO format" },

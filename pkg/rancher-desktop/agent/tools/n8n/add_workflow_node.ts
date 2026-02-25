@@ -89,6 +89,7 @@ export const addWorkflowNodeRegistration: ToolRegistration = {
   name: 'add_workflow_node',
   description: 'Add a single node to an existing n8n workflow with deterministic placement.',
   category: 'n8n',
+  operationTypes: ['create','update'],
   schemaDef: {
     workflowId: { type: 'string' as const, description: 'Workflow ID' },
     node: { type: 'object' as const, description: 'The n8n node object to add.' },

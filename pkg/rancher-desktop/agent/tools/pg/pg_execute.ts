@@ -47,6 +47,7 @@ export const pgExecuteRegistration: ToolRegistration = {
   name: "pg_execute",
   description: "Execute a PostgreSQL statement and return execution results.",
   category: "pg",
+  operationTypes: ['execute'],
   schemaDef: {
     sql: { type: 'string' as const, optional: true, description: "The SQL statement to execute" },
     query: { type: 'string' as const, optional: true, description: "Alias for sql" },

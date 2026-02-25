@@ -50,6 +50,7 @@ export const calendarGetRegistration: ToolRegistration = {
   name: "calendar_get",
   description: "Get details of a specific calendar event by ID.",
   category: "calendar",
+  operationTypes: ['read'],
   schemaDef: {
     eventId: { type: 'number' as const, description: "The ID of the calendar event" },
   },

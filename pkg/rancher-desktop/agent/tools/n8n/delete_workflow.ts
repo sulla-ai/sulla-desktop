@@ -35,6 +35,7 @@ export const deleteWorkflowRegistration: ToolRegistration = {
   name: "delete_workflow",
   description: "Delete a workflow from n8n.",
   category: "n8n",
+  operationTypes: ['delete'],
   schemaDef: {
     id: { type: 'string' as const, description: "Workflow ID" },
   },

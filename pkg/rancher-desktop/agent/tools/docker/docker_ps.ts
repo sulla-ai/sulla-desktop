@@ -47,6 +47,7 @@ export const dockerPsRegistration: ToolRegistration = {
   name: "docker_ps",
   description: "List Docker containers.",
   category: "docker",
+  operationTypes: ['read', 'execute'],
   schemaDef: {
     all: { type: 'boolean' as const, optional: true, description: "Show all containers (default: only running)" },
     format: { type: 'string' as const, optional: true, description: "Format output (e.g., 'table {{.Names}}\\t{{.Status}}')" },

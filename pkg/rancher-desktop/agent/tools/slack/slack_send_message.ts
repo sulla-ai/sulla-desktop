@@ -103,6 +103,7 @@ export const slackSendMessageRegistration: ToolRegistration = {
   name: "slack_send_message",
   description: "Send a new message to a Slack channel.",
   category: "slack",
+  operationTypes: ['read'],
   schemaDef: {
     channel: { type: 'string' as const, description: "Channel ID where the message will be posted" },
     text: { type: 'string' as const, description: "Message text to post" },

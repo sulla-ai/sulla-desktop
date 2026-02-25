@@ -35,6 +35,7 @@ export const deactivateWorkflowRegistration: ToolRegistration = {
   name: "deactivate_workflow",
   description: "Deactivate a workflow in n8n.",
   category: "n8n",
+  operationTypes: ['update'],
   schemaDef: {
     id: { type: 'string' as const, description: "Workflow ID" },
   },

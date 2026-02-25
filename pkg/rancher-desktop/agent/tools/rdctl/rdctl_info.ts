@@ -37,6 +37,7 @@ export const rdctlInfoRegistration: ToolRegistration = {
   name: "rdctl_info",
   description: "Return information about Sulla Desktop.",
   category: "rdctl",
+  operationTypes: ['read'],
   schemaDef: {},
   workerClass: RdctlInfoWorker,
 };

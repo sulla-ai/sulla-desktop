@@ -66,6 +66,7 @@ export const articleFindRegistration: ToolRegistration = {
   name: "article_find",
   description: "Find and retrieve a single article by its slug. Returns the full article metadata and content.",
   category: "memory",
+  operationTypes: ['read'],
   schemaDef: {
     slug: { type: 'string' as const, description: "The unique slug identifier of the article to find" },
   },

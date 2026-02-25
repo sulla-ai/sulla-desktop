@@ -90,6 +90,7 @@ export const updateWorkflowNodeRegistration: ToolRegistration = {
   name: 'update_workflow_node',
   description: 'Update a single node in an n8n workflow by nodeId or nodeName.',
   category: 'n8n',
+  operationTypes: ['update'],
   schemaDef: {
     workflowId: { type: 'string' as const, description: 'Workflow ID' },
     nodePatch: { type: 'object' as const, description: 'Partial node fields to update.' },

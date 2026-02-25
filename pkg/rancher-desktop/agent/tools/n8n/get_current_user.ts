@@ -41,6 +41,7 @@ export const getCurrentUserRegistration: ToolRegistration = {
   name: "get_current_user",
   description: "Get current user info from n8n.",
   category: "n8n",
+  operationTypes: ['read'],
   schemaDef: {},
   workerClass: GetCurrentUserWorker,
 };

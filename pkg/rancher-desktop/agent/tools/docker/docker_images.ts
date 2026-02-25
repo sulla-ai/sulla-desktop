@@ -44,6 +44,7 @@ export const dockerImagesRegistration: ToolRegistration = {
   name: "docker_images",
   description: "List Docker images.",
   category: "docker",
+  operationTypes: ['read', 'update', 'create', 'delete'],
   schemaDef: {
     all: { type: 'boolean' as const, optional: true, description: "Show all images (default: only top-level images)" },
   },

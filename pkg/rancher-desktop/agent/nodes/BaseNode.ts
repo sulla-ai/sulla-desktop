@@ -27,6 +27,31 @@ export const TOOLS_RESPONSE_JSON = `  "tools": [
     ["emit_chat_message", "Respond to the users inquiry"]
   ],`;
 
+export const OBSERVATIONAL_MEMORY_SOP = `### SOP: add_observational_memory
+
+Call **immediately** when **any** of these triggers fire:
+
+Must-call triggers:
+1. User expresses/changes preference, goal, constraint, hard no, identity signal, desired name/nickname
+2. User commits (deadline, budget, deliverable, strategy, “from now on”, “always/never again”)
+3. Recurring pattern confirmed in user requests/behavior
+4. Breakthrough, major insight, painful lesson (yours or user’s)
+5. You create/edit/delete/rename/configure anything persistent (article, memory, event, setting, container, agent, workflow, prompt, tool, integration)
+6. Important new/confirmed info about tools, environment, APIs, limits, capabilities
+7. High-value tool result that will shape future reasoning
+
+Priority (pick exactly one):
+🔴 Critical   = identity, strong prefs/goals, promises, deal-breakers, core constraints
+🟡 Valuable   = decisions, patterns, reusable tool outcomes, progress markers
+⚪ Low        = transient/minor (almost never use)
+
+Content rules – enforced:
+- Exactly one concise sentence
+- Third-person/neutral voice only (“Human prefers…”, “User committed to…”)
+- No “I” or “you”
+- Always include specifics when they exist: dates, numbers, names, versions, exact phrases, URLs
+- Maximize signal per character – never vague`;
+
 // ============================================================================
 // INTERFACES AND TYPES
 // ============================================================================
@@ -38,6 +63,36 @@ export interface LLMCallOptions {
     temperature?: number;
     signal?: AbortSignal;
     disableTools?: boolean;
+    nodeRunPolicy?: NodeRunPolicy;
+    nodeRunMessages?: {
+      assistantMessages?: ChatMessage[];
+      userMessages?: ChatMessage[];
+      systemPrompt?: string;
+    };
+    allowedToolCategories?: string[];
+    allowedToolNames?: string[];
+}
+
+export interface NodeRunPolicy {
+    messageSource?: 'graph' | 'node-local' | 'custom';
+    persistAssistantToGraph?: boolean;
+    persistToolResultsToGraph?: boolean;
+    persistAssistantToNodeState?: boolean;
+    persistToolResultsToNodeState?: boolean;
+    nodeStateNamespace?: string;
+    includeGraphAssistantMessages?: boolean;
+    includeGraphUserMessages?: boolean;
+}
+
+export interface NodeRunContext {
+    runId: string;
+    nodeId: string;
+    nodeName: string;
+    messages: ChatMessage[];
+    toolTranscript: Array<{ toolName: string; success: boolean; result?: unknown; error?: string }>;
+    hadToolCalls: boolean;
+    hadUserMessages: boolean;
+    policy: Required<NodeRunPolicy>;
 }
 
 export interface LLMResponse {
@@ -48,6 +103,7 @@ export interface LLMResponse {
 export interface PromptEnrichmentOptions {
   includeSoul?: boolean;
   includeAwareness?: boolean;
+  includeEnvironment?: boolean;
   includeMemory?: boolean;
   includeTools?: boolean;
   includeStrategicPlan?: boolean;
@@ -85,48 +141,63 @@ async function getSoulPrompt(): Promise<string> {
 }
 
 
-const ENVIRONMENT_PROMPT = `Core Identity & Principles and Environment & Tools
+export const ENVIRONMENT_PROMPT = `Core Identity & Principles and Environment & Tools
+
+## Tool responses
+Tool responses are delivered back as assistant messages.
 
 ## Persistent Environment & Tools
-You operate inside a custom runtime with these built-in persistent systems. Use them proactively as first resort. Never improvise alternatives.
-
-You are a strategic autonomous agent. Make real progress. Use these environment resources relentlessly.
+The agent operates inside a custom runtime that contains the following built-in persistent systems.
 
 Current datetime: {{formattedTime}}
-Computers set time zone: {{timeZone}}
+Computer time zone: {{timeZone}}
 
 ### Calendar System
-Single source of truth for time-based actions. Every reminder, meeting, recurring report, or scheduled task (e.g., "morning report at 7am") creates or updates a calendar event. Events auto-wake you at trigger time with full context prompt. Use for your own scheduling: daily reviews, follow-ups, recurring automations. Always check calendar before committing to deadlines.
+The calendar system is the single source of truth for all time-based actions. Reminders, meetings, recurring reports, and scheduled tasks are stored as calendar events. Events automatically trigger at the scheduled time and provide full context.
 
-### Memory Systems
-**Observational Memory** (short-term context): 
-Short-term context layer. On any trigger (preferences, commitments, patterns, breakthroughs, new artifacts), call add_observational_memory with one neutral sentence + slug linking to long-term items (workflow, calendar event, workspace, project doc). This bridges conversations.
+### Observational Memory (short-term context layer)
+Observational Memory is the short-term context layer. It consists of timestamped snapshot entries delivered as assistant messages.
 
-#### Long-term Memory (vector DB)
-Your core brain. Search it first on every task.  
-Your core knowledge and identity. Search it first on every task. Store and retrieve: SOPs (thousands of skills), project docs (solutions architect format: user stories, MoSCoW priorities, architecture, acceptance criteria), Wikipedia-style pages on everything you encounter, people, companies, projects, friends, customers, their businesses/families/events. When starting projects, create full project resource doc as source of truth. Extract SOPs from any learned skill/platform and store here. Always extend, tag, and categorize properly with accurate relationships.
+Each entry follows this exact structure:
+- A UTC timestamp in ISO format (YYYY-MM-DDTHH:MM:SS.sssZ)
+- A status indicator (🔴 for significant or confirmed events, 🟡 for finalized or completed milestones)
+- One or more neutral factual sentences that record user requests, confirmations, formal submissions, or task state changes
+- Optional reference slugs that link to related long-term memory items
+
+The current Observational Memory snapshot contains repeated chronological records of user confirmations and formal requests for the specific n8n workflow PRD titled “daily X/Twitter + RSS + GitHub AI intelligence monitor” that uses Sulla’s local AI endpoint[](http://host.docker.internal:3000/v1/chat/completions), stores curated dated reports to long-term memory, and delivers a Slack digest for YouTube topic ideation.
+
+Additional entries are created automatically when significant user interactions, repeated confirmations, finalized requests, or major progress milestones occur. The full current snapshot is always included in the context for continuity.
+
+### Long-term Memory (vector database)
+Long-term Memory is the core knowledge base and identity store. It contains:
+- SOPs and skills
+- Project documentation in solutions-architect format (user stories, MoSCoW priorities, architecture, acceptance criteria)
+- Wikipedia-style reference pages on people, companies, projects, friends, customers, businesses, families, and events
+- Project resource documents that serve as the source of truth for each active project
 
 ### Workspaces
-Dedicated folders in user data dir for persistent files and dev work. Use create_workspace tool to make one per project. Store all code, assets, outputs here. Access via list/read tools. Execute commands only with full absolute paths (no ~ or relative). Ideal for software builds, downloads, data processing.
+Workspaces are dedicated folders in the user data directory for persistent files and development work. One workspace exists per project. They store code, assets, and outputs. Access occurs via list and read tools. Commands execute with full absolute paths.
 
 ### Docker Environment
-You run on Docker with full host access. Launch any safe container/image from internet. For dev: always mount workspace dir into container via docker-compose for hot reload (e.g., Node.js changes appear instantly on refresh).
+The runtime runs on Docker with full host access. Safe containers and images from the internet can be launched. Workspace directories are mounted into containers via docker-compose for hot reloading.
 
 ### Automation Workflows (n8n)
-Your hands and feet for external automation. Thousands of community templates available. Search templates first, import/adapt, or build custom. When user requests automation, create/maintain workflow, push to n8n, test, document in long-term memory with slug.
+n8n is the automation workflow engine. It includes access to thousands of community templates.
 
 ### Tools
-Use the built in tools to quickly and accurately accomplish tasks in their categories. If no tool exists, use the "exec" tool to run commands (be careful).
-Use the browse_tools to locate the other available tools.
-Available Tool Categories: {{tool_categories}}
+Built-in tools exist across multiple categories: {{tool_categories}}.  
+The browse_tools tool lists all available tools.  
+The exec tool runs system commands when no dedicated tool exists.
 
-### You have an OpenAI compatible API
-You can configure other other services to communicate back to you, such as n8n workflows when setting up an AI node. To access your endpoint from the parent machine you can use http://localhost:3000
-When you need access from a container (from Docker/Kubernetes pods) use http://host.docker.internal:3000
+### OpenAI Compatible API
+An OpenAI-compatible API server runs locally in this environment.
+- From the parent machine: http://localhost:3000
+- From inside Docker containers: http://host.docker.internal:3000
 All endpoints are prefixed with /v1/.
 
-### Your codebase
-Here's your codebase https://github.com/sulla-ai/sulla-desktop you can check the doc folder to learn more about your architecture.
+### Codebase
+Your agent codebase is located at https://github.com/sulla-ai/sulla-desktop.  
+Architecture and system documentation reside in the /doc folder.
 
 `;
 
@@ -141,6 +212,7 @@ export abstract class BaseNode<T extends BaseThreadState = BaseThreadState> {
     id: string;
     name: string;
     protected llm: BaseLanguageModel | null = null;
+    private currentNodeRunContext: NodeRunContext | null = null;
 
     constructor(id: string, name: string) {
         this.id = id;
@@ -210,7 +282,9 @@ export abstract class BaseNode<T extends BaseThreadState = BaseThreadState> {
             AwarenessMessage = AwarenessMessage.replace('{{formattedTime}}', formattedTime);
             AwarenessMessage = AwarenessMessage.replace('{{timeZone}}', timeZone);
 
-        parts.push(AwarenessMessage);
+        if (options.includeEnvironment !== false) {
+            parts.push(AwarenessMessage);
+        }
 
         /////////////////////////////////////////////////////////////////
         // adds observational memories to the message thread
@@ -248,31 +322,7 @@ export abstract class BaseNode<T extends BaseThreadState = BaseThreadState> {
                 state.metadata.awarenessIncluded = true;
             }
 
-            const AWARENESS_SYSTEM_INSTRUCTIONS = `### SOP: add_observational_memory
-
-Call **immediately** when **any** of these triggers fire:
-
-Must-call triggers:
-1. User expresses/changes preference, goal, constraint, hard no, identity signal, desired name/nickname
-2. User commits (deadline, budget, deliverable, strategy, “from now on”, “always/never again”)
-3. Recurring pattern confirmed in user requests/behavior
-4. Breakthrough, major insight, painful lesson (yours or user’s)
-5. You create/edit/delete/rename/configure anything persistent (article, memory, event, setting, container, agent, workflow, prompt, tool, integration)
-6. Important new/confirmed info about tools, environment, APIs, limits, capabilities
-7. High-value tool result that will shape future reasoning
-
-Priority (pick exactly one):
-🔴 Critical   = identity, strong prefs/goals, promises, deal-breakers, core constraints
-🟡 Valuable   = decisions, patterns, reusable tool outcomes, progress markers
-⚪ Low        = transient/minor (almost never use)
-
-Content rules – enforced:
-- Exactly one concise sentence
-- Third-person/neutral voice only (“Human prefers…”, “User committed to…”)
-- No “I” or “you”
-- Always include specifics when they exist: dates, numbers, names, versions, exact phrases, URLs
-- Maximize signal per character – never vague`;
-            parts.push(AWARENESS_SYSTEM_INSTRUCTIONS);
+            parts.push(OBSERVATIONAL_MEMORY_SOP);
         }
         
 
@@ -376,16 +426,16 @@ Content rules – enforced:
         const context = state.metadata.llmLocal ? 'local' : 'remote';
         this.llm = await getService(context, state.metadata.llmModel);
 
-        // Prepare messages from state
-        let messages = [...state.messages];
+        const nodeRunContext = this.createNodeRunContext(state, {
+            systemPrompt,
+            policy: options.nodeRunPolicy,
+            assistantMessages: options.nodeRunMessages?.assistantMessages,
+            userMessages: options.nodeRunMessages?.userMessages,
+            systemMessageOverride: options.nodeRunMessages?.systemPrompt,
+        });
 
-        // Remove all system prompts
-        messages = messages.filter(m => m.role !== 'system');
-
-        //console.log(`[${this.name}:BaseNode] Chat messages:`, messages);
-
-        // Append new system prompt
-        messages.push({ role: 'system', content: systemPrompt.trim() });
+        const callToolAccessPolicy = this.buildToolAccessPolicyForCall(options);
+        const messages = [...nodeRunContext.messages];
 
         // Check for abort before making LLM calls
         throwIfAborted(state, 'Chat operation aborted');
@@ -405,10 +455,20 @@ Content rules – enforced:
             // Final fallback to just meta tools
             llmTools = await toolRegistry.getLLMToolsFor(await toolRegistry.getToolsByCategory("meta"));
           }
+
+          const filtered = await this.filterLLMToolsByAccessPolicy(llmTools, options);
+          llmTools = filtered.tools;
         }
+
+        const previousToolAccessPolicy = (state.metadata as any).__toolAccessPolicy;
+        (state.metadata as any).__toolAccessPolicy = callToolAccessPolicy;
 
         const systemMessage = messages.find(msg => msg.role === 'system');
         console.log(`[BaseNode:${this.name}] prompt:`, systemMessage ? systemMessage.content : 'No system message');
+        const conversationId = typeof state.metadata.threadId === 'string' ? state.metadata.threadId : undefined;
+        const nodeName = this.name;
+        const previousRunContext = this.currentNodeRunContext;
+        this.currentNodeRunContext = nodeRunContext;
         try {
             // Primary attempt
             state.metadata.hadToolCalls = false;
@@ -420,6 +480,8 @@ Content rules – enforced:
                 temperature: options.temperature,
                 signal: (state as any).metadata?.__abort?.signal,
                 tools: llmTools,
+                conversationId,
+                nodeName,
             });
 
             if (!reply) throw new Error('No response from primary LLM');
@@ -434,7 +496,8 @@ Content rules – enforced:
             const toolCalls = reply.metadata.tool_calls || [];
             if (toolCalls.length) {
                 console.log(`[${this.name}] Processing ${toolCalls.length} tool calls via executeToolCalls`);
-                await this.executeToolCalls(state, toolCalls);
+                const allowedToolNames = await this.getAllowedToolNamesForExecution(llmTools);
+                await this.executeToolCalls(state, toolCalls, allowedToolNames);
             }
 
             this.triggerBackgroundStateMaintenance(state);
@@ -459,7 +522,9 @@ Content rules – enforced:
                             signal: options.signal,
                             temperature: options.temperature,
                             maxTokens: options.maxTokens,
-                            format: options.format
+                            format: options.format,
+                            conversationId,
+                            nodeName,
                         });
                         if (reply) {
                             this.appendResponse(state, reply.content);
@@ -473,7 +538,283 @@ Content rules – enforced:
             }
 
             return null;
+        } finally {
+            this.currentNodeRunContext = previousRunContext;
+            (state.metadata as any).__toolAccessPolicy = previousToolAccessPolicy;
         }
+    }
+
+    private buildToolAccessPolicyForCall(options: LLMCallOptions): {
+        allowedCategories: string[] | null;
+        allowedToolNames: string[] | null;
+    } {
+        const allowedCategories = options.allowedToolCategories?.length
+            ? [...new Set(options.allowedToolCategories)]
+            : null;
+        const allowedToolNames = options.allowedToolNames?.length
+            ? [...new Set(options.allowedToolNames)]
+            : null;
+
+        return {
+            allowedCategories,
+            allowedToolNames,
+        };
+    }
+
+    private async filterLLMToolsByAccessPolicy(
+        llmTools: any[],
+        options: LLMCallOptions,
+    ): Promise<{ tools: any[] }> {
+        const hasRestrictions = Boolean(options.allowedToolCategories?.length || options.allowedToolNames?.length);
+
+        if (!hasRestrictions || !Array.isArray(llmTools) || llmTools.length === 0) {
+            return { tools: llmTools || [] };
+        }
+
+        const allowedToolNamesSet = options.allowedToolNames?.length
+            ? new Set(options.allowedToolNames)
+            : null;
+        const allowedCategoriesSet = options.allowedToolCategories?.length
+            ? new Set(options.allowedToolCategories)
+            : null;
+        const filteredTools: any[] = [];
+        for (const llmTool of llmTools) {
+            const toolName = llmTool?.function?.name;
+            if (!toolName) {
+                continue;
+            }
+
+            if (allowedToolNamesSet && !allowedToolNamesSet.has(toolName)) {
+                continue;
+            }
+
+            const toolInstance = await toolRegistry.getTool(toolName);
+            const category = String(toolInstance?.metadata?.category || '').trim();
+            if (allowedCategoriesSet && !allowedCategoriesSet.has(category)) {
+                continue;
+            }
+
+            filteredTools.push(llmTool);
+        }
+
+        return { tools: filteredTools };
+    }
+
+    private async getAllowedToolNamesForExecution(llmTools: any[]): Promise<string[] | undefined> {
+        if (!Array.isArray(llmTools) || llmTools.length === 0) {
+            return undefined;
+        }
+
+        const names = llmTools
+            .map(tool => tool?.function?.name)
+            .filter((name): name is string => Boolean(name));
+
+        return names.length > 0 ? names : undefined;
+    }
+
+    protected getDefaultNodeRunPolicy(): Required<NodeRunPolicy> {
+        return {
+            messageSource: 'graph',
+            persistAssistantToGraph: true,
+            persistToolResultsToGraph: true,
+            persistAssistantToNodeState: false,
+            persistToolResultsToNodeState: false,
+            nodeStateNamespace: '',
+            includeGraphAssistantMessages: true,
+            includeGraphUserMessages: true,
+        };
+    }
+
+    private appendNodeScopedMessage(state: BaseThreadState, message: ChatMessage, messageType: 'assistant' | 'tool'): void {
+        if (!this.currentNodeRunContext) {
+            return;
+        }
+
+        const policy = this.currentNodeRunContext.policy;
+        let namespace = String(policy.nodeStateNamespace || '').trim();
+        if (!namespace) {
+            namespace = `__messages_${this.id}`;
+        }
+        if (!namespace) {
+            return;
+        }
+
+        this.ensureNodeMessageLaneInitializedFromGraph(state, namespace);
+
+        const shouldPersist = messageType === 'assistant'
+            ? (policy.persistAssistantToNodeState || !policy.persistAssistantToGraph)
+            : (policy.persistToolResultsToNodeState || !policy.persistToolResultsToGraph);
+
+        if (!shouldPersist) {
+            return;
+        }
+
+        const metadataAny = state.metadata as any;
+        if (!metadataAny[namespace] || typeof metadataAny[namespace] !== 'object') {
+            metadataAny[namespace] = {};
+        }
+
+        if (!Array.isArray(metadataAny[namespace].messages)) {
+            metadataAny[namespace].messages = [];
+        }
+
+        const persistedMessage: ChatMessage = messageType === 'tool'
+            ? {
+                role: 'assistant',
+                content: message.content,
+                metadata: {
+                    ...(message.metadata || {}),
+                    originalRole: 'tool',
+                },
+            }
+            : { ...message };
+
+        metadataAny[namespace].messages.push(persistedMessage);
+        this.bumpStateVersion(state);
+    }
+
+    private ensureNodeMessageLaneInitializedFromGraph(state: BaseThreadState, namespace: string): void {
+        const metadataAny = state.metadata as any;
+        if (!metadataAny[namespace] || typeof metadataAny[namespace] !== 'object') {
+            metadataAny[namespace] = {};
+        }
+
+        if (metadataAny[namespace].graphSeedInitialized === true) {
+            if (!Array.isArray(metadataAny[namespace].messages)) {
+                metadataAny[namespace].messages = [];
+            }
+            return;
+        }
+
+        const graphMessages = Array.isArray(state.messages)
+            ? state.messages.map((msg) => ({ ...msg }))
+            : [];
+
+        metadataAny[namespace].messages = graphMessages;
+        metadataAny[namespace].graphSeedInitialized = true;
+    }
+
+    protected buildAssistantMessagesForNode(
+        state: BaseThreadState,
+        policy: Required<NodeRunPolicy>,
+        override?: ChatMessage[],
+    ): ChatMessage[] {
+        if (override) {
+            const overrideAssistant = override.filter(msg => msg.role === 'assistant').map(msg => ({ ...msg }));
+            if (!policy.includeGraphAssistantMessages) {
+                return overrideAssistant;
+            }
+
+            const graphAssistant = (state.messages || [])
+                .filter(msg => msg.role === 'assistant')
+                .map(msg => ({ ...msg }));
+
+            return [...graphAssistant, ...overrideAssistant];
+        }
+
+        if (!policy.includeGraphAssistantMessages) {
+            return [];
+        }
+
+        return (state.messages || [])
+            .filter(msg => msg.role === 'assistant')
+            .map(msg => ({ ...msg }));
+    }
+
+    protected buildUserMessagesForNode(
+        state: BaseThreadState,
+        policy: Required<NodeRunPolicy>,
+        override?: ChatMessage[],
+    ): ChatMessage[] {
+        if (override) {
+            const overrideUser = override.filter(msg => msg.role === 'user').map(msg => ({ ...msg }));
+            if (!policy.includeGraphUserMessages) {
+                return overrideUser;
+            }
+
+            const graphUser = (state.messages || [])
+                .filter(msg => msg.role === 'user')
+                .map(msg => ({ ...msg }));
+
+            return [...graphUser, ...overrideUser];
+        }
+
+        if (!policy.includeGraphUserMessages) {
+            return [];
+        }
+
+        return (state.messages || [])
+            .filter(msg => msg.role === 'user')
+            .map(msg => ({ ...msg }));
+    }
+
+    protected buildSystemPromptForNode(systemPrompt: string, override?: string): ChatMessage {
+        const content = (override ?? systemPrompt ?? '').trim();
+        return {
+            role: 'system',
+            content,
+        };
+    }
+
+    protected createNodeRunContext(
+        state: BaseThreadState,
+        input: {
+            systemPrompt: string;
+            policy?: NodeRunPolicy;
+            assistantMessages?: ChatMessage[];
+            userMessages?: ChatMessage[];
+            systemMessageOverride?: string;
+        },
+    ): NodeRunContext {
+        const defaults = this.getDefaultNodeRunPolicy();
+        const policy: Required<NodeRunPolicy> = {
+            ...defaults,
+            ...(input.policy || {}),
+        };
+
+        let namespace = String(policy.nodeStateNamespace || '').trim();
+        if (!namespace) {
+            namespace = `__messages_${this.id}`;
+        }
+        if (namespace) {
+            this.ensureNodeMessageLaneInitializedFromGraph(state, namespace);
+        }
+
+        const systemMessage = this.buildSystemPromptForNode(input.systemPrompt, input.systemMessageOverride);
+        let mergedMessages: ChatMessage[] = [];
+
+        if (policy.messageSource === 'graph' && !input.assistantMessages && !input.userMessages) {
+            mergedMessages = [
+                ...(state.messages || []).filter(msg => msg.role !== 'system').map(msg => ({ ...msg })),
+                systemMessage,
+            ];
+        } else if (policy.messageSource === 'node-local' && this.currentNodeRunContext?.messages?.length) {
+            mergedMessages = [
+                ...this.currentNodeRunContext.messages
+                    .filter(msg => msg.role !== 'system')
+                    .map(msg => ({ ...msg })),
+                systemMessage,
+            ];
+        } else {
+            const assistantMessages = this.buildAssistantMessagesForNode(state, policy, input.assistantMessages);
+            const userMessages = this.buildUserMessagesForNode(state, policy, input.userMessages);
+            mergedMessages = [
+                ...assistantMessages,
+                ...userMessages,
+                systemMessage,
+            ];
+        }
+
+        return {
+            runId: `${this.id}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+            nodeId: this.id,
+            nodeName: this.name,
+            messages: mergedMessages,
+            toolTranscript: [],
+            hadToolCalls: false,
+            hadUserMessages: false,
+            policy,
+        };
     }
 
     /**
@@ -851,6 +1192,30 @@ Content rules – enforced:
     protected async appendResponse(state: BaseThreadState, content: string): Promise<void> {
         // Ensure content is a string
         const contentStr = typeof content === 'string' ? content : JSON.stringify(content);
+
+        if (this.currentNodeRunContext) {
+            this.currentNodeRunContext.messages.push({
+                role: 'assistant',
+                content: contentStr,
+                metadata: {
+                    nodeId: this.id,
+                    timestamp: Date.now()
+                }
+            });
+        }
+
+        this.appendNodeScopedMessage(state, {
+            role: 'assistant',
+            content: contentStr,
+            metadata: {
+                nodeId: this.id,
+                timestamp: Date.now()
+            }
+        }, 'assistant');
+
+        if (this.currentNodeRunContext && !this.currentNodeRunContext.policy.persistAssistantToGraph) {
+            return;
+        }
         
         state.messages.push({
             role: 'assistant',
@@ -1064,6 +1429,90 @@ Content rules – enforced:
         });
     }
 
+    private stableStringify(value: unknown): string {
+        const normalize = (input: unknown): unknown => {
+            if (Array.isArray(input)) {
+                return input.map(item => normalize(item));
+            }
+
+            if (!input || typeof input !== 'object') {
+                return input;
+            }
+
+            const record = input as Record<string, unknown>;
+            const sortedKeys = Object.keys(record).sort((a, b) => a.localeCompare(b));
+            const normalized: Record<string, unknown> = {};
+            for (const key of sortedKeys) {
+                normalized[key] = normalize(record[key]);
+            }
+
+            return normalized;
+        };
+
+        return JSON.stringify(normalize(value));
+    }
+
+    private buildToolRunDedupeKey(toolName: string, args: unknown): string {
+        return `${toolName}:${this.stableStringify(args ?? {})}`;
+    }
+
+    private persistStructuredToolRunRecord(
+        state: BaseThreadState,
+        payload: {
+            toolName: string;
+            toolRunId: string;
+            args: unknown;
+            success: boolean;
+            result?: unknown;
+            error?: string;
+        },
+    ): void {
+        if (!this.currentNodeRunContext) {
+            return;
+        }
+
+        const metadataAny = state.metadata as any;
+        const dedupeKey = this.buildToolRunDedupeKey(payload.toolName, payload.args);
+        const record = {
+            toolName: payload.toolName,
+            toolRunId: payload.toolRunId,
+            dedupeKey,
+            args: payload.args ?? {},
+            success: payload.success,
+            result: payload.result,
+            error: payload.error,
+            timestamp: Date.now(),
+            nodeId: this.id,
+            nodeName: this.name,
+        };
+
+        if (!Array.isArray(metadataAny.__toolRuns)) {
+            metadataAny.__toolRuns = [];
+        }
+        if (!metadataAny.__toolRunIndex || typeof metadataAny.__toolRunIndex !== 'object') {
+            metadataAny.__toolRunIndex = {};
+        }
+        metadataAny.__toolRuns.push(record);
+        metadataAny.__toolRunIndex[dedupeKey] = record;
+
+        const namespace = String(this.currentNodeRunContext.policy.nodeStateNamespace || '').trim();
+        if (namespace) {
+            this.ensureNodeMessageLaneInitializedFromGraph(state, namespace);
+
+            if (!Array.isArray(metadataAny[namespace].toolRuns)) {
+                metadataAny[namespace].toolRuns = [];
+            }
+
+            if (!metadataAny[namespace].toolRunIndex || typeof metadataAny[namespace].toolRunIndex !== 'object') {
+                metadataAny[namespace].toolRunIndex = {};
+            }
+
+            metadataAny[namespace].toolRuns.push(record);
+            metadataAny[namespace].toolRunIndex[dedupeKey] = record;
+        }
+        this.bumpStateVersion(state);
+    }
+
 
     /**
      * Execute multiple tool calls, append results as 'tool' messages, return results array.
@@ -1080,6 +1529,9 @@ Content rules – enforced:
         if (!toolCalls?.length) return [];
 
         state.metadata.hadToolCalls = true;
+        if (this.currentNodeRunContext) {
+            this.currentNodeRunContext.hadToolCalls = true;
+        }
 
         // Check for abort before processing tools
         throwIfAborted(state, 'Tool execution aborted');
@@ -1095,6 +1547,35 @@ Content rules – enforced:
             const toolName = call.name;
             const args = call.args;
 
+            const policyBlockReason = await this.getToolPolicyBlockReason(state, toolName);
+            if (policyBlockReason) {
+                await this.emitToolCallEvent(state, toolRunId, toolName, args);
+                await this.emitToolResultEvent(state, toolRunId, false, policyBlockReason);
+
+                await this.appendToolResultMessage(state, toolName, {
+                    toolName,
+                    success: false,
+                    error: policyBlockReason,
+                    toolCallId: toolRunId
+                });
+                this.persistStructuredToolRunRecord(state, {
+                    toolName,
+                    toolRunId,
+                    args,
+                    success: false,
+                    error: policyBlockReason,
+                });
+                results.push({ toolName, success: false, error: policyBlockReason });
+                if (this.currentNodeRunContext) {
+                    this.currentNodeRunContext.toolTranscript.push({
+                        toolName,
+                        success: false,
+                        error: policyBlockReason,
+                    });
+                }
+                continue;
+            }
+
             // Disallowed → emit tool call and failure, then continue
             if (allowedTools?.length && !allowedTools.includes(toolName)) {
                 await this.emitToolCallEvent(state, toolRunId, toolName, args);
@@ -1106,7 +1587,21 @@ Content rules – enforced:
                     error: `Tool not allowed in this node: ${toolName}`,
                     toolCallId: toolRunId
                 });
+                this.persistStructuredToolRunRecord(state, {
+                    toolName,
+                    toolRunId,
+                    args,
+                    success: false,
+                    error: `Tool not allowed in this node: ${toolName}`,
+                });
                 results.push({ toolName, success: false, error: 'Not allowed' });
+                if (this.currentNodeRunContext) {
+                    this.currentNodeRunContext.toolTranscript.push({
+                        toolName,
+                        success: false,
+                        error: `Tool not allowed in this node: ${toolName}`,
+                    });
+                }
                 continue;
             }
 
@@ -1148,6 +1643,14 @@ Content rules – enforced:
                         error: toolError,
                         toolCallId: toolRunId
                     });
+                    this.persistStructuredToolRunRecord(state, {
+                        toolName,
+                        toolRunId,
+                        args,
+                        success: toolSuccess,
+                        result,
+                        error: toolError,
+                    });
 
                     results.push({
                         toolName,
@@ -1155,6 +1658,14 @@ Content rules – enforced:
                         result,
                         error: toolError
                     });
+                    if (this.currentNodeRunContext) {
+                        this.currentNodeRunContext.toolTranscript.push({
+                            toolName,
+                            success: toolSuccess,
+                            result,
+                            error: toolError,
+                        });
+                    }
                 } catch (err: any) {
                     const error = err.message || String(err);
                     
@@ -1167,7 +1678,21 @@ Content rules – enforced:
                         error,
                         toolCallId: toolRunId
                     });
+                    this.persistStructuredToolRunRecord(state, {
+                        toolName,
+                        toolRunId,
+                        args,
+                        success: false,
+                        error,
+                    });
                     results.push({ toolName, success: false, error });
+                    if (this.currentNodeRunContext) {
+                        this.currentNodeRunContext.toolTranscript.push({
+                            toolName,
+                            success: false,
+                            error,
+                        });
+                    }
                 }
             } catch {
                 await this.emitToolCallEvent(state, toolRunId, toolName, args);
@@ -1179,12 +1704,57 @@ Content rules – enforced:
                     error: `Unknown tool: ${toolName}`,
                     toolCallId: toolRunId
                 });
+                this.persistStructuredToolRunRecord(state, {
+                    toolName,
+                    toolRunId,
+                    args,
+                    success: false,
+                    error: `Unknown tool: ${toolName}`,
+                });
                 results.push({ toolName, success: false, error: 'Unknown tool' });
+                if (this.currentNodeRunContext) {
+                    this.currentNodeRunContext.toolTranscript.push({
+                        toolName,
+                        success: false,
+                        error: 'Unknown tool',
+                    });
+                }
                 continue;
             }
         }
 
         return results;
+    }
+
+    private async getToolPolicyBlockReason(state: BaseThreadState, toolName: string): Promise<string | null> {
+        const policy = (state.metadata as any).__toolAccessPolicy as {
+            allowedCategories: string[] | null;
+            allowedToolNames: string[] | null;
+        } | undefined;
+
+        if (!policy) {
+            return null;
+        }
+
+        const allowedToolNames = policy.allowedToolNames;
+        if (allowedToolNames?.length && !allowedToolNames.includes(toolName)) {
+            return `Tool not allowed by name policy: ${toolName}`;
+        }
+
+        let toolInstance: any;
+        try {
+            toolInstance = await toolRegistry.getTool(toolName);
+        } catch {
+            return null;
+        }
+
+        const category = String(toolInstance?.metadata?.category || '').trim();
+        const allowedCategories = policy.allowedCategories;
+        if (allowedCategories?.length && !allowedCategories.includes(category)) {
+            return `Tool category not allowed in this node: ${toolName} (category: ${category || 'unknown'})`;
+        }
+
+        return null;
     }
 
     /**
@@ -1198,8 +1768,8 @@ Content rules – enforced:
         action: string,
         result: ToolResult
     ): Promise<void> {
-        // Skip appending tool results for emit_chat_message
-        if (action === 'emit_chat_message') {
+        // Skip appending tool results for tools that should not add message payloads.
+        if (action === 'emit_chat_message' || action === 'browse_tools') {
             return;
         }
 
@@ -1207,21 +1777,81 @@ Content rules – enforced:
             ? `Tool ${action} succeeded`
             : `Tool ${action} failed: ${result.error || 'unknown error'}`;
 
-        const content = JSON.stringify(
-            {
-                tool: action,
-                success: result.success,
-                error: result.error || null,
-                result: result.result ? (JSON.stringify(result.result).length < 5000
-                    ? result.result
-                    : `${JSON.stringify(result.result).substring(0, 5000)}...`) : null,
-                toolCallId: result.toolCallId
-            },
-            null,
-            2
-        );
+        const normalizeResultPayload = (payload: unknown): unknown => {
+            if (typeof payload !== 'string') {
+                return payload;
+            }
 
-        state.messages.push({
+            const trimmed = payload.trim();
+            if (!trimmed) {
+                return payload;
+            }
+
+            if (!(trimmed.startsWith('{') || trimmed.startsWith('['))) {
+                return payload;
+            }
+
+            try {
+                return JSON.parse(trimmed);
+            } catch {
+                return payload;
+            }
+        };
+
+        const unwrapToolEnvelope = (payload: unknown): unknown => {
+            if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+                return payload;
+            }
+
+            const record = payload as Record<string, any>;
+            if ('result' in record && (
+                'toolName' in record ||
+                'tool' in record ||
+                'success' in record ||
+                'toolCallId' in record
+            )) {
+                return record.result;
+            }
+
+            return payload;
+        };
+
+        const formatForMessage = (payload: unknown): string => {
+            if (payload == null) {
+                return 'null';
+            }
+
+            const serialized = typeof payload === 'string'
+                ? payload
+                : JSON.stringify(payload, null, 2);
+
+            if (serialized.length <= 5000) {
+                return serialized;
+            }
+
+            return `${serialized.substring(0, 5000)}...`;
+        };
+
+        const normalizedResult = normalizeResultPayload(result.result);
+        const compactResult = unwrapToolEnvelope(normalizedResult);
+        const detailText = compactResult == null ? '' : formatForMessage(compactResult);
+        const normalizedErrorText = String(result.error || 'unknown error').trim();
+        const normalizedDetailText = detailText.trim();
+        const includeDetails = normalizedDetailText.length > 0 && normalizedDetailText !== normalizedErrorText;
+
+        const content = result.success
+            ? [
+                `tool: ${action}`,
+                'result:',
+                formatForMessage(compactResult),
+            ].join('\n')
+            : [
+                `tool: ${action}`,
+                `error: ${normalizedErrorText || 'unknown error'}`,
+                includeDetails ? `result:\n${detailText}` : '',
+            ].filter(Boolean).join('\n');
+
+        const toolMessage: ChatMessage = {
             role: 'tool',
             content,
             name: action,                     // tool name as sender
@@ -1235,7 +1865,19 @@ Content rules – enforced:
                 summary,
                 timestamp: Date.now()
             }
-        });
+        };
+
+        if (this.currentNodeRunContext) {
+            this.currentNodeRunContext.messages.push(toolMessage);
+        }
+
+        this.appendNodeScopedMessage(state, toolMessage, 'tool');
+
+        if (this.currentNodeRunContext && !this.currentNodeRunContext.policy.persistToolResultsToGraph) {
+            return;
+        }
+
+        state.messages.push(toolMessage);
         this.bumpStateVersion(state);
     }
 

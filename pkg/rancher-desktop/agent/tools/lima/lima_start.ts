@@ -43,6 +43,7 @@ export const limaStartRegistration: ToolRegistration = {
   name: "lima_start",
   description: "Start a Lima virtual machine instance.",
   category: "lima",
+  operationTypes: ['execute'],
   schemaDef: {
     instance: { type: 'string' as const, description: "Name of the Lima instance" },
   },

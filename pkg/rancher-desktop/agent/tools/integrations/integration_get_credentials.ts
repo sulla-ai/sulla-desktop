@@ -51,7 +51,7 @@ Last sync at: ${status.last_sync_at ? new Date(status.last_sync_at).toLocaleStri
 
 Credentials:\n`;
       credentials.forEach(cred => {
-        responseString += `- ${cred.title} (${cred.key}): ${cred.has_value ? '[SET]' : '[NOT SET]'} (${cred.required ? 'Required' : 'Optional'})\n`;
+        responseString += `- ${cred.title} (${cred.key}): ${cred.has_value ? String(cred.value) : '[NOT SET]'} (${cred.required ? 'Required' : 'Optional'})\n`;
       });
 
       return {
@@ -79,6 +79,7 @@ export const integrationGetCredentialsRegistration: ToolRegistration = {
   name: "integration_get_credentials",
   description: "Retrieve the credentials and connection status for a specific integration. Returns each credential property name, title, type, whether it is required, and its stored value, along with whether the integration is enabled.",
   category: "integrations",
+  operationTypes: ['read'],
   schemaDef: {
     integration_slug: { type: 'string' as const, description: "The slug identifier of the integration (e.g. 'slack', 'github', 'n8n')" },
   },

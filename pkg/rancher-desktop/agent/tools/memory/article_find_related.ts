@@ -51,6 +51,7 @@ export const articleFindRelatedRegistration: ToolRegistration = {
   name: "article_find_related",
   description: "Find articles related to a given slug via graph relationships. Returns up to 10 related articles by default.",
   category: "memory",
+  operationTypes: ['read'],
   schemaDef: {
     slug: { type: 'string' as const, description: "The slug of the article to find related articles for" },
     relType: { type: 'string' as const, optional: true, default: "MENTIONS", description: "Type of relationship to search (e.g., MENTIONS)" },

@@ -44,6 +44,7 @@ export const getWorkflowNodeRegistration: ToolRegistration = {
   name: 'get_workflow_node',
   description: 'Get a single node from an n8n workflow by nodeId or nodeName.',
   category: 'n8n',
+  operationTypes: ['read'],
   schemaDef: {
     workflowId: { type: 'string' as const, description: 'Workflow ID' },
     nodeId: { type: 'string' as const, optional: true, description: 'Node ID (preferred)' },

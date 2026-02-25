@@ -52,6 +52,7 @@ export const slackSearchUsersRegistration: ToolRegistration = {
   name: "slack_search_users",
   description: "Search Slack users by username, real name, display name, or email.",
   category: "slack",
+  operationTypes: ['read'],
   schemaDef: {
     query: { type: 'string' as const, description: "Search query for Slack users" },
     limit: { type: 'number' as const, optional: true, description: "Maximum number of users to return (default: 10)" },

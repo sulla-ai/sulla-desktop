@@ -47,6 +47,7 @@ export const dockerLogsRegistration: ToolRegistration = {
   name: "docker_logs",
   description: "Fetch the logs of a Docker container.",
   category: "docker",
+  operationTypes: ['read'],
   schemaDef: {
     container: { type: 'string' as const, description: "Container name or ID" },
     follow: { type: 'boolean' as const, optional: true, description: "Follow log output" },

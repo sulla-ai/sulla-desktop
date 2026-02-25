@@ -51,6 +51,7 @@ export const calendarCancelRegistration: ToolRegistration = {
   name: "calendar_cancel",
   description: "Cancel a calendar event by ID.",
   category: "calendar",
+  operationTypes: ['delete'],
   schemaDef: {
     eventId: { type: 'number' as const, description: "The ID of the calendar event to cancel" },
   },

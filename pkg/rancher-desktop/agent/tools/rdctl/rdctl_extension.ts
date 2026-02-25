@@ -41,6 +41,7 @@ export const rdctlExtensionRegistration: ToolRegistration = {
   name: "rdctl_extension",
   description: "Manage extensions.",
   category: "rdctl",
+  operationTypes: ['execute'],
   schemaDef: {
     subcommand: { type: 'string' as const, description: "Extension subcommand, e.g., install, uninstall, list" },
     args: { type: 'array' as const, items: { type: 'string' as const }, optional: true, description: "Arguments for the subcommand" },

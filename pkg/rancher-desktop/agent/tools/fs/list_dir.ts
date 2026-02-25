@@ -31,6 +31,7 @@ export const fsListDirRegistration: ToolRegistration = {
   name: 'fs_list_dir',
   description: 'List files and directories at a path.',
   category: 'fs',
+  operationTypes: ['read'],
   schemaDef: {
     path: { type: 'string' as const, description: 'Directory path to list.' },
   },

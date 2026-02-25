@@ -39,6 +39,7 @@ export const createDataTableRegistration: ToolRegistration = {
   name: "create_data_table",
   description: "Create a new data table in n8n.",
   category: "n8n",
+  operationTypes: ['create'],
   schemaDef: {
     name: { type: 'string' as const, description: "Data table name" },
     columns: { type: 'array' as const, items: {

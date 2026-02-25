@@ -37,6 +37,7 @@ export const rdctlListSettingsRegistration: ToolRegistration = {
   name: "rdctl_list_settings",
   description: "Lists the current settings.",
   category: "rdctl",
+  operationTypes: ['read'],
   schemaDef: {},
   workerClass: RdctlListSettingsWorker,
 };

@@ -45,6 +45,7 @@ export const getTemplateCategoriesRegistration: ToolRegistration = {
   name: "get_template_categories",
   description: "List all available n8n template categories from the public n8n template library.",
   category: "n8n",
+  operationTypes: ['read'],
   schemaDef: {},
   workerClass: GetTemplateCategoriesWorker,
 };

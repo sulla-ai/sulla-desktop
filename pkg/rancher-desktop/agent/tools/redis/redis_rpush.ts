@@ -32,6 +32,7 @@ export const redisRpushRegistration: ToolRegistration = {
   name: "redis_rpush",
   description: "Append one or more values to a Redis list.",
   category: "redis",
+  operationTypes: ['execute'],
   schemaDef: {
     key: { type: 'string' as const, description: "The Redis list key" },
     values: { type: 'array' as const, items: { type: 'string' as const }, description: "The values to append" },

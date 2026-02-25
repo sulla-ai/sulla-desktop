@@ -38,6 +38,7 @@ export const pgQueryOneRegistration: ToolRegistration = {
   name: "pg_queryone",
   description: "Execute a PostgreSQL query and return the first result row.",
   category: "pg",
+  operationTypes: ['read'],
   schemaDef: {
     sql: { type: 'string' as const, description: "The SQL query to execute" },
     params: { type: 'array' as const, items: { type: 'string' as const }, optional: true, description: "Parameters for the query" },

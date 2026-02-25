@@ -41,6 +41,7 @@ export const getTemplateWorkflowRegistration: ToolRegistration = {
   name: "get_template_workflow",
   description: "Get the details of a single n8n workflow template by its ID from the public n8n template library.",
   category: "n8n",
+  operationTypes: ['read'],
   schemaDef: {
     id: { type: 'number' as const, description: "Template workflow ID" },
   },

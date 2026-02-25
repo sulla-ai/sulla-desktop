@@ -1,5 +1,7 @@
 // src/tools/registry.ts
 
+import type { ToolOperation } from './base';
+
 type ToolLoader = () => Promise<any>;
 
 export interface ToolEntry {
@@ -15,6 +17,7 @@ export interface ToolRegistration {
   category: string;
   schemaDef: any;
   workerClass: new () => any;
+  operationTypes?: ToolOperation[];
 }
 
 export class ToolRegistry {
@@ -69,7 +72,7 @@ export class ToolRegistry {
   }
 
   registerAllRegistrations(registrations: ToolRegistration[]) {
-    const entries = registrations.map((reg, index) => {
+    const entries = registrations.map((reg) => {
       const entry = {
         name: reg.name,
         description: reg.description,
@@ -80,6 +83,9 @@ export class ToolRegistry {
           instance.name = reg.name;
           instance.description = reg.description;
           instance.metadata.category = reg.category;
+          instance.metadata.operationTypes = Array.isArray(reg.operationTypes)
+            ? [...reg.operationTypes]
+            : [];
           return instance;
         },
       };

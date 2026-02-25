@@ -22,8 +22,8 @@ import { OutputNode } from './OutputNode';
 // ============================================================================
 
 // SkillGraph retry configuration
-const MAX_PLANNER_RETRIES = 10; // Total attempts: 3 (0, 1, 2)
-const MAX_REASONING_RETRIES = 10;
+const MAX_PLANNER_RETRIES = 15;
+const MAX_REASONING_RETRIES = 15;
 const MAX_ACTION_LOOPS = 20;
 
 // ============================================================================
@@ -31,7 +31,7 @@ const MAX_ACTION_LOOPS = 20;
 // ============================================================================
 
 const DEFAULT_WS_CHANNEL = 'dreaming-protocol';
-const MAX_CONSECTUIVE_LOOP = 10;
+const MAX_CONSECTUIVE_LOOP = 15;
 const MAX_MESSAGES_IN_THREAD = 120;
 
 // ============================================================================
@@ -772,7 +772,15 @@ export function createSkillGraph(): Graph<SkillGraphState> {
   
   // Action completes → always route through critic for verification (no bypasses)
   graph.addConditionalEdge('action', state => {
-    const actionResponse = (state.metadata as any).action?.response;
+    const actionMeta = (state.metadata as any).action || {};
+    const actionStatus = String(actionMeta.status || '').trim().toLowerCase();
+    const actionResponse = actionMeta.response;
+
+    if (actionStatus === 'blocked') {
+      console.log('[SkillGraph] Action reported BLOCKED - routing back to reasoning and skipping critic');
+      (state.metadata as any).reactLoopCount = 0;
+      return 'reasoning';
+    }
 
     if (actionResponse) {
       console.log('[SkillGraph] Action response captured - sending to critic for verification');
@@ -790,8 +798,8 @@ export function createSkillGraph(): Graph<SkillGraphState> {
       return 'skill_critic';
     }
 
-    console.log(`[SkillGraph] Action completed (cycle ${newLoopCount}) - returning to reasoning`);
-    return 'reasoning';
+    console.log(`[SkillGraph] Action completed (cycle ${newLoopCount}) - continuing action loop`);
+    return 'action';
   });
   
   // Critic evaluation → routing based on technical/project completion

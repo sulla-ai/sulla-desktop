@@ -99,6 +99,7 @@ export const validateWorkflowPayloadRegistration: ToolRegistration = {
   name: "validate_workflow_payload",
   description: "Validate an n8n workflow payload (nodes/connections/settings) before create/update.",
   category: "n8n",
+  operationTypes: ['execute'],
   schemaDef: {
     name: { type: 'string' as const, description: "Workflow name" },
     nodes: { type: 'array' as const, items: { type: 'object' as const }, description: "Workflow nodes as n8n node objects." },

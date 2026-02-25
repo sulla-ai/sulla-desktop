@@ -285,8 +285,9 @@ export abstract class VectorBaseModel {
       return existingIds;
     }
 
-    // Otherwise, look for chunks dynamically
-    // Start with _0 and keep checking until we don't find any more
+    // Otherwise, look for chunks dynamically.
+    // Scan a bounded range instead of stopping at the first miss so sparse
+    // chunk sets (e.g. missing _0 after partial deletes) are still discoverable.
     let chunkIndex = 0;
     const maxChunks = 100; // Reasonable upper limit to prevent infinite loops
 
@@ -297,15 +298,12 @@ export abstract class VectorBaseModel {
         if (res?.ids?.length && res.ids[0]) {
           existingIds.push(chunkId);
           console.log(`[VectorBaseModel] Found chunk ${chunkId}`);
-          chunkIndex++;
-        } else {
-          // No more chunks found
-          break;
         }
       } catch (err) {
-        // Chunk doesn't exist, stop looking
-        break;
+        // Chunk doesn't exist, continue scanning bounded range
       }
+
+      chunkIndex++;
     }
 
     console.log(`[VectorBaseModel] Found ${existingIds.length} chunks for ${baseId}`);
@@ -350,7 +348,15 @@ export abstract class VectorBaseModel {
     const id = this.attributes[this.idField];
     if (!id) return;
 
-    await VectorBaseModel.vectorDB.deleteDocuments(this.collectionName, [String(id)]);
+    const baseId = String(id);
+    const chunkIds = await VectorBaseModel.findAllChunkIds(this.collectionName, baseId);
+    const idsToDelete = Array.from(new Set([baseId, ...chunkIds]));
+
+    await VectorBaseModel.vectorDB.deleteDocuments(
+      this.collectionName,
+      idsToDelete,
+      { id: { $startsWith: `${baseId}_` } },
+    );
   }
 
   get attributesSnapshot(): Readonly<Record<string, any>> {

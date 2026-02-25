@@ -55,6 +55,7 @@ export const integrationIsEnabledRegistration: ToolRegistration = {
   name: "integration_is_enabled",
   description: "Check whether a specific integration is enabled (connected). Returns the enabled status along with connection timestamps.",
   category: "integrations",
+  operationTypes: ['read'],
   schemaDef: {
     integration_slug: { type: 'string' as const, description: "The slug identifier of the integration (e.g. 'slack', 'github', 'n8n')" },
   },

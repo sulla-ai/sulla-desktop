@@ -44,6 +44,7 @@ export const gitHubInitRegistration: ToolRegistration = {
   name: "github_init",
   description: "Initialize a git repository at the specified absolute path.",
   category: "github",
+  operationTypes: ['execute', 'create'],
   schemaDef: {
     absolutePath: { type: 'string' as const, description: "Absolute path where the git repository should be initialized" },
   },

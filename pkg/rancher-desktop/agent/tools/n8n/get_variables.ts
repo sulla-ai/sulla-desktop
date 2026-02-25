@@ -113,6 +113,7 @@ export const getVariablesRegistration: ToolRegistration = {
   name: "get_variables",
   description: "Get all variables from n8n with optional filtering.",
   category: "n8n",
+  operationTypes: ['read'],
   schemaDef: {
     limit: { type: 'number' as const, optional: true, description: "Maximum number of results" },
     cursor: { type: 'string' as const, optional: true, description: "Cursor for pagination" },

@@ -51,6 +51,7 @@ export const kubectlApplyRegistration: ToolRegistration = {
   name: "kubectl_apply",
   description: "Apply a Kubernetes manifest file.",
   category: "kubectl",
+  operationTypes: ['execute', 'update'],
   schemaDef: {
     file: { type: 'string' as const, description: "Path to the manifest file" },
     namespace: { type: 'string' as const, optional: true, description: "Namespace to apply to" },

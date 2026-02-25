@@ -49,6 +49,7 @@ export const articleDeleteRegistration: ToolRegistration = {
   name: "article_delete",
   description: "Delete an article from the knowledge base by its slug. This action is permanent.",
   category: "memory",
+  operationTypes: ['delete'],
   schemaDef: {
     slug: { type: 'string' as const, description: "Slug of the article to delete" },
   },

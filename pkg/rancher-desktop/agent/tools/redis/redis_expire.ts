@@ -32,6 +32,7 @@ export const redisExpireRegistration: ToolRegistration = {
   name: "redis_expire",
   description: "Set a timeout on a Redis key.",
   category: "redis",
+  operationTypes: ['execute'],
   schemaDef: {
     key: { type: 'string' as const, description: "The Redis key to set expiration on" },
     seconds: { type: 'number' as const, description: "The expiration time in seconds" },

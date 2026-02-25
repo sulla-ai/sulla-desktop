@@ -75,6 +75,7 @@ export const removeObservationalMemoryRegistration: ToolRegistration = {
   name: "remove_observational_memory",
   description: "Remove a specific observational memory by its ID to delete it from long-term memory.",
   category: "meta",
+  operationTypes: ['delete'],
   schemaDef: {
     id: { type: 'string' as const, description: "The 4-character ID of the memory to remove." },
   },

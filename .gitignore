@@ -23,3 +23,5 @@
 /.yarn/
 .DS_Store
 justfile
+.env
+log/*

@@ -1,14 +1,5 @@
-import { BaseTool, ToolResponse } from "../base";
+import { BaseTool, ToolRegistration, ToolResponse } from "../base";
 import { getIntegrationService } from '../../services/IntegrationService';
-
-// Define the registration type
-type ToolRegistration = {
-  name: string;
-  description: string;
-  category: string;
-  schemaDef: any; // Using any for now, could be more specific
-  workerClass: new () => BaseTool;
-};
 
 /**
  * Brave Search Tool - Worker class for execution
@@ -85,6 +76,7 @@ export const braveSearchRegistration: ToolRegistration = {
   name: "brave_search",
   description: "Search the web using Brave Search API for current and comprehensive results.",
   category: "browser",
+  operationTypes: ['read'],
   schemaDef: {
     query: { type: 'string' as const, description: "The search query to execute" },
     count: { type: 'number' as const, optional: true, default: 10, description: "Number of search results to return (max 20)" },

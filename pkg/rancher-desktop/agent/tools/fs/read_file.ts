@@ -30,6 +30,7 @@ export const fsReadFileRegistration: ToolRegistration = {
   name: 'fs_read_file',
   description: 'Read a text file and return its contents.',
   category: 'fs',
+  operationTypes: ['read'],
   schemaDef: {
     path: { type: 'string' as const, description: 'File path to read.' },
   },
