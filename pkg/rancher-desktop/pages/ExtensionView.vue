@@ -50,7 +50,6 @@ const extensionIcon = ref<string>('');
 const extensionDisplayMode = ref<'embedded' | 'iframe'>('iframe');
 const extensionContentUrl = ref<string>('');
 const extensionContentHtml = ref<string>('');
-const iframeRef = ref<HTMLIFrameElement | null>(null);
 
 const toggleTheme = () => {
   isDark.value = !isDark.value;
@@ -58,25 +57,15 @@ const toggleTheme = () => {
 };
 
 const onIframeLoad = () => {
-  const iframe = iframeRef.value;
+  const iframe = document.querySelector('iframe') as HTMLIFrameElement;
   if (iframe && iframe.contentWindow) {
-    try {
-      const height = iframe.contentWindow.document.body.scrollHeight;
-      iframe.style.height = height + 'px';
-    } catch (e) {
-      console.error('Failed to resize iframe:', e);
-    }
-    // Send theme to iframe
-    console.log('Sending initial theme to iframe:', isDark.value);
     iframe.contentWindow.postMessage({ type: 'theme', isDark: isDark.value }, '*');
   }
 };
 
 watch(isDark, (newVal) => {
-  console.log('Theme changed to:', newVal);
-  const iframe = iframeRef.value;
+  const iframe = document.querySelector('iframe') as HTMLIFrameElement;
   if (iframe && iframe.contentWindow) {
-    console.log('Sending theme update to iframe:', newVal);
     iframe.contentWindow.postMessage({ type: 'theme', isDark: newVal }, '*');
   }
 });
