@@ -214,14 +214,33 @@ Electron.protocol.registerSchemesAsPrivileged([{ scheme: 'app' }, {
 hookSullaEnd(Electron, mainEvents, window);
 
 
+// Allowing us to iframe anything we want
+Electron.app.whenReady().then(() => {
+  Electron.session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    const headers = { ...(details.responseHeaders || {}) };
+
+    // Delete the two main things that block iframes
+    delete headers['x-frame-options'];
+    delete headers['X-Frame-Options'];
+    delete headers['content-security-policy'];
+    delete headers['Content-Security-Policy'];
+
+    // Optional: also strip stricter variants
+    delete headers['x-frame-options-report'];
+    delete headers['X-Frame-Options-Report'];
+    delete headers['frame-ancestors'];
+
+    console.log(`[Sulla Global Fix] Stripped framing headers from → ${details.url}`);
+
+    callback({ responseHeaders: headers });
+  });
+});
+
+
+
 ////////////////////////////////////////////////////////////////////////////////
 // SULLA DESKTOP - END
 ////////////////////////////////////////////////////////////////////////////////
-
-
-
-
-
 
 
 

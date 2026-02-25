@@ -90,6 +90,10 @@ services:
       - N8N_PORT=5678
       - N8N_PROTOCOL=http
       - WEBHOOK_URL=http://localhost:30119/
+      - N8N_DISABLE_UI_SECURITY=true
+      - N8N_SAMESITE_COOKIE=none
+      - N8N_SECURE_COOKIE=false
+      - N8N_DISABLE_X_FRAME_OPTIONS=true
       - EXECUTIONS_MODE=regular
       - QUEUE_BULL_REDIS_HOST=redis
       - QUEUE_BULL_REDIS_PORT=6379

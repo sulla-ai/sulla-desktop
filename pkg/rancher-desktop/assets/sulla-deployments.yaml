@@ -404,6 +404,14 @@ spec:
           value: "localhost"
         - name: N8N_PORT
           value: "5678"
+        - name: N8N_DISABLE_UI_SECURITY
+          value: "true"
+        - name: N8N_SAMESITE_COOKIE
+          value: "none"
+        - name: N8N_SECURE_COOKIE
+          value: "false"
+        - name: N8N_DISABLE_X_FRAME_OPTIONS
+          value: "true"
         - name: N8N_PROTOCOL
           value: "http"
         - name: WEBHOOK_URL
