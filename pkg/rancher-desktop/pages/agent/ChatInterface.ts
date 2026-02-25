@@ -4,36 +4,6 @@ import { getAgentPersonaRegistry, type ChatMessage as RegistryChatMessage } from
 
 export type ChatMessage = RegistryChatMessage;
 
-
-type SidebarTodoStatus = 'pending' | 'in_progress' | 'done' | 'blocked';
-
-type SidebarTodo = {
-  key: string;
-  title: string;
-  status: SidebarTodoStatus;
-  statusLabel: string;
-};
-
-function normalizeStatus(status: string): SidebarTodoStatus {
-  if (status === 'in_progress' || status === 'done' || status === 'blocked') {
-    return status;
-  }
-  return 'pending';
-}
-
-function makeStatusLabel(status: SidebarTodoStatus): string {
-  switch (status) {
-  case 'in_progress':
-    return 'In progress';
-  case 'done':
-    return 'Completed';
-  case 'blocked':
-    return 'Blocked';
-  default:
-    return 'Pending';
-  }
-}
-
 export class ChatInterface {
   private readonly registry = getAgentPersonaRegistry();
   private activeAgentId = ref<string>('chat-controller');

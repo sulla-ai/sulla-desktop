@@ -19,7 +19,7 @@ export { getExtensionService, ExtensionService, LocalExtensionMetadata } from '.
 
 // Models
 export { AgentPersonaService } from './database/models/AgentPersonaModel';
-export type { PersonaTemplateId, PersonaStatus, PersonaEmotion, TodoStatus, Todo, PlanState, AgentPersonaState } from './database/models/AgentPersonaModel';
+export type { PersonaTemplateId, PersonaStatus, PersonaEmotion, AgentPersonaState } from './database/models/AgentPersonaModel';
 
 // Registry
 export { AgentPersonaRegistry, getAgentPersonaRegistry } from './database/registry/AgentPersonaRegistry';

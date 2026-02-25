@@ -27,22 +27,6 @@ export type PersonaEmotion =
   | 'sadness'
   | 'mischief';
 
-export type TodoStatus = 'pending' | 'in_progress' | 'done' | 'blocked';
-
-export type Todo = {
-  id: number;
-  title: string;
-  status: TodoStatus;
-  orderIndex: number;
-};
-
-export type PlanState = {
-  planId: number | null;
-  goal: string | null;
-  todos: Map<number, Todo>;
-  todoOrder: number[];
-};
-
 export type AgentPersonaState = {
   agentId: string;
   agentName: string;
@@ -105,14 +89,6 @@ export class AgentPersonaService {
     totalInputCost: 0,
     totalOutputCost: 0,
     totalCost: 0,
-  });
-
-  // This service represents ONE agent - single plan state
-  readonly planState = reactive<PlanState>({
-    planId: null,
-    goal: null,
-    todos: new Map(),
-    todoOrder: [],
   });
 
   readonly emotionClass = computed(() => `persona-profile-${this.state.emotion}`);
@@ -245,42 +221,6 @@ export class AgentPersonaService {
     }
   }
 
-  // Plan State Management - this service represents ONE agent
-  resetPlan(planId: number, goal: string | null): void {
-    this.planState.planId = planId;
-    this.planState.goal = goal;
-    this.planState.todos.clear();
-    this.planState.todoOrder = [];
-  }
-
-  upsertTodo(todoId: number, title: string, orderIndex: number, status: TodoStatus): void {
-    this.planState.todos.set(todoId, { id: todoId, title, status, orderIndex });
-    if (!this.planState.todoOrder.includes(todoId)) {
-      this.planState.todoOrder.push(todoId);
-    }
-    this.sortTodoOrder();
-  }
-
-  deleteTodo(todoId: number): void {
-    this.planState.todos.delete(todoId);
-    this.planState.todoOrder = this.planState.todoOrder.filter((id: number) => id !== todoId);
-  }
-
-  updateTodoStatus(todoId: number, status: TodoStatus): void {
-    const todo = this.planState.todos.get(todoId);
-    if (todo) {
-      todo.status = status;
-    }
-  }
-
-  private sortTodoOrder(): void {
-    this.planState.todoOrder.sort((a: number, b: number) => {
-      const ta = this.planState.todos.get(a);
-      const tb = this.planState.todos.get(b);
-      return (ta?.orderIndex ?? 0) - (tb?.orderIndex ?? 0);
-    });
-  }
-
   private handleWebSocketMessage(agentId: string, msg: WebSocketMessage): void {
     const dataPreview = msg.data
       ? (typeof msg.data === 'string'
@@ -340,51 +280,6 @@ export class AgentPersonaService {
         // StrategicStateService sends: { type: 'progress', threadId, data: { phase, ... } }
         const data = (msg.data && typeof msg.data === 'object') ? (msg.data as any) : null;
         const phase = data?.phase;
-        
-        // Handle plan-related progress events
-        if (phase === 'plan_created' || phase === 'plan_revised' || phase === 'strategic_plan_created') {
-          const planId = data?.planId ? Number(data.planId) : null;
-          const goal = typeof data?.goal === 'string' ? data.goal : null;
-          if (planId) {
-            this.resetPlan(planId, goal);
-          }
-        }
-        
-        // Handle todo-related progress events
-        if (phase === 'todo_created' || phase === 'todo_updated' || phase === 'todo_completed') {
-          const todoId = data?.todoId ? Number(data.todoId) : null;
-          const title = typeof data?.title === 'string' ? data.title : '';
-          const orderIndex = data?.orderIndex !== undefined ? Number(data.orderIndex) : 0;
-          const status = typeof data?.status === 'string' ? data.status as TodoStatus : 'pending';
-          if (todoId) {
-            this.upsertTodo(todoId, title, orderIndex, status);
-          }
-        }
-        
-        // Handle todo deletion
-        if (phase === 'todo_deleted') {
-          const todoId = data?.todoId ? Number(data.todoId) : null;
-          if (todoId) {
-            this.deleteTodo(todoId);
-          }
-        }
-        
-        // Handle plan deletion
-        if (phase === 'plan_deleted') {
-          const planId = data?.planId ? Number(data.planId) : null;
-          if (planId) {
-            this.resetPlan(planId, null);
-          }
-        }
-        
-        if (phase === 'todo_status') {
-          const todoId = data?.todoId ? Number(data.todoId) : null;
-          const stepId = data?.stepId ? String(data.stepId) : null;
-          const status = typeof data?.status === 'string' ? data.status as TodoStatus : undefined;
-          if (todoId && status) {
-            this.updateTodoStatus(todoId, status);
-          }
-        }
 
         // Handle tool_call progress events - create tool card message
         if (phase === 'tool_call') {
