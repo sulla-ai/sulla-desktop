@@ -3,7 +3,10 @@ export const environment = `
 
 ## n8n
 - n8n is installed locally on docker.
-- The n8n dashboard is accessible at http://localhost:30119.
+- The n8n dashboard is accessible at http://127.0.0.1:30119.
+- n8n web UI host: localhost
+- n8n web UI port: 30119
+- n8n base URL: http://127.0.0.1:30119
 - n8n has a full API.
 - Native tools are built around the n8n API in the n8n tool category.
 - n8n is installed into the postgres database.
@@ -28,6 +31,29 @@ export const environment = `
 - update_workflow_node patches fields through nodePatch.
 - When name changes in update_workflow_node, related connections are rewritten automatically.
 - remove_workflow_node removes one node and cleans related connections automatically.
+
+## Active Sidebar Elements (Persona Assets)
+- The right sidebar supports active elements that can show live webpages (iframe) and editable documents.
+- Use tool 
+  
+  manage_active_asset
+  
+  to create/update/remove these active elements.
+- For workflow SPA webpage display, use the resolved stable workflow asset ID.
+- Keep URL on the workflow app main/base route only (origin), not deep workflow routes.
+- Derive base route dynamically from the provided workflow URL (URL origin), not hardcoded route paths.
+- Typical flow for workflow tasks:
+  1) Upsert iframe asset using a workflow URL.
+  2) Normalize to origin/main route and keep using the same id.
+  3) Keep active=true so user can watch live changes.
+- Recommended workflow URL example:
+  - https://<workflow-host>:<port>
+
+### manage_active_asset quick usage
+- Upsert workflow page:
+  {"action":"upsert","assetType":"iframe","assetId":"workflow_panel","skillSlug":"workflow_automation","title":"Workflow App","url":"https://workflow.example.internal/workflow/abc123","active":true,"collapsed":true}
+- Upsert planning document:
+  {"action":"upsert","assetType":"document","assetId":"planning-prd","title":"Planning PRD","content":"<h3>Plan</h3><p>...</p>","active":true}
 
 ## Chat Completions Endpoint
 - Local chat completions are provided by Sulla's OpenAI-compatible API server at http://localhost:3000/v1/chat/completions.

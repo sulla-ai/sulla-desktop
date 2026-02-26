@@ -166,4 +166,57 @@ describe('n8n workflow payload tools', () => {
     expect(parsed.nodes).toBeUndefined();
     expect(parsed.connections).toBeUndefined();
   });
+
+  it('create_workflow normalizes non-none saveDataSuccessExecution values to all', async () => {
+    const { createModule } = await loadN8nTools();
+    const worker = configureWorker(new createModule.CreateWorkflowWorker(), createModule.createWorkflowRegistration) as any;
+
+    const normalizedAll = worker.normalizeWorkflowPayload({
+      ...validPayload,
+      settings: {
+        saveDataSuccessExecution: 'all',
+      },
+    });
+    expect(normalizedAll.settings.saveDataSuccessExecution).toBe('all');
+
+    const normalizedFromLegacyValue = worker.normalizeWorkflowPayload({
+      ...validPayload,
+      settings: {
+        saveDataSuccessExecution: 'last',
+      },
+    });
+    expect(normalizedFromLegacyValue.settings.saveDataSuccessExecution).toBe('all');
+  });
+
+  it('update_workflow normalizes non-none saveDataSuccessExecution values to all', async () => {
+    const { updateModule } = await loadN8nTools();
+    const worker = configureWorker(new updateModule.UpdateWorkflowWorker(), updateModule.updateWorkflowRegistration) as any;
+
+    const stubService = {
+      getWorkflow: async () => ({
+        id: 'workflow-id-placeholder',
+        name: 'Existing Workflow',
+        active: false,
+        nodes: validPayload.nodes,
+        connections: validPayload.connections,
+        settings: {},
+      }),
+    };
+
+    const normalizedNone = await worker.normalizeWorkflowPayload({
+      id: 'workflow-id-placeholder',
+      settings: {
+        saveDataSuccessExecution: 'none',
+      },
+    }, stubService);
+    expect(normalizedNone.workflowData.settings.saveDataSuccessExecution).toBe('none');
+
+    const normalizedFromLegacyValue = await worker.normalizeWorkflowPayload({
+      id: 'workflow-id-placeholder',
+      settings: {
+        saveDataSuccessExecution: 'last',
+      },
+    }, stubService);
+    expect(normalizedFromLegacyValue.workflowData.settings.saveDataSuccessExecution).toBe('all');
+  });
 });

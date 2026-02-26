@@ -27,22 +27,6 @@ export type PersonaEmotion =
   | 'sadness'
   | 'mischief';
 
-export type TodoStatus = 'pending' | 'in_progress' | 'done' | 'blocked';
-
-export type Todo = {
-  id: number;
-  title: string;
-  status: TodoStatus;
-  orderIndex: number;
-};
-
-export type PlanState = {
-  planId: number | null;
-  goal: string | null;
-  todos: Map<number, Todo>;
-  todoOrder: number[];
-};
-
 export type AgentPersonaState = {
   agentId: string;
   agentName: string;
@@ -70,13 +54,30 @@ export type AgentPersonaState = {
   totalCost: number;
 };
 
+export type PersonaAssetType = 'iframe' | 'document';
+
+export type PersonaSidebarAsset = {
+  id: string;
+  type: PersonaAssetType;
+  title: string;
+  active: boolean;
+  skillSlug?: string;
+  collapsed: boolean;
+  updatedAt: number;
+  url?: string;
+  content?: string;
+  refKey?: string;
+};
+
 export class AgentPersonaService {
   private readonly registry: AgentPersonaRegistry;
   private wsService = getWebSocketClientService();
   private readonly wsUnsub = new Map<string, () => void>();
+  private lastSentN8nLiveEventsEnabled: boolean | null = null;
 
   readonly messages: ChatMessage[] = reactive([]);
   private readonly toolRunIdToMessageId = new Map<string, string>();
+  readonly activeAssets: PersonaSidebarAsset[] = reactive([]);
 
   graphRunning = ref(false);
 
@@ -107,14 +108,6 @@ export class AgentPersonaService {
     totalCost: 0,
   });
 
-  // This service represents ONE agent - single plan state
-  readonly planState = reactive<PlanState>({
-    planId: null,
-    goal: null,
-    todos: new Map(),
-    todoOrder: [],
-  });
-
   readonly emotionClass = computed(() => `persona-profile-${this.state.emotion}`);
 
   private refreshWebSocketService(): void {
@@ -140,6 +133,255 @@ export class AgentPersonaService {
 
     // Connect immediately — this is the core fix
     this.connectAndListen();
+  }
+
+  registerIframeAsset(input: {
+    id: string;
+    title: string;
+    url: string;
+    active?: boolean;
+    skillSlug?: string;
+    collapsed?: boolean;
+    refKey?: string;
+  }): void {
+    const stableId = this.resolveWebsiteAssetId(input.id, input.skillSlug);
+    const normalizedUrl = this.normalizeIframeUrlForAsset(stableId, input.skillSlug, input.url);
+    const existingAsset = this.activeAssets.find((asset) => asset.id === stableId && asset.type === 'iframe');
+    const fallbackUrl = existingAsset?.url || '';
+    const effectiveUrl = normalizedUrl || fallbackUrl;
+
+    console.log('[AgentPersonaModel] registerIframeAsset', {
+      requestedId: input.id,
+      stableId,
+      skillSlug: input.skillSlug || '',
+      requestedUrl: input.url || '',
+      normalizedUrl,
+      fallbackUrl,
+      effectiveUrl,
+      hadExistingAsset: !!existingAsset,
+    });
+
+    if (!effectiveUrl.trim()) {
+      console.error('[AgentPersonaModel] registerIframeAsset produced empty iframe src', input);
+      return;
+    }
+
+    this.upsertAsset({
+      id: stableId,
+      type: 'iframe',
+      title: input.title,
+      active: input.active ?? effectiveUrl.trim().length > 0,
+      skillSlug: input.skillSlug,
+      collapsed: input.collapsed ?? true,
+      updatedAt: Date.now(),
+      url: effectiveUrl,
+      refKey: input.refKey,
+    });
+  }
+
+  private normalizeSkillSlug(value: unknown): string {
+    if (typeof value !== 'string') {
+      return '';
+    }
+    return value.trim().toLowerCase();
+  }
+
+  private getStableWebsiteAssetIdForSkill(skillSlug: string): string | null {
+    if (!skillSlug) {
+      return null;
+    }
+
+    if (skillSlug.includes('workflow')) {
+      return 'sulla_n8n';
+    }
+
+    return null;
+  }
+
+  private resolveWebsiteAssetId(candidateId: string, skillSlug?: string): string {
+    const normalizedSkillSlug = this.normalizeSkillSlug(skillSlug);
+    const stableSkillId = this.getStableWebsiteAssetIdForSkill(normalizedSkillSlug);
+    if (stableSkillId) {
+      return stableSkillId;
+    }
+    return candidateId;
+  }
+
+  private isN8nWorkflowAsset(assetId: string, skillSlug?: string): boolean {
+    const normalizedSkillSlug = this.normalizeSkillSlug(skillSlug);
+    return assetId === 'sulla_n8n' || normalizedSkillSlug.includes('workflow');
+  }
+
+  private normalizeIframeUrlForAsset(assetId: string, skillSlug: string | undefined, url: string): string {
+    const trimmed = String(url || '').trim();
+    if (!trimmed) {
+      return '';
+    }
+
+    if (!this.isN8nWorkflowAsset(assetId, skillSlug)) {
+      return trimmed;
+    }
+
+    try {
+      const parsed = new URL(trimmed);
+      return `${parsed.origin}/`;
+    } catch {
+      return trimmed;
+    }
+  }
+
+  private applyAssetLifecycleUpdate(data: any, phase: string): boolean {
+    const asset = (data?.asset && typeof data.asset === 'object') ? data.asset as any : null;
+    if (!asset) {
+      return false;
+    }
+
+    if (asset?.type === 'iframe') {
+      const skillSlug = this.normalizeSkillSlug(asset.skillSlug ?? asset.selected_skill_slug ?? data?.selected_skill_slug);
+      const requestedId = String(asset.id || `iframe_${Date.now()}`);
+      const requestedUrl = String(asset.url || '');
+
+      console.log('[AgentPersonaModel] websocket asset lifecycle iframe', {
+        phase,
+        requestedId,
+        requestedUrl,
+        skillSlug,
+        active: asset.active !== false,
+        collapsed: asset.collapsed !== false,
+      });
+
+      this.registerIframeAsset({
+        id: requestedId,
+        title: String(asset.title || 'Website'),
+        url: requestedUrl,
+        active: asset.active !== false,
+        skillSlug: skillSlug || undefined,
+        collapsed: asset.collapsed !== false,
+        refKey: typeof asset.refKey === 'string' ? asset.refKey : undefined,
+      });
+
+      return true;
+    }
+
+    if (asset?.type === 'document') {
+      const documentId = String(asset.id || `doc_${Date.now()}`);
+      const content = String(asset.content || '');
+      const existingDocument = this.activeAssets.find((item) => item.id === documentId && item.type === 'document');
+
+      if (existingDocument) {
+        this.updateDocumentAssetContent(documentId, content);
+      } else {
+        this.registerDocumentAsset({
+          id: documentId,
+          title: String(asset.title || 'Document'),
+          content,
+          active: asset.active !== false,
+          collapsed: asset.collapsed !== false,
+          refKey: typeof asset.refKey === 'string' ? asset.refKey : undefined,
+        });
+      }
+
+      return true;
+    }
+
+    return false;
+  }
+
+  registerDocumentAsset(input: {
+    id: string;
+    title: string;
+    content: string;
+    active?: boolean;
+    collapsed?: boolean;
+    refKey?: string;
+  }): void {
+    this.upsertAsset({
+      id: input.id,
+      type: 'document',
+      title: input.title,
+      active: input.active ?? input.content.trim().length > 0,
+      collapsed: input.collapsed ?? true,
+      updatedAt: Date.now(),
+      content: input.content,
+      refKey: input.refKey,
+    });
+  }
+
+  updateDocumentAssetContent(assetId: string, content: string): void {
+    const asset = this.activeAssets.find((item) => item.id === assetId && item.type === 'document');
+    if (!asset) {
+      return;
+    }
+    asset.content = content;
+    asset.active = content.trim().length > 0;
+    asset.updatedAt = Date.now();
+  }
+
+  setAssetCollapsed(assetId: string, collapsed: boolean): void {
+    const asset = this.activeAssets.find((item) => item.id === assetId);
+    if (!asset) {
+      return;
+    }
+
+    if (!collapsed) {
+      this.activeAssets.forEach((item) => {
+        item.collapsed = item.id !== assetId;
+      });
+    } else {
+      asset.collapsed = true;
+    }
+    asset.updatedAt = Date.now();
+  }
+
+  removeAsset(assetId: string): void {
+    const index = this.activeAssets.findIndex((item) => item.id === assetId);
+    if (index >= 0) {
+      this.activeAssets.splice(index, 1);
+      this.syncGraphRuntimeFlags();
+    }
+  }
+
+  private upsertAsset(asset: PersonaSidebarAsset): void {
+    const existing = this.activeAssets.find((item) => item.id === asset.id);
+    if (existing) {
+      Object.assign(existing, asset, { updatedAt: Date.now() });
+      this.syncGraphRuntimeFlags();
+      return;
+    }
+    this.activeAssets.push(asset);
+    this.syncGraphRuntimeFlags();
+  }
+
+  private isN8nLiveEventsEnabledForCurrentAssets(): boolean {
+    return this.activeAssets.some((asset) => {
+      if (asset.type !== 'iframe' || asset.active !== true) {
+        return false;
+      }
+
+      return this.isN8nWorkflowAsset(asset.id, asset.skillSlug);
+    });
+  }
+
+  private syncGraphRuntimeFlags(): void {
+    const threadId = String(this.state.threadId || '').trim();
+    if (!threadId) {
+      return;
+    }
+
+    const n8nLiveEventsEnabled = this.isN8nLiveEventsEnabledForCurrentAssets();
+    if (this.lastSentN8nLiveEventsEnabled === n8nLiveEventsEnabled) {
+      return;
+    }
+
+    this.lastSentN8nLiveEventsEnabled = n8nLiveEventsEnabled;
+    void this.wsService.send(this.state.agentId, {
+      type: 'graph_runtime_update',
+      data: {
+        threadId,
+        n8nLiveEventsEnabled,
+      },
+      timestamp: Date.now(),
+    });
   }
 
   private connectAndListen() {
@@ -204,6 +446,8 @@ export class AgentPersonaService {
 
   setThreadId(threadId: string): void {
     this.state.threadId = threadId;
+    this.lastSentN8nLiveEventsEnabled = null;
+    this.syncGraphRuntimeFlags();
   }
 
   getThreadId(): string | undefined {
@@ -212,6 +456,7 @@ export class AgentPersonaService {
 
   clearThreadId(): void {
     this.state.threadId = undefined;
+    this.lastSentN8nLiveEventsEnabled = null;
   }
 
   async emitStopSignal(agentId: string): Promise<boolean> {
@@ -243,42 +488,6 @@ export class AgentPersonaService {
       }
       this.wsService.disconnect(agentId);
     }
-  }
-
-  // Plan State Management - this service represents ONE agent
-  resetPlan(planId: number, goal: string | null): void {
-    this.planState.planId = planId;
-    this.planState.goal = goal;
-    this.planState.todos.clear();
-    this.planState.todoOrder = [];
-  }
-
-  upsertTodo(todoId: number, title: string, orderIndex: number, status: TodoStatus): void {
-    this.planState.todos.set(todoId, { id: todoId, title, status, orderIndex });
-    if (!this.planState.todoOrder.includes(todoId)) {
-      this.planState.todoOrder.push(todoId);
-    }
-    this.sortTodoOrder();
-  }
-
-  deleteTodo(todoId: number): void {
-    this.planState.todos.delete(todoId);
-    this.planState.todoOrder = this.planState.todoOrder.filter((id: number) => id !== todoId);
-  }
-
-  updateTodoStatus(todoId: number, status: TodoStatus): void {
-    const todo = this.planState.todos.get(todoId);
-    if (todo) {
-      todo.status = status;
-    }
-  }
-
-  private sortTodoOrder(): void {
-    this.planState.todoOrder.sort((a: number, b: number) => {
-      const ta = this.planState.todos.get(a);
-      const tb = this.planState.todos.get(b);
-      return (ta?.orderIndex ?? 0) - (tb?.orderIndex ?? 0);
-    });
   }
 
   private handleWebSocketMessage(agentId: string, msg: WebSocketMessage): void {
@@ -334,57 +543,23 @@ export class AgentPersonaService {
         }
         return;
       }
+      case 'register_or_activate_asset': {
+        const data = (msg.data && typeof msg.data === 'object') ? (msg.data as any) : null;
+        if (this.applyAssetLifecycleUpdate(data, 'register_or_activate_asset')) {
+          return;
+        }
+        console.error('[AgentPersonaModel] register_or_activate_asset payload not handled', {
+          reason: 'missing_or_invalid_asset_payload',
+          data,
+        });
+        return;
+      }
       case 'progress':
       case 'plan_update': {
         // Progress and plan_update messages contain plan updates, tool calls, etc.
         // StrategicStateService sends: { type: 'progress', threadId, data: { phase, ... } }
         const data = (msg.data && typeof msg.data === 'object') ? (msg.data as any) : null;
         const phase = data?.phase;
-        
-        // Handle plan-related progress events
-        if (phase === 'plan_created' || phase === 'plan_revised' || phase === 'strategic_plan_created') {
-          const planId = data?.planId ? Number(data.planId) : null;
-          const goal = typeof data?.goal === 'string' ? data.goal : null;
-          if (planId) {
-            this.resetPlan(planId, goal);
-          }
-        }
-        
-        // Handle todo-related progress events
-        if (phase === 'todo_created' || phase === 'todo_updated' || phase === 'todo_completed') {
-          const todoId = data?.todoId ? Number(data.todoId) : null;
-          const title = typeof data?.title === 'string' ? data.title : '';
-          const orderIndex = data?.orderIndex !== undefined ? Number(data.orderIndex) : 0;
-          const status = typeof data?.status === 'string' ? data.status as TodoStatus : 'pending';
-          if (todoId) {
-            this.upsertTodo(todoId, title, orderIndex, status);
-          }
-        }
-        
-        // Handle todo deletion
-        if (phase === 'todo_deleted') {
-          const todoId = data?.todoId ? Number(data.todoId) : null;
-          if (todoId) {
-            this.deleteTodo(todoId);
-          }
-        }
-        
-        // Handle plan deletion
-        if (phase === 'plan_deleted') {
-          const planId = data?.planId ? Number(data.planId) : null;
-          if (planId) {
-            this.resetPlan(planId, null);
-          }
-        }
-        
-        if (phase === 'todo_status') {
-          const todoId = data?.todoId ? Number(data.todoId) : null;
-          const stepId = data?.stepId ? String(data.stepId) : null;
-          const status = typeof data?.status === 'string' ? data.status as TodoStatus : undefined;
-          if (todoId && status) {
-            this.updateTodoStatus(todoId, status);
-          }
-        }
 
         // Handle tool_call progress events - create tool card message
         if (phase === 'tool_call') {

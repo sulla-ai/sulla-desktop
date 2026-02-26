@@ -56,6 +56,7 @@ import * as window from '@pkg/window';
 import { closeDashboard, openDashboard } from '@pkg/window/dashboard';
 import { openPreferences, preferencesSetDirtyFlag } from '@pkg/window/preferences';
 import { hookSullaEnd, sullaEnd, onMainProxyLoad } from '@pkg/sulla';
+import { SullaWebRequestFixer, SullaWebRequestLogEvent } from '@pkg/SullaWebRequestFixer';
 import { SullaSettingsModel } from './pkg/rancher-desktop/agent/database/models/SullaSettingsModel';
 
 // https://www.electronjs.org/docs/latest/breaking-changes#changed-gtk-4-is-default-when-running-gnome
@@ -214,14 +215,58 @@ Electron.protocol.registerSchemesAsPrivileged([{ scheme: 'app' }, {
 hookSullaEnd(Electron, mainEvents, window);
 
 
+
+const SULLA_WEB_REQUEST_LOG_DIR = path.join(process.cwd(), 'log');
+const SULLA_WEB_REQUEST_LOG_FILE = path.join(SULLA_WEB_REQUEST_LOG_DIR, 'background-web-requests.log');
+
+function writeSullaWebRequestEvent(event: SullaWebRequestLogEvent): void {
+  try {
+    let payloadText = '{}';
+    try {
+      payloadText = JSON.stringify(event.payload ?? {}, null, 2);
+    } catch {
+      payloadText = String(event.payload);
+    }
+
+    fs.mkdirSync(SULLA_WEB_REQUEST_LOG_DIR, { recursive: true });
+    fs.appendFileSync(SULLA_WEB_REQUEST_LOG_FILE, [
+      '---',
+      `timestamp: ${new Date().toISOString()}`,
+      `direction: ${event.direction}`,
+      `method: ${event.method || 'unknown'}`,
+      `statusCode: ${typeof event.statusCode === 'number' ? event.statusCode : 'n/a'}`,
+      `resourceType: ${event.resourceType || 'unknown'}`,
+      `url: ${event.url || 'unknown'}`,
+      'payload:',
+      payloadText,
+      '',
+    ].join('\n') + '\n', { encoding: 'utf-8' });
+
+    console.log('[SullaWebRequest]', {
+      timestamp: new Date().toISOString(),
+      direction: event.direction,
+      method: event.method || 'unknown',
+      statusCode: typeof event.statusCode === 'number' ? event.statusCode : 'n/a',
+      resourceType: event.resourceType || 'unknown',
+      url: event.url || 'unknown',
+      payload: event.payload ?? {},
+    });
+  } catch (error) {
+    console.error('[SullaWebRequestLogger] Failed to write event:', error);
+  }
+}
+
+Electron.app.whenReady().then(() => {
+  const session = Electron.session.defaultSession;
+
+  const fixer = new SullaWebRequestFixer(writeSullaWebRequestEvent);
+  fixer.attachToSession(session);
+
+});
+
 ////////////////////////////////////////////////////////////////////////////////
 // SULLA DESKTOP - END
 ////////////////////////////////////////////////////////////////////////////////
-
-
-
-
-
 
 
 

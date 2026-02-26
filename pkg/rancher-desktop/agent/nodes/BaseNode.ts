@@ -1,5 +1,5 @@
 import type { BaseThreadState, NodeResult } from './Graph';
-import type { ToolResult, ToolCall, ThreadState } from '../types';
+import type { ToolResult, ToolCall, ThreadState, PendingToolResult } from '../types';
 import type { WebSocketMessageHandler } from '../services/WebSocketClientService';
 import { getCurrentMode, getLocalService, getService } from '../languagemodels';
 import { parseJson } from '../services/JsonParseService';
@@ -182,7 +182,22 @@ Workspaces are dedicated folders in the user data directory for persistent files
 The runtime runs on Docker with full host access. Safe containers and images from the internet can be launched. Workspace directories are mounted into containers via docker-compose for hot reloading.
 
 ### Automation Workflows (n8n)
-n8n is the automation workflow engine. It includes access to thousands of community templates.
+n8n is the automation workflow engine. It includes access to thousands of community templates and is fully integrated into this runtime.
+
+Integration surfaces available to you:
+- WebSocket integration: live execution/workflow events are available, and you can trigger runtime socket updates through tool-driven graph state changes.
+- API integration: you can read/update/run workflows and inspect workflow state through n8n bridge capabilities.
+- Database integration (Postgres): workflow-related state and execution context can be persisted and queried through the existing system data layer.
+- Docker integration: n8n and related services run in the same containerized environment, with host/container network support already configured.
+
+When workflow automation is active, you should operate with a monitor-and-act loop:
+1. Can call getCurrentWorkflowState() to see the current graph/workflow state.
+2. Can decide what to change based on observed state and failures.
+3. Can call updateNode(...) and/or runWorkflow(...).
+4. Can call waitForExecutionComplete() and analyze execution logs/events.
+5. Can see exactly what changed and the resulting output/evidence.
+
+The tool stack is designed so you can manage the workflow system end-to-end without leaving this environment.
 
 ### Tools
 Built-in tools exist across multiple categories: {{tool_categories}}.  
@@ -463,8 +478,6 @@ export abstract class BaseNode<T extends BaseThreadState = BaseThreadState> {
         const previousToolAccessPolicy = (state.metadata as any).__toolAccessPolicy;
         (state.metadata as any).__toolAccessPolicy = callToolAccessPolicy;
 
-        const systemMessage = messages.find(msg => msg.role === 'system');
-        console.log(`[BaseNode:${this.name}] prompt:`, systemMessage ? systemMessage.content : 'No system message');
         const conversationId = typeof state.metadata.threadId === 'string' ? state.metadata.threadId : undefined;
         const nodeName = this.name;
         const previousRunContext = this.currentNodeRunContext;
@@ -473,6 +486,7 @@ export abstract class BaseNode<T extends BaseThreadState = BaseThreadState> {
             // Primary attempt
             state.metadata.hadToolCalls = false;
             state.metadata.hadUserMessages = false;
+            const pendingToolResults = (state.metadata as any).__pendingToolResults ?? [];
             let reply: NormalizedResponse | null = await this.llm.chat(messages, {
                 model: state.metadata.llmModel,
                 maxTokens: options.maxTokens,
@@ -482,12 +496,20 @@ export abstract class BaseNode<T extends BaseThreadState = BaseThreadState> {
                 tools: llmTools,
                 conversationId,
                 nodeName,
+                pendingToolResults,
             });
 
             if (!reply) throw new Error('No response from primary LLM');
 
+            // Clear pending tool results — they were injected into this request
+            (state.metadata as any).__pendingToolResults = [];
+
             // Append to state
-            this.appendResponse(state, reply.content);
+            this.appendResponse(state, reply.content, reply.metadata.rawProviderContent);
+
+            // Preserve raw provider content for this turn so every pending tool result
+            // can carry it even if execution is interrupted mid-tool-loop.
+            (state.metadata as any).__activeRawProviderContent = reply.metadata.rawProviderContent;
 
             // Send token information to AgentPersona
             this.dispatchTokenInfoToAgentPersona(state, reply);
@@ -527,7 +549,7 @@ export abstract class BaseNode<T extends BaseThreadState = BaseThreadState> {
                             nodeName,
                         });
                         if (reply) {
-                            this.appendResponse(state, reply.content);
+                            this.appendResponse(state, reply.content, reply.metadata.rawProviderContent);
                             this.triggerBackgroundStateMaintenance(state);
                             return reply;
                         }
@@ -539,6 +561,7 @@ export abstract class BaseNode<T extends BaseThreadState = BaseThreadState> {
 
             return null;
         } finally {
+            delete (state.metadata as any).__activeRawProviderContent;
             this.currentNodeRunContext = previousRunContext;
             (state.metadata as any).__toolAccessPolicy = previousToolAccessPolicy;
         }
@@ -1188,29 +1211,33 @@ export abstract class BaseNode<T extends BaseThreadState = BaseThreadState> {
 
     /**
      * Optional: append assistant response to state.messages
+     * rawProviderContent: raw content array from provider (e.g. Anthropic tool_use blocks) stored
+     * on the message so buildRequestBody can pass it through as-is on the next turn.
      */
-    protected async appendResponse(state: BaseThreadState, content: string): Promise<void> {
+    protected async appendResponse(state: BaseThreadState, content: string, rawProviderContent?: any): Promise<void> {
         // Ensure content is a string
         const contentStr = typeof content === 'string' ? content : JSON.stringify(content);
+
+        const messageMeta: Record<string, any> = {
+            nodeId: this.id,
+            timestamp: Date.now(),
+        };
+        if (rawProviderContent !== undefined) {
+            messageMeta.rawProviderContent = rawProviderContent;
+        }
 
         if (this.currentNodeRunContext) {
             this.currentNodeRunContext.messages.push({
                 role: 'assistant',
                 content: contentStr,
-                metadata: {
-                    nodeId: this.id,
-                    timestamp: Date.now()
-                }
+                metadata: messageMeta,
             });
         }
 
         this.appendNodeScopedMessage(state, {
             role: 'assistant',
             content: contentStr,
-            metadata: {
-                nodeId: this.id,
-                timestamp: Date.now()
-            }
+            metadata: messageMeta,
         }, 'assistant');
 
         if (this.currentNodeRunContext && !this.currentNodeRunContext.policy.persistAssistantToGraph) {
@@ -1220,10 +1247,7 @@ export abstract class BaseNode<T extends BaseThreadState = BaseThreadState> {
         state.messages.push({
             role: 'assistant',
             content: contentStr,
-            metadata: {
-                nodeId: this.id,
-                timestamp: Date.now()
-            }
+            metadata: messageMeta,
         });
         this.bumpStateVersion(state);
     }
@@ -1758,10 +1782,11 @@ export abstract class BaseNode<T extends BaseThreadState = BaseThreadState> {
     }
 
     /**
-     * Append tool result as a 'tool' message to state.messages.
-     * Role: 'tool' — standard for most LLM APIs (OpenAI, Anthropic, Grok).
-     * Includes short summary + full JSON payload for context.
-     * Failed tools add help instructions.
+     * Store tool result in state.metadata.__pendingToolResults.
+     * Results are NOT pushed to state.messages here.
+     * Instead they are injected into the outbound message array at send-time
+     * by the provider adapter (RemoteService / OllamaService) in the correct
+     * provider-specific format (Anthropic tool_result block, OpenAI tool role, etc.).
      */
     public async appendToolResultMessage(
         state: BaseThreadState,
@@ -1769,7 +1794,7 @@ export abstract class BaseNode<T extends BaseThreadState = BaseThreadState> {
         result: ToolResult
     ): Promise<void> {
         // Skip appending tool results for tools that should not add message payloads.
-        if (action === 'emit_chat_message' || action === 'browse_tools') {
+        if (action === 'emit_chat_message') {
             return;
         }
 
@@ -1832,6 +1857,16 @@ export abstract class BaseNode<T extends BaseThreadState = BaseThreadState> {
             return `${serialized.substring(0, 5000)}...`;
         };
 
+        const formatForPendingToolResult = (payload: unknown): string => {
+            if (payload == null) {
+                return 'null';
+            }
+
+            return typeof payload === 'string'
+                ? payload
+                : JSON.stringify(payload, null, 2);
+        };
+
         const normalizedResult = normalizeResultPayload(result.result);
         const compactResult = unwrapToolEnvelope(normalizedResult);
         const detailText = compactResult == null ? '' : formatForMessage(compactResult);
@@ -1851,11 +1886,23 @@ export abstract class BaseNode<T extends BaseThreadState = BaseThreadState> {
                 includeDetails ? `result:\n${detailText}` : '',
             ].filter(Boolean).join('\n');
 
+        const pendingContent = result.success
+            ? [
+                `tool: ${action}`,
+                'result:',
+                formatForPendingToolResult(compactResult),
+            ].join('\n')
+            : [
+                `tool: ${action}`,
+                `error: ${normalizedErrorText || 'unknown error'}`,
+                includeDetails ? `result:\n${formatForPendingToolResult(compactResult)}` : '',
+            ].filter(Boolean).join('\n');
+
         const toolMessage: ChatMessage = {
             role: 'tool',
             content,
-            name: action,                     // tool name as sender
-            tool_call_id: result.toolCallId,  // link back to call
+            name: action,
+            tool_call_id: result.toolCallId,
             metadata: {
                 nodeId: this.id,
                 nodeName: this.name,
@@ -1867,17 +1914,37 @@ export abstract class BaseNode<T extends BaseThreadState = BaseThreadState> {
             }
         };
 
+        // Keep tool message in node run context so the ReAct loop within this
+        // node execution can still see previous tool outputs mid-turn.
         if (this.currentNodeRunContext) {
             this.currentNodeRunContext.messages.push(toolMessage);
         }
 
         this.appendNodeScopedMessage(state, toolMessage, 'tool');
 
-        if (this.currentNodeRunContext && !this.currentNodeRunContext.policy.persistToolResultsToGraph) {
-            return;
-        }
+        // Store as pending tool result in state metadata for send-time injection.
+        const pendingRecord: PendingToolResult = {
+            toolCallId: result.toolCallId || `${action}_${Date.now()}`,
+            toolName: action,
+            success: result.success,
+            result: result.result,
+            error: result.error,
+            content: pendingContent,
+            nodeId: this.id,
+            nodeName: this.name,
+            timestamp: Date.now(),
+            rawProviderContent: undefined,
+        };
 
-        state.messages.push(toolMessage);
+        const metadataAny = state.metadata as any;
+        if (metadataAny.__activeRawProviderContent !== undefined) {
+            pendingRecord.rawProviderContent = metadataAny.__activeRawProviderContent;
+        }
+        if (!Array.isArray(metadataAny.__pendingToolResults)) {
+            metadataAny.__pendingToolResults = [];
+        }
+        metadataAny.__pendingToolResults.push(pendingRecord);
+
         this.bumpStateVersion(state);
     }
 

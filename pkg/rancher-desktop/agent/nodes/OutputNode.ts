@@ -90,6 +90,7 @@ export class OutputNode extends BaseNode {
     const enriched = await this.enrichPrompt(prompt, state, {
       includeSoul: true,
       includeAwareness: true,
+      includeEnvironment: true,
       includeMemory: false,
       includeTools: false,
       includeStrategicPlan: false,

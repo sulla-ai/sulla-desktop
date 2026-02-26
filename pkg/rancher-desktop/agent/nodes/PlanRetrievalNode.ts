@@ -10,13 +10,10 @@
 // - JSON-only response with no tools
 
 import type { BaseThreadState, NodeResult } from './Graph';
-import { BaseNode, ENVIRONMENT_PROMPT, JSON_ONLY_RESPONSE_INSTRUCTIONS, NodeRunPolicy } from './BaseNode';
+import { BaseNode, JSON_ONLY_RESPONSE_INSTRUCTIONS, NodeRunPolicy } from './BaseNode';
 import { articlesRegistry } from '../database/registry/ArticlesRegistry';
 import { skillsRegistry } from '../database/registry/SkillsRegistry';
 import { ActivePlanManager } from './ActivePlanManager';
-import { SullaSettingsModel } from '../database/models/SullaSettingsModel';
-import { toolRegistry } from '../tools';
-import type { ChatMessage } from '../languagemodels/BaseLanguageModel';
 
 // ============================================================================
 // INTERFACES
@@ -43,9 +40,10 @@ interface SkillSummaryEntry {
 
 const PLAN_RETRIEVAL_PROMPT = `You are a specialized planning and intent analysis system.
 
-Look ONLY at the user's last message.
+Use the full conversation thread for continuity and context.
+Classify intent and goal based primarily on the user's latest message.
 
-Available skills are provided as assistant messages. Use them to select selected_skill_slug.
+Available skills are provided in the SKILLS CONTEXT section. Use them to select selected_skill_slug.
 
 ## Strict Complexity Rules (exact order)
 
@@ -99,41 +97,19 @@ export class PlanRetrievalNode extends BaseNode {
     super('plan_retrieval', 'Plan Retrieval');
   }
 
-  private buildPlanRetrievalNodeMessages(
-    state: BaseThreadState,
-    policy: Required<NodeRunPolicy>,
-    availableSkills: SkillSummaryEntry[],
-  ): {
-    assistantMessages: ChatMessage[];
-    userMessages: ChatMessage[];
-  } {
-    const skillAssistantMessages: ChatMessage[] = availableSkills.map((skill) => ({
-      role: 'assistant',
-      content: [
+  private buildSkillsContextForPrompt(availableSkills: SkillSummaryEntry[]): string {
+    if (!Array.isArray(availableSkills) || availableSkills.length === 0) {
+      return 'No available skills.';
+    }
+
+    return availableSkills
+      .map((skill) => [
         `${skill.name || 'unknown'}`,
         `slug: ${skill.slug || 'unknown'}`,
         `trigger: ${(Array.isArray(skill.triggers) ? skill.triggers : []).join(' | ') || 'none'}`,
         `description: ${skill.description || ''}`,
-      ].join('\n'),
-    }));
-
-    const lastUserMessage = this.findLatestUserMessage(state.messages || []);
-    const latestUserContent = typeof lastUserMessage?.content === 'string'
-      ? lastUserMessage.content
-      : String(lastUserMessage?.content || '');
-
-    const directive: ChatMessage = {
-      role: 'user',
-      content: latestUserContent || 'No user message provided.',
-    };
-
-    const assistantMessages = this.buildAssistantMessagesForNode(state, policy, skillAssistantMessages);
-    const userMessages = this.buildUserMessagesForNode(state, policy, [directive]);
-
-    return {
-      assistantMessages,
-      userMessages,
-    };
+      ].join('\n'))
+      .join('\n\n');
   }
 
   async execute(state: BaseThreadState): Promise<NodeResult<BaseThreadState>> {
@@ -178,11 +154,6 @@ export class PlanRetrievalNode extends BaseNode {
     diagnostics.analysisCompleted = true;
 
     // ----------------------------------------------------------------
-    // 4.5. APPEND SHARED CONTEXT TO GRAPH MESSAGES (POST-ANALYSIS)
-    // ----------------------------------------------------------------
-    await this.appendSharedContextMessagesToGraphState(state);
-
-    // ----------------------------------------------------------------
     // 5. PERFORM VECTOR DATABASE SEARCHES
     // ----------------------------------------------------------------
     const { memoryArticles } = await this.performVectorSearches(planData);
@@ -194,6 +165,18 @@ export class PlanRetrievalNode extends BaseNode {
     // ----------------------------------------------------------------
     this.storeMetadata(state, planData);
     await this.appendMemoryResults(state, memoryArticles, planData);
+
+    const wsChannel = String((state.metadata as any).wsChannel || 'chat-controller');
+    void this.dispatchToWebSocket(wsChannel, {
+      type: 'progress',
+      data: {
+        phase: 'plan_retrieval',
+        selected_skill_slug: planData.selected_skill_slug,
+        selectedSkillSlug: planData.selected_skill_slug,
+        complexity: planData.complexity,
+      },
+      timestamp: Date.now(),
+    });
 
     // ----------------------------------------------------------------
     // 7. LOG COMPLETION SUMMARY
@@ -384,96 +367,6 @@ export class PlanRetrievalNode extends BaseNode {
     }
   }
 
-  private buildEnvironmentContextAssistantMessage(): string {
-    let environmentContext = ENVIRONMENT_PROMPT;
-
-    const categoriesWithDesc = toolRegistry.getCategoriesWithDescriptions();
-    const categoriesText = categoriesWithDesc
-      .map(({ category, description }) => `- ${category}: ${description}`)
-      .join('\n');
-    environmentContext = environmentContext.replace('{{tool_categories}}', categoriesText);
-
-    const formattedTime = new Date().toLocaleString('en-US', {
-      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: true,
-    });
-    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'unknown';
-
-    environmentContext = environmentContext.replace('{{formattedTime}}', formattedTime);
-    environmentContext = environmentContext.replace('{{timeZone}}', timeZone);
-
-    return environmentContext.trim();
-  }
-
-  private async getObservationalMemorySnapshot(): Promise<string> {
-    try {
-      const observationalMemory = await SullaSettingsModel.get('observationalMemory', {});
-      const raw =
-        typeof observationalMemory === 'string'
-          ? JSON.parse(observationalMemory || '[]')
-          : observationalMemory;
-
-      if (!Array.isArray(raw) || raw.length === 0) {
-        return 'No observational memory entries available.';
-      }
-
-      return raw
-        .slice(-10)
-        .map((entry: any) => `${entry?.priority || ''} ${entry?.timestamp || ''} ${entry?.content || ''}`.trim())
-        .filter((line: string) => Boolean(line))
-        .join('\n');
-    } catch (error) {
-      console.warn('[PlanRetrievalNode] Failed to read observational memory snapshot:', error);
-      return 'Observational memory unavailable due to parse/read error.';
-    }
-  }
-
-  private async appendSharedContextMessagesToGraphState(state: BaseThreadState): Promise<void> {
-    const environmentContextMessage: ChatMessage = {
-      role: 'assistant',
-      content: `Environment systems and tools context:\n${this.buildEnvironmentContextAssistantMessage()}`,
-      metadata: {
-        nodeId: this.id,
-        nodeName: this.name,
-        kind: 'shared_context_environment',
-        timestamp: Date.now(),
-      },
-    };
-    const observationalMemoryMessage: ChatMessage = {
-      role: 'assistant',
-      content: `Observational memory snapshot:\n${await this.getObservationalMemorySnapshot()}`,
-      metadata: {
-        nodeId: this.id,
-        nodeName: this.name,
-        kind: 'shared_context_observational_memory',
-        timestamp: Date.now(),
-      },
-    };
-    const existingMessages = Array.isArray(state.messages) ? state.messages : [];
-    const retainedMessages = existingMessages.filter((message: any) => {
-      const metadata = message?.metadata || {};
-      const kind = String(metadata?.kind || '').trim();
-      return !(
-        kind === 'shared_context_environment'
-        || kind === 'shared_context_observational_memory'
-      );
-    });
-
-    state.messages = [
-      ...retainedMessages,
-      environmentContextMessage,
-      observationalMemoryMessage,
-    ];
-
-    this.bumpStateVersion(state);
-  }
 
   private async loadAvailableSkills(): Promise<SkillSummaryEntry[]> {
     try {
@@ -495,31 +388,30 @@ export class PlanRetrievalNode extends BaseNode {
    */
   private async analyzeUserIntent(state: BaseThreadState, availableSkills: SkillSummaryEntry[]): Promise<PlanRetrievalResponse | null> {
     const policy: Required<NodeRunPolicy> = {
-      messageSource: 'custom',
+      messageSource: 'graph',
       persistAssistantToGraph: false,
       persistToolResultsToGraph: false,
       persistAssistantToNodeState: false,
       persistToolResultsToNodeState: false,
       nodeStateNamespace: '',
-      includeGraphAssistantMessages: false,
-      includeGraphUserMessages: false,
+      includeGraphAssistantMessages: true,
+      includeGraphUserMessages: true,
     };
 
-    const nodeMessages = this.buildPlanRetrievalNodeMessages(state, policy, availableSkills);
+    const planPrompt = `${PLAN_RETRIEVAL_PROMPT}\n\n## SKILLS CONTEXT\n${this.buildSkillsContextForPrompt(availableSkills)}`;
 
     console.log(`[PlanRetrievalNode] Analyzing messages for intent and planning data with ${availableSkills.length} available skills`);
 
     // Use low temperature for consistent extraction
     const extractionResult = await this.chat(
       state,
-      PLAN_RETRIEVAL_PROMPT,
+      planPrompt,
       {
         temperature: 0.1, // Low temperature for consistency
         maxTokens: 500,   // Keep response concise
         format: 'json',   // JSON-only response
         disableTools: true,
         nodeRunPolicy: policy,
-        nodeRunMessages: nodeMessages,
       }
     );
 

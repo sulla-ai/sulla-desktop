@@ -190,8 +190,8 @@ export class PlannerNode extends BaseNode {
 
     const enrichedPrompt = await this.enrichPrompt(prompt, state, {
       includeSoul: true,
-      includeAwareness: false,
-      includeEnvironment: false,
+      includeAwareness: true,
+      includeEnvironment: true,
       includeMemory: false
     });
 

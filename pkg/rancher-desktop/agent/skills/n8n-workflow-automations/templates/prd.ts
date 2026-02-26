@@ -152,7 +152,7 @@ The Technical Execution Briefs MUST build this workflow in small, verifiable inc
 The following steps represent a single TEB and ReAct loop.
 Check off each step as it is completed:
 
-- [ ] 1. Create the empty workflow \`workflow-daily-sales-summary\` with basic settings (name, timezone, saveDataErrorExecution: all, saveDataSuccessExecution: last).
+- [ ] 1. Create the empty workflow \`workflow-daily-sales-summary\` with basic settings (name, timezone, saveDataErrorExecution: all, saveDataSuccessExecution: all).
 - [ ] 2. Add Schedule Trigger node (daily at 08:00 America/Los_Angeles) + verify with manual trigger.
 - [ ] 3. Add Stripe node (or HTTP Request) to fetch today's sales data + Set node to normalize output.
 - [ ] 4. Add Google Sheets node to pull additional sales data + Merge node to combine both sources.

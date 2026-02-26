@@ -14,8 +14,12 @@
     <!-- Main agent interface -->
     <div ref="chatScrollContainer" id="chat-scroll-container" class="flex min-h-0 flex-1 overflow-y-auto" :class="{ 'blur-sm pointer-events-none select-none': showOverlay }">
       <div class="flex min-h-0 min-w-0 flex-1 flex-col">
-        <div v-if="hasMessages" class="relative mx-auto flex w-full max-w-8xl flex-1 justify-center sm:px-2 lg:px-8 xl:px-12">
-          <div class="hidden lg:relative lg:block lg:flex-none lg:w-72 xl:w-80 bg-slate-50 dark:bg-slate-800/30">
+        <div
+          v-if="hasMessages"
+          class="relative mx-auto flex w-full flex-1 "
+          :class="isAssetPaneExpanded ? 'max-w-none justify-start' : 'max-w-8xl xl:px-12 sm:px-2 lg:px-8 justify-center'"
+        >
+          <div v-if="!isAssetPaneExpanded" class="hidden lg:relative lg:block lg:flex-none lg:w-72 xl:w-80 bg-slate-50 dark:bg-slate-800/30">
             <div class="sticky top-[15px] pt-[15px] h-[calc(100vh-5rem-15px)] w-full overflow-x-hidden overflow-y-auto">
 
               <AgentPersonaLibrary/>
@@ -23,10 +27,15 @@
             </div>
           </div>
 
-          <div class="max-w-2xl min-w-0 flex-auto px-4 py-16 lg:max-w-none lg:pr-0 lg:pl-8 xl:px-16">
+          <div
+            class="min-w-0 py-16"
+            :class="isAssetPaneExpanded
+              ? 'flex-[0_0_30%] px-4 lg:pr-2 lg:pl-4 xl:px-6'
+              : 'max-w-2xl flex-auto px-4 lg:max-w-none lg:pr-0 lg:pl-8 xl:px-16'"
+          >
             <div ref="transcriptEl" id="chat-messages-list" class="pb-40">
               <div
-                v-for="m in messages"
+                v-for="m in displayMessages"
                 :key="m.id"
                 class="mb-8"
               >
@@ -108,8 +117,13 @@
             </div>
           </div>
 
-          <div class="hidden xl:sticky xl:top-0 xl:-mr-6 xl:block xl:max-h-[calc(100vh-12rem)] xl:flex-none xl:overflow-y-auto xl:py-16 xl:pr-6">
-            <div class="w-72">
+          <div
+            class="hidden xl:sticky xl:top-0 xl:block xl:max-h-[calc(100vh-1rem-10rem)]"
+            :class="isAssetPaneExpanded ? 'xl:flex-[0_0_70%] xl:overflow-hidden' : 'xl:flex-none xl:overflow-y-auto'"
+            @wheel="handleAssetPaneScrollLock"
+            @touchmove="handleAssetPaneScrollLock"
+          >
+            <div :class="isAssetPaneExpanded ? 'h-full w-full' : 'w-72'">
               <div v-if="latestChatError" class="my-8 flex rounded-3xl p-6 bg-amber-50 dark:bg-slate-800/60 dark:ring-1 dark:ring-slate-300/10">
                 <svg aria-hidden="true" viewBox="0 0 32 32" fill="none" class="h-8 w-8 flex-none [--icon-foreground:var(--color-amber-900)] [--icon-background:var(--color-amber-100)]">
                   <defs>
@@ -140,31 +154,20 @@
                 </div>
               </div>
 
-              <nav class="text-base lg:text-sm">
-                <div class="mb-3">
-                  <h2 class="font-display font-medium text-slate-900 dark:text-white"></h2>
-                  <div v-if="activePlanGoal" class="mt-2 text-sm text-slate-500 dark:text-slate-400">
-                    {{ activePlanGoal }}
-                  </div>
-                  <div v-else class="mt-2 text-sm text-slate-500 dark:text-slate-400"></div>
-                </div>
-
-                <ul role="list" class="mt-2 space-y-2 border-l-2 border-slate-100 lg:mt-4 lg:space-y-4 lg:border-slate-200 dark:border-slate-800">
-                  <li v-for="t in activePlanTodos" :key="t.key" class="relative">
-                    <div
-                      class="block w-full pl-3.5 before:pointer-events-none before:absolute before:top-1/2 before:-left-1 before:h-1.5 before:w-1.5 before:-translate-y-1/2 before:rounded-full"
-                      :class="t.status === 'in_progress'
-                        ? 'font-semibold text-sky-500 before:bg-sky-500'
-                        : t.status === 'done'
-                          ? 'text-slate-500 line-through before:bg-slate-300 dark:text-slate-500 dark:before:bg-slate-700'
-                          : 'text-slate-500 before:hidden before:bg-slate-300 hover:text-slate-600 hover:before:block dark:text-slate-400 dark:before:bg-slate-700 dark:hover:text-slate-300'"
-                    >
-                      {{ t.title }}
-                      <div class="mt-0.5 text-xs text-slate-400 dark:text-slate-500">{{ t.statusLabel }}</div>
-                    </div>
-                  </li>
-                </ul>
-              </nav>
+              <div class="flex flex-col gap-2" :class="isAssetPaneExpanded ? 'h-full min-h-0 pb-2' : ''">
+                <AgentPersonaAssetCard
+                  v-for="asset in visiblePersonaAssets"
+                  :key="asset.id"
+                  :asset="asset"
+                  :asset-size="getAssetSize(asset.id)"
+                  :is-active="assetIsActive(asset)"
+                  :sanitize-asset-html="sanitizeAssetHtml"
+                  :thread-id="currentThreadId || undefined"
+                  @toggle-size="cycleAssetSize(asset.id)"
+                  @document-format="applyDocumentFormat"
+                  @document-input="onDocumentAssetInput"
+                />
+              </div>
             </div>
             </div>
           </div>
@@ -525,21 +528,21 @@
 import StartupOverlay from './agent/StartupOverlay.vue';
 import AgentHeader from './agent/AgentHeader.vue';
 import AgentPersonaLibrary from './agent/personas/AgentPersonaLibrary.vue';
+import AgentPersonaAssetCard from './agent/AgentPersonaAssetCard.vue';
 import PostHogTracker from '@pkg/components/PostHogTracker.vue';
 
 import { ref, onMounted, onUnmounted, computed, nextTick, watch } from 'vue';
 import DOMPurify from 'dompurify';
 import { marked } from 'marked';
 import {
-  getSensory,
-  getResponseHandler,
+  type PersonaSidebarAsset,
 } from '@pkg/agent';
-import type { AgentResponse } from '@pkg/agent/types';
 import { AgentSettingsController } from './agent/AgentSettingsController';
 import { ChatInterface } from './agent/ChatInterface';
 import { FrontendGraphWebSocketService } from '@pkg/agent/services/FrontendGraphWebSocketService';
 import { AgentModelSelectorController } from './agent/AgentModelSelectorController';
 import { getAgentPersonaRegistry, type ChatMessage } from '@pkg/agent';
+import { getN8nVueBridgeService } from '@pkg/agent/services/N8nVueBridgeService';
 import { ipcRenderer } from '@pkg/utils/ipcRenderer';
 import './assets/AgentModelSelector.css';
 import './agent/personas/persona-profiles.css';
@@ -553,8 +556,26 @@ const renderMarkdown = (markdown: string): string => {
   });
 };
 
+const sanitizeAssetHtml = (html: string): string => {
+  const raw = typeof html === 'string' ? html : String(html || '');
+  return DOMPurify.sanitize(raw, {
+    USE_PROFILES: { html: true },
+    ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto|tel):|data:image\/(?:png|gif|jpe?g|webp);base64,|\/|\.|#)/i,
+  });
+};
+
 const THEME_STORAGE_KEY = 'agentTheme';
 const isDark = ref(false);
+
+const syncN8nInterfaceTheme = (): void => {
+  const n8nVueBridgeService = getN8nVueBridgeService();
+  if (isDark.value) {
+    n8nVueBridgeService.setDarkMode();
+    return;
+  }
+
+  n8nVueBridgeService.setLightMode();
+};
 
 const currentThreadId = ref<string | null>(null);
 
@@ -640,10 +661,6 @@ function updateComposerLayout(): void {
   el.style.height = `${nextHeight}px`;
 }
 
-// Initialize agent components
-const sensory = getSensory();
-const responseHandler = getResponseHandler();
-
 const showOverlay = ref(false);
 const modelName = ref('');
 const modelMode = ref<'local' | 'remote'>('local');
@@ -656,49 +673,10 @@ const settingsController = new AgentSettingsController(
   },
 );
 
-type SidebarTodoStatus = 'pending' | 'in_progress' | 'done' | 'blocked';
-type SidebarTodo = {
-  key: string;
-  title: string;
-  status: SidebarTodoStatus;
-  statusLabel: string;
-};
-
-function normalizeStatus(status: string): SidebarTodoStatus {
-  if (status === 'in_progress' || status === 'done' || status === 'blocked') {
-    return status;
-  }
-  return 'pending';
-}
-
-function makeStatusLabel(status: SidebarTodoStatus): string {
-  switch (status) {
-  case 'in_progress':
-    return 'In progress';
-  case 'done':
-    return 'Completed';
-  case 'blocked':
-    return 'Blocked';
-  default:
-    return 'Pending';
-  }
-}
-
-const onAgentResponse = (resp: AgentResponse) => {
-  const metadata = (resp?.metadata || {}) as Record<string, any>;
-  const nextPlanId = typeof metadata.activePlanId === 'number' ? metadata.activePlanId : null;
-
-  // Plan state is now managed by AgentPersonaService and accessed via ChatInterface
-  // This handler can be used for additional response processing if needed
-};
-
 const chatController = new ChatInterface();
 
 const frontendGraphController = new FrontendGraphWebSocketService({
   currentThreadId,
-  sensory,
-  responseHandler,
-  onAgentResponse,
 });
 
 const {
@@ -707,6 +685,13 @@ const {
   hasMessages,
   graphRunning,
 } = chatController;
+
+const displayMessages = computed(() => {
+  return messages.value.filter((m: ChatMessage) => {
+    const kind = String((m as any)?.metadata?.kind || '').trim();
+    return kind !== 'action_live_n8n_event';
+  });
+});
 
 const registry = getAgentPersonaRegistry();
 const loading = computed<boolean>(() => {
@@ -802,29 +787,6 @@ watch(() => messages.value.length, async () => {
   container.scrollTop = container.scrollHeight; // Instant scroll, no smooth behavior
 }, { flush: 'post' });
 
-const activePlanGoal = computed<string | null>(() => {
-  const persona = registry.getActivePersonaService();
-  return persona?.planState.goal ?? null;
-});
-
-const activePlanTodos = computed<SidebarTodo[]>(() => {
-  const persona = registry.getActivePersonaService();
-  if (!persona) return [];
-  const todos: SidebarTodo[] = [];
-  for (const todoId of persona.planState.todoOrder) {
-    const t = persona.planState.todos.get(todoId);
-    if (!t) continue;
-    const status = normalizeStatus(t.status);
-    todos.push({
-      key: String(t.id),
-      title: t.title,
-      status,
-      statusLabel: makeStatusLabel(status),
-    });
-  }
-  return todos;
-});
-
 const latestChatError = computed(() => {
   for (let i = messages.value.length - 1; i >= 0; i--) {
     const m: ChatMessage = messages.value[i];
@@ -834,6 +796,104 @@ const latestChatError = computed(() => {
   }
   return '';
 });
+
+const activePersonaService = computed(() => registry.getActivePersonaService());
+const personaAssets = computed(() => activePersonaService.value?.activeAssets ?? []);
+type AssetSize = 'medium' | 'large';
+const assetSizes = ref<Record<string, AssetSize>>({});
+
+const normalizeAssetSize = (value: unknown): AssetSize => {
+  return value === 'large' ? 'large' : 'medium';
+};
+
+const getAssetSize = (assetId: string): AssetSize => normalizeAssetSize(assetSizes.value[assetId]);
+
+const largeAssetId = computed(() => {
+  return personaAssets.value.find((asset) => getAssetSize(asset.id) === 'large')?.id || null;
+});
+
+const visiblePersonaAssets = computed(() => {
+  if (largeAssetId.value) {
+    return personaAssets.value.filter((asset) => asset.id === largeAssetId.value);
+  }
+  return personaAssets.value;
+});
+
+const isAssetPaneExpanded = computed(() => !!largeAssetId.value);
+
+const setAssetSize = (assetId: string, nextSize: AssetSize): void => {
+  if (nextSize === 'large') {
+    const nextMap: Record<string, AssetSize> = {};
+    personaAssets.value.forEach((asset) => {
+      nextMap[asset.id] = asset.id === assetId ? 'large' : 'medium';
+    });
+    assetSizes.value = nextMap;
+    return;
+  }
+
+  assetSizes.value = {
+    ...assetSizes.value,
+    [assetId]: nextSize,
+  };
+};
+
+const cycleAssetSize = (assetId: string): void => {
+  const current = getAssetSize(assetId);
+  if (current === 'medium') {
+    setAssetSize(assetId, 'large');
+    return;
+  }
+  setAssetSize(assetId, 'medium');
+};
+
+const handleAssetPaneScrollLock = (event: Event): void => {
+  if (!isAssetPaneExpanded.value) {
+    return;
+  }
+  event.preventDefault();
+  event.stopPropagation();
+};
+
+watch(personaAssets, (assets) => {
+  const ids = new Set(assets.map((asset) => asset.id));
+  const nextSizes: Record<string, AssetSize> = {};
+  Object.entries(assetSizes.value).forEach(([assetId, size]) => {
+    if (ids.has(assetId)) {
+      nextSizes[assetId] = normalizeAssetSize(size);
+    }
+  });
+  assets.forEach((asset) => {
+    if (!nextSizes[asset.id]) {
+      nextSizes[asset.id] = 'medium';
+    }
+  });
+  assetSizes.value = nextSizes;
+}, { immediate: true });
+
+const onDocumentAssetInput = (assetId: string, event: Event): void => {
+  const service = activePersonaService.value;
+  if (!service) {
+    return;
+  }
+  const target = event.target as HTMLElement;
+  service.updateDocumentAssetContent(assetId, target.innerHTML || '');
+};
+
+const applyDocumentFormat = (command: string, value?: string): void => {
+  if (command === 'createLink') {
+    const url = window.prompt('Enter URL');
+    if (!url) {
+      return;
+    }
+    document.execCommand(command, false, url);
+    return;
+  }
+  document.execCommand(command, false, value);
+};
+
+const assetIsActive = (asset: PersonaSidebarAsset): boolean => {
+  return asset.active === true;
+};
 
 const isRunning = computed<boolean>(() => {
   const agent = registry.activeAgent.value;
@@ -850,6 +910,9 @@ const modelSelector = new AgentModelSelectorController({
 });
 
 onMounted(async () => {
+  const n8nVueBridgeService = getN8nVueBridgeService();
+  n8nVueBridgeService.markInitialized('Agent.vue:onMounted');
+
   const stored = localStorage.getItem(THEME_STORAGE_KEY);
 
   if (stored === 'dark') {
@@ -866,6 +929,7 @@ onMounted(async () => {
   // Load settings eagerly — SullaSettingsModel has a disk fallback even before Redis/PG are ready
   await settingsController.start();
   await modelSelector.start();
+  syncN8nInterfaceTheme();
 });
 
 // Re-sync settings when system is fully ready (bootstrap may have updated values)
@@ -911,6 +975,10 @@ const toggleTheme = () => {
   isDark.value = !isDark.value;
   localStorage.setItem(THEME_STORAGE_KEY, isDark.value ? 'dark' : 'light');
 };
+
+watch(isDark, () => {
+  syncN8nInterfaceTheme();
+}, { immediate: true });
 
 const handleModelSwitcherClick = () => {
   console.log('[Agent] Model switcher clicked');

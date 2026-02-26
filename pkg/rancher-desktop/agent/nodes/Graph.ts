@@ -214,6 +214,7 @@ export interface BaseThreadState {
     finalSummary: string;
     totalSummary?: string;
     finalState: 'failed'  | 'running' | 'completed';
+    n8nLiveEventsEnabled?: boolean;
 
     // parent graph return
     returnTo: string | null;
@@ -222,6 +223,8 @@ export interface BaseThreadState {
     datetimeIncluded?: boolean;
     hadToolCalls?: boolean;
     hadUserMessages?: boolean;
+
+    __pendingToolResults?: import('../types').PendingToolResult[];
   };
 }
 
@@ -410,14 +413,21 @@ export class Graph<TState = BaseThreadState> {
         // yield to event loop
         await new Promise(r => setTimeout(r, 0));
 
-        const nextId = this.resolveNext((state as any).metadata.currentNodeId, result.decision, state);
+        const currentNodeId = String((state as any).metadata.currentNodeId || '');
+        let nextId = this.resolveNext(currentNodeId, result.decision, state);
         console.log(`[Graph] ${result.decision.type} → ${nextId}`);
 
-        if (nextId === (state as any).metadata.currentNodeId) {
+        if (nextId === currentNodeId) {
           (state as any).metadata.consecutiveSameNode++;
           if ((state as any).metadata.consecutiveSameNode >= MAX_CONSECTUIVE_LOOP) {
-            console.warn(`Max consecutive loop — forcing end`);
-            break;
+            if (currentNodeId === 'action') {
+              console.warn('Max consecutive loop on action — forcing critic review');
+              (state as any).metadata.consecutiveSameNode = 0;
+              nextId = 'skill_critic';
+            } else {
+              console.warn(`Max consecutive loop — forcing end`);
+              break;
+            }
           }
         } else {
           (state as any).metadata.consecutiveSameNode = 0;
@@ -562,6 +572,7 @@ export async function createInitialThreadState<T extends BaseThreadState>(
       finalSummary: '',
       totalSummary: '',
       finalState: 'running',
+      n8nLiveEventsEnabled: false,
       returnTo: null
     };
 
@@ -698,24 +709,26 @@ export function createSkillGraph(): Graph<SkillGraphState> {
   graph.addEdge('input_handler', 'plan_retrieval');
 
   // PlanRetrieval complexity routing:
-  // - low: direct to output
-  // - medium: direct to action (executor)
-  // - high (default): full planner flow
+  // - low: direct to action
+  // - medium or high WITHOUT a skill: direct to action (executor)
+  // - high WITH a skill identified: full planner flow
   graph.addConditionalEdge('plan_retrieval', state => {
     const complexity = (state.metadata as any).planRetrieval?.complexity;
+    const selectedSkillSlug = (state.metadata as any).planRetrieval?.selected_skill_slug;
+    const hasSkill = typeof selectedSkillSlug === 'string' && selectedSkillSlug.trim().length > 0;
 
     if (complexity === 'low') {
-      console.log('[SkillGraph] PlanRetrieval complexity=low - routing directly to output');
-      return 'output';
-    }
-
-    if (complexity === 'medium') {
-      console.log('[SkillGraph] PlanRetrieval complexity=medium - routing directly to action');
+      console.log('[SkillGraph] PlanRetrieval complexity=low - routing directly to action');
       return 'action';
     }
 
-    console.log('[SkillGraph] PlanRetrieval complexity=high (or missing) - routing to planner');
-    return 'planner';
+    if (complexity === 'high' && hasSkill) {
+      console.log(`[SkillGraph] PlanRetrieval complexity=high + skill=${selectedSkillSlug} - routing to planner`);
+      return 'planner';
+    }
+
+    console.log(`[SkillGraph] PlanRetrieval complexity=${complexity}, skill=${selectedSkillSlug || 'none'} - routing directly to action`);
+    return 'action';
   });
 
   // Planner → Reasoning (start ReAct loop)
@@ -829,14 +842,13 @@ export function createSkillGraph(): Graph<SkillGraphState> {
       return 'reasoning';
     }
 
-    console.log('[SkillGraph] Critic: Technical complete but project incomplete - returning to planner with project feedback');
+    console.log('[SkillGraph] Critic: Technical complete but project incomplete - returning to reasoning with project feedback');
     (state.metadata as any).reactLoopCount = 0;
-    (state.metadata as any).planner = {
-      ...((state.metadata as any).planner || {}),
+    (state.metadata as any).reasoning = {
+      ...((state.metadata as any).reasoning || {}),
       critic_feedback: criticData.project_feedback || '',
-      critic_tprd: (state.metadata as any).technical_instructions || '',
     };
-    return 'planner';
+    return 'reasoning';
   });
 
   // Output can loop back to input for continued work

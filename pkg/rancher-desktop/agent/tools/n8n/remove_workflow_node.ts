@@ -14,8 +14,13 @@ export class RemoveWorkflowNodeWorker extends BaseTool {
 
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     try {
+      const workflowId = String(input.workflowId || '').trim();
+      if (!workflowId) {
+        throw new Error('Workflow ID is required.');
+      }
+
       const service = await createN8nService();
-      const workflow = await service.getWorkflow(input.workflowId, true);
+      const workflow = await service.getWorkflow(workflowId, true);
       const graph = cloneWorkflowGraph(workflow);
 
       const nodeIndex = resolveNodeIndex(graph.nodes, {

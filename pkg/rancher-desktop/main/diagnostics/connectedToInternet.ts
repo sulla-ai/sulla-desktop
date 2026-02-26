@@ -32,7 +32,7 @@ mainEvents.on('settings-update', settings => {
 async function checkNetworkConnectivity(): Promise<boolean> {
   const request = net.request({
     method:      'HEAD',
-    url:         'https://sulladesktop.com/docs/',
+    url:         'https://www.gstatic.com/generate_204',
     credentials: 'omit',
     cache:       'no-cache',
   });

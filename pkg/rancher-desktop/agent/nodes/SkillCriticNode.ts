@@ -49,7 +49,8 @@ ${JSON_ONLY_RESPONSE_INSTRUCTIONS}
   "technical_completed": boolean,
   "technical_feedback": "string — thorough factual explanation. If false, list missing proof/items with exact quotes from Executor output. If true, confirm what was delivered.",
   "project_complete": boolean,
-  "project_feedback": "string — does this complete a Must-Have in PRD? If false, list remaining open items from PRD with exact section references."
+  "project_feedback": "string — does this complete a Must-Have in PRD? If false, list remaining open items from PRD with exact section references.",
+  "completed_steps": ["number — execution step numbers that are factually complete this cycle, e.g. [3,4]"]
 }`.trim();
 
 /**
@@ -119,6 +120,7 @@ export class SkillCriticNode extends BaseNode {
       technical_feedback?: string;
       project_complete?: boolean;
       project_feedback?: string;
+      completed_steps?: number[];
     } | null;
 
     if (!data || typeof data !== 'object') {
@@ -134,12 +136,20 @@ export class SkillCriticNode extends BaseNode {
 
     const technicalCompleted = data.technical_completed === true;
     const projectComplete = technicalCompleted && data.project_complete === true;
+    const completedSteps = Array.isArray(data.completed_steps)
+      ? data.completed_steps
+          .map((step) => Number(step))
+          .filter((step) => Number.isInteger(step) && step > 0)
+      : [];
+    const appliedCompletedSteps = this.applyCompletedStepsToPlanningInstructions(state, completedSteps);
 
     (state.metadata as any).skillCritic = {
       technical_completed: technicalCompleted,
       technical_feedback: (data.technical_feedback || '').trim(),
       project_complete: projectComplete,
       project_feedback: (data.project_feedback || '').trim(),
+      completed_steps: completedSteps,
+      applied_completed_steps: appliedCompletedSteps,
       evaluatedAt: Date.now(),
     };
 
@@ -191,6 +201,35 @@ export class SkillCriticNode extends BaseNode {
         return `[#${index + 1}] ${label}\n${content || '[empty message]'}`;
       })
       .join('\n\n');
+  }
+
+  private applyCompletedStepsToPlanningInstructions(state: BaseThreadState, completedSteps: number[]): number[] {
+    const planningInstructions = String((state.metadata as any).planning_instructions || '');
+    const parsedSignals = [...new Set(completedSteps)];
+
+    if (!planningInstructions || parsedSignals.length === 0) {
+      return [];
+    }
+
+    let updatedPlanningInstructions = planningInstructions;
+    const appliedSteps: number[] = [];
+
+    for (const stepNumber of parsedSignals) {
+      const stepLineRegex = new RegExp(`(^\\s*-\\s*)\\[(?:\\s|✅|x|X)\\](\\s*${stepNumber}\\.\\s)`, 'm');
+      if (!stepLineRegex.test(updatedPlanningInstructions)) {
+        continue;
+      }
+
+      updatedPlanningInstructions = updatedPlanningInstructions.replace(stepLineRegex, '$1[✅]$2');
+      appliedSteps.push(stepNumber);
+    }
+
+    if (appliedSteps.length > 0 && updatedPlanningInstructions !== planningInstructions) {
+      (state.metadata as any).planning_instructions = updatedPlanningInstructions;
+      this.bumpStateVersion(state);
+    }
+
+    return appliedSteps;
   }
 
   private appendNegativeCriticFeedbackToGraphState(

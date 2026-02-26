@@ -41,7 +41,7 @@ export class N8nService {
 
     console.log(`API key ${this.apiKey ? 'generated/retrieved' : 'failed'} with ID ${serviceAccount.attributes.id}, length: ${this.apiKey?.length || 0}`);
 
-    this.baseUrl = 'http://localhost:30119';
+    this.baseUrl = 'http://127.0.0.1:30119';
   }
 
   /**
@@ -261,11 +261,11 @@ export class N8nService {
     name: string;
     nodes: any[];
     connections: any;
-    settings: {
+    settings?: {
       saveExecutionProgress?: boolean;
       saveManualExecutions?: boolean;
       saveDataErrorExecution?: string;
-      saveDataSuccessExecution?: string;
+      saveDataSuccessExecution?: 'none' | 'all';
       executionTimeout?: number;
       errorWorkflow?: string;
       timezone?: string;
@@ -278,15 +278,68 @@ export class N8nService {
     shared?: any[];
     staticData?: any;
   }): Promise<any> {
+    const sanitizedSettings = this.sanitizeWorkflowSettings(workflowData?.settings);
+    if (sanitizedSettings.availableInMCP === undefined) {
+      sanitizedSettings.availableInMCP = true;
+    }
+
+    const sanitizedPayload = {
+      name: String(workflowData?.name || '').trim(),
+      nodes: Array.isArray(workflowData?.nodes) ? workflowData.nodes : [],
+      connections: workflowData?.connections && typeof workflowData.connections === 'object' && !Array.isArray(workflowData.connections)
+        ? workflowData.connections
+        : {},
+      settings: sanitizedSettings,
+      ...(Array.isArray(workflowData?.shared) ? { shared: workflowData.shared } : {}),
+      ...(workflowData?.staticData !== undefined ? { staticData: workflowData.staticData } : {}),
+    };
+
     return this.request('/api/v1/workflows', {
       method: 'POST',
-      body: JSON.stringify(workflowData)
+      body: JSON.stringify(sanitizedPayload)
     });
   }
 
   /**
    * Update an existing workflow
    */
+  private sanitizeWorkflowSettings(settings: any): Record<string, any> {
+    if (!settings || typeof settings !== 'object' || Array.isArray(settings)) {
+      return {};
+    }
+
+    const allowedSettingKeys = new Set([
+      'saveExecutionProgress',
+      'saveManualExecutions',
+      'saveDataErrorExecution',
+      'saveDataSuccessExecution',
+      'executionTimeout',
+      'errorWorkflow',
+      'timezone',
+      'executionOrder',
+      'callerPolicy',
+      'callerIds',
+      'timeSavedPerExecution',
+      'availableInMCP',
+    ]);
+
+    return Object.fromEntries(
+      Object.entries(settings).filter(([key]) => allowedSettingKeys.has(key))
+    );
+  }
+
+  private sanitizeWorkflowUpdatePayload(workflowData: any): Record<string, any> {
+    return {
+      name: workflowData?.name,
+      nodes: Array.isArray(workflowData?.nodes) ? workflowData.nodes : [],
+      connections: workflowData?.connections && typeof workflowData.connections === 'object' && !Array.isArray(workflowData.connections)
+        ? workflowData.connections
+        : {},
+      settings: this.sanitizeWorkflowSettings(workflowData?.settings),
+      ...(workflowData?.staticData !== undefined ? { staticData: workflowData.staticData } : {}),
+    };
+  }
+
   async updateWorkflow(id: string, workflowData: {
     name: string;
     active?: boolean;
@@ -296,7 +349,7 @@ export class N8nService {
       saveExecutionProgress?: boolean;
       saveManualExecutions?: boolean;
       saveDataErrorExecution?: string;
-      saveDataSuccessExecution?: string;
+      saveDataSuccessExecution?: 'none' | 'all';
       executionTimeout?: number;
       errorWorkflow?: string;
       timezone?: string;
@@ -320,6 +373,7 @@ export class N8nService {
     // n8n treats "active" as read-only on PUT /workflows/:id.
     // Activation state is handled via activate/deactivate endpoints.
     const { active: _ignoredActive, shared: _ignoredShared, ...updatableWorkflowData } = workflowData as any;
+    const sanitizedPayload = this.sanitizeWorkflowUpdatePayload(updatableWorkflowData);
 
     if (wasActive) {
       await this.deactivateWorkflow(workflowId);
@@ -328,7 +382,7 @@ export class N8nService {
     try {
       const updatedWorkflow = await this.request(`/api/v1/workflows/${workflowId}`, {
         method: 'PUT',
-        body: JSON.stringify(updatableWorkflowData)
+        body: JSON.stringify(sanitizedPayload)
       });
 
       if (wasActive) {
@@ -417,6 +471,82 @@ export class N8nService {
     return this.request(`/api/v1/workflows/${id}/deactivate`, {
       method: 'POST'
     });
+  }
+
+  /**
+   * Set workflow archived state
+   */
+  async setWorkflowArchived(id: string, archived: boolean): Promise<any> {
+    const workflowId = String(id || '').trim();
+    if (!workflowId) {
+      throw new Error('Workflow ID is required for archive state change');
+    }
+
+    const archiveState = archived === true;
+
+    const isNotFoundOrMethodError = (error: unknown): boolean => {
+      const message = error instanceof Error ? error.message : String(error);
+      return message.includes('N8n API error 404') || message.includes('N8n API error 405');
+    };
+
+    if (archiveState) {
+      try {
+        return await this.request(`/api/v1/workflows/${workflowId}/archive`, {
+          method: 'POST'
+        });
+      } catch (error) {
+        if (!isNotFoundOrMethodError(error)) {
+          throw error;
+        }
+      }
+    } else {
+      try {
+        return await this.request(`/api/v1/workflows/${workflowId}/unarchive`, {
+          method: 'POST'
+        });
+      } catch (error) {
+        if (!isNotFoundOrMethodError(error)) {
+          throw error;
+        }
+      }
+    }
+
+    try {
+      // Preferred path for unarchive and fallback for archive on API variants.
+      return await this.request(`/api/v1/workflows/${workflowId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ archived: archiveState })
+      });
+    } catch (patchError) {
+      if (!isNotFoundOrMethodError(patchError)) {
+        throw patchError;
+      }
+
+      // Final fallback for n8n variants that require full workflow updates via PUT.
+      const existingWorkflow = await this.getWorkflow(workflowId);
+      const sanitizedExistingWorkflow = this.sanitizeWorkflowUpdatePayload(existingWorkflow);
+      return this.request(`/api/v1/workflows/${workflowId}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          ...sanitizedExistingWorkflow,
+          archived: archiveState,
+        })
+      });
+    }
+  }
+
+  /**
+   * Archive a workflow
+   */
+  async archiveWorkflow(id: string): Promise<any> {
+    return this.setWorkflowArchived(id, true);
+  }
+
+  /**
+   * Unarchive a workflow
+   */
+  async unarchiveWorkflow(id: string): Promise<any> {
+    return this.setWorkflowArchived(id, false);
   }
 
   // ========== EXECUTIONS ==========

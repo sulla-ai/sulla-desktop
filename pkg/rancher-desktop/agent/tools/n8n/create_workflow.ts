@@ -9,6 +9,11 @@ export class CreateWorkflowWorker extends BaseTool {
   description: string = '';
   schemaDef: any = {};
 
+  private normalizeSaveDataSuccessExecution(value: unknown): 'none' | 'all' {
+    const normalized = String(value || '').trim().toLowerCase();
+    return normalized === 'none' ? 'none' : 'all';
+  }
+
   private parseJsonIfString(value: any, field: string): any {
     if (typeof value !== 'string') {
       return value;
@@ -48,6 +53,10 @@ export class CreateWorkflowWorker extends BaseTool {
 
     if (typeof payload.settings !== 'object' || payload.settings === null || Array.isArray(payload.settings)) {
       throw new Error('Invalid workflow payload: settings must be an object.');
+    }
+
+    if (payload.settings.saveDataSuccessExecution !== undefined) {
+      payload.settings.saveDataSuccessExecution = this.normalizeSaveDataSuccessExecution(payload.settings.saveDataSuccessExecution);
     }
 
     if (payload.shared !== undefined && !Array.isArray(payload.shared)) {
@@ -101,7 +110,7 @@ export const createWorkflowRegistration: ToolRegistration = {
       saveExecutionProgress: { type: 'boolean' as const, optional: true },
       saveManualExecutions: { type: 'boolean' as const, optional: true },
       saveDataErrorExecution: { type: 'string' as const, optional: true },
-      saveDataSuccessExecution: { type: 'string' as const, optional: true },
+      saveDataSuccessExecution: { type: 'enum' as const, enum: ['none', 'all'], optional: true },
       executionTimeout: { type: 'number' as const, optional: true },
       errorWorkflow: { type: 'string' as const, optional: true },
       timezone: { type: 'string' as const, optional: true },
