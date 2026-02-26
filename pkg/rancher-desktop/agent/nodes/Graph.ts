@@ -709,7 +709,7 @@ export function createSkillGraph(): Graph<SkillGraphState> {
   graph.addEdge('input_handler', 'plan_retrieval');
 
   // PlanRetrieval complexity routing:
-  // - low: direct to output
+  // - low: direct to action
   // - medium or high WITHOUT a skill: direct to action (executor)
   // - high WITH a skill identified: full planner flow
   graph.addConditionalEdge('plan_retrieval', state => {
@@ -718,8 +718,8 @@ export function createSkillGraph(): Graph<SkillGraphState> {
     const hasSkill = typeof selectedSkillSlug === 'string' && selectedSkillSlug.trim().length > 0;
 
     if (complexity === 'low') {
-      console.log('[SkillGraph] PlanRetrieval complexity=low - routing directly to output');
-      return 'output';
+      console.log('[SkillGraph] PlanRetrieval complexity=low - routing directly to action');
+      return 'action';
     }
 
     if (complexity === 'high' && hasSkill) {

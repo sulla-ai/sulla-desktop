@@ -507,6 +507,10 @@ export abstract class BaseNode<T extends BaseThreadState = BaseThreadState> {
             // Append to state
             this.appendResponse(state, reply.content, reply.metadata.rawProviderContent);
 
+            // Preserve raw provider content for this turn so every pending tool result
+            // can carry it even if execution is interrupted mid-tool-loop.
+            (state.metadata as any).__activeRawProviderContent = reply.metadata.rawProviderContent;
+
             // Send token information to AgentPersona
             this.dispatchTokenInfoToAgentPersona(state, reply);
             
@@ -516,17 +520,6 @@ export abstract class BaseNode<T extends BaseThreadState = BaseThreadState> {
                 console.log(`[${this.name}] Processing ${toolCalls.length} tool calls via executeToolCalls`);
                 const allowedToolNames = await this.getAllowedToolNamesForExecution(llmTools);
                 await this.executeToolCalls(state, toolCalls, allowedToolNames);
-
-                // Stamp rawProviderContent from this response onto the pending tool results
-                // so buildRequestBody can inject the paired assistant tool_use message at send-time
-                if (reply.metadata.rawProviderContent) {
-                    const pending: any[] = (state.metadata as any).__pendingToolResults ?? [];
-                    for (const tr of pending) {
-                        if (!tr.rawProviderContent) {
-                            tr.rawProviderContent = reply.metadata.rawProviderContent;
-                        }
-                    }
-                }
             }
 
             this.triggerBackgroundStateMaintenance(state);
@@ -568,6 +561,7 @@ export abstract class BaseNode<T extends BaseThreadState = BaseThreadState> {
 
             return null;
         } finally {
+            delete (state.metadata as any).__activeRawProviderContent;
             this.currentNodeRunContext = previousRunContext;
             (state.metadata as any).__toolAccessPolicy = previousToolAccessPolicy;
         }
@@ -1863,6 +1857,16 @@ export abstract class BaseNode<T extends BaseThreadState = BaseThreadState> {
             return `${serialized.substring(0, 5000)}...`;
         };
 
+        const formatForPendingToolResult = (payload: unknown): string => {
+            if (payload == null) {
+                return 'null';
+            }
+
+            return typeof payload === 'string'
+                ? payload
+                : JSON.stringify(payload, null, 2);
+        };
+
         const normalizedResult = normalizeResultPayload(result.result);
         const compactResult = unwrapToolEnvelope(normalizedResult);
         const detailText = compactResult == null ? '' : formatForMessage(compactResult);
@@ -1880,6 +1884,18 @@ export abstract class BaseNode<T extends BaseThreadState = BaseThreadState> {
                 `tool: ${action}`,
                 `error: ${normalizedErrorText || 'unknown error'}`,
                 includeDetails ? `result:\n${detailText}` : '',
+            ].filter(Boolean).join('\n');
+
+        const pendingContent = result.success
+            ? [
+                `tool: ${action}`,
+                'result:',
+                formatForPendingToolResult(compactResult),
+            ].join('\n')
+            : [
+                `tool: ${action}`,
+                `error: ${normalizedErrorText || 'unknown error'}`,
+                includeDetails ? `result:\n${formatForPendingToolResult(compactResult)}` : '',
             ].filter(Boolean).join('\n');
 
         const toolMessage: ChatMessage = {
@@ -1913,13 +1929,17 @@ export abstract class BaseNode<T extends BaseThreadState = BaseThreadState> {
             success: result.success,
             result: result.result,
             error: result.error,
-            content,
+            content: pendingContent,
             nodeId: this.id,
             nodeName: this.name,
             timestamp: Date.now(),
+            rawProviderContent: undefined,
         };
 
         const metadataAny = state.metadata as any;
+        if (metadataAny.__activeRawProviderContent !== undefined) {
+            pendingRecord.rawProviderContent = metadataAny.__activeRawProviderContent;
+        }
         if (!Array.isArray(metadataAny.__pendingToolResults)) {
             metadataAny.__pendingToolResults = [];
         }

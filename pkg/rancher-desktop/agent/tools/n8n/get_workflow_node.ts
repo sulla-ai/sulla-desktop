@@ -47,7 +47,7 @@ export class GetWorkflowNodeWorker extends BaseTool {
 
 export const getWorkflowNodeRegistration: ToolRegistration = {
   name: 'get_workflow_node',
-  description: 'Get a single node from an n8n workflow by nodeId or nodeName.',
+  description: 'Get a single node from a n8n workflow by nodeId or nodeName.',
   category: 'n8n',
   operationTypes: ['read'],
   schemaDef: {

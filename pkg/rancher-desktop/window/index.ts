@@ -136,6 +136,7 @@ export function openMain() {
         devTools:         !app.isPackaged,
         nodeIntegration:  true,
         contextIsolation: false,
+        webviewTag:       true,
         webSecurity:      false, // Allow fetch to localhost services (Ollama)
       },
     });
@@ -692,6 +693,7 @@ export async function openFirstRunDialog() {
         devTools:         !app.isPackaged,
         nodeIntegration:  true,
         contextIsolation: false,
+        webviewTag:       true,
         webSecurity:      false, // Allow fetch to localhost services (Ollama)
       },
     });

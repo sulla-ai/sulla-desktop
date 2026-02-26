@@ -211,13 +211,44 @@ export class RemoteModelService extends BaseLanguageModel {
 
       // Inject pending tool results with their paired assistant tool_use message
       if (pendingToolResults.length > 0) {
-        // Group by rawProviderContent so we emit one assistant tool_use block per originating response
-        const rawContentSeen = new Set<any>();
+        const toolUseIds = new Set(
+          pendingToolResults
+            .map((tr: any) => String(tr.toolCallId || '').trim())
+            .filter((id: string) => id.length > 0)
+        );
+
+        // Emit assistant tool_use blocks that exactly match the pending tool_result ids.
+        // This avoids replaying unmatched tool_use ids when a run is interrupted mid-tool-loop.
+        const assistantToolUseBlocks: any[] = [];
+        const seenToolUseIds = new Set<string>();
         for (const tr of pendingToolResults) {
-          if (tr.rawProviderContent && !rawContentSeen.has(tr.rawProviderContent)) {
-            rawContentSeen.add(tr.rawProviderContent);
-            processedMessages.push({ role: 'assistant', content: tr.rawProviderContent });
+          const raw = tr.rawProviderContent;
+          if (!Array.isArray(raw)) {
+            continue;
           }
+
+          for (const block of raw) {
+            if (!block || typeof block !== 'object') {
+              continue;
+            }
+
+            const blockType = String((block as any).type || '');
+            const blockId = String((block as any).id || '').trim();
+            if (blockType !== 'tool_use' || !blockId) {
+              continue;
+            }
+
+            if (!toolUseIds.has(blockId) || seenToolUseIds.has(blockId)) {
+              continue;
+            }
+
+            seenToolUseIds.add(blockId);
+            assistantToolUseBlocks.push(block);
+          }
+        }
+
+        if (assistantToolUseBlocks.length > 0) {
+          processedMessages.push({ role: 'assistant', content: assistantToolUseBlocks });
         }
 
         const toolResultBlocks = pendingToolResults.map((tr: any) => ({

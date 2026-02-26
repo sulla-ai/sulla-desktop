@@ -13,6 +13,18 @@ type N8nBridgeLogEvent = {
 const N8N_BRIDGE_LOG_DIR = path.join(process.cwd(), 'log');
 const N8N_BRIDGE_LOG_FILE = path.join(N8N_BRIDGE_LOG_DIR, 'agent-n8n-bridge.log');
 
+function createPushRef(): string {
+  try {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return crypto.randomUUID();
+    }
+  } catch {
+    // Fall through to deterministic fallback.
+  }
+
+  return `rd-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+}
+
 function writeN8nBridgeEvent(event: N8nBridgeLogEvent): void {
   try {
     let payloadText = '{}';
@@ -86,6 +98,7 @@ export class N8nBridgeService {
   private readonly wsPath: string;
   private readonly reconnectBaseDelayMs: number;
   private readonly reconnectMaxDelayMs: number;
+  private readonly pushRef: string;
 
   private socket: WebSocket | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -101,6 +114,7 @@ export class N8nBridgeService {
     this.wsPath = config.wsPath || '/rest/push';
     this.reconnectBaseDelayMs = config.reconnectBaseDelayMs ?? 1_500;
     this.reconnectMaxDelayMs = config.reconnectMaxDelayMs ?? 30_000;
+    this.pushRef = createPushRef();
   }
 
   private async isSessionAuthenticated(): Promise<boolean> {
@@ -223,10 +237,59 @@ export class N8nBridgeService {
   }
 
   async runWorkflow(workflowId: string, data: JsonRecord = {}): Promise<unknown> {
-    return this.request(`/rest/workflows/${encodeURIComponent(workflowId)}/run`, {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
+    const payload = data && typeof data === 'object' && !Array.isArray(data) ? data : {};
+
+    try {
+      return await this.request(`/rest/workflows/${encodeURIComponent(workflowId)}/run`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const needsWorkflowDataFallback = message.includes("Cannot read properties of undefined (reading 'id')")
+        || message.includes("Cannot read properties of undefined (reading 'nodeName')");
+      if (!needsWorkflowDataFallback) {
+        throw error;
+      }
+
+      const workflowResponse = await this.getWorkflow(workflowId);
+      const workflowRecord = (workflowResponse && typeof workflowResponse === 'object' && !Array.isArray(workflowResponse))
+        ? workflowResponse as JsonRecord
+        : {};
+      const workflowDataCandidate = (workflowRecord.data && typeof workflowRecord.data === 'object' && !Array.isArray(workflowRecord.data))
+        ? workflowRecord.data as JsonRecord
+        : workflowRecord;
+
+      const workflowData: JsonRecord = {
+        ...workflowDataCandidate,
+        id: String((workflowDataCandidate.id as string) || (workflowRecord.id as string) || workflowId),
+      };
+
+      const runWithWorkflowDataPayload: JsonRecord = {
+        workflowData,
+        ...payload,
+      };
+
+      try {
+        return await this.request(`/rest/workflows/${encodeURIComponent(workflowId)}/run`, {
+          method: 'POST',
+          body: JSON.stringify(runWithWorkflowDataPayload),
+        });
+      } catch (retryError) {
+        const retryMessage = retryError instanceof Error ? retryError.message : String(retryError);
+        const isNotFound = retryMessage.includes(' 404 ') || retryMessage.includes('Cannot POST');
+        const retryNeedsWorkflowDataFallback = retryMessage.includes("Cannot read properties of undefined (reading 'id')")
+          || retryMessage.includes("Cannot read properties of undefined (reading 'nodeName')");
+        if (!isNotFound && !retryNeedsWorkflowDataFallback) {
+          throw retryError;
+        }
+      }
+
+      return this.request('/rest/workflows/run', {
+        method: 'POST',
+        body: JSON.stringify(runWithWorkflowDataPayload),
+      });
+    }
   }
 
   async request(endpoint: string, options: {
@@ -305,7 +368,7 @@ export class N8nBridgeService {
     }
 
     const wsBaseUrl = this.baseUrl.replace(/^http/i, 'ws');
-    const wsUrl = await this.getPushWebSocketUrl(`${wsBaseUrl}${this.wsPath}`);
+    const wsUrl = this.getPushWebSocketUrl(`${wsBaseUrl}${this.wsPath}`);
 
     this.socket = new WebSocket(wsUrl);
 
@@ -369,19 +432,14 @@ export class N8nBridgeService {
     }, delay);
   }
 
-  private async getPushWebSocketUrl(baseWsUrl: string): Promise<string> {
-    const pushRef = String(await SullaSettingsModel.get('n8nPushRef', '') || '').trim();
-    if (!pushRef) {
-      return baseWsUrl;
-    }
-
+  private getPushWebSocketUrl(baseWsUrl: string): string {
     try {
       const url = new URL(baseWsUrl);
-      url.searchParams.set('pushRef', pushRef);
+      url.searchParams.set('pushRef', this.pushRef);
       return url.toString();
     } catch {
       const separator = baseWsUrl.includes('?') ? '&' : '?';
-      return `${baseWsUrl}${separator}pushRef=${encodeURIComponent(pushRef)}`;
+      return `${baseWsUrl}${separator}pushRef=${encodeURIComponent(this.pushRef)}`;
     }
   }
 
