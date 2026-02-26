@@ -21,11 +21,13 @@ interface UrlInfo {
 export class SullaWebRequestFixer {
   private cookieHeaderCacheByDomain: Record<string, string> = {};
   private writeEvent: (event: SullaWebRequestLogEvent) => void;
+  private static readonly LOGGING_ENABLED = false;
+  private hasLoggedN8nHealthz = false;
   private static readonly CONNECTIVITY_PROBE_URL_PREFIX = 'https://www.gstatic.com/generate_204';
   private static readonly COOKIE_PROPERTY_PREFIX = 'webRequestCookieHeader:';
 
   constructor(writeSullaWebRequestEvent: (event: SullaWebRequestLogEvent) => void) {
-    this.writeEvent = writeSullaWebRequestEvent;
+    this.writeEvent = SullaWebRequestFixer.LOGGING_ENABLED ? writeSullaWebRequestEvent : () => {};
   }
 
   private getUrlInfo(url: string): UrlInfo {
@@ -95,8 +97,6 @@ export class SullaWebRequestFixer {
           resourceType: details.resourceType,
           payload: { requestId: details.id, responseHeaders: headers },
         });
-
-        console.log(`[Sulla Global Fix] Stripped framing headers from → ${details.url}`);
       }
       callback({ responseHeaders: headers });
     });
@@ -120,7 +120,7 @@ export class SullaWebRequestFixer {
 
         const isLocalN8nRequest = !!parsedUrl
           && (parsedUrl.hostname === 'localhost' || parsedUrl.hostname === '127.0.0.1')
-          && parsedUrl.port === '30119';
+          && (parsedUrl.port === '30119' || details.url.includes('/rest/push'));
 
         // N8N SPECIFIC FIX
         if (isLocalN8nRequest && parsedUrl) {
@@ -161,7 +161,7 @@ export class SullaWebRequestFixer {
         const urlInfo = this.getUrlInfo(details.url);
         const domainKey = this.getCookieDomainKey(details.url);
         const cachedCookieHeader = await this.loadCookieHeaderForDomain(domainKey);
-        if (urlInfo.isN8n && cachedCookieHeader) {
+        if (urlInfo.isN8n && cachedCookieHeader && shouldLog) {
           details.requestHeaders['Cookie'] = cachedCookieHeader;
 
           this.writeEvent({
@@ -179,7 +179,6 @@ export class SullaWebRequestFixer {
               domainKey,
             },
           });
-          console.log(`[Sulla Manual Cookie Header] SUCCESS (cache) on ${urlInfo.baseUrl}`);
         }
 
         if (shouldLog) {
@@ -247,7 +246,9 @@ export class SullaWebRequestFixer {
       }
     });
 
-    console.log('✅ SullaWebRequestFixer fully attached');
+    if (SullaWebRequestFixer.LOGGING_ENABLED) {
+      console.log('✅ SullaWebRequestFixer fully attached');
+    }
   }
 
   private handleN8nSetCookie(headers: any, details: any, urlInfo: UrlInfo) {
@@ -311,7 +312,19 @@ export class SullaWebRequestFixer {
    * 
    */
   private shouldLogRequest(url: string): boolean {
-    return !url.startsWith(SullaWebRequestFixer.CONNECTIVITY_PROBE_URL_PREFIX);
+    if (url.startsWith(SullaWebRequestFixer.CONNECTIVITY_PROBE_URL_PREFIX)) {
+      return false;
+    }
+
+    const isN8nHealthz = /^https?:\/\/(127\.0\.0\.1|localhost):30119\/healthz(?:[/?#]|$)/i.test(url);
+    if (isN8nHealthz) {
+      if (this.hasLoggedN8nHealthz) {
+        return false;
+      }
+      this.hasLoggedN8nHealthz = true;
+    }
+
+    return true;
   }
 
   private getCookieDomainKey(url: string): string {

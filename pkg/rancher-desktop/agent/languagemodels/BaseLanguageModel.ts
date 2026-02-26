@@ -33,6 +33,7 @@ export interface NormalizedResponse {
     finish_reason?: FinishReason;
     reasoning?: string;
     parsed_content?: any;
+    rawProviderContent?: any;
   };
 }
 
@@ -178,6 +179,7 @@ export abstract class BaseLanguageModel {
       tools?: any;
       conversationId?: string;
       nodeName?: string;
+      pendingToolResults?: import('../types').PendingToolResult[];
     } = {}
   ): Promise<NormalizedResponse | null> {
     const startTime = performance.now();
@@ -284,8 +286,6 @@ export abstract class BaseLanguageModel {
    * @override
    */
   protected normalizeResponse(raw: any): NormalizedResponse {
-    console.log(`[RemoteService] Raw response:`, JSON.stringify(raw, null, 2));
-
     let content = '';
     let reasoning = '';
     let toolCalls: Array<{ id?: string; name: string; args: any }> = [];
@@ -319,6 +319,7 @@ export abstract class BaseLanguageModel {
         .filter((b: any) => b.type === 'thinking' || b.type === 'reasoning')
         .map((b: any) => b.text)
         .join('\n');
+
     } else if ('id' in this.config && this.config.id === 'google') {
       content = raw.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
     } else {
@@ -429,6 +430,9 @@ export abstract class BaseLanguageModel {
         finish_reason: this.normalizeFinishReason(finishReason),
         reasoning: reasoning.trim() || undefined,   // ← extra safety net
         parsed_content: parsedContent,
+        rawProviderContent: ('id' in this.config && this.config.id === 'anthropic' && Array.isArray(raw.content) && raw.content.length > 0)
+          ? raw.content
+          : undefined,
       },
     };
   }

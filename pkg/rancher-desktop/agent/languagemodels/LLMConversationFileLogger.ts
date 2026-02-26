@@ -41,6 +41,24 @@ function serializePayload(payload: unknown): string {
   }
 }
 
+function sanitizeEventPayload(event: LLMLogEvent): unknown {
+  if (event.direction !== 'request') {
+    return event.payload;
+  }
+
+  if (!event.payload || typeof event.payload !== 'object' || Array.isArray(event.payload)) {
+    return event.payload;
+  }
+
+  const payload = { ...(event.payload as Record<string, unknown>) };
+
+  if ('tools' in payload) {
+    delete payload.tools;
+  }
+
+  return payload;
+}
+
 export function writeLLMConversationEvent(event: LLMLogEvent): void {
   if (!isEnabled()) {
     return;
@@ -59,7 +77,7 @@ export function writeLLMConversationEvent(event: LLMLogEvent): void {
       `conversationId: ${event.conversationId || 'default'}`,
       `attempt: ${typeof event.attempt === 'number' ? event.attempt : 'n/a'}`,
       'payload:',
-      serializePayload(event.payload),
+      serializePayload(sanitizeEventPayload(event)),
       '',
     ];
 

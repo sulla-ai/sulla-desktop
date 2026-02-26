@@ -2,30 +2,9 @@ import { BaseNode, NodeRunPolicy } from './BaseNode';
 import type { BaseThreadState, NodeResult } from './Graph';
 import { ActivePlanManager } from './ActivePlanManager';
 import type { ChatMessage } from '../languagemodels/BaseLanguageModel';
-
-// Types for evidence collection
-interface ActionEvidence {
-  evidence_type: 'file_created' | 'file_modified' | 'api_response_data' | 'data_generated' | 'tool_output' | 'installation_confirmed';
-  description: string;
-  evidence_pointer: string;
-  evidence_content: any;
-  verification_method: string;
-  timestamp: number;
-}
-
-// Types for action results
-interface ActionResult {
-  action_type: string;
-  tool_name?: string;
-  parameters_used: Record<string, any>;
-  result: any;
-  success: boolean;
-  error_message?: string;
-  execution_time_ms: number;
-  evidence_collected: ActionEvidence[];
-  completion_justification: string;
-  timestamp: number;
-}
+import { getN8nBridgeService } from '../services/N8nBridgeService';
+import { getN8nEventLog, type N8nLogEntry } from '../services/N8nEventLog';
+import { getN8nStateStore } from '../services/N8nStateStore';
 
 // ============================================================================
 // ACTION PROMPT SUFFIX
@@ -34,14 +13,14 @@ interface ActionResult {
 // The technical_instructions tell the action agent exactly what to do this cycle.
 // ============================================================================
 
-const ACTION_PROMPT_SUFFIX = `You are the Action Executor Agent in a ReAct graph loop.
+const ACTION_PROMPT_BASE = `You are the Action Executor Agent in a ReAct graph loop.
 You get right to work on the primary focus;
 You take massive action and you don't let things stand in your way;
 You're incredible about finding ways of getting things accomplished;
 You're incredibly resourceful;
-You're constantly thinking outside the box when tasks don't easily come together;
+You're constantly thinking outside the box when tasks don't easily come together;`;
 
-**PRIMARY DIRECTIVE (highest priority — never violate):**
+const ACTION_PROMPT_TEB_ONLY = `**PRIMARY DIRECTIVE (highest priority — never violate):**
 Accomplish the goal defined in the Technical Execution Brief (TEB) provided in the latest user message.
 The TEB is your source of truth for objective, constraints, and known context.
 
@@ -61,7 +40,14 @@ The TEB is your source of truth for objective, constraints, and known context.
 - Use short, direct sentences.
 - Your final KEY_RESULT must be a factual evidence snapshot string that points to concrete proof (tool names, returned ids/paths/statuses, and failures if any).
 - If the TEB goal is fully accomplished, you MUST stop all explanation and output ONLY the DONE wrapper block with nothing after it.
-- If execution is blocked and the TEB goal cannot be completed in this cycle, you MUST stop all explanation and output ONLY the BLOCKED wrapper block with nothing after it.
+- If execution is blocked and the TEB goal cannot be completed in this cycle, you MUST stop all explanation and output ONLY the BLOCKED wrapper block with nothing after it.`;
+
+const ACTION_PROMPT_COMPLETION_WRAPPERS = `
+CRITICAL CONTINUITY RULES:
+- This is a persistent conversation. Review the entire message history + the facts above before every action.
+- If you see the same user request again, it means previous actions failed or were incomplete — continue from there using the latest state.
+- Never restart or repeat steps that are already marked complete in memory.
+- Don't use language that would suggest this is a brand new conversation, like :"On it.", "Got it." etc.
 
 DONE wrapper (use when goal completed):
 
@@ -101,6 +87,8 @@ const UNBLOCK_REQUIREMENTS_XML_REGEX = /<UNBLOCK_REQUIREMENTS>([\s\S]*?)<\/UNBLO
  *   - Results stored in state.metadata.actions for ReasoningNode to review
  */
 export class ActionNode extends BaseNode {
+  private static n8nBridgeStartPromise: Promise<void> | null = null;
+
   constructor() {
     super('action', 'Action');
   }
@@ -111,68 +99,77 @@ export class ActionNode extends BaseNode {
     // ----------------------------------------------------------------
     // 1. READ TECHNICAL INSTRUCTIONS
     // ----------------------------------------------------------------
-    const technicalInstructions = (state.metadata as any).technical_instructions;
-
+    const technicalInstructions = String((state.metadata as any).technical_instructions || '').trim();
     if (!technicalInstructions) {
-      console.warn('[ActionNode] No technical_instructions found — cannot execute without direction');
-      return { state, decision: { type: 'next' } };
+      console.log('[ActionNode] No technical_instructions found — executing with fallback directive');
     }
 
     // ----------------------------------------------------------------
     // 2. BUILD SYSTEM PROMPT = ACTION DIRECTIVE
     // ----------------------------------------------------------------
-    const systemPrompt = ACTION_PROMPT_SUFFIX;
+    const systemPrompt = technicalInstructions
+      ? `${ACTION_PROMPT_BASE}\n\n${ACTION_PROMPT_TEB_ONLY}\n\n${ACTION_PROMPT_COMPLETION_WRAPPERS}`
+      : `${ACTION_PROMPT_BASE}\n\n${ACTION_PROMPT_COMPLETION_WRAPPERS}`;
 
     const enrichedPrompt = await this.enrichPrompt(systemPrompt, state, {
       includeSoul: true,
-      includeAwareness: false,
-      includeEnvironment: false,
+      includeAwareness: true,
+      includeEnvironment: true,
       includeMemory: false,
     });
 
-    console.log(`[ActionNode] Executing with technical_instructions: ${technicalInstructions.substring(0, 100)}...`);
+    console.log(
+      `[ActionNode] Executing with technical_instructions: ${technicalInstructions ? `${technicalInstructions.substring(0, 100)}...` : '[none]'}`
+    );
 
     // ----------------------------------------------------------------
     // 3. EXECUTE — LLM interprets PRD + focus, calls tools
     // ----------------------------------------------------------------
-    const actionResult = await this.executeAction(enrichedPrompt, state, startTime);
+    const disposeLiveN8nStream = await this.startLiveN8nActionStream(state);
+    const actionResult = await this.executeAction(enrichedPrompt, state, startTime)
+      .finally(() => {
+        disposeLiveN8nStream();
+      });
 
-    const actionResultText = typeof actionResult.result === 'string' ? actionResult.result : '';
+    const actionResultText = typeof actionResult === 'string' ? actionResult : '';
     const actionOutcome = this.extractActionOutcome(actionResultText);
-    const actionResponse = actionOutcome.summary;
-    const nonTechnicalExecutionBriefContent = this.extractNonTechnicalExecutionBriefContent(actionResultText);
 
     (state.metadata as any).action = {
       ...((state.metadata as any).action || {}),
       status: actionOutcome.status,
-      response: actionResponse,
       blocker_reason: actionOutcome.blockerReason,
       unblock_requirements: actionOutcome.unblockRequirements,
       updatedAt: Date.now(),
     };
 
-    this.persistActionEvidenceSnapshotToGraphState(state, actionResponse);
-
-    if (nonTechnicalExecutionBriefContent) {
-      await this.wsChatMessage(state, nonTechnicalExecutionBriefContent, 'assistant');
+    if (actionResultText) {
+      if (!Array.isArray(state.messages)) {
+        state.messages = [];
+      }
+      state.messages.push({
+        role: 'assistant',
+        content: actionResultText,
+        metadata: {
+          nodeId: this.id,
+          nodeName: this.name,
+          kind: 'action_result',
+          timestamp: Date.now(),
+        },
+      } as ChatMessage);
+      this.bumpStateVersion(state);
+      await this.wsChatMessage(state, actionResultText, 'assistant');
     }
 
     // ----------------------------------------------------------------
-    // 4. STORE ACTION RESULT
+    // 4. UPDATE PLAN HEARTBEAT
     // ----------------------------------------------------------------
-    this.storeActionResult(state, actionResult);
+    await this.updatePlanProgress(state, actionOutcome.status === 'done');
 
     // ----------------------------------------------------------------
-    // 5. UPDATE PLAN HEARTBEAT
-    // ----------------------------------------------------------------
-    await this.updatePlanProgress(state, actionResult);
-
-    // ----------------------------------------------------------------
-    // 6. LOG
+    // 5. LOG
     // ----------------------------------------------------------------
     const executionTimeMs = Date.now() - startTime;
-    const toolCalled = state.metadata.hadToolCalls || false;
-    console.log(`[ActionNode] Complete — ${actionResult.success ? 'SUCCESS' : 'FAILED'} in ${executionTimeMs}ms, tools: ${toolCalled}, response: ${actionResponse ? 'present' : 'none'}`);
+    console.log(`[ActionNode] Complete — status: ${actionOutcome.status} in ${executionTimeMs}ms`);
 
     return { state, decision: { type: 'next' } };
   }
@@ -185,7 +182,7 @@ export class ActionNode extends BaseNode {
     systemPrompt: string,
     state: BaseThreadState,
     startTime: number
-  ): Promise<ActionResult> {
+  ): Promise<string | null> {
     try {
       const policy: Required<NodeRunPolicy> = {
         messageSource: 'custom',
@@ -207,33 +204,143 @@ export class ActionNode extends BaseNode {
         nodeRunMessages: nodeMessages,
       });
 
-      const resultContent = chatResult || 'Action completed';
-
-      return {
-        action_type: 'execute',
-        parameters_used: { prd_chars: 'see planning_instructions', technical_chars: 'see technical_instructions' },
-        result: resultContent,
-        success: true,
-        execution_time_ms: Date.now() - startTime,
-        evidence_collected: [],
-        completion_justification: 'Action completed',
-        timestamp: Date.now(),
-      };
+      return chatResult || null;
     } catch (error) {
       console.error('[ActionNode] Action execution failed:', error);
-
-      return {
-        action_type: 'execute',
-        parameters_used: {},
-        result: null,
-        success: false,
-        error_message: error instanceof Error ? error.message : String(error),
-        execution_time_ms: Date.now() - startTime,
-        evidence_collected: [],
-        completion_justification: `Action failed: ${error instanceof Error ? error.message : String(error)}`,
-        timestamp: Date.now(),
-      };
+      return null;
     }
+  }
+
+  private async startLiveN8nActionStream(state: BaseThreadState): Promise<() => void> {
+    // leave this in place, I've commented it out only for testing atm
+    //if ((state.metadata as any).n8nLiveEventsEnabled !== true) { return () => {}; }
+
+    try {
+      const wsChannel = String((state.metadata as any).wsChannel || 'chat-controller');
+      const selectedSkillSlug = String((state.metadata as any).planRetrieval?.selected_skill_slug || '');
+      const n8nRootUrl = String(getN8nBridgeService().getAppRootUrl() || 'http://127.0.0.1:30119/').trim();
+
+      void this.dispatchToWebSocket(wsChannel, {
+        type: 'register_or_activate_asset',
+        data: {
+          asset: {
+            type: 'iframe',
+            id: 'sulla_n8n',
+            title: 'Sulla n8n',
+            url: n8nRootUrl,
+            active: true,
+            collapsed: true,
+            skillSlug: selectedSkillSlug,
+            refKey: `graph.skill.${selectedSkillSlug || 'workflow'}.website_url`,
+          },
+        },
+        timestamp: Date.now(),
+      });
+
+      const eventLog = await this.getN8nEventLogReady();
+      const onLogAdded = (entry: N8nLogEntry) => {
+        console.log('[ActionNode] live n8n eventLog entry received:', entry);
+        const message = this.formatLiveN8nEvent(entry);
+        if (!message) {
+          return;
+        }
+
+        if (!this.shouldAppendLiveN8nEvent(state, message)) {
+          return;
+        }
+
+        this.appendActionLiveAssistantMessage(state, message, entry);
+      };
+
+      eventLog.on('log:added', onLogAdded);
+
+      return () => {
+        eventLog.off('log:added', onLogAdded);
+      };
+    } catch (error) {
+      console.warn('[ActionNode] Unable to start live n8n event stream:', error);
+      return () => {};
+    }
+  }
+
+  private async getN8nEventLogReady() {
+    const bridge = getN8nBridgeService();
+    if (!ActionNode.n8nBridgeStartPromise) {
+      ActionNode.n8nBridgeStartPromise = bridge.start().catch((error) => {
+        ActionNode.n8nBridgeStartPromise = null;
+        throw error;
+      });
+    }
+
+    await ActionNode.n8nBridgeStartPromise;
+    const stateStore = getN8nStateStore(bridge);
+    return getN8nEventLog(bridge, stateStore);
+  }
+
+  private formatLiveN8nEvent(entry: N8nLogEntry): string {
+    if (!entry) {
+      return '';
+    }
+
+    if (entry.type === 'state' || entry.action === 'rawMessage') {
+      return '';
+    }
+
+    const head = `[n8n ${entry.type}]`;
+    const action = entry.action ? ` ${entry.action}` : '';
+    const workflow = entry.workflowId ? ` workflow=${entry.workflowId}` : '';
+    const execution = entry.executionId ? ` execution=${entry.executionId}` : '';
+    const node = entry.nodeName ? ` node=${entry.nodeName}` : '';
+    const message = entry.message ? ` — ${entry.message}` : '';
+
+    return `${head}${action}${workflow}${execution}${node}${message}`.trim();
+  }
+
+  private shouldAppendLiveN8nEvent(state: BaseThreadState, content: string): boolean {
+    const metadataAny = state.metadata as any;
+    const liveMeta = metadataAny.__actionLiveEvent || {};
+    const now = Date.now();
+
+    if (liveMeta.lastContent === content && now - Number(liveMeta.lastAt || 0) < 1000) {
+      return false;
+    }
+
+    metadataAny.__actionLiveEvent = {
+      lastContent: content,
+      lastAt: now,
+    };
+
+    return true;
+  }
+
+  private appendActionLiveAssistantMessage(state: BaseThreadState, content: string, entry: N8nLogEntry): void {
+    const message: ChatMessage = {
+      role: 'assistant',
+      content,
+      metadata: {
+        nodeId: this.id,
+        nodeName: this.name,
+        kind: 'action_live_n8n_event',
+        source: 'n8n_event_stream',
+        eventType: entry.type,
+        action: entry.action,
+        workflowId: entry.workflowId,
+        executionId: entry.executionId,
+        timestamp: Date.now(),
+      },
+    };
+
+    state.messages.push(message);
+
+    const metadataAny = state.metadata as any;
+    const namespace = '__messages_action';
+    if (!metadataAny[namespace] || !Array.isArray(metadataAny[namespace].messages)) {
+      metadataAny[namespace] = { messages: [], graphSeedInitialized: true };
+    }
+    metadataAny[namespace].messages.push({ ...message });
+
+    this.bumpStateVersion(state);
+    void this.wsChatMessage(state, content, 'assistant', 'progress');
   }
 
   private buildActionNodeMessages(state: BaseThreadState, policy: Required<NodeRunPolicy>): {
@@ -267,15 +374,16 @@ export class ActionNode extends BaseNode {
       .map((message) => ({ ...message }));
 
     const technicalInstructions = String((state.metadata as any).technical_instructions || '').trim();
-    const userDirective: ChatMessage = {
-      role: 'user',
-      content: technicalInstructions
-        ? `Execute this cycle exactly as specified in this Technical Execution Brief:\n${technicalInstructions}`
-        : 'Execute the current technical brief for this cycle without expanding scope.',
-    };
 
     const assistantMessages = actionScopedHistory;
-    const userMessages = [userDirective];
+    const userMessages: ChatMessage[] = [];
+
+    if (technicalInstructions) {
+      userMessages.push({
+        role: 'user',
+        content: `${technicalInstructions}`,
+      });
+    }
 
     return {
       assistantMessages,
@@ -353,63 +461,11 @@ export class ActionNode extends BaseNode {
     };
   }
 
-  private extractNonTechnicalExecutionBriefContent(actionResultText: string): string {
-    let output = String(actionResultText || '').trim();
-    if (!output) {
-      return '';
-    }
-
-    output = output
-      .replace(/<TECHNICAL_EXECUTION_BRIEF>[\s\S]*?<\/TECHNICAL_EXECUTION_BRIEF>/gi, '')
-      .replace(/###\s+Technical\s+Execution\s+Brief[\s\S]*?(?=<EXECUTOR_DONE>|$)/gi, '')
-      .trim();
-
-    return output;
-  }
-
-  private persistActionEvidenceSnapshotToGraphState(state: BaseThreadState, actionResponse: string | null): void {
-    const snapshot = String(actionResponse || '').trim();
-    if (!snapshot) {
-      return;
-    }
-
-    if (!Array.isArray(state.messages)) {
-      state.messages = [];
-    }
-
-    state.messages.push({
-      role: 'assistant',
-      content: snapshot,
-      metadata: {
-        nodeId: this.id,
-        nodeName: this.name,
-        kind: 'action_evidence_snapshot',
-        timestamp: Date.now(),
-      },
-    } as ChatMessage);
-
-    this.bumpStateVersion(state);
-  }
-
-  // ======================================================================
-  // RESULT STORAGE
-  // ======================================================================
-
-  private storeActionResult(state: BaseThreadState, result: ActionResult): void {
-    if (!(state.metadata as any).actions) {
-      (state.metadata as any).actions = [];
-    }
-    (state.metadata as any).actions.push(result);
-    (state.metadata as any).latestAction = result;
-
-    console.log(`[ActionNode] Result stored: ${result.success ? 'SUCCESS' : 'FAILED'}`);
-  }
-
   // ======================================================================
   // ACTIVE PLAN HEARTBEAT
   // ======================================================================
 
-  private async updatePlanProgress(state: BaseThreadState, actionResult: ActionResult): Promise<void> {
+  private async updatePlanProgress(state: BaseThreadState, success: boolean): Promise<void> {
     try {
       const activePlanId = (state.metadata as any).reasoning?.activePlanId;
 
@@ -420,7 +476,7 @@ export class ActionNode extends BaseNode {
 
         const heartbeatResult = await activePlanManager.sendHeartbeat(threadId, activePlanId, executorPID);
 
-        console.log(`[ActionNode] Heartbeat sent for plan: ${activePlanId}, success: ${actionResult.success}`);
+        console.log(`[ActionNode] Heartbeat sent for plan: ${activePlanId}, success: ${success}`);
 
         if (!heartbeatResult.success) {
           console.warn('[ActionNode] Plan heartbeat failed — may have been taken over');

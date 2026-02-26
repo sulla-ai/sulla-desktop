@@ -106,6 +106,38 @@ export const GraphRegistry = {
 
   clearAll(): void {
     registry.clear();
+  },
+
+  updateRuntimeFlags(threadId: string, flags: { n8nLiveEventsEnabled?: boolean }): boolean {
+    const record = registry.get(threadId);
+    if (!record) {
+      return false;
+    }
+
+    if (typeof flags.n8nLiveEventsEnabled === 'boolean') {
+      (record.state.metadata as any).n8nLiveEventsEnabled = flags.n8nLiveEventsEnabled;
+    }
+
+    return true;
+  },
+
+  updateRuntimeFlagsByStateThreadId(threadId: string, flags: { n8nLiveEventsEnabled?: boolean }): number {
+    let updatedCount = 0;
+
+    for (const record of registry.values()) {
+      const stateThreadId = String((record.state.metadata as any)?.threadId || '').trim();
+      if (!stateThreadId || stateThreadId !== threadId) {
+        continue;
+      }
+
+      if (typeof flags.n8nLiveEventsEnabled === 'boolean') {
+        (record.state.metadata as any).n8nLiveEventsEnabled = flags.n8nLiveEventsEnabled;
+      }
+
+      updatedCount += 1;
+    }
+
+    return updatedCount;
   }
 };
 
@@ -166,6 +198,7 @@ async function buildOverlordState(wsChannel: string, prompt: string): Promise<Ov
       },
       finalSummary: '',
       finalState: 'running',
+      n8nLiveEventsEnabled: false,
       returnTo: null,
       primaryProject: '',
       projectDescription: '',
@@ -238,6 +271,7 @@ async function buildSkillState(wsChannel: string, threadId?: string): Promise<Sk
       },
       finalSummary: '',
       finalState: 'running',
+      n8nLiveEventsEnabled: false,
       returnTo: null,
 
       // SkillGraph-specific metadata properties

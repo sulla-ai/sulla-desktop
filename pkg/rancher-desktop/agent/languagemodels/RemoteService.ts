@@ -186,71 +186,46 @@ export class RemoteModelService extends BaseLanguageModel {
 
   /**
    * Build provider-specific request body.
+   * Pending tool results (from state.metadata.__pendingToolResults) are injected
+   * here in the correct format for the target provider.
    */
   private buildRequestBody(messages: ChatMessage[], options: any, overrides: any): any {
+    const pendingToolResults: any[] = Array.isArray(options.pendingToolResults) ? options.pendingToolResults : [];
+
     const sanitizedMessages = messages
+      .filter(m => m.role !== 'tool') // strip legacy role:tool messages
+      .filter(m => (m as any).metadata?.kind !== 'tool_result') // strip assistant-role tool results written by node-scoped lane
       .map(m => ({
         ...m,
         content: typeof m.content === 'string' ? m.content.trim() : String(m.content ?? '').trim(),
       }))
-      .filter(m => m.content.length > 0);
+      .filter(m => m.content.length > 0 || (m as any).metadata?.rawProviderContent !== undefined);
 
-    const baseBody: any = {
-      model: options.model ?? this.model,
-      messages: sanitizedMessages.map(m => ({ role: m.role, content: m.content })),
-    };
-
-    if (options.maxTokens) {
-      baseBody.max_tokens = options.maxTokens;
-    }
-
-    // Add tools when provided (OpenAI / Grok / most compatible)
-    if (options.tools?.length) {
-      baseBody.tools = options.tools;
-    }
-
-    if (options.format === 'json') {
-      baseBody.response_format = { type: 'json_object' };
-    }
-
-    // Anthropic shape (uses tools array differently)
+    // ── Anthropic ─────────────────────────────────────────────────────────────
     if (this.config.id === 'anthropic') {
-      // Extract system message content for separate system parameter
       const systemMessage = sanitizedMessages.find(m => m.role === 'system');
-      
-      // Process messages for Anthropic
-      let processedMessages = sanitizedMessages
-        .filter(m => m.role !== 'system') // Remove system messages from messages array
-        .map(m => {
-          // Anthropic only supports 'user' and 'assistant' roles in messages
-          // Convert tool messages to user messages, keep user/assistant as-is
-          if (m.role === 'tool') {
-            return { role: 'user', content: m.content };
-          }
-          return { role: m.role, content: m.content };
-        });
 
-      // Anthropic requires conversation to end with user message.
-      // Do not delete messages; move the latest user message to the end if needed.
-      if (processedMessages.length > 0 && processedMessages[processedMessages.length - 1].role !== 'user') {
-        let lastUserIndex = -1;
-        for (let i = processedMessages.length - 1; i >= 0; i--) {
-          if (processedMessages[i].role === 'user') {
-            lastUserIndex = i;
-            break;
+      let processedMessages: any[] = sanitizedMessages
+        .filter(m => m.role !== 'system')
+        .map(m => ({ role: m.role, content: m.content }));
+
+      // Inject pending tool results with their paired assistant tool_use message
+      if (pendingToolResults.length > 0) {
+        // Group by rawProviderContent so we emit one assistant tool_use block per originating response
+        const rawContentSeen = new Set<any>();
+        for (const tr of pendingToolResults) {
+          if (tr.rawProviderContent && !rawContentSeen.has(tr.rawProviderContent)) {
+            rawContentSeen.add(tr.rawProviderContent);
+            processedMessages.push({ role: 'assistant', content: tr.rawProviderContent });
           }
         }
 
-        if (lastUserIndex >= 0 && lastUserIndex !== processedMessages.length - 1) {
-          const [lastUserMessage] = processedMessages.splice(lastUserIndex, 1);
-          processedMessages.push(lastUserMessage);
-          console.log('[RemoteService] Moved latest user message to end for Anthropic compatibility');
-        }
-      }
-
-      // Ensure we have at least one user message
-      if (processedMessages.length === 0 || processedMessages[processedMessages.length - 1].role !== 'user') {
-        console.warn('[RemoteService] No user message at end - this may cause Anthropic API errors');
+        const toolResultBlocks = pendingToolResults.map((tr: any) => ({
+          type: 'tool_result',
+          tool_use_id: tr.toolCallId,
+          content: typeof tr.content === 'string' ? tr.content : JSON.stringify(tr.content),
+        }));
+        processedMessages.push({ role: 'user', content: toolResultBlocks });
       }
 
       const anthropicBody: any = {
@@ -259,23 +234,20 @@ export class RemoteModelService extends BaseLanguageModel {
         messages: processedMessages,
       };
 
-      // Add system parameter if system message exists
       if (systemMessage?.content) {
         anthropicBody.system = systemMessage.content;
       }
 
       if (options.tools?.length) {
-        // Transform OpenAI-style tools to Anthropic format
         anthropicBody.tools = options.tools.map((tool: any) => {
           if (tool.type === 'function') {
             return {
               type: 'custom',
               name: tool.function.name,
               description: tool.function.description,
-              input_schema: tool.function.parameters || { type: 'object', properties: {} }
+              input_schema: tool.function.parameters || { type: 'object', properties: {} },
             };
           }
-          // Pass through if already in Anthropic format
           return tool;
         });
       }
@@ -283,15 +255,62 @@ export class RemoteModelService extends BaseLanguageModel {
       return anthropicBody;
     }
 
-    // Google (no native tools yet — skip or use extensions if needed)
+    // ── Google ────────────────────────────────────────────────────────────────
     if (this.config.id === 'google') {
+      const contents: any[] = sanitizedMessages.map(m => ({
+        role: m.role === 'assistant' ? 'model' : m.role,
+        parts: [{ text: m.content }],
+      }));
+
+      // Inject pending tool results as functionResponse parts in a user turn
+      if (pendingToolResults.length > 0) {
+        contents.push({
+          role: 'user',
+          parts: pendingToolResults.map((tr: any) => ({
+            functionResponse: {
+              name: tr.toolName,
+              response: { content: tr.content },
+            },
+          })),
+        });
+      }
+
       return {
-        contents: sanitizedMessages.map(m => ({
-          role: m.role === 'assistant' ? 'model' : m.role,
-          parts: [{ text: m.content }],
-        })),
+        contents,
         generationConfig: { maxOutputTokens: options.maxTokens },
       };
+    }
+
+    // ── OpenAI / Grok / Azure / Mistral / Groq (OpenAI-compatible) ───────────
+    const baseMessages: any[] = sanitizedMessages.map(m => ({ role: m.role, content: m.content }));
+
+    // Inject pending tool results as role:tool messages with tool_call_id
+    if (pendingToolResults.length > 0) {
+      for (const tr of pendingToolResults) {
+        baseMessages.push({
+          role: 'tool',
+          tool_call_id: tr.toolCallId,
+          name: tr.toolName,
+          content: typeof tr.content === 'string' ? tr.content : JSON.stringify(tr.content),
+        });
+      }
+    }
+
+    const baseBody: any = {
+      model: options.model ?? this.model,
+      messages: baseMessages,
+    };
+
+    if (options.maxTokens) {
+      baseBody.max_tokens = options.maxTokens;
+    }
+
+    if (options.tools?.length) {
+      baseBody.tools = options.tools;
+    }
+
+    if (options.format === 'json') {
+      baseBody.response_format = { type: 'json_object' };
     }
 
     return baseBody;

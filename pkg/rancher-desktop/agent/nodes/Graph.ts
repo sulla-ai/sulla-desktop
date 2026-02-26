@@ -214,6 +214,7 @@ export interface BaseThreadState {
     finalSummary: string;
     totalSummary?: string;
     finalState: 'failed'  | 'running' | 'completed';
+    n8nLiveEventsEnabled?: boolean;
 
     // parent graph return
     returnTo: string | null;
@@ -222,6 +223,8 @@ export interface BaseThreadState {
     datetimeIncluded?: boolean;
     hadToolCalls?: boolean;
     hadUserMessages?: boolean;
+
+    __pendingToolResults?: import('../types').PendingToolResult[];
   };
 }
 
@@ -569,6 +572,7 @@ export async function createInitialThreadState<T extends BaseThreadState>(
       finalSummary: '',
       totalSummary: '',
       finalState: 'running',
+      n8nLiveEventsEnabled: false,
       returnTo: null
     };
 
@@ -706,23 +710,25 @@ export function createSkillGraph(): Graph<SkillGraphState> {
 
   // PlanRetrieval complexity routing:
   // - low: direct to output
-  // - medium: direct to action (executor)
-  // - high (default): full planner flow
+  // - medium or high WITHOUT a skill: direct to action (executor)
+  // - high WITH a skill identified: full planner flow
   graph.addConditionalEdge('plan_retrieval', state => {
     const complexity = (state.metadata as any).planRetrieval?.complexity;
+    const selectedSkillSlug = (state.metadata as any).planRetrieval?.selected_skill_slug;
+    const hasSkill = typeof selectedSkillSlug === 'string' && selectedSkillSlug.trim().length > 0;
 
     if (complexity === 'low') {
       console.log('[SkillGraph] PlanRetrieval complexity=low - routing directly to output');
       return 'output';
     }
 
-    if (complexity === 'medium') {
-      console.log('[SkillGraph] PlanRetrieval complexity=medium - routing directly to action');
-      return 'action';
+    if (complexity === 'high' && hasSkill) {
+      console.log(`[SkillGraph] PlanRetrieval complexity=high + skill=${selectedSkillSlug} - routing to planner`);
+      return 'planner';
     }
 
-    console.log('[SkillGraph] PlanRetrieval complexity=high (or missing) - routing to planner');
-    return 'planner';
+    console.log(`[SkillGraph] PlanRetrieval complexity=${complexity}, skill=${selectedSkillSlug || 'none'} - routing directly to action`);
+    return 'action';
   });
 
   // Planner → Reasoning (start ReAct loop)

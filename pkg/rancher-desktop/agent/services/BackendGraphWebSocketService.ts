@@ -75,6 +75,11 @@ export class BackendGraphWebSocketService {
 
   private async handleWebSocketMessage(msg: WebSocketMessage): Promise<void> {
     console.log('[BackendGraphWS] Handling WebSocket message:', msg.type);
+
+    if (msg.type === 'graph_runtime_update') {
+      this.handleGraphRuntimeUpdate(msg);
+      return;
+    }
     
     if (msg.type === 'stop_run') {
       console.log('[BackendGraphWS] stop_run received, aborting active execution');
@@ -112,6 +117,32 @@ export class BackendGraphWebSocketService {
 
     console.log('[BackendGraphWS] Starting user input processing');
     await this.processUserInput(content, threadIdFromMsg);
+  }
+
+  private handleGraphRuntimeUpdate(msg: WebSocketMessage): void {
+    const data = (msg.data && typeof msg.data === 'object') ? (msg.data as any) : null;
+    const threadId = typeof data?.threadId === 'string' ? data.threadId.trim() : '';
+    const n8nLiveEventsEnabled = typeof data?.n8nLiveEventsEnabled === 'boolean'
+      ? data.n8nLiveEventsEnabled
+      : null;
+
+    if (!threadId || n8nLiveEventsEnabled === null) {
+      return;
+    }
+
+    const updated = GraphRegistry.updateRuntimeFlags(threadId, { n8nLiveEventsEnabled });
+    const updatedByStateThreadId = GraphRegistry.updateRuntimeFlagsByStateThreadId(threadId, { n8nLiveEventsEnabled });
+    if (!updated && updatedByStateThreadId === 0) {
+      console.log('[BackendGraphWS] graph_runtime_update ignored (thread not found):', threadId);
+      return;
+    }
+
+    console.log('[BackendGraphWS] graph_runtime_update applied:', {
+      threadId,
+      n8nLiveEventsEnabled,
+      updatedByRegistryKey: updated,
+      updatedByStateThreadId,
+    });
   }
 
   private async processUserInput(userText: string, threadIdFromMsg?: string): Promise<void> {

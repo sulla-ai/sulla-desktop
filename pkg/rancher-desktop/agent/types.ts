@@ -78,6 +78,19 @@ export interface ToolResult {
   toolCallId?: string;
 }
 
+export interface PendingToolResult {
+  toolCallId: string;
+  toolName: string;
+  success: boolean;
+  result?: unknown;
+  error?: string;
+  content: string;
+  nodeId: string;
+  nodeName: string;
+  timestamp: number;
+  rawProviderContent?: any;
+}
+
 // ============================================================================
 // RESPONSE TYPES
 // ============================================================================

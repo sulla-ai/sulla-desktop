@@ -26,6 +26,15 @@ import { getWorkflowNodeListRegistration } from './get_workflow_node_list';
 import { addWorkflowNodeRegistration } from './add_workflow_node';
 import { updateWorkflowNodeRegistration } from './update_workflow_node';
 import { removeWorkflowNodeRegistration } from './remove_workflow_node';
+import { getN8nStateRegistration } from './get_n8n_state';
+import { refreshN8nStateRegistration } from './refresh_n8n_state';
+import { getN8nEventLogRegistration } from './get_n8n_event_log';
+import { searchN8nEventLogRegistration } from './search_n8n_event_log';
+import { getN8nRecentErrorsRegistration } from './get_n8n_recent_errors';
+import { getN8nWorkflowBridgeRegistration } from './get_n8n_workflow_bridge';
+import { updateN8nWorkflowBridgeRegistration } from './update_n8n_workflow_bridge';
+import { runN8nWorkflowBridgeRegistration } from './run_n8n_workflow_bridge';
+import { waitN8nExecutionCompleteRegistration } from './wait_n8n_execution_complete';
 
 // Export all n8n tool registrations as an array
 export const n8nToolRegistrations = [
@@ -56,4 +65,13 @@ export const n8nToolRegistrations = [
   addWorkflowNodeRegistration,
   updateWorkflowNodeRegistration,
   removeWorkflowNodeRegistration,
+  getN8nStateRegistration,
+  refreshN8nStateRegistration,
+  getN8nEventLogRegistration,
+  searchN8nEventLogRegistration,
+  getN8nRecentErrorsRegistration,
+  getN8nWorkflowBridgeRegistration,
+  updateN8nWorkflowBridgeRegistration,
+  runN8nWorkflowBridgeRegistration,
+  waitN8nExecutionCompleteRegistration,
 ];

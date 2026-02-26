@@ -10,13 +10,10 @@
 // - JSON-only response with no tools
 
 import type { BaseThreadState, NodeResult } from './Graph';
-import { BaseNode, ENVIRONMENT_PROMPT, JSON_ONLY_RESPONSE_INSTRUCTIONS, NodeRunPolicy } from './BaseNode';
+import { BaseNode, JSON_ONLY_RESPONSE_INSTRUCTIONS, NodeRunPolicy } from './BaseNode';
 import { articlesRegistry } from '../database/registry/ArticlesRegistry';
 import { skillsRegistry } from '../database/registry/SkillsRegistry';
 import { ActivePlanManager } from './ActivePlanManager';
-import { SullaSettingsModel } from '../database/models/SullaSettingsModel';
-import { toolRegistry } from '../tools';
-import type { ChatMessage } from '../languagemodels/BaseLanguageModel';
 
 // ============================================================================
 // INTERFACES
@@ -155,11 +152,6 @@ export class PlanRetrievalNode extends BaseNode {
       console.log('[PlanRetrievalNode] Used fast-path rule-based intent detection - skipped LLM call');
     }
     diagnostics.analysisCompleted = true;
-
-    // ----------------------------------------------------------------
-    // 4.5. APPEND SHARED CONTEXT TO GRAPH MESSAGES (POST-ANALYSIS)
-    // ----------------------------------------------------------------
-    await this.appendSharedContextMessagesToGraphState(state);
 
     // ----------------------------------------------------------------
     // 5. PERFORM VECTOR DATABASE SEARCHES
@@ -375,110 +367,6 @@ export class PlanRetrievalNode extends BaseNode {
     }
   }
 
-  private buildEnvironmentContextAssistantMessage(): string {
-    let environmentContext = ENVIRONMENT_PROMPT;
-
-    const categoriesWithDesc = toolRegistry.getCategoriesWithDescriptions();
-    const categoriesText = categoriesWithDesc
-      .map(({ category, description }) => `- ${category}: ${description}`)
-      .join('\n');
-    environmentContext = environmentContext.replace('{{tool_categories}}', categoriesText);
-
-    const formattedTime = new Date().toLocaleString('en-US', {
-      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: true,
-    });
-    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'unknown';
-
-    environmentContext = environmentContext.replace('{{formattedTime}}', formattedTime);
-    environmentContext = environmentContext.replace('{{timeZone}}', timeZone);
-
-    const activeElementsGuidance = [
-      '## Active Sidebar Elements (Right Panel)',
-      '- The UI supports active elements where the user can watch live webpages/apps and documents as you edit them',
-      '- Use tool `manage_active_asset` to create/update/remove these assets at runtime.',
-      '- Asset types:',
-      '  - iframe: display live webpages/apps (automation tools, workflow UIs, etc).',
-      '  - document: display/edit planning docs (for example PRD/planning instructions).',
-      '- For workflow SPA websites, use the resolved stable workflow asset id so updates target the same panel.',
-      '- Keep iframe URL on the workflow app main/base route only (origin), not deep routes.',
-      '- Derive base route dynamically from the provided workflow URL (use URL origin), not hardcoded route paths.',
-    ].join('\n');
-
-    environmentContext = `${environmentContext.trim()}\n\n${activeElementsGuidance}`;
-
-    return environmentContext.trim();
-  }
-
-  private async getObservationalMemorySnapshot(): Promise<string> {
-    try {
-      const observationalMemory = await SullaSettingsModel.get('observationalMemory', {});
-      const raw =
-        typeof observationalMemory === 'string'
-          ? JSON.parse(observationalMemory || '[]')
-          : observationalMemory;
-
-      if (!Array.isArray(raw) || raw.length === 0) {
-        return 'No observational memory entries available.';
-      }
-
-      return raw
-        .slice(-10)
-        .map((entry: any) => `${entry?.priority || ''} ${entry?.timestamp || ''} ${entry?.content || ''}`.trim())
-        .filter((line: string) => Boolean(line))
-        .join('\n');
-    } catch (error) {
-      console.warn('[PlanRetrievalNode] Failed to read observational memory snapshot:', error);
-      return 'Observational memory unavailable due to parse/read error.';
-    }
-  }
-
-  private async appendSharedContextMessagesToGraphState(state: BaseThreadState): Promise<void> {
-    const environmentContextMessage: ChatMessage = {
-      role: 'assistant',
-      content: `Environment systems and tools context:\n${this.buildEnvironmentContextAssistantMessage()}`,
-      metadata: {
-        nodeId: this.id,
-        nodeName: this.name,
-        kind: 'shared_context_environment',
-        timestamp: Date.now(),
-      },
-    };
-    const observationalMemoryMessage: ChatMessage = {
-      role: 'assistant',
-      content: `Observational memory snapshot:\n${await this.getObservationalMemorySnapshot()}`,
-      metadata: {
-        nodeId: this.id,
-        nodeName: this.name,
-        kind: 'shared_context_observational_memory',
-        timestamp: Date.now(),
-      },
-    };
-    const existingMessages = Array.isArray(state.messages) ? state.messages : [];
-    const retainedMessages = existingMessages.filter((message: any) => {
-      const metadata = message?.metadata || {};
-      const kind = String(metadata?.kind || '').trim();
-      return !(
-        kind === 'shared_context_environment'
-        || kind === 'shared_context_observational_memory'
-      );
-    });
-
-    state.messages = [
-      ...retainedMessages,
-      environmentContextMessage,
-      observationalMemoryMessage,
-    ];
-
-    this.bumpStateVersion(state);
-  }
 
   private async loadAvailableSkills(): Promise<SkillSummaryEntry[]> {
     try {

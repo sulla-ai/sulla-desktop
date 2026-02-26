@@ -154,7 +154,7 @@
                 </div>
               </div>
 
-              <div class="mt-4 flex flex-col gap-2" :class="isAssetPaneExpanded ? 'h-full min-h-0 pb-2' : ''">
+              <div class="flex flex-col gap-2" :class="isAssetPaneExpanded ? 'h-full min-h-0 pb-2' : ''">
                 <div
                   v-for="asset in visiblePersonaAssets"
                   :key="asset.id"
@@ -163,8 +163,7 @@
                 >
                   <button
                     type="button"
-                    class="flex w-full items-center justify-between gap-2 px-3 text-left transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/80"
-                    :class="getAssetSize(asset.id) === 'small' ? 'h-9' : 'h-10 border-b border-slate-200 dark:border-slate-700'"
+                    class="flex h-10 w-full items-center justify-between gap-2 border-b border-slate-200 px-3 text-left transition-colors hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800/80"
                     @click="cycleAssetSize(asset.id)"
                   >
                     <div class="min-w-0 flex items-center gap-2">
@@ -182,12 +181,12 @@
                         {{ asset.type }}
                       </span>
                     </div>
-                    <svg width="14" height="14" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg" class="shrink-0 text-slate-500 transition-transform" :class="getAssetSize(asset.id) === 'small' ? '' : 'rotate-180'" aria-hidden="true">
+                    <svg width="14" height="14" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg" class="shrink-0 text-slate-500 transition-transform" :class="getAssetSize(asset.id) === 'large' ? 'rotate-180' : ''" aria-hidden="true">
                       <path d="M3.13523 6.15803C3.3241 5.95657 3.64052 5.94637 3.84197 6.13523L7.5 9.56464L11.158 6.13523C11.3595 5.94637 11.6759 5.95657 11.8648 6.15803C12.0536 6.35949 12.0434 6.67591 11.842 6.86477L7.84197 10.6148C7.64964 10.7951 7.35036 10.7951 7.15803 10.6148L3.15803 6.86477C2.95657 6.67591 2.94637 6.35949 3.13523 6.15803Z" fill="currentColor" fill-rule="evenodd" clip-rule="evenodd" />
                     </svg>
                   </button>
 
-                  <div v-if="getAssetSize(asset.id) !== 'small'" class="min-h-0 flex-1">
+                  <div class="min-h-0 flex-1">
                     <div
                       v-if="asset.type === 'iframe'"
                       class="overflow-hidden"
@@ -852,10 +851,14 @@ const latestChatError = computed(() => {
 
 const activePersonaService = computed(() => registry.getActivePersonaService());
 const personaAssets = computed(() => activePersonaService.value?.activeAssets ?? []);
-type AssetSize = 'small' | 'medium' | 'large';
+type AssetSize = 'medium' | 'large';
 const assetSizes = ref<Record<string, AssetSize>>({});
 
-const getAssetSize = (assetId: string): AssetSize => assetSizes.value[assetId] || 'small';
+const normalizeAssetSize = (value: unknown): AssetSize => {
+  return value === 'large' ? 'large' : 'medium';
+};
+
+const getAssetSize = (assetId: string): AssetSize => normalizeAssetSize(assetSizes.value[assetId]);
 
 const largeAssetId = computed(() => {
   return personaAssets.value.find((asset) => getAssetSize(asset.id) === 'large')?.id || null;
@@ -874,7 +877,7 @@ const setAssetSize = (assetId: string, nextSize: AssetSize): void => {
   if (nextSize === 'large') {
     const nextMap: Record<string, AssetSize> = {};
     personaAssets.value.forEach((asset) => {
-      nextMap[asset.id] = asset.id === assetId ? 'large' : 'small';
+      nextMap[asset.id] = asset.id === assetId ? 'large' : 'medium';
     });
     assetSizes.value = nextMap;
     return;
@@ -888,15 +891,11 @@ const setAssetSize = (assetId: string, nextSize: AssetSize): void => {
 
 const cycleAssetSize = (assetId: string): void => {
   const current = getAssetSize(assetId);
-  if (current === 'small') {
-    setAssetSize(assetId, 'medium');
-    return;
-  }
   if (current === 'medium') {
     setAssetSize(assetId, 'large');
     return;
   }
-  setAssetSize(assetId, 'small');
+  setAssetSize(assetId, 'medium');
 };
 
 const handleAssetPaneScrollLock = (event: Event): void => {
@@ -912,12 +911,12 @@ watch(personaAssets, (assets) => {
   const nextSizes: Record<string, AssetSize> = {};
   Object.entries(assetSizes.value).forEach(([assetId, size]) => {
     if (ids.has(assetId)) {
-      nextSizes[assetId] = size;
+      nextSizes[assetId] = normalizeAssetSize(size);
     }
   });
   assets.forEach((asset) => {
     if (!nextSizes[asset.id]) {
-      nextSizes[asset.id] = 'small';
+      nextSizes[asset.id] = 'medium';
     }
   });
   assetSizes.value = nextSizes;

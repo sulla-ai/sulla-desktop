@@ -151,9 +151,26 @@ export class OllamaService extends BaseLanguageModel {
    * Build the request body for Ollama /api/chat
    */
   private buildRequestBody(messages: ChatMessage[], options: any): Record<string, any> {
+    const pendingToolResults: any[] = Array.isArray(options.pendingToolResults) ? options.pendingToolResults : [];
+
+    const cleanMessages = messages
+      .filter((m: ChatMessage) => m.role !== 'tool')
+      .filter((m: ChatMessage) => (m as any).metadata?.kind !== 'tool_result');
+
+    const outboundMessages: any[] = [...cleanMessages];
+
+    for (const tr of pendingToolResults) {
+      outboundMessages.push({
+        role: 'tool',
+        tool_call_id: tr.toolCallId,
+        name: tr.toolName,
+        content: typeof tr.content === 'string' ? tr.content : JSON.stringify(tr.content),
+      });
+    }
+
     const body: Record<string, any> = {
       model: options.model ?? this.model,
-      messages,
+      messages: outboundMessages,
       stream: false,
       keep_alive: -1,
     };
