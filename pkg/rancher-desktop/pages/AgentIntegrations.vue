@@ -169,6 +169,7 @@ import AgentHeader from './agent/AgentHeader.vue';
 import PostHogTracker from '@pkg/components/PostHogTracker.vue';
 import { integrations, type Integration } from '@pkg/agent/integrations/catalog';
 import { getIntegrationService } from '@pkg/agent/services/IntegrationService';
+import { getExtensionService } from '@pkg/agent/services/ExtensionService';
 import { formatFuzzyTime } from '@pkg/utils/dateFormat';
 
 import { computed, onMounted, ref } from 'vue';
@@ -180,7 +181,8 @@ const integrationService = getIntegrationService();
 const search = ref('');
 const activeCategory = ref<string | null>(null);
 
-const integrationsList = ref(Object.values(integrations));
+const integrationsList = ref<Integration[]>([]);
+const mergedIntegrations = ref<Record<string, Integration>>({});
 
 const categories = computed(() => {
   const counts = new Map<string, number>();
@@ -228,7 +230,7 @@ const toggleTheme = () => {
 const connectIntegration = async (id: string) => {
   try {
     await integrationService.setConnectionStatus(id, true);
-    const integration = integrations[id];
+    const integration = mergedIntegrations.value[id];
     if (integration) {
       integration.connected = true;
       const index = integrationsList.value.findIndex(i => i.id === id);
@@ -244,7 +246,7 @@ const connectIntegration = async (id: string) => {
 const disconnectIntegration = async (id: string) => {
   try {
     await integrationService.setConnectionStatus(id, false);
-    const integration = integrations[id];
+    const integration = mergedIntegrations.value[id];
     if (integration) {
       integration.connected = false;
       const index = integrationsList.value.findIndex(i => i.id === id);
@@ -268,9 +270,18 @@ onMounted(async () => {
   // Initialize integration service and load connection status
   try {
     await integrationService.initialize();
+
+    const extensionService = getExtensionService();
+    await extensionService.initialize();
+
+    const extensionIntegrations = extensionService.getExtensionIntegrations();
+    mergedIntegrations.value = { ...integrations };
+    for (const extInt of extensionIntegrations) {
+      mergedIntegrations.value[extInt.id] = extInt;
+    }
     
     // Load connection status for all integrations
-    const integrationIds = Object.keys(integrations);
+    const integrationIds = Object.keys(mergedIntegrations.value);
     const connectionPromises = integrationIds.map(async (id) => {
       try {
         const connectionStatus = await integrationService.getConnectionStatus(id);
@@ -285,11 +296,11 @@ onMounted(async () => {
     
     // Update integrations with their connection status
     connectionResults.forEach(({ id, connected }) => {
-      integrations[id].connected = connected;
+      mergedIntegrations.value[id].connected = connected;
     });
 
     // Update the list to trigger reactivity
-    integrationsList.value = Object.values(integrations);
+    integrationsList.value = Object.values(mergedIntegrations.value);
   } catch (error) {
     console.error('Failed to load integration connection statuses:', error);
   }

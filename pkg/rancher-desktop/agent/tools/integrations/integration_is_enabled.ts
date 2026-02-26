@@ -1,6 +1,7 @@
 import { BaseTool, ToolRegistration, ToolResponse } from "../base";
 import { getIntegrationService } from "../../services/IntegrationService";
 import { integrations } from "../../integrations/catalog";
+import { getExtensionService } from "@pkg/agent/services/ExtensionService";
 
 /**
  * Integration Is Enabled Tool - Worker class for execution
@@ -13,11 +14,20 @@ export class IntegrationIsEnabledWorker extends BaseTool {
     const { integration_slug } = input;
 
     try {
-      const catalogEntry = integrations[integration_slug];
+      const extensionService = getExtensionService();
+      await extensionService.initialize();
+
+      const extensionIntegrations = extensionService.getExtensionIntegrations();
+      const mergedIntegrations = { ...integrations };
+      for (const extInt of extensionIntegrations) {
+        mergedIntegrations[extInt.id] = extInt;
+      }
+
+      const catalogEntry = mergedIntegrations[integration_slug];
       if (!catalogEntry) {
         return {
           successBoolean: false,
-          responseString: `Integration "${integration_slug}" not found in the catalog. Available integrations: ${Object.keys(integrations).join(', ')}`
+          responseString: `Integration "${integration_slug}" not found in the catalog. Available integrations: ${Object.keys(mergedIntegrations).join(', ')}`
         };
       }
 

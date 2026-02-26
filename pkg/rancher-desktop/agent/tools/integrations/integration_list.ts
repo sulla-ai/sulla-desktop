@@ -1,6 +1,7 @@
 import { BaseTool, ToolRegistration, ToolResponse } from "../base";
 import { getIntegrationService } from "../../services/IntegrationService";
 import { integrations } from "../../integrations/catalog";
+import { getExtensionService } from "@pkg/agent/services/ExtensionService";
 
 /**
  * Integration List Tool - Worker class for execution
@@ -16,8 +17,20 @@ export class IntegrationListWorker extends BaseTool {
       const service = getIntegrationService();
       await service.initialize();
 
+      const extensionService = getExtensionService();
+      await extensionService.initialize();
+
+      const extensionIntegrations = extensionService.getExtensionIntegrations();
+      const mergedIntegrations = { ...integrations };
+      for (const extInt of extensionIntegrations) {
+        mergedIntegrations[extInt.id] = extInt;
+      }
+
+      console.log('extensionIntegrations', extensionIntegrations);
+      console.log('mergedIntegrations', mergedIntegrations);
+
       const allIntegrations = await Promise.all(
-        Object.entries(integrations).map(async ([integration_slug, catalogEntry]) => {
+        Object.entries(mergedIntegrations).map(async ([integration_slug, catalogEntry]) => {
           const status = await service.getConnectionStatus(integration_slug);
           return {
             integration_slug,

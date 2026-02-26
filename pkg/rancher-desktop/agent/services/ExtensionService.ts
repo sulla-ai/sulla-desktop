@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import paths from '@pkg/utils/paths';
 import { ExtensionMetadata } from '@pkg/main/extensions/types';
+import { Integration } from '../integrations/catalog';
 
 export interface LocalExtensionMetadata extends ExtensionMetadata {
   id: string;
@@ -22,6 +23,7 @@ export interface LocalExtensionMetadata extends ExtensionMetadata {
     showInHeader?: boolean;
     displayMode?: 'embedded' | 'iframe';
   }>;
+  integrations: Record<string, Integration>;
   [key: string]: any;
 }
 
@@ -131,5 +133,19 @@ export class ExtensionService {
 
   getExtensionMetadata(name: string): LocalExtensionMetadata | undefined {
     return this.extensionsMetadata.find(ext => ext.name === name);
+  }
+  
+  getExtensionIntegrations(): Integration[] {
+    const allIntegrations: Integration[] = [];
+    
+    for (const ext of this.extensionsMetadata) {
+      if (ext.integrations) {
+        for (const [_, integration] of Object.entries(ext.integrations)) {
+          allIntegrations.push(integration);
+        }
+      }
+    }
+    
+    return allIntegrations;
   }
 }

@@ -403,6 +403,7 @@ import PostHogTracker from '@pkg/components/PostHogTracker.vue';
 import { integrations, type Integration } from '@pkg/agent/integrations/catalog';
 import YouTubePlayer from '@pkg/components/YouTubePlayer.vue';
 import { getIntegrationService } from '@pkg/agent/services/IntegrationService';
+import { getExtensionService } from '@pkg/agent/services/ExtensionService';
 import { formatFuzzyTime } from '@pkg/utils/dateFormat';
 
 import { onMounted, ref, computed } from 'vue';
@@ -415,6 +416,7 @@ const router = useRouter();
 const integrationService = getIntegrationService();
 
 const integration = ref<Integration | null>(null);
+const mergedIntegrations = ref<Record<string, Integration>>({});
 const currentImageIndex = ref(0);
 const formData = ref<Record<string, string>>({});
 const errors = ref<Record<string, string>>({});
@@ -446,7 +448,7 @@ const connectIntegration = async () => {
     try {
       await integrationService.setConnectionStatus(integration.value.id, true);
       integration.value.connected = true;
-      integrations[integration.value.id].connected = true;
+      mergedIntegrations.value[integration.value.id].connected = true;
     } catch (error) {
       console.error('Failed to connect integration:', error);
     } finally {
@@ -461,7 +463,7 @@ const disconnectIntegration = async () => {
     try {
       await integrationService.setConnectionStatus(integration.value.id, false);
       integration.value.connected = false;
-      integrations[integration.value.id].connected = false;
+      mergedIntegrations.value[integration.value.id].connected = false;
     } catch (error) {
       console.error('Failed to disconnect integration:', error);
     } finally {
@@ -546,7 +548,7 @@ const handleConnect = async () => {
       // Update connection status
       await integrationService.setConnectionStatus(integration.value.id, true);
       integration.value.connected = true;
-      integrations[integration.value.id].connected = true;
+      mergedIntegrations.value[integration.value.id].connected = true;
     } catch (error) {
       console.error('Failed to save integration configuration:', error);
     } finally {
@@ -566,9 +568,18 @@ onMounted(async () => {
   // Initialize integration service
   await integrationService.initialize();
 
+  const extensionService = getExtensionService();
+  await extensionService.initialize();
+
+  const extensionIntegrations = extensionService.getExtensionIntegrations();
+  mergedIntegrations.value = { ...integrations };
+  for (const extInt of extensionIntegrations) {
+    mergedIntegrations.value[extInt.id] = extInt;
+  }
+
   // Load integration data based on route parameter
   const integrationId = route.params.id as string;
-  integration.value = integrations[integrationId] || null;
+  integration.value = mergedIntegrations.value[integrationId] || null;
 
   // If integration not found, redirect back to integrations list
   if (!integration.value) {
@@ -588,7 +599,7 @@ onMounted(async () => {
     // Load connection status
     const connectionStatus = await integrationService.getConnectionStatus(integrationId);
     integration.value.connected = connectionStatus.connected;
-    integrations[integrationId].connected = connectionStatus.connected;
+    mergedIntegrations.value[integrationId].connected = connectionStatus.connected;
   } catch (error) {
     console.error('Failed to load integration data:', error);
   }
