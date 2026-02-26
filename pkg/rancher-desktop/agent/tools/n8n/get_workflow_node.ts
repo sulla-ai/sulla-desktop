@@ -9,8 +9,13 @@ export class GetWorkflowNodeWorker extends BaseTool {
 
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     try {
+      const workflowId = String(input.workflowId || '').trim();
+      if (!workflowId) {
+        throw new Error('Workflow ID is required.');
+      }
+
       const service = await createN8nService();
-      const workflow = await service.getWorkflow(input.workflowId, input.excludePinnedData);
+      const workflow = await service.getWorkflow(workflowId, input.excludePinnedData);
 
       const nodeIndex = resolveNodeIndex(workflow.nodes || [], {
         nodeId: input.nodeId,

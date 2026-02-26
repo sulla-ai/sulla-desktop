@@ -14,6 +14,7 @@
 import { TextEncoder, TextDecoder } from 'util';
 import { webcrypto } from 'crypto';
 import { ReadableStream, WritableStream, TransformStream } from 'stream/web';
+import { beforeAll, describe, expect, it, jest } from '@jest/globals';
 
 // @ts-ignore - Required for Node.js environment compatibility
 globalThis.TextEncoder = TextEncoder;
@@ -29,7 +30,8 @@ globalThis.WritableStream = WritableStream;
 globalThis.TransformStream = TransformStream;
 
 import type { SkillGraphState } from '../Graph';
-import { GraphRegistry } from '../../services/GraphRegistry';
+
+let GraphRegistry: typeof import('../../services/GraphRegistry').GraphRegistry;
 
 // ============================================================================
 // MINIMAL TARGETED MOCKS (external services only)
@@ -37,8 +39,9 @@ import { GraphRegistry } from '../../services/GraphRegistry';
 
 // Mock LLM calls with realistic responses (external dependency)
 jest.mock('../../languagemodels', () => ({
-  getService: jest.fn().mockImplementation(async (context: string, model: string) => ({
-    chat: jest.fn().mockImplementation(async (messages: any[], options?: any) => {
+  getService: jest.fn().mockImplementation(async (..._args: any[]) => ({
+    chat: (jest.fn() as any).mockImplementation(async (...chatArgs: any[]) => {
+        const messages: any[] = Array.isArray(chatArgs?.[0]) ? chatArgs[0] : [];
         const systemMsg = [...messages].reverse().find((m: any) => m.role === 'system');
         const prompt = systemMsg?.content || messages.map((m: any) => m.content).join(' ');
 
@@ -177,7 +180,7 @@ jest.mock('../../tools', () => ({
     getToolNames: () => ['file_manager'],
     getTool: () => ({
       name: 'file_manager',
-      execute: jest.fn().mockResolvedValue({
+      execute: (jest.fn() as any).mockResolvedValue({
         success: true,
         result: { file_created: 'package.json', size: 245 },
         evidence: {
@@ -213,10 +216,17 @@ jest.mock('../../database/PostgresClient', () => ({
   postgresClient: { query: jest.fn(), connect: jest.fn() }
 }));
 
+jest.mock('relaxed-json', () => ({
+  parse: (value: string) => JSON.parse(value),
+  default: {
+    parse: (value: string) => JSON.parse(value),
+  },
+}));
+
 // Mock SullaSettingsModel (required by GraphRegistry)
 jest.mock('../../database/models/SullaSettingsModel', () => ({
   SullaSettingsModel: {
-    get: jest.fn().mockImplementation(async (key: string) => {
+    get: jest.fn().mockImplementation(async (key: any) => {
       // Return realistic settings for different keys
       const settings: Record<string, any> = {
         'model': 'test-model',
@@ -226,7 +236,7 @@ jest.mock('../../database/models/SullaSettingsModel', () => ({
       };
       return settings[key] || 'default-value';
     }),
-    set: jest.fn().mockResolvedValue(true),
+    set: (jest.fn() as any).mockResolvedValue(true),
     setFallbackFilePath: jest.fn(),
     getFallbackFilePath: jest.fn().mockReturnValue('/tmp/test-settings')
   }
@@ -238,6 +248,10 @@ jest.mock('../../database/models/SullaSettingsModel', () => ({
 // ============================================================================
 
 describe('SkillGraph Core Production Test', () => {
+  beforeAll(async () => {
+    ({ GraphRegistry } = await import('../../services/GraphRegistry'));
+  });
+
   
   it('should validate real production workflow using GraphRegistry', async () => {
     console.log('🔍 Starting REAL production workflow validation...');
@@ -318,7 +332,8 @@ describe('SkillGraph Core Production Test', () => {
       expect(Array.isArray(finalState.metadata.actions)).toBe(true);
       
       if (finalState.metadata.skillCritic) {
-        expect(['continue', 'revise', 'complete']).toContain(finalState.metadata.skillCritic.decision);
+        expect(typeof finalState.metadata.skillCritic.technical_completed).toBe('boolean');
+        expect(typeof finalState.metadata.skillCritic.project_complete).toBe('boolean');
       }
     } else {
       // Simple path was taken - validate direct completion

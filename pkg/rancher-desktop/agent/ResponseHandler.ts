@@ -89,7 +89,8 @@ export class ResponseHandler {
     }
 
     try {
-      const llm = getLLMService(getCurrentMode());
+      const mode = await getCurrentMode();
+      const llm = await getLLMService(mode);
       const refined = await llm.chat([{
         role: 'user',
         content: `Refine this response for clarity and coherence. Keep it concise. Only output the refined response, nothing else:\n\n${ response.content }`

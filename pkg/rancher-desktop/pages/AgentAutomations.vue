@@ -193,7 +193,7 @@ onMounted(async () => {
 
 const openN8N = () => {
   // Open N8N in external browser
-  const n8nUrl = 'http://localhost:30119';
+  const n8nUrl = 'http://127.0.0.1:30119';
 
   // Use Electron's shell to open external URL
   if (window.require) {

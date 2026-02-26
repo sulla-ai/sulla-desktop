@@ -1,5 +1,6 @@
 import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { Article } from '../models/Article';
 import { redisClient } from '../RedisClient';
@@ -13,6 +14,8 @@ import {
 export interface SkillRegistryInitOptions {
   filesystemSkillDirs?: string[];
 }
+
+const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
 
 export class SkillsRegistry {
   private readonly cacheKey = 'sulla:skills:summary';
@@ -264,7 +267,7 @@ export class SkillsRegistry {
   }
 
   private getDefaultFilesystemDirs(extraDirs: string[]): string[] {
-    const seedSkillsDir = path.resolve(__dirname, '../../seed_pedia/skills');
+    const seedSkillsDir = path.resolve(MODULE_DIR, '../../seed_pedia/skills');
 
     const fromEnv = String(process.env.SULLA_SKILLS_DIRS || '')
       .split(',')

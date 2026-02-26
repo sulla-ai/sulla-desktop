@@ -118,7 +118,9 @@ export class FrontendGraphWebSocketService {
       const resumeNodeId = state.metadata.waitingForUser === true
         ? String(state.metadata.currentNodeId || '').trim()
         : '';
-      const shouldResumeFromCurrentNode = !!resumeNodeId && resumeNodeId !== 'input_handler';
+      const shouldResumeFromCurrentNode = !!resumeNodeId
+        && resumeNodeId !== 'input_handler'
+        && resumeNodeId !== 'output';
 
       state.metadata.cycleComplete = false;
       state.metadata.waitingForUser = false;

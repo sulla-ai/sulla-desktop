@@ -401,7 +401,7 @@ spec:
         - containerPort: 5678
         env:
         - name: N8N_HOST
-          value: "localhost"
+          value: "0.0.0.0"
         - name: N8N_PORT
           value: "5678"
         - name: N8N_DISABLE_UI_SECURITY
@@ -412,10 +412,14 @@ spec:
           value: "false"
         - name: N8N_DISABLE_X_FRAME_OPTIONS
           value: "true"
+        - name: N8N_INSECURE_DISABLE_WEBHOOK_IFRAME_SANDBOX
+          value: "true"
         - name: N8N_PROTOCOL
           value: "http"
         - name: WEBHOOK_URL
-          value: "http://localhost:30119/"
+          value: "http://127.0.0.1:30119/"
+        - name: N8N_EDITOR_BASE_URL
+          value: "http://127.0.0.1:30119/"
         - name: EXECUTIONS_MODE
           value: "regular"
         - name: QUEUE_BULL_REDIS_HOST
@@ -437,7 +441,7 @@ spec:
         - name: N8N_ENCRYPTION_KEY
           value: "changeMeToA32CharRandomString1234"
         - name: N8N_BASIC_AUTH_ACTIVE
-          value: "true"
+          value: "false"
         - name: N8N_BASIC_AUTH_USER
           value: "admin"
         - name: N8N_BASIC_AUTH_PASSWORD

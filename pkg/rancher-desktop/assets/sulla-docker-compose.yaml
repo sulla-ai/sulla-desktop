@@ -86,14 +86,16 @@ services:
     ports:
       - "30119:5678"
     environment:
-      - N8N_HOST=localhost
+      - N8N_HOST=0.0.0.0
       - N8N_PORT=5678
       - N8N_PROTOCOL=http
-      - WEBHOOK_URL=http://localhost:30119/
+      - WEBHOOK_URL=http://127.0.0.1:30119/
+      - N8N_EDITOR_BASE_URL=http://127.0.0.1:30119/
       - N8N_DISABLE_UI_SECURITY=true
       - N8N_SAMESITE_COOKIE=none
       - N8N_SECURE_COOKIE=false
       - N8N_DISABLE_X_FRAME_OPTIONS=true
+      - N8N_INSECURE_DISABLE_WEBHOOK_IFRAME_SANDBOX=true
       - EXECUTIONS_MODE=regular
       - QUEUE_BULL_REDIS_HOST=redis
       - QUEUE_BULL_REDIS_PORT=6379
@@ -104,7 +106,7 @@ services:
       - DB_POSTGRESDB_USER=sulla
       - DB_POSTGRESDB_PASSWORD=sulla_dev_password
       - N8N_ENCRYPTION_KEY=changeMeToA32CharRandomString1234
-      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_ACTIVE=false
       - N8N_BASIC_AUTH_USER=admin
       - N8N_BASIC_AUTH_PASSWORD=n8n_dev_password
       - N8N_REST_API_ENABLED=true

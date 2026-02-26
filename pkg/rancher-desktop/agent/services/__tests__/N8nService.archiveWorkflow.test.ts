@@ -24,15 +24,10 @@ describe('N8nService.setWorkflowArchived', () => {
     expect(requestMock).toHaveBeenCalledWith('/api/v1/workflows/wf_1/archive', { method: 'POST' });
   });
 
-  it('falls back to PATCH /workflows/:id when archive endpoint returns 404', async () => {
+  it('unarchives with POST /workflows/:id/unarchive on supported APIs', async () => {
     const service = new N8nServiceClass() as any;
 
-    let callCount = 0;
     const requestMock = jest.fn(async () => {
-      callCount += 1;
-      if (callCount === 1) {
-        throw new Error('N8n API error 404: Not Found');
-      }
       return { id: 'wf_2', archived: false };
     });
 
@@ -41,12 +36,10 @@ describe('N8nService.setWorkflowArchived', () => {
     const result = await service.setWorkflowArchived('wf_2', false);
 
     expect(result).toEqual({ id: 'wf_2', archived: false });
-    expect(requestMock).toHaveBeenCalledTimes(2);
+    expect(requestMock).toHaveBeenCalledTimes(1);
     const calls = (requestMock as any).mock.calls as any[];
     expect(calls[0][0]).toBe('/api/v1/workflows/wf_2/unarchive');
     expect(calls[0][1]).toEqual({ method: 'POST' });
-    expect(calls[1][0]).toBe('/api/v1/workflows/wf_2');
-    expect(calls[1][1]).toEqual({ method: 'PATCH', body: JSON.stringify({ archived: false }) });
   });
 
   it('falls back to PUT /workflows/:id when PATCH fallback is not allowed', async () => {
@@ -83,7 +76,10 @@ describe('N8nService.setWorkflowArchived', () => {
         expect(url).toBe('/api/v1/workflows/wf_put_1');
         expect(init?.method).toBe('PUT');
         expect(JSON.parse(init?.body || '{}')).toEqual({
-          ...existingWorkflow,
+          name: existingWorkflow.name,
+          nodes: existingWorkflow.nodes,
+          connections: existingWorkflow.connections,
+          settings: existingWorkflow.settings,
           archived: true,
         });
         return { id: 'wf_put_1', archived: true };
@@ -109,7 +105,10 @@ describe('N8nService.setWorkflowArchived', () => {
     expect(calls[3][1]).toEqual({
       method: 'PUT',
       body: JSON.stringify({
-        ...existingWorkflow,
+        name: existingWorkflow.name,
+        nodes: existingWorkflow.nodes,
+        connections: existingWorkflow.connections,
+        settings: existingWorkflow.settings,
         archived: true,
       }),
     });

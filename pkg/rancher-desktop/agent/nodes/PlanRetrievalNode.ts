@@ -43,9 +43,10 @@ interface SkillSummaryEntry {
 
 const PLAN_RETRIEVAL_PROMPT = `You are a specialized planning and intent analysis system.
 
-Look ONLY at the user's last message.
+Use the full conversation thread for continuity and context.
+Classify intent and goal based primarily on the user's latest message.
 
-Available skills are provided as assistant messages. Use them to select selected_skill_slug.
+Available skills are provided in the SKILLS CONTEXT section. Use them to select selected_skill_slug.
 
 ## Strict Complexity Rules (exact order)
 
@@ -99,41 +100,19 @@ export class PlanRetrievalNode extends BaseNode {
     super('plan_retrieval', 'Plan Retrieval');
   }
 
-  private buildPlanRetrievalNodeMessages(
-    state: BaseThreadState,
-    policy: Required<NodeRunPolicy>,
-    availableSkills: SkillSummaryEntry[],
-  ): {
-    assistantMessages: ChatMessage[];
-    userMessages: ChatMessage[];
-  } {
-    const skillAssistantMessages: ChatMessage[] = availableSkills.map((skill) => ({
-      role: 'assistant',
-      content: [
+  private buildSkillsContextForPrompt(availableSkills: SkillSummaryEntry[]): string {
+    if (!Array.isArray(availableSkills) || availableSkills.length === 0) {
+      return 'No available skills.';
+    }
+
+    return availableSkills
+      .map((skill) => [
         `${skill.name || 'unknown'}`,
         `slug: ${skill.slug || 'unknown'}`,
         `trigger: ${(Array.isArray(skill.triggers) ? skill.triggers : []).join(' | ') || 'none'}`,
         `description: ${skill.description || ''}`,
-      ].join('\n'),
-    }));
-
-    const lastUserMessage = this.findLatestUserMessage(state.messages || []);
-    const latestUserContent = typeof lastUserMessage?.content === 'string'
-      ? lastUserMessage.content
-      : String(lastUserMessage?.content || '');
-
-    const directive: ChatMessage = {
-      role: 'user',
-      content: latestUserContent || 'No user message provided.',
-    };
-
-    const assistantMessages = this.buildAssistantMessagesForNode(state, policy, skillAssistantMessages);
-    const userMessages = this.buildUserMessagesForNode(state, policy, [directive]);
-
-    return {
-      assistantMessages,
-      userMessages,
-    };
+      ].join('\n'))
+      .join('\n\n');
   }
 
   async execute(state: BaseThreadState): Promise<NodeResult<BaseThreadState>> {
@@ -194,6 +173,18 @@ export class PlanRetrievalNode extends BaseNode {
     // ----------------------------------------------------------------
     this.storeMetadata(state, planData);
     await this.appendMemoryResults(state, memoryArticles, planData);
+
+    const wsChannel = String((state.metadata as any).wsChannel || 'chat-controller');
+    void this.dispatchToWebSocket(wsChannel, {
+      type: 'progress',
+      data: {
+        phase: 'plan_retrieval',
+        selected_skill_slug: planData.selected_skill_slug,
+        selectedSkillSlug: planData.selected_skill_slug,
+        complexity: planData.complexity,
+      },
+      timestamp: Date.now(),
+    });
 
     // ----------------------------------------------------------------
     // 7. LOG COMPLETION SUMMARY
@@ -409,6 +400,20 @@ export class PlanRetrievalNode extends BaseNode {
     environmentContext = environmentContext.replace('{{formattedTime}}', formattedTime);
     environmentContext = environmentContext.replace('{{timeZone}}', timeZone);
 
+    const activeElementsGuidance = [
+      '## Active Sidebar Elements (Right Panel)',
+      '- The UI supports active elements where the user can watch live webpages/apps and documents as you edit them',
+      '- Use tool `manage_active_asset` to create/update/remove these assets at runtime.',
+      '- Asset types:',
+      '  - iframe: display live webpages/apps (automation tools, workflow UIs, etc).',
+      '  - document: display/edit planning docs (for example PRD/planning instructions).',
+      '- For workflow SPA websites, use the resolved stable workflow asset id so updates target the same panel.',
+      '- Keep iframe URL on the workflow app main/base route only (origin), not deep routes.',
+      '- Derive base route dynamically from the provided workflow URL (use URL origin), not hardcoded route paths.',
+    ].join('\n');
+
+    environmentContext = `${environmentContext.trim()}\n\n${activeElementsGuidance}`;
+
     return environmentContext.trim();
   }
 
@@ -495,31 +500,30 @@ export class PlanRetrievalNode extends BaseNode {
    */
   private async analyzeUserIntent(state: BaseThreadState, availableSkills: SkillSummaryEntry[]): Promise<PlanRetrievalResponse | null> {
     const policy: Required<NodeRunPolicy> = {
-      messageSource: 'custom',
+      messageSource: 'graph',
       persistAssistantToGraph: false,
       persistToolResultsToGraph: false,
       persistAssistantToNodeState: false,
       persistToolResultsToNodeState: false,
       nodeStateNamespace: '',
-      includeGraphAssistantMessages: false,
-      includeGraphUserMessages: false,
+      includeGraphAssistantMessages: true,
+      includeGraphUserMessages: true,
     };
 
-    const nodeMessages = this.buildPlanRetrievalNodeMessages(state, policy, availableSkills);
+    const planPrompt = `${PLAN_RETRIEVAL_PROMPT}\n\n## SKILLS CONTEXT\n${this.buildSkillsContextForPrompt(availableSkills)}`;
 
     console.log(`[PlanRetrievalNode] Analyzing messages for intent and planning data with ${availableSkills.length} available skills`);
 
     // Use low temperature for consistent extraction
     const extractionResult = await this.chat(
       state,
-      PLAN_RETRIEVAL_PROMPT,
+      planPrompt,
       {
         temperature: 0.1, // Low temperature for consistency
         maxTokens: 500,   // Keep response concise
         format: 'json',   // JSON-only response
         disableTools: true,
         nodeRunPolicy: policy,
-        nodeRunMessages: nodeMessages,
       }
     );
 

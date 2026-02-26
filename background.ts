@@ -56,6 +56,7 @@ import * as window from '@pkg/window';
 import { closeDashboard, openDashboard } from '@pkg/window/dashboard';
 import { openPreferences, preferencesSetDirtyFlag } from '@pkg/window/preferences';
 import { hookSullaEnd, sullaEnd, onMainProxyLoad } from '@pkg/sulla';
+import { SullaWebRequestFixer, SullaWebRequestLogEvent } from '@pkg/SullaWebRequestFixer';
 import { SullaSettingsModel } from './pkg/rancher-desktop/agent/database/models/SullaSettingsModel';
 
 // https://www.electronjs.org/docs/latest/breaking-changes#changed-gtk-4-is-default-when-running-gnome
@@ -214,29 +215,54 @@ Electron.protocol.registerSchemesAsPrivileged([{ scheme: 'app' }, {
 hookSullaEnd(Electron, mainEvents, window);
 
 
-// Allowing us to iframe anything we want
+
+const SULLA_WEB_REQUEST_LOG_DIR = path.join(process.cwd(), 'log');
+const SULLA_WEB_REQUEST_LOG_FILE = path.join(SULLA_WEB_REQUEST_LOG_DIR, 'background-web-requests.log');
+
+function writeSullaWebRequestEvent(event: SullaWebRequestLogEvent): void {
+  try {
+    let payloadText = '{}';
+    try {
+      payloadText = JSON.stringify(event.payload ?? {}, null, 2);
+    } catch {
+      payloadText = String(event.payload);
+    }
+
+    fs.mkdirSync(SULLA_WEB_REQUEST_LOG_DIR, { recursive: true });
+    fs.appendFileSync(SULLA_WEB_REQUEST_LOG_FILE, [
+      '---',
+      `timestamp: ${new Date().toISOString()}`,
+      `direction: ${event.direction}`,
+      `method: ${event.method || 'unknown'}`,
+      `statusCode: ${typeof event.statusCode === 'number' ? event.statusCode : 'n/a'}`,
+      `resourceType: ${event.resourceType || 'unknown'}`,
+      `url: ${event.url || 'unknown'}`,
+      'payload:',
+      payloadText,
+      '',
+    ].join('\n') + '\n', { encoding: 'utf-8' });
+
+    console.log('[SullaWebRequest]', {
+      timestamp: new Date().toISOString(),
+      direction: event.direction,
+      method: event.method || 'unknown',
+      statusCode: typeof event.statusCode === 'number' ? event.statusCode : 'n/a',
+      resourceType: event.resourceType || 'unknown',
+      url: event.url || 'unknown',
+      payload: event.payload ?? {},
+    });
+  } catch (error) {
+    console.error('[SullaWebRequestLogger] Failed to write event:', error);
+  }
+}
+
 Electron.app.whenReady().then(() => {
-  Electron.session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
-    const headers = { ...(details.responseHeaders || {}) };
+  const session = Electron.session.defaultSession;
 
-    // Delete the two main things that block iframes
-    delete headers['x-frame-options'];
-    delete headers['X-Frame-Options'];
-    delete headers['content-security-policy'];
-    delete headers['Content-Security-Policy'];
+  const fixer = new SullaWebRequestFixer(writeSullaWebRequestEvent);
+  fixer.attachToSession(session);
 
-    // Optional: also strip stricter variants
-    delete headers['x-frame-options-report'];
-    delete headers['X-Frame-Options-Report'];
-    delete headers['frame-ancestors'];
-
-    console.log(`[Sulla Global Fix] Stripped framing headers from → ${details.url}`);
-
-    callback({ responseHeaders: headers });
-  });
 });
-
-
 
 ////////////////////////////////////////////////////////////////////////////////
 // SULLA DESKTOP - END

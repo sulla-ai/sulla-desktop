@@ -45,8 +45,13 @@ export class GetWorkflowNodeListWorker extends BaseTool {
 
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     try {
+      const workflowId = String(input.workflowId || '').trim();
+      if (!workflowId) {
+        throw new Error('Workflow ID is required.');
+      }
+
       const service = await createN8nService();
-      const workflow = await service.getWorkflow(input.workflowId, input.excludePinnedData);
+      const workflow = await service.getWorkflow(workflowId, input.excludePinnedData);
 
       const nodes = Array.isArray(workflow?.nodes) ? workflow.nodes : [];
       const connections = workflow?.connections && typeof workflow.connections === 'object' ? workflow.connections : {};

@@ -12,12 +12,14 @@ jest.unstable_mockModule('../../../services/N8nService', () => ({
 
 async function loadNodeTools() {
   const getModule = await import('../get_workflow_node');
+  const listModule = await import('../get_workflow_node_list');
   const addModule = await import('../add_workflow_node');
   const updateModule = await import('../update_workflow_node');
   const removeModule = await import('../remove_workflow_node');
 
   return {
     getModule,
+    listModule,
     addModule,
     updateModule,
     removeModule,
@@ -54,7 +56,7 @@ describe('n8n workflow node tools', () => {
     mockUpdateWorkflow.mockResolvedValueOnce({ id: 'wf-1' });
 
     const result = await worker.invoke({
-      workflowId: 'wf-1',
+      workflowId: '  wf-1  ',
       node: {
         name: 'Trigger',
         type: 'n8n-nodes-base.httpRequest',
@@ -66,9 +68,45 @@ describe('n8n workflow node tools', () => {
     expect(result.success).toBe(true);
     const updateArg = mockUpdateWorkflow.mock.calls[0][1];
     const insertedNode = updateArg.nodes[1];
+    expect(mockGetWorkflow).toHaveBeenCalledWith('wf-1', true);
     expect(insertedNode.name).toBe('Trigger (2)');
     expect(insertedNode.type).toBe('n8n-nodes-base.httpRequest');
     expect(String(insertedNode.id)).toMatch(/^trigger-2/);
+  });
+
+  it('lists workflow nodes with connection summaries and edges', async () => {
+    const { listModule } = await loadNodeTools();
+    const worker = configureWorker(new listModule.GetWorkflowNodeListWorker(), listModule.getWorkflowNodeListRegistration);
+
+    mockGetWorkflow.mockResolvedValueOnce({
+      id: 'wf-5',
+      name: 'Workflow E',
+      nodes: [
+        { id: 'node-a', name: 'Source', type: 'n8n-nodes-base.manualTrigger', position: [0, 0], parameters: {} },
+        { id: 'node-b', name: 'Target', type: 'n8n-nodes-base.httpRequest', position: [240, 0], parameters: {} },
+      ],
+      connections: {
+        Source: {
+          main: [[{ node: 'Target', type: 'main', index: 0 }]],
+        },
+      },
+      settings: {},
+    });
+
+    const result = await worker.invoke({
+      workflowId: ' wf-5 ',
+      excludePinnedData: true,
+    });
+
+    expect(result.success).toBe(true);
+    expect(mockGetWorkflow).toHaveBeenCalledWith('wf-5', true);
+
+    const parsed = JSON.parse(result.result as string);
+    expect(parsed.nodeCount).toBe(2);
+    expect(parsed.nodes[0].nodeName).toBe('Source');
+    expect(parsed.nodes[0].outboundConnections).toBe(1);
+    expect(parsed.nodes[1].inboundConnections).toBe(1);
+    expect(parsed.edges).toEqual([{ fromNode: 'Source', toNode: 'Target' }]);
   });
 
   it('updates a node name and rewrites connections by node name', async () => {

@@ -768,6 +768,20 @@ export class PlannerNode extends BaseNode {
       void this.savePrdArticleAsync(parsedPrd.meta, parsedPrd.document);
     }
 
+    const wsChannel = String((state.metadata as any).wsChannel || 'chat-controller');
+    const selectedSkillSlug = String((state.metadata as any).planRetrieval?.selected_skill_slug || '');
+    void this.dispatchToWebSocket(wsChannel, {
+      type: 'progress',
+      data: {
+        phase: 'planner_note',
+        planning_instructions: prd,
+        planningInstructions: prd,
+        selected_skill_slug: selectedSkillSlug,
+        selectedSkillSlug,
+      },
+      timestamp: Date.now(),
+    });
+
     console.log(`[PlannerNode] PRD stored at planning_instructions (${prd.length} chars)`);
   }
 
