@@ -15,6 +15,13 @@ export type NodeSelector = {
   nodeName?: string;
 };
 
+function normalizeNodeLookupToken(value: unknown): string {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '');
+}
+
 export function cloneWorkflowGraph(workflow: any): WorkflowPayload {
   return {
     id: workflow?.id,
@@ -39,8 +46,10 @@ export function resolveNodeIndex(nodes: WorkflowNode[], selector: NodeSelector):
     throw new Error('Node selector is required: provide nodeId or nodeName.');
   }
 
+  const nodeEntries = nodes.map((node, index) => ({ node, index }));
+
   const idMatches = nodeId
-    ? nodes.map((node, index) => ({ node, index })).filter(({ node }) => String(node?.id || '') === nodeId)
+    ? nodeEntries.filter(({ node }) => String(node?.id || '') === nodeId)
     : [];
 
   if (nodeId && idMatches.length === 0) {
@@ -48,17 +57,68 @@ export function resolveNodeIndex(nodes: WorkflowNode[], selector: NodeSelector):
   }
 
   if (nodeName) {
-    const nameMatches = nodes.map((node, index) => ({ node, index })).filter(({ node }) => String(node?.name || '') === nodeName);
-    if (nameMatches.length === 0 && !nodeId) {
-      throw new Error(`Node not found by nodeName: ${nodeName}`);
+    const requestedNameLower = nodeName.toLowerCase();
+    const requestedNameNormalized = normalizeNodeLookupToken(nodeName);
+
+    let nameMatches = nodeEntries.filter(({ node }) => String(node?.name || '') === nodeName);
+
+    if (nameMatches.length === 0) {
+      nameMatches = nodeEntries.filter(({ node }) => String(node?.name || '').trim().toLowerCase() === requestedNameLower);
     }
+
+    if (nameMatches.length === 0) {
+      nameMatches = nodeEntries.filter(({ node }) => normalizeNodeLookupToken(node?.name) === requestedNameNormalized);
+    }
+
+    if (nameMatches.length === 0) {
+      nameMatches = nodeEntries.filter(({ node }) => {
+        const candidateId = String(node?.id || '').trim();
+        return candidateId === nodeName || normalizeNodeLookupToken(candidateId) === requestedNameNormalized;
+      });
+    }
+
+    if (nameMatches.length === 0 && requestedNameNormalized.length >= 3) {
+      const containsMatches = nodeEntries.filter(({ node }) => {
+        const candidateName = String(node?.name || '').trim();
+        const candidateNormalized = normalizeNodeLookupToken(candidateName);
+        return candidateName.toLowerCase().includes(requestedNameLower) || candidateNormalized.includes(requestedNameNormalized);
+      });
+
+      if (containsMatches.length === 1) {
+        nameMatches = containsMatches;
+      } else if (!nodeId && containsMatches.length > 1) {
+        const candidates = containsMatches
+          .slice(0, 8)
+          .map(({ node }) => String(node?.name || node?.id || ''))
+          .filter(Boolean)
+          .join(', ');
+        throw new Error(`Node name is ambiguous: ${nodeName}. Matching candidates: ${candidates}. Provide nodeId instead.`);
+      }
+    }
+
+    if (nameMatches.length === 0 && !nodeId) {
+      const availableNodes = nodeEntries
+        .slice(0, 12)
+        .map(({ node }) => String(node?.name || node?.id || ''))
+        .filter(Boolean)
+        .join(', ');
+      throw new Error(`Node not found by nodeName: ${nodeName}. Available nodes: ${availableNodes}`);
+    }
+
     if (!nodeId && nameMatches.length > 1) {
-      throw new Error(`Node name is ambiguous: ${nodeName}. Provide nodeId instead.`);
+      const candidates = nameMatches
+        .slice(0, 8)
+        .map(({ node }) => String(node?.name || node?.id || ''))
+        .filter(Boolean)
+        .join(', ');
+      throw new Error(`Node name is ambiguous: ${nodeName}. Matching candidates: ${candidates}. Provide nodeId instead.`);
     }
 
     if (nodeId) {
       const idMatch = idMatches[0];
-      if (String(idMatch.node?.name || '') !== nodeName) {
+      const idMatchName = String(idMatch.node?.name || '');
+      const namesMatch = idMatchName === nodeName || normalizeNodeLookupToken(idMatchName) === requestedNameNormalized;
+      if (!namesMatch) {
         throw new Error(`Node selector mismatch: nodeId ${nodeId} does not match nodeName ${nodeName}.`);
       }
       return idMatch.index;

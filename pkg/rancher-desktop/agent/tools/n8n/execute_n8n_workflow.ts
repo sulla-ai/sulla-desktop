@@ -10,8 +10,8 @@ export class ExecuteN8nWorkflowBridgeWorker extends BaseTool {
 
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     const logPrefix = '[execute_n8n_workflow]';
-    const gatewayWorkflowName = '🚀 Universal Workflow Trigger Gateway';
-    const gatewayWebhookPath = 'trigger-any';
+    const gatewayWorkflowName = '🚀 Universal n8n Trigger Gateway (Minimal 2026)';
+    const gatewayWebhookPath = 'universal-gateway';
     const safeStringify = (value: unknown): string => {
       try {
         return JSON.stringify(value, null, 2);
@@ -128,70 +128,51 @@ export class ExecuteN8nWorkflowBridgeWorker extends BaseTool {
       console.log(`${logPrefix} run payload`, truncate(safeStringify(data)));
 
       const gatewayPayload = {
-        name: gatewayWorkflowName,
-        nodes: [
+        "name": gatewayWorkflowName,
+        "nodes": [
           {
-            parameters: {
-              httpMethod: 'GET',
-              path: gatewayWebhookPath,
-              responseMode: 'lastNode',
-              options: {},
+            "parameters": {
+              "httpMethod": "POST",
+              "path": gatewayWebhookPath,
+              "responseMode": "lastNode",
+              "options": {},
             },
-            id: 'gateway-webhook',
-            name: 'Webhook - Trigger Any Workflow',
-            type: 'n8n-nodes-base.webhook',
-            typeVersion: 2,
-            position: [240, 300],
+            "id": '1',
+            "name": 'Webhook',
+            "type": 'n8n-nodes-base.webhook',
+            "typeVersion": 2,
+            "position": [240, 300],
           },
           {
-            parameters: {
-              workflowId: '={{ $json.body?.workflowId || $json.query?.workflowId || "" }}',
-              workflowData: '={{ (() => { const bodyData = $json.body?.data; if (bodyData && typeof bodyData === "object") { return bodyData; } const queryData = $json.query?.data; if (queryData && typeof queryData === "object") { return queryData; } if (typeof queryData === "string" && queryData.trim()) { try { return JSON.parse(queryData); } catch { return {}; } } return $json.body || {}; })() }}',
-              options: {},
+            "parameters": {
+              "workflowId": '={{ $json.body.workflowId ?? $query.workflowId ?? $json.workflowId }}',
+              "workflowData": '={{ $json.body.data ?? $query.data ?? $json.body ?? $json }}',
+              "options": {
+                "waitForExecution": true,
+              },
             },
-            id: 'execute-workflow',
-            name: 'Execute Target Workflow',
-            type: 'n8n-nodes-base.executeWorkflow',
-            typeVersion: 1,
-            position: [460, 300],
-          },
-          {
-            parameters: {
-              responseMode: 'lastNode',
-            },
-            id: 'respond',
-            name: 'Respond to Webhook',
-            type: 'n8n-nodes-base.respondToWebhook',
-            typeVersion: 1,
-            position: [680, 300],
+            "id": '2',
+            "name": 'Execute Target Workflow',
+            "type": 'n8n-nodes-base.executeWorkflow',
+            "typeVersion": 1,
+            "position": [460, 300],
           },
         ],
-        connections: {
-          'Webhook - Trigger Any Workflow': {
-            main: [
+        "connections": {
+          "Webhook": {
+            "main": [
               [
                 {
-                  node: 'Execute Target Workflow',
-                  type: 'main',
-                  index: 0,
-                },
-              ],
-            ],
-          },
-          'Execute Target Workflow': {
-            main: [
-              [
-                {
-                  node: 'Respond to Webhook',
-                  type: 'main',
-                  index: 0,
+                  "node": 'Execute Target Workflow',
+                  "type": 'main',
+                  "index": 0,
                 },
               ],
             ],
           },
         },
-        settings: {
-          executionOrder: 'v1',
+        "settings": {
+          "executionOrder": 'v1',
         },
       };
 
@@ -209,6 +190,12 @@ export class ExecuteN8nWorkflowBridgeWorker extends BaseTool {
         console.log(`${logPrefix} gateway workflow not found, creating`, truncate(safeStringify(gatewayPayload)));
         gatewayWorkflow = await service.createWorkflow(gatewayPayload);
         gatewayCreated = true;
+      } else {
+        const existingGatewayWorkflowId = getWorkflowId(gatewayWorkflow);
+        if (existingGatewayWorkflowId) {
+          console.log(`${logPrefix} gateway workflow found, normalizing definition`, { gatewayWorkflowId: existingGatewayWorkflowId });
+          gatewayWorkflow = await service.updateWorkflow(existingGatewayWorkflowId, gatewayPayload as any);
+        }
       }
 
       const gatewayWorkflowId = getWorkflowId(gatewayWorkflow);
@@ -223,8 +210,7 @@ export class ExecuteN8nWorkflowBridgeWorker extends BaseTool {
 
       if (!isWorkflowActive(gatewayWorkflow)) {
         console.log(`${logPrefix} gateway workflow inactive, activating`, { gatewayWorkflowId });
-        const gatewayVersionId = String(toRecord(gatewayWorkflow).versionId || '').trim();
-        await service.activateWorkflow(gatewayWorkflowId, gatewayVersionId ? { versionId: gatewayVersionId } : undefined);
+        await service.activateWorkflow(gatewayWorkflowId);
       }
 
       const webhookBase = bridge.getAppRootUrl();
@@ -237,19 +223,18 @@ export class ExecuteN8nWorkflowBridgeWorker extends BaseTool {
         workflowId: resolvedWorkflowId,
         data,
       };
-      webhookUrl.searchParams.set('workflowId', resolvedWorkflowId);
-      webhookUrl.searchParams.set('data', JSON.stringify(data));
 
       const webhookUrlString = webhookUrl.toString();
       console.log(`${logPrefix} invoking gateway webhook`, { webhookUrl, gatewayWorkflowId, waitForCompletion });
       console.log(`${logPrefix} gateway webhook payload`, truncate(safeStringify(webhookPayload)));
 
       const webhookResponse = await fetch(webhookUrlString, {
-        method: 'GET',
+        method: 'POST',
         credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
         },
+        body: JSON.stringify(webhookPayload),
       });
 
       const responseText = await webhookResponse.text();
@@ -261,19 +246,68 @@ export class ExecuteN8nWorkflowBridgeWorker extends BaseTool {
       }
 
       if (!webhookResponse.ok) {
+        let targetExecutionError: Record<string, unknown> | null = null;
+
+        if (webhookResponse.status === 500) {
+          try {
+            const recentExecutions = await service.getExecutions({
+              workflowId: resolvedWorkflowId,
+              includeData: true,
+              limit: 5,
+            });
+
+            const failedExecution = recentExecutions.find((execution: any) => {
+              const status = String(execution?.status || '').toLowerCase();
+              return status === 'error' || status === 'failed' || status === 'canceled';
+            }) || recentExecutions[0];
+
+            if (failedExecution) {
+              const resultData = failedExecution?.data?.resultData || {};
+              const executionError = resultData?.error || failedExecution?.data?.error || failedExecution?.error || null;
+
+              targetExecutionError = {
+                executionId: String(failedExecution?.id || ''),
+                status: String(failedExecution?.status || ''),
+                startedAt: failedExecution?.startedAt,
+                stoppedAt: failedExecution?.stoppedAt,
+                finishedAt: failedExecution?.finishedAt,
+                error: executionError,
+              };
+            }
+          } catch (executionLookupError) {
+            targetExecutionError = {
+              lookupFailed: true,
+              message: executionLookupError instanceof Error ? executionLookupError.message : String(executionLookupError),
+            };
+          }
+        }
+
         console.error(`${logPrefix} gateway webhook failed`, {
           status: webhookResponse.status,
           statusText: webhookResponse.statusText,
           body: truncate(responseText),
+          targetExecutionError,
         });
         return {
           successBoolean: false,
-          responseString: JSON.stringify({
-            error: `Gateway webhook failed ${webhookResponse.status} ${webhookResponse.statusText}`,
-            gatewayWorkflowId,
-            webhookUrl: webhookUrlString,
-            responseBody: parsedWebhookResponse,
-          }, null, 2),
+          responseString: JSON.stringify(
+            webhookResponse.status === 500 && targetExecutionError?.error
+              ? {
+                error: 'Target workflow execution failed',
+                targetWorkflowId: resolvedWorkflowId,
+                targetExecutionError,
+              }
+              : {
+                error: `Gateway webhook failed ${webhookResponse.status} ${webhookResponse.statusText}`,
+                gatewayWorkflowId,
+                targetWorkflowId: resolvedWorkflowId,
+                webhookUrl: webhookUrlString,
+                responseBody: parsedWebhookResponse,
+                targetExecutionError,
+              },
+            null,
+            2,
+          ),
         };
       }
 

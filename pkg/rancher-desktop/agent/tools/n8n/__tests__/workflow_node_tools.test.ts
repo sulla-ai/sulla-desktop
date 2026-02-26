@@ -212,4 +212,62 @@ describe('n8n workflow node tools', () => {
     expect(parsed.node.id).toBe('node-b');
     expect(parsed.connections.inbound).toBe(1);
   });
+
+  it('gets a single node by normalized nodeName match', async () => {
+    const { getModule } = await loadNodeTools();
+    const worker = configureWorker(new getModule.GetWorkflowNodeWorker(), getModule.getWorkflowNodeRegistration);
+
+    mockGetWorkflow.mockResolvedValueOnce({
+      id: 'wf-6',
+      name: 'Workflow F',
+      nodes: [
+        { id: 'node-a', name: 'Source Node', type: 'n8n-nodes-base.manualTrigger', position: [0, 0], parameters: {} },
+        { id: 'node-b', name: 'Merge All Sources', type: 'n8n-nodes-base.merge', position: [240, 0], parameters: {} },
+      ],
+      connections: {
+        'Source Node': {
+          main: [[{ node: 'Merge All Sources', type: 'main', index: 0 }]],
+        },
+      },
+      settings: {},
+    });
+
+    const result = await worker.invoke({
+      workflowId: 'wf-6',
+      nodeName: 'merge-all-sources',
+    });
+
+    expect(result.success).toBe(true);
+    const parsed = JSON.parse(result.result as string);
+    expect(parsed.node.id).toBe('node-b');
+  });
+
+  it('gets a single node by unique partial nodeName match', async () => {
+    const { getModule } = await loadNodeTools();
+    const worker = configureWorker(new getModule.GetWorkflowNodeWorker(), getModule.getWorkflowNodeRegistration);
+
+    mockGetWorkflow.mockResolvedValueOnce({
+      id: 'wf-7',
+      name: 'Workflow G',
+      nodes: [
+        { id: 'node-a', name: 'Source Node', type: 'n8n-nodes-base.manualTrigger', position: [0, 0], parameters: {} },
+        { id: 'node-b', name: 'Merge All Sources', type: 'n8n-nodes-base.merge', position: [240, 0], parameters: {} },
+      ],
+      connections: {
+        'Source Node': {
+          main: [[{ node: 'Merge All Sources', type: 'main', index: 0 }]],
+        },
+      },
+      settings: {},
+    });
+
+    const result = await worker.invoke({
+      workflowId: 'wf-7',
+      nodeName: 'merge-all-001',
+    });
+
+    expect(result.success).toBe(true);
+    const parsed = JSON.parse(result.result as string);
+    expect(parsed.node.id).toBe('node-b');
+  });
 });

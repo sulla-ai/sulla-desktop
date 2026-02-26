@@ -71,7 +71,7 @@ export class WebhookEntityModel extends BaseModel<WebhookEntityAttributes> {
     }
 
     const webhookPath = providedWebhookPath || crypto.randomUUID();
-    const method = String(params.method || 'GET').trim() || 'GET';
+    const method = String(params.method || 'POST').trim() || 'POST';
     const node = String(params.node || '').trim() || `node_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 
     const attributes: WebhookEntityAttributes = {
