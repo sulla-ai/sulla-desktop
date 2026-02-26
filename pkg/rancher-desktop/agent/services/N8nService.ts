@@ -261,7 +261,7 @@ export class N8nService {
     name: string;
     nodes: any[];
     connections: any;
-    settings: {
+    settings?: {
       saveExecutionProgress?: boolean;
       saveManualExecutions?: boolean;
       saveDataErrorExecution?: string;
@@ -278,9 +278,25 @@ export class N8nService {
     shared?: any[];
     staticData?: any;
   }): Promise<any> {
+    const sanitizedSettings = this.sanitizeWorkflowSettings(workflowData?.settings);
+    if (sanitizedSettings.availableInMCP === undefined) {
+      sanitizedSettings.availableInMCP = true;
+    }
+
+    const sanitizedPayload = {
+      name: String(workflowData?.name || '').trim(),
+      nodes: Array.isArray(workflowData?.nodes) ? workflowData.nodes : [],
+      connections: workflowData?.connections && typeof workflowData.connections === 'object' && !Array.isArray(workflowData.connections)
+        ? workflowData.connections
+        : {},
+      settings: sanitizedSettings,
+      ...(Array.isArray(workflowData?.shared) ? { shared: workflowData.shared } : {}),
+      ...(workflowData?.staticData !== undefined ? { staticData: workflowData.staticData } : {}),
+    };
+
     return this.request('/api/v1/workflows', {
       method: 'POST',
-      body: JSON.stringify(workflowData)
+      body: JSON.stringify(sanitizedPayload)
     });
   }
 
