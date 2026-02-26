@@ -3,7 +3,6 @@ import { getWorkflowsRegistration } from './get_workflows';
 import { createWorkflowRegistration } from './create_workflow';
 import { cloneWorkflowRegistration } from './clone_workflow';
 import { deleteWorkflowRegistration } from './delete_workflow';
-import { deleteWorkflowNodeRegistration } from './delete_workflow_node';
 import { getWorkflowRegistration } from './get_workflow';
 import { getWorkflowConnectionsRegistration } from './get_workflow_connections';
 import { validateWorkflowRegistration } from './validate_workflow';
@@ -29,11 +28,7 @@ import { getTemplateCategoriesRegistration } from './get_template_categories';
 import { validateWorkflowPayloadRegistration } from './validate_workflow_payload';
 import { getWorkflowNodeRegistration } from './get_workflow_node';
 import { getWorkflowNodeListRegistration } from './get_workflow_node_list';
-import { addWorkflowNodeRegistration } from './add_workflow_node';
-import { addWorkflowConnectionRegistration } from './add_workflow_connection';
-import { removeWorkflowConnectionRegistration } from './remove_workflow_connection';
-import { updateWorkflowNodeRegistration } from './update_workflow_node';
-import { removeWorkflowNodeRegistration } from './remove_workflow_node';
+import { patchWorkflowRegistration } from './patch_workflow';
 import { executeN8nWorkflowBridgeRegistration } from './execute_n8n_workflow';
 import { listWorkflowExecutionsRegistration } from './list_workflow_executions';
 import { getExecutionLogRegistration } from './get_execution_log';
@@ -44,7 +39,6 @@ export const n8nToolRegistrations = [
   createWorkflowRegistration,
   cloneWorkflowRegistration,
   deleteWorkflowRegistration,
-  deleteWorkflowNodeRegistration,
   getWorkflowRegistration,
   getWorkflowConnectionsRegistration,
   validateWorkflowRegistration,
@@ -70,11 +64,7 @@ export const n8nToolRegistrations = [
   validateWorkflowPayloadRegistration,
   getWorkflowNodeRegistration,
   getWorkflowNodeListRegistration,
-  addWorkflowNodeRegistration,
-  addWorkflowConnectionRegistration,
-  removeWorkflowConnectionRegistration,
-  updateWorkflowNodeRegistration,
-  removeWorkflowNodeRegistration,
+  patchWorkflowRegistration,
   executeN8nWorkflowBridgeRegistration,
   listWorkflowExecutionsRegistration,
   getExecutionLogRegistration,
