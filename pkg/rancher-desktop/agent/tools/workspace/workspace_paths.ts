@@ -13,7 +13,7 @@ export function resolveWorkspaceRoot(): string {
 
   // Default to the user's mounted home directory so workspace paths are
   // directly usable by tools, Docker mounts, and host-side file operations.
-  return path.join(os.homedir(), 'workspaces');
+  return path.join(os.homedir(), 'sulla', 'workspaces');
 }
 
 export function resolveWorkspacePath(name: string): string {

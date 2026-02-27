@@ -1,9 +1,8 @@
 import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import yaml from 'js-yaml';
-import { hardcodedSkillResourcesBySlug } from '../skills';
 
-export type SkillSource = 'hardcoded' | 'database' | 'filesystem';
+export type SkillSource = 'database' | 'filesystem';
 
 export interface SkillManifest {
   schemaversion?: number;
@@ -57,13 +56,11 @@ export class SkillService {
   readonly source: SkillSource;
   readonly manifest: SkillManifest;
   readonly document: string;
-  private readonly hardcodedResourceMap: Record<string, string>;
 
   private constructor(source: SkillSource, manifest: SkillManifest, document: string) {
     this.source = source;
     this.manifest = manifest;
     this.document = document;
-    this.hardcodedResourceMap = hardcodedSkillResourcesBySlug[String(manifest.slug || '').trim()] || {};
   }
 
   static fromRaw(source: SkillSource, fallbackSlug: string, rawContent: string): SkillService | null {
@@ -246,16 +243,6 @@ export class SkillService {
 
     const loaded: SkillLoadedResource[] = [];
     for (const resource of loadableResources) {
-      const registeredContent = this.resolveHardcodedRegisteredResource(resource.path);
-      if (registeredContent !== null) {
-        loaded.push({
-          type: resource.type,
-          path: resource.path,
-          content: registeredContent,
-        });
-        continue;
-      }
-
       const candidates = this.resolveResourcePaths(resource.path);
       for (const absolutePath of candidates) {
         try {
@@ -291,12 +278,6 @@ export class SkillService {
   }
 
   async loadPrimaryPrdTemplate(): Promise<string> {
-    const registeredPrd = Object.entries(this.hardcodedResourceMap)
-      .find(([resourcePath]) => /\/templates\/prd\.[^/]+$/i.test(resourcePath))?.[1];
-    if (registeredPrd) {
-      return String(registeredPrd || '').trim();
-    }
-
     const templateResources = this.resources.filter((resource) => String(resource.type || '').toLowerCase() === 'template');
     if (templateResources.length === 0) return '';
 
@@ -386,16 +367,6 @@ export class SkillService {
   }
 
   private async loadDiscoveredTemplateAndResourceFiles(): Promise<SkillLoadedResource[]> {
-    if (Object.keys(this.hardcodedResourceMap).length > 0) {
-      return Object.entries(this.hardcodedResourceMap)
-        .filter(([resourcePath]) => /\/templates\//i.test(resourcePath) || /\/resources\//i.test(resourcePath))
-        .map(([resourcePath, content]) => ({
-          type: /\/templates\//i.test(resourcePath) ? 'template' : 'resource',
-          path: resourcePath,
-          content,
-        }));
-    }
-
     const discovered: SkillLoadedResource[] = [];
     const visitedDirs = new Set<string>();
 
@@ -493,25 +464,6 @@ export class SkillService {
     return extracted ?? rawContent;
   }
 
-  private resolveHardcodedRegisteredResource(resourcePath: string): string | null {
-    if (!resourcePath || Object.keys(this.hardcodedResourceMap).length === 0) return null;
-
-    const normalized = String(resourcePath).trim().replace(/\\/g, '/');
-    if (!normalized) return null;
-
-    const exact = this.hardcodedResourceMap[normalized];
-    if (typeof exact === 'string') return exact;
-
-    const altTs = normalized.endsWith('.ts') ? '' : `${normalized}.ts`;
-    if (altTs && typeof this.hardcodedResourceMap[altTs] === 'string') {
-      return this.hardcodedResourceMap[altTs];
-    }
-
-    const found = Object.entries(this.hardcodedResourceMap)
-      .find(([key]) => key.replace(/\\/g, '/') === normalized || key.endsWith(`/${normalized}`));
-    return found ? found[1] : null;
-  }
-
   private getExpectedExportNameFromPath(filePath: string): string {
     const base = path.basename(String(filePath || '').trim(), path.extname(String(filePath || '').trim()));
     return base.replace(/[^a-zA-Z0-9_$]/g, '_');
@@ -581,8 +533,6 @@ export class SkillService {
       path.resolve(cwd, target),
       path.resolve(cwd, 'agent', target),
       path.resolve(cwd, 'pkg/rancher-desktop/agent', target),
-      path.resolve(cwd, 'agent/seed_pedia/skills', target),
-      path.resolve(cwd, 'pkg/rancher-desktop/agent/seed_pedia/skills', target),
     ];
 
     return candidates;

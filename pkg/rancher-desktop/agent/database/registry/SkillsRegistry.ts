@@ -1,10 +1,9 @@
-import { readdir, readFile } from 'node:fs/promises';
+import { readdir, readFile, mkdir, writeFile } from 'node:fs/promises';
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-
 import { Article } from '../models/Article';
 import { redisClient } from '../RedisClient';
-import { hardcodedSkills } from '../../skills';
 import {
   SkillService,
   type SkillSchema,
@@ -14,8 +13,6 @@ import {
 export interface SkillRegistryInitOptions {
   filesystemSkillDirs?: string[];
 }
-
-const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
 
 export class SkillsRegistry {
   private readonly cacheKey = 'sulla:skills:summary';
@@ -56,9 +53,6 @@ export class SkillsRegistry {
 
   private async rebuildAndCache(options: SkillRegistryInitOptions = {}): Promise<void> {
     const map = new Map<string, SkillService>();
-
-    const hardcodedSkills = await this.loadHardcodedSkills();
-    hardcodedSkills.forEach(skill => this.mergeSkillBySourcePriority(map, skill));
 
     const databaseSkills = await this.loadDatabaseSkills();
     databaseSkills.forEach(skill => this.mergeSkillBySourcePriority(map, skill));
@@ -184,22 +178,6 @@ export class SkillsRegistry {
       : '_No skills found in the knowledge base yet._';
   }
 
-  private async loadHardcodedSkills(): Promise<SkillService[]> {
-    const skills: SkillService[] = [];
-
-    for (const [fallbackSlug, rawContent] of Object.entries(hardcodedSkills)) {
-      if (typeof rawContent !== 'string') continue;
-
-      const skill = SkillService.fromRaw('hardcoded', fallbackSlug, rawContent);
-      if (!skill) continue;
-      if (!this.looksLikeSkill(skill)) continue;
-
-      skills.push(skill);
-    }
-
-    return skills;
-  }
-
   private async loadDatabaseSkills(): Promise<SkillService[]> {
     try {
       const articles = await Article.findByTag('skill');
@@ -239,7 +217,13 @@ export class SkillsRegistry {
     const candidateDirs = this.getDefaultFilesystemDirs(extraDirs);
 
     for (const dir of candidateDirs) {
+      // Folder-based: look for <dir>/<name>/SKILL.md first
+      const folderSkills = await this.loadFolderBasedSkills(dir);
+      skills.push(...folderSkills);
+
+      // Legacy flat scan: any .md files directly in the dir tree
       const markdownFiles = await this.collectMarkdownFiles(dir);
+      const folderSlugs = new Set(folderSkills.map(s => s.slug));
 
       for (const filePath of markdownFiles) {
         try {
@@ -247,11 +231,36 @@ export class SkillsRegistry {
           const fallbackSlug = path.basename(filePath, path.extname(filePath));
           const service = SkillService.fromRaw('filesystem', fallbackSlug, raw);
           if (!service) continue;
+          if (folderSlugs.has(service.slug)) continue;
           if (!this.looksLikeSkill(service)) continue;
           skills.push(service);
         } catch (error) {
           console.warn(`[SkillsRegistry] Failed to load skill file ${filePath}:`, error);
         }
+      }
+    }
+
+    return skills;
+  }
+
+  private async loadFolderBasedSkills(parentDir: string): Promise<SkillService[]> {
+    const skills: SkillService[] = [];
+    let entries: import('node:fs').Dirent[];
+    try {
+      entries = await readdir(parentDir, { withFileTypes: true });
+    } catch {
+      return skills;
+    }
+
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const skillMd = path.join(parentDir, entry.name, 'SKILL.md');
+      try {
+        const raw = await readFile(skillMd, 'utf8');
+        const service = SkillService.fromRaw('filesystem', entry.name, raw);
+        if (service) skills.push(service);
+      } catch {
+        // No SKILL.md in this subfolder — skip
       }
     }
 
@@ -267,17 +276,25 @@ export class SkillsRegistry {
   }
 
   private getDefaultFilesystemDirs(extraDirs: string[]): string[] {
-    const seedSkillsDir = path.resolve(MODULE_DIR, '../../seed_pedia/skills');
+    const userSkillsDir = this.getUserSkillsDir();
 
     const fromEnv = String(process.env.SULLA_SKILLS_DIRS || '')
       .split(',')
       .map(value => value.trim())
       .filter(Boolean);
 
-    const all = [...extraDirs, ...fromEnv, seedSkillsDir]
+    const all = [...extraDirs, ...fromEnv, userSkillsDir]
       .map(dir => path.resolve(dir));
 
     return Array.from(new Set(all));
+  }
+
+  getUserSkillsDir(): string {
+    const envPath = String(process.env.SULLA_SKILLS_DIR || '').trim();
+    if (envPath) {
+      return path.isAbsolute(envPath) ? envPath : path.resolve(envPath);
+    }
+    return path.join(os.homedir(), 'sulla', 'skills');
   }
 
   private async collectMarkdownFiles(dirPath: string): Promise<string[]> {
@@ -331,8 +348,6 @@ export class SkillsRegistry {
 
   private getSourcePriority(source: string): number {
     switch (String(source || '').toLowerCase()) {
-      case 'hardcoded':
-        return 3;
       case 'filesystem':
         return 2;
       case 'database':
@@ -386,6 +401,113 @@ export class SkillsRegistry {
     this.refresh(this.lastInitOptions).catch((error) => {
       console.warn('[SkillsRegistry] Non-blocking refresh failed:', error);
     });
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // SkillStore API — used by skills tools
+  // ─────────────────────────────────────────────────────────────
+
+  async searchSkills(query: string): Promise<string> {
+    await this.ensureInitialized();
+
+    const queryWords = String(query || '').toLowerCase().split(/\s+/).filter(Boolean);
+    if (queryWords.length === 0) return 'Please provide a search query.';
+
+    const nativeResults: string[] = [];
+    const dynamicResults: string[] = [];
+
+    // Search native skills
+    try {
+      const { nativeSkillRegistry } = await import('../../skills/native/NativeSkillRegistry');
+      const nativeMatches = nativeSkillRegistry.search(query);
+      for (const m of nativeMatches) {
+        nativeResults.push(`${m.name} (native): ${m.description}`);
+      }
+    } catch { /* native registry not available */ }
+
+    // Search dynamic/filesystem/hardcoded skills
+    for (const skill of this.skillsBySlug.values()) {
+      const haystack = [
+        skill.slug,
+        skill.name,
+        skill.description,
+        ...(skill.manifest.tags || []),
+        ...(skill.triggers || []),
+      ].join(' ').toLowerCase();
+
+      if (queryWords.some(word => haystack.includes(word))) {
+        dynamicResults.push(`${skill.name}: ${skill.description}`);
+      }
+    }
+
+    const parts: string[] = [];
+    if (nativeResults.length > 0) parts.push(`Native skills:\n${nativeResults.join('\n')}`);
+    if (dynamicResults.length > 0) parts.push(`Dynamic skills:\n${dynamicResults.join('\n')}`);
+
+    return parts.length > 0
+      ? parts.join('\n\n')
+      : 'No matching skills. You can create one with create_skill.';
+  }
+
+  async loadSkill(skillName: string): Promise<string> {
+    await this.ensureInitialized();
+
+    const name = String(skillName || '').trim();
+
+    // Check native skills first — call func() to return full skill content
+    try {
+      const { nativeSkillRegistry } = await import('../../skills/native/NativeSkillRegistry');
+      const nativeDef = nativeSkillRegistry.get(name);
+      if (nativeDef) {
+        return await nativeDef.func({});
+      }
+    } catch { /* native registry not available */ }
+
+    // Try exact slug match
+    const bySlug = this.skillsBySlug.get(name);
+    if (bySlug) return bySlug.document;
+
+    // Try folder name match in user skills dir
+    const userDir = this.getUserSkillsDir();
+    const skillMd = path.join(userDir, name, 'SKILL.md');
+    if (fs.existsSync(skillMd)) {
+      return fs.readFileSync(skillMd, 'utf8');
+    }
+
+    // Try fuzzy match by name
+    for (const skill of this.skillsBySlug.values()) {
+      if (skill.name.toLowerCase() === name.toLowerCase()) {
+        return skill.document;
+      }
+    }
+
+    const available = Array.from(this.skillsBySlug.keys()).join(', ') || '(none)';
+    return `Skill '${name}' not found. Available: ${available}`;
+  }
+
+  async createSkill(skillName: string, content: string): Promise<string> {
+    const name = String(skillName || '').trim();
+    if (!name) return 'Skill name is required.';
+
+    const userDir = this.getUserSkillsDir();
+    const skillDir = path.join(userDir, name);
+    const skillFile = path.join(skillDir, 'SKILL.md');
+
+    try {
+      await mkdir(skillDir, { recursive: true });
+      await writeFile(skillFile, content, 'utf8');
+
+      // Reload from the new file so the registry picks it up immediately
+      const service = SkillService.fromRaw('filesystem', name, content);
+      if (service) {
+        this.skillsBySlug.set(service.slug, service);
+        this.cachedSummaries = this.buildSummariesFromCurrentMap();
+      }
+
+      return `Skill '${name}' created/updated successfully at ${skillFile}. You can now load it anytime with load_skill.`;
+    } catch (error: any) {
+      return `Failed to create skill '${name}': ${error.message}`;
+    }
   }
 }
 

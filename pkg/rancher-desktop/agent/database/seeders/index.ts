@@ -2,7 +2,6 @@
 // Central registry for all seeders
 // DatabaseManager imports this to run tracked seeders
 
-import { initialize as knowledgeBaseSeeder } from './KnowledgeBaseSeeder';  // adjust path if needed
 import { initialize as knowledgeBaseSectionsSeeder } from './KnowledgeBaseSectionsSeeder';
 import { initialize as n8nUserSeeder } from './N8nUserSeeder';
 import { initialize as n8nSettingsSeeder } from './N8nSettingsSeeder';
@@ -11,10 +10,6 @@ import { initialize as n8nSettingsSeeder } from './N8nSettingsSeeder';
 // import { initialize as someOtherSeeder } from './some-other-seeder';
 
 export const seedersRegistry = [
-  {
-    name: 'knowledgebase-seeder-v4',
-    run: knowledgeBaseSeeder,
-  },
   {
     name: 'knowledgebase-sections-seeder',
     run: knowledgeBaseSectionsSeeder,
