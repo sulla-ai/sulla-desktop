@@ -156,20 +156,27 @@ export class AgentNode extends BaseNode {
     };
 
     // Push assistant response to conversation thread
+    // appendResponse already stores native content arrays (including text+tool_use),
+    // so only push here if the text isn't already present in the last message.
     if (userVisibleResultText) {
       if (!Array.isArray(state.messages)) {
         state.messages = [];
       }
       const normalizedUserVisibleResult = userVisibleResultText.trim();
-      const lastMessage = state.messages[state.messages.length - 1] as ChatMessage | undefined;
-      if (
-        normalizedUserVisibleResult
-        && !(
-          lastMessage?.role === 'assistant'
-          && typeof lastMessage.content === 'string'
-          && lastMessage.content.trim() === normalizedUserVisibleResult
-        )
-      ) {
+      const alreadyStored = state.messages.some((msg: any) => {
+        if (msg.role !== 'assistant') return false;
+        // Match string content
+        if (typeof msg.content === 'string' && msg.content.trim() === normalizedUserVisibleResult) return true;
+        // Match text inside native content arrays (e.g. [{ type: 'text', text: '...' }, { type: 'tool_use', ... }])
+        if (Array.isArray(msg.content)) {
+          return msg.content.some((block: any) =>
+            block?.type === 'text' && typeof block.text === 'string' && block.text.trim() === normalizedUserVisibleResult,
+          );
+        }
+        return false;
+      });
+
+      if (normalizedUserVisibleResult && !alreadyStored) {
         state.messages.push({
           role: 'assistant',
           content: normalizedUserVisibleResult,

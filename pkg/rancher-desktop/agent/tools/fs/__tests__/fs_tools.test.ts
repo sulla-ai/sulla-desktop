@@ -34,8 +34,10 @@ describe('fs tool category', () => {
     );
     const projectDir = path.join(workspaceRoot, 'project');
     const docsDir = path.join(projectDir, 'docs');
+    const guidesDir = path.join(docsDir, 'guides');
     const archiveDir = path.join(projectDir, 'archive');
     const filePath = path.join(docsDir, 'notes.txt');
+    const nestedFilePath = path.join(guidesDir, 'guide.txt');
     const copiedPath = path.join(archiveDir, 'notes-copy.txt');
     const movedPath = path.join(archiveDir, 'notes-final.txt');
 
@@ -59,11 +61,17 @@ describe('fs tool category', () => {
     const mkdirResult = await mkdirWorker.invoke({ path: docsDir });
     expect(mkdirResult.success).toBe(true);
 
+    const mkdirGuidesResult = await mkdirWorker.invoke({ path: guidesDir });
+    expect(mkdirGuidesResult.success).toBe(true);
+
     const mkdirArchiveResult = await mkdirWorker.invoke({ path: archiveDir });
     expect(mkdirArchiveResult.success).toBe(true);
 
     const writeResult = await writeWorker.invoke({ path: filePath, content: 'hello fs tools' });
     expect(writeResult.success).toBe(true);
+
+    const nestedWriteResult = await writeWorker.invoke({ path: nestedFilePath, content: 'nested guide' });
+    expect(nestedWriteResult.success).toBe(true);
 
     const appendResult = await appendWorker.invoke({ path: filePath, content: '\nappended line' });
     expect(appendResult.success).toBe(true);
@@ -85,6 +93,12 @@ describe('fs tool category', () => {
     const listResult = await listWorker.invoke({ path: docsDir });
     expect(listResult.success).toBe(true);
     expect(listResult.result).toContain('notes.txt');
+    expect(listResult.result).toContain('guides');
+    expect(listResult.result).not.toContain('guides/guide.txt');
+
+    const listDepthTwoResult = await listWorker.invoke({ path: docsDir, depth: 2 });
+    expect(listDepthTwoResult.success).toBe(true);
+    expect(listDepthTwoResult.result).toContain('guides/guide.txt');
 
     const listArchiveResult = await listWorker.invoke({ path: archiveDir });
     expect(listArchiveResult.success).toBe(true);

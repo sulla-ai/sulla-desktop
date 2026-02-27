@@ -217,6 +217,69 @@ export class RemoteModelService extends BaseLanguageModel {
         .filter(m => m.role !== 'system')
         .map(m => ({ role: m.role, content: m.content }));
 
+      // Safety net: ensure strict tool_use/tool_result adjacency.
+      // Pass 1: drop orphaned tool_result (no matching tool_use before it).
+      // Pass 2: drop orphaned tool_use (no matching tool_result after it).
+      // Build sequentially so adjacency checks use the already-cleaned array.
+      {
+        // Pass 1: validate tool_result → preceding tool_use
+        const pass1: any[] = [];
+        for (const msg of processedMessages) {
+          if (msg.role === 'user' && Array.isArray(msg.content)
+              && msg.content.some((b: any) => b?.type === 'tool_result')) {
+            const prev = pass1[pass1.length - 1];
+            if (!prev || prev.role !== 'assistant' || !Array.isArray(prev.content)) {
+              continue; // Drop orphaned tool_result
+            }
+            const prevToolUseIds = new Set(
+              prev.content.filter((b: any) => b?.type === 'tool_use' && b?.id).map((b: any) => b.id),
+            );
+            const allMatched = msg.content
+              .filter((b: any) => b?.type === 'tool_result')
+              .every((b: any) => prevToolUseIds.has(b.tool_use_id));
+            if (!allMatched) continue;
+          }
+          pass1.push(msg);
+        }
+
+        // Pass 2: validate tool_use → following tool_result
+        const pass2: any[] = [];
+        for (let i = 0; i < pass1.length; i++) {
+          const msg = pass1[i];
+          if (msg.role === 'assistant' && Array.isArray(msg.content)
+              && msg.content.some((b: any) => b?.type === 'tool_use')) {
+            const next = pass1[i + 1];
+            if (!next || next.role !== 'user' || !Array.isArray(next.content)
+                || !next.content.some((b: any) => b?.type === 'tool_result')) {
+              // Orphaned tool_use — extract text blocks and keep as plain assistant if any text
+              const textBlocks = msg.content.filter((b: any) => b?.type === 'text' && b?.text?.trim());
+              if (textBlocks.length > 0) {
+                pass2.push({ role: 'assistant', content: textBlocks.map((b: any) => b.text).join('\n') });
+              }
+              continue;
+            }
+          }
+          pass2.push(msg);
+        }
+        processedMessages = pass2;
+      }
+
+      // Anthropic forbids consecutive messages with the same role.
+      // Merge consecutive same-role string messages (skip native arrays to preserve tool blocks).
+      {
+        const merged: any[] = [];
+        for (const msg of processedMessages) {
+          const prev = merged[merged.length - 1];
+          if (prev && prev.role === msg.role
+              && typeof prev.content === 'string' && typeof msg.content === 'string') {
+            prev.content = `${prev.content}\n\n${msg.content}`;
+          } else {
+            merged.push(msg);
+          }
+        }
+        processedMessages = merged;
+      }
+
       // Anthropic requires the final turn to be a user message.
       // If tool_use/tool_result pairs are stored properly this should rarely fire.
       const lastProcessedMessage = processedMessages[processedMessages.length - 1];

@@ -139,6 +139,7 @@ export class FrontendGraphWebSocketService {
       // Reset here — after graph run completes
       state.metadata.consecutiveSameNode = 0;
       state.metadata.iterations = 0;
+      (state.metadata as any).agentLoopCount = 0;
       this.activeAbort = null;
     }
   }

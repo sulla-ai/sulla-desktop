@@ -394,6 +394,27 @@ export class ConversationSummaryService {
       messagesToSummarize.push(...remainingMessages.slice(0, additionalNeeded));
     }
 
+    // Ensure tool_use/tool_result pairs are always summarized together.
+    // If one half is selected, pull in the other half too.
+    const summarizeSet = new Set(messagesToSummarize);
+    for (let i = 0; i < workingMessages.length - 1; i++) {
+      const msg = workingMessages[i];
+      const next = workingMessages[i + 1];
+      const isToolUse = msg.role === 'assistant' && Array.isArray(msg.content)
+        && msg.content.some((b: any) => b?.type === 'tool_use');
+      const isToolResult = next.role === 'user' && Array.isArray(next.content)
+        && next.content.some((b: any) => b?.type === 'tool_result');
+      if (isToolUse && isToolResult) {
+        if (summarizeSet.has(msg) && !summarizeSet.has(next)) {
+          messagesToSummarize.push(next);
+          summarizeSet.add(next);
+        } else if (summarizeSet.has(next) && !summarizeSet.has(msg)) {
+          messagesToSummarize.push(msg);
+          summarizeSet.add(msg);
+        }
+      }
+    }
+
     if (messagesToSummarize.length < 2) {
       console.log('[ConversationSummary] Not enough messages to summarize, skipping');
       return;

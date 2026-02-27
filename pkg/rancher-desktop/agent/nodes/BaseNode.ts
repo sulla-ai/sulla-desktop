@@ -476,13 +476,41 @@ export abstract class BaseNode<T extends BaseThreadState = BaseThreadState> {
     }
 
     /**
+     * Build a map of paired tool_use/tool_result message indices.
+     * Returns a Map where each index in a pair maps to the other index.
+     * This ensures both halves are always kept or dropped together.
+     */
+    private static buildToolPairMap(messages: ChatMessage[]): Map<number, number> {
+        const pairs = new Map<number, number>();
+        for (let i = 0; i < messages.length - 1; i++) {
+            const msg = messages[i];
+            const next = messages[i + 1];
+
+            // assistant with native tool_use content array
+            if (msg.role === 'assistant' && Array.isArray(msg.content)
+                && msg.content.some((b: any) => b?.type === 'tool_use')) {
+                // next must be user with tool_result content array
+                if (next.role === 'user' && Array.isArray(next.content)
+                    && next.content.some((b: any) => b?.type === 'tool_result')) {
+                    pairs.set(i, i + 1);
+                    pairs.set(i + 1, i);
+                }
+            }
+        }
+        return pairs;
+    }
+
+    /**
      * Fast synchronous trim: evicts oldest non-protected messages by character
-     * weight until under budget. No LLM call. Protects system messages and the
-     * latest user message.
+     * weight until under budget. No LLM call. Protects system messages, the
+     * latest user message, and tool_use/tool_result pairs (always kept or
+     * dropped together).
      */
     private fastTrimByWeight(state: BaseThreadState, charBudget: number): void {
         const messages = state.messages;
         if (messages.length === 0) return;
+
+        const toolPairs = BaseNode.buildToolPairMap(messages);
 
         // Find latest user message
         let latestUserIdx = -1;
@@ -502,20 +530,42 @@ export abstract class BaseNode<T extends BaseThreadState = BaseThreadState> {
         const budgetForRest = charBudget - protectedChars;
         if (budgetForRest <= 0) return;
 
-        // Walk from newest to oldest, keep until budget exhausted
+        // Walk from newest to oldest, keep until budget exhausted.
+        // Tool pairs are kept/dropped atomically.
         const kept = new Set<number>();
+        const visited = new Set<number>();
         let usedBudget = 0;
 
         for (let i = messages.length - 1; i >= 0; i--) {
+            if (visited.has(i)) continue;
             const m = messages[i];
             if (m.role === 'system' || i === latestUserIdx) {
                 kept.add(i);
+                visited.add(i);
                 continue;
             }
-            const content = typeof m.content === 'string' ? m.content : JSON.stringify(m.content);
-            if (usedBudget + content.length <= budgetForRest) {
-                kept.add(i);
-                usedBudget += content.length;
+
+            // If this message is part of a tool pair, measure both together
+            const pairedIdx = toolPairs.get(i);
+            if (pairedIdx !== undefined && !visited.has(pairedIdx)) {
+                const c1 = typeof m.content === 'string' ? m.content : JSON.stringify(m.content);
+                const p = messages[pairedIdx];
+                const c2 = typeof p.content === 'string' ? p.content : JSON.stringify(p.content);
+                const pairSize = c1.length + c2.length;
+                if (usedBudget + pairSize <= budgetForRest) {
+                    kept.add(i);
+                    kept.add(pairedIdx);
+                    usedBudget += pairSize;
+                }
+                visited.add(i);
+                visited.add(pairedIdx);
+            } else {
+                const content = typeof m.content === 'string' ? m.content : JSON.stringify(m.content);
+                if (usedBudget + content.length <= budgetForRest) {
+                    kept.add(i);
+                    usedBudget += content.length;
+                }
+                visited.add(i);
             }
         }
 
@@ -1434,24 +1484,45 @@ export abstract class BaseNode<T extends BaseThreadState = BaseThreadState> {
         // --- 2. Persist to state.messages as native tool_result (user role) ---
         // The assistant's tool_use message was already stored by appendResponse
         // with the native content array. Now store the matching tool_result.
-        state.messages.push({
-            role: 'user',
-            content: [
-                {
-                    type: 'tool_result',
-                    tool_use_id: toolCallId,
-                    content: resultContent,
+        //
+        // Anthropic requires ALL tool_result blocks for a multi-tool_use assistant
+        // message to appear in the SAME immediately-following user message.
+        // So if the last message is already a user tool_result message AND the
+        // assistant message before it contains our tool_use_id, merge into it.
+        const newToolResultBlock = {
+            type: 'tool_result',
+            tool_use_id: toolCallId,
+            content: resultContent,
+        };
+
+        const lastMsg = state.messages[state.messages.length - 1];
+        const secondToLast = state.messages.length >= 2 ? state.messages[state.messages.length - 2] : null;
+
+        const lastIsToolResult = lastMsg?.role === 'user'
+            && Array.isArray(lastMsg.content)
+            && lastMsg.content.some((b: any) => b?.type === 'tool_result');
+
+        const prevAssistantHasOurToolUse = secondToLast?.role === 'assistant'
+            && Array.isArray(secondToLast.content)
+            && secondToLast.content.some((b: any) => b?.type === 'tool_use' && b?.id === toolCallId);
+
+        if (lastIsToolResult && prevAssistantHasOurToolUse) {
+            // Merge into existing user tool_result message
+            (lastMsg.content as unknown as any[]).push(newToolResultBlock);
+        } else {
+            state.messages.push({
+                role: 'user',
+                content: [newToolResultBlock],
+                metadata: {
+                    nodeId: this.id,
+                    nodeName: this.name,
+                    kind: 'tool_result',
+                    toolName: action,
+                    success: result.success,
+                    timestamp: Date.now(),
                 },
-            ],
-            metadata: {
-                nodeId: this.id,
-                nodeName: this.name,
-                kind: 'tool_result',
-                toolName: action,
-                success: result.success,
-                timestamp: Date.now(),
-            },
-        } as any);
+            } as any);
+        }
 
         this.bumpStateVersion(state);
     }

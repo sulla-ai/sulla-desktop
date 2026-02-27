@@ -45,6 +45,7 @@ export const fsToolManifests: ToolManifest[] = [
     category: 'fs',
     schemaDef: {
     path: { type: 'string', description: 'Directory path to list.' },
+    depth: { type: 'number', optional: true, description: 'Optional recursion depth. 1 = current directory only (default).' },
   },
     operationTypes: ['read'],
     loader: () => import('./list_dir'),
