@@ -1,8 +1,33 @@
 import fs from 'fs';
 import path from 'path';
+import yaml from 'yaml';
 import paths from '@pkg/utils/paths';
 import { ExtensionMetadata } from '@pkg/main/extensions/types';
 import { Integration } from '../integrations/catalog';
+
+const MARKETPLACE_URL = 'https://raw.githubusercontent.com/sulla-ai/sulla-recipes/refs/heads/main/index.yaml';
+const CACHE_TTL_MS = 30 * 60 * 1000;
+
+export interface MarketplaceEntry {
+  slug:                  string;
+  version:               string;
+  containerd_compatible: boolean;
+  labels:                Record<string, string>;
+  title:                 string;
+  logo:                  string;
+  publisher:             string;
+  short_description:     string;
+  installable?:          string;
+}
+
+export interface InstalledExtension {
+  id:               string;
+  version:          string;
+  metadata:         ExtensionMetadata;
+  labels:           Record<string, string>;
+  availableVersion?: string;
+  canUpgrade:       boolean;
+}
 
 export interface LocalExtensionMetadata extends ExtensionMetadata {
   id: string;
@@ -49,6 +74,9 @@ export class ExtensionService {
   private extensionsMetadata: LocalExtensionMetadata[] = [];
   private headerMenuItems: HeaderMenuItem[] = [];
   private initialized = false;
+  private cachedMarketplace: MarketplaceEntry[] | undefined;
+  private marketplaceCacheExpires = 0;
+  private inFlightMarketplaceFetch: Promise<MarketplaceEntry[]> | undefined;
 
   constructor() {
     // Constructor doesn't load, call initialize() later
@@ -147,5 +175,115 @@ export class ExtensionService {
     }
     
     return allIntegrations;
+  }
+
+  async fetchMarketplaceData(): Promise<MarketplaceEntry[]> {
+    if (this.cachedMarketplace && Date.now() < this.marketplaceCacheExpires) {
+      return this.cachedMarketplace;
+    }
+
+    if (this.inFlightMarketplaceFetch) {
+      return this.inFlightMarketplaceFetch;
+    }
+
+    this.inFlightMarketplaceFetch = (async () => {
+      try {
+        const response = await fetch(MARKETPLACE_URL);
+
+        if (!response.ok) {
+          console.error(`[ExtensionService] Failed to fetch marketplace: ${response.status}`);
+          return this.cachedMarketplace ?? [];
+        }
+
+        const text = await response.text();
+        const parsed = yaml.parse(text) as { plugins?: MarketplaceEntry[] };
+
+        this.cachedMarketplace = parsed.plugins ?? [];
+        this.marketplaceCacheExpires = Date.now() + CACHE_TTL_MS;
+
+        return this.cachedMarketplace;
+      } catch (ex) {
+        console.error(`[ExtensionService] Error fetching marketplace: ${ex}`);
+        return this.cachedMarketplace ?? [];
+      } finally {
+        this.inFlightMarketplaceFetch = undefined;
+      }
+    })();
+
+    return this.inFlightMarketplaceFetch;
+  }
+
+  async fetchInstalledExtensions(): Promise<InstalledExtension[]> {
+    try {
+      const response = await fetch(`${this.backendUrl}/v1/extensions`, {
+        headers: this.getRequestHeaders(),
+      });
+
+      if (!response.ok) {
+        console.error(`[ExtensionService] Failed to fetch installed extensions: ${response.status}`);
+        return [];
+      }
+
+      const data: Record<string, { version: string; metadata: ExtensionMetadata; labels: Record<string, string> }> = await response.json();
+      const marketplace = await this.fetchMarketplaceData();
+
+      return Object.entries(data).map(([id, ext]) => {
+        const marketEntry = marketplace.find(m => m.slug === id);
+        let canUpgrade = false;
+
+        if (marketEntry) {
+          try {
+            const { default: semver } = require('semver') as { default: typeof import('semver') };
+            canUpgrade = semver.gt(marketEntry.version, ext.version);
+          } catch { /* ignore */ }
+        }
+
+        return {
+          id,
+          version:          ext.version,
+          metadata:         ext.metadata,
+          labels:           ext.labels,
+          availableVersion: marketEntry?.version,
+          canUpgrade,
+        };
+      });
+    } catch (error) {
+      console.error('[ExtensionService] Failed to fetch installed extensions:', error);
+      return [];
+    }
+  }
+
+  async installExtension(id: string): Promise<{ ok: boolean; error?: string }> {
+    try {
+      const response = await fetch(`${this.backendUrl}/v1/extensions/install?id=${encodeURIComponent(id)}`, {
+        method:  'POST',
+        headers: this.getRequestHeaders(),
+      });
+
+      if (!response.ok) {
+        return { ok: false, error: response.statusText };
+      }
+
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, error: String(error) };
+    }
+  }
+
+  async uninstallExtension(id: string): Promise<{ ok: boolean; error?: string }> {
+    try {
+      const response = await fetch(`${this.backendUrl}/v1/extensions/uninstall?id=${encodeURIComponent(id)}`, {
+        method:  'POST',
+        headers: this.getRequestHeaders(),
+      });
+
+      if (!response.ok) {
+        return { ok: false, error: response.statusText };
+      }
+
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, error: String(error) };
+    }
   }
 }

@@ -2,7 +2,7 @@
 import { ChildProcessByStdio, spawn, SpawnOptionsWithStdioTuple } from 'child_process';
 import http from 'http';
 import path from 'path';
-import { Readable } from 'stream';import * as yaml from 'js-yaml';
+import { Readable } from 'stream';
 
 import Electron, { IpcMainEvent, IpcMainInvokeEvent, net } from 'electron';
 import _ from 'lodash';
@@ -13,7 +13,7 @@ import {
   Extension, ExtensionErrorCode, ExtensionManager, SpawnOptions, SpawnResult,
 } from './types';
 
-import MARKETPLACE_DATA from '@pkg/assets/extension-data.yaml';
+import { fetchMarketplaceData } from './marketplaceData';
 import type { ContainerEngineClient } from '@pkg/backend/containerClient';
 import { ContainerEngine, Settings } from '@pkg/config/settings';
 import { getIpcMainProxy } from '@pkg/main/ipcMain';
@@ -280,7 +280,7 @@ export class ExtensionManagerImpl implements ExtensionManager {
         continue;
       }
 
-      if (!this.isSupported(repo)) {
+      if (!(await this.isSupported(repo))) {
         // If this extension is explicitly not supported, don't re-install it.
         console.log(`Uninstalling unsupported extension ${ repo }:${ tag }`);
         mainEvents.emit('settings-write', { application: { extensions: { installed: { [repo]: undefined } } } });
@@ -310,7 +310,7 @@ export class ExtensionManagerImpl implements ExtensionManager {
    * @note This is a temporary hack while we have a hard-coded list of
    * extensions.
    */
-  protected isSupported(repo: string): boolean {
+  protected async isSupported(repo: string): Promise<boolean> {
     if (!this.containerd) {
       return true;
     }
@@ -323,8 +323,9 @@ export class ExtensionManagerImpl implements ExtensionManager {
 
     if (!this.#supportedExtensions) {
       const supported: Record<string, boolean> = {};
+      const marketplaceData = await fetchMarketplaceData();
 
-      for (const item of MARKETPLACE_DATA) {
+      for (const item of marketplaceData) {
         const slug = parseImageReference(item.slug);
 
         if (!slug) {

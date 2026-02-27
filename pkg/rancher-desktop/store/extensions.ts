@@ -1,11 +1,18 @@
 import semver from 'semver';
 import { GetterTree, MutationTree } from 'vuex';
+import yaml from 'yaml';
 
 import { fetchAPI } from './credentials';
 import { ActionTree, MutationsType } from './ts-helpers';
 
-import MARKETPLACE_DATA from '@pkg/assets/extension-data.yaml';
 import type { ExtensionMetadata } from '@pkg/main/extensions/types';
+
+const MARKETPLACE_URL = 'https://raw.githubusercontent.com/sulla-ai/sulla-recipes/refs/heads/main/index.yaml';
+const CACHE_TTL_MS = 30 * 60 * 1000;
+
+let cachedMarketplaceData: MarketplaceData[] | undefined;
+let cacheExpiresAt = 0;
+let inFlightMarketplaceFetch: Promise<MarketplaceData[]> | undefined;
 
 /**
  * BackendExtensionState describes the API response from the API backend.
@@ -35,7 +42,8 @@ export type ExtensionState = BackendExtensionState & {
 };
 
 interface ExtensionsState {
-  extensions: Record<string, ExtensionState>;
+  extensions:      Record<string, ExtensionState>;
+  marketplaceData: MarketplaceData[];
 }
 
 export interface MarketplaceData {
@@ -47,19 +55,66 @@ export interface MarketplaceData {
   logo:                  string;
   publisher:             string;
   short_description:     string;
+  installable?:          string;
 }
 
-export const state: () => ExtensionsState = () => ({ extensions: {} });
+async function fetchMarketplaceData(): Promise<MarketplaceData[]> {
+  if (cachedMarketplaceData && Date.now() < cacheExpiresAt) {
+    return cachedMarketplaceData;
+  }
+
+  if (inFlightMarketplaceFetch) {
+    return inFlightMarketplaceFetch;
+  }
+
+  inFlightMarketplaceFetch = (async() => {
+    try {
+      const response = await fetch(MARKETPLACE_URL);
+
+      if (!response.ok) {
+        console.error(`Failed to fetch marketplace data: ${ response.status }`);
+
+        return cachedMarketplaceData ?? [];
+      }
+
+      const text = await response.text();
+      const parsed = yaml.parse(text) as { plugins?: MarketplaceData[] };
+
+      cachedMarketplaceData = parsed.plugins ?? [];
+      cacheExpiresAt = Date.now() + CACHE_TTL_MS;
+
+      return cachedMarketplaceData;
+    } catch (ex) {
+      console.error(`Error fetching marketplace data: ${ ex }`);
+
+      return cachedMarketplaceData ?? [];
+    } finally {
+      inFlightMarketplaceFetch = undefined;
+    }
+  })();
+
+  return inFlightMarketplaceFetch;
+}
+
+export const state: () => ExtensionsState = () => ({ extensions: {}, marketplaceData: [] });
 
 export const mutations = {
   SET_EXTENSIONS(state, extensions: Record<string, ExtensionState>) {
     state.extensions = extensions;
   },
+  SET_MARKETPLACE_DATA(state, data: MarketplaceData[]) {
+    state.marketplaceData = data;
+  },
 } satisfies Partial<MutationsType<ExtensionsState>> & MutationTree<ExtensionsState>;
 
 export const actions = {
   async fetch({ commit, rootState }) {
-    const response = await fetchAPI('/v1/extensions', rootState);
+    const [response, marketplaceData] = await Promise.all([
+      fetchAPI('/v1/extensions', rootState),
+      fetchMarketplaceData(),
+    ]);
+
+    commit('SET_MARKETPLACE_DATA', marketplaceData);
 
     if (!response.ok) {
       console.log(`fetchExtensions: failed: status: ${ response.status }:${ response.statusText }`);
@@ -68,7 +123,7 @@ export const actions = {
     }
     const backendState: Record<string, BackendExtensionState> = await response.json();
     const result = Object.fromEntries(Object.entries(backendState).map(([id, data]) => {
-      const marketplaceEntry = (MARKETPLACE_DATA as MarketplaceData[]).find(ext => ext.slug === id);
+      const marketplaceEntry = marketplaceData.find(ext => ext.slug === id);
       const frontendState: ExtensionState = {
         ...data, id, canUpgrade: false,
       };
@@ -127,7 +182,7 @@ export const getters = {
   installedExtensions(state): ExtensionState[] {
     return Object.values(state.extensions);
   },
-  marketData(): MarketplaceData[] {
-    return MARKETPLACE_DATA;
+  marketData(state): MarketplaceData[] {
+    return state.marketplaceData;
   },
 } satisfies GetterTree<ExtensionsState, any>;

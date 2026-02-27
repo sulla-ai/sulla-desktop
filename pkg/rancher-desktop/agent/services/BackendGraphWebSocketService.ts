@@ -191,6 +191,8 @@ export class BackendGraphWebSocketService {
         : '';
       const shouldResumeFromCurrentNode = !!resumeNodeId && resumeNodeId !== 'input_handler';
 
+      state.metadata.consecutiveSameNode = 0;
+      state.metadata.iterations = 0;
       state.metadata.cycleComplete = false;
       state.metadata.waitingForUser = false;
       console.log('[BackendGraphWS] Reset pause flags, starting graph execution');

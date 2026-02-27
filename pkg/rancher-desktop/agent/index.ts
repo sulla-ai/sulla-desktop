@@ -16,6 +16,7 @@ export { FrontendGraphWebSocketService } from './services/FrontendGraphWebSocket
 export { getBackendGraphWebSocketService, BackendGraphWebSocketService } from './services/BackendGraphWebSocketService';
 export { getIntegrationService, IntegrationService } from './services/IntegrationService';
 export { getExtensionService, ExtensionService, LocalExtensionMetadata } from './services/ExtensionService';
+export type { MarketplaceEntry, InstalledExtension } from './services/ExtensionService';
 
 // Models
 export { AgentPersonaService } from './database/models/AgentPersonaModel';

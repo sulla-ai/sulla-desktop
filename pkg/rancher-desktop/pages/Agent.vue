@@ -991,11 +991,6 @@ const handleModelSwitcherClick = () => {
   modelSelector.toggleModelMenu();
 };
 
-// Watch for changes in chat messages
-watch(() => chatController.messages.value.length, (newLength, oldLength) => {
-  console.log('[Agent] chatController messages length changed:', oldLength, '->', newLength);
-  console.log('[Agent] Current messages:', chatController.messages.value.map(m => ({ role: m.role, content: m.content.slice(0, 50) + '...' })));
-});
 </script>
 
 <style scoped>

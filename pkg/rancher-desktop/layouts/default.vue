@@ -60,7 +60,6 @@ export default {
     routes() {
       const badges = {
         '/Diagnostics': this.diagnosticsCount,
-        '/Extensions':  this.extensionUpgradeCount,
       };
 
       return mainRoutes.map((route) => {
@@ -77,10 +76,6 @@ export default {
     /** @returns {number} The number of diagnostics errors. */
     diagnosticsCount() {
       return this.diagnostics.filter(diagnostic => !diagnostic.mute).length;
-    },
-    /** @returns {number} The number of extensions with upgrade available. */
-    extensionUpgradeCount() {
-      return this.installedExtensions.filter(ext => ext.canUpgrade).length;
     },
     ...mapState('credentials', ['credentials']),
     ...mapTypedState('diagnostics', ['diagnostics']),

@@ -122,6 +122,9 @@ export class FrontendGraphWebSocketService {
         && resumeNodeId !== 'input_handler'
         && resumeNodeId !== 'output';
 
+      state.metadata.consecutiveSameNode = 0;
+      state.metadata.iterations = 0;
+      state.metadata.agentLoopCount = 0;   
       state.metadata.cycleComplete = false;
       state.metadata.waitingForUser = false;
 
@@ -136,7 +139,7 @@ export class FrontendGraphWebSocketService {
         this.emitSystemMessage(`Error: ${err.message || String(err)}`);
       }
     } finally {
-      // Reset here — after graph run completes
+      // Reset here — after graph run completes this is fine
       state.metadata.consecutiveSameNode = 0;
       state.metadata.iterations = 0;
       (state.metadata as any).agentLoopCount = 0;

@@ -18,6 +18,7 @@ import AgentKnowledgeBaseCreate from '../pages/AgentKnowledgeBaseCreate.vue';
 import AgentKnowledgeBaseSearch from '../pages/AgentKnowledgeBaseSearch.vue';
 import AgentIntegrations from '../pages/AgentIntegrations.vue';
 import AgentIntegrationDetail from '../pages/AgentIntegrationDetail.vue';
+import AgentExtensions from '../pages/AgentExtensions.vue';
 import AgentAutomations from '../pages/AgentAutomations.vue';
 import AgentKnowledgeBaseSections from '../pages/AgentKnowledgeBaseSections.vue';
 import AgentKnowledgeBaseEdit from '../pages/AgentKnowledgeBaseEdit.vue';
@@ -37,6 +38,7 @@ const router = createRouter({
     { path: '/KnowledgeBase/Edit/:slug', component: AgentKnowledgeBaseEdit, name: 'AgentKnowledgeBaseEdit' },
     { path: '/Integrations', component: AgentIntegrations, name: 'AgentIntegrations' },
     { path: '/Integrations/:id', component: AgentIntegrationDetail, name: 'AgentIntegrationDetail' },
+    { path: '/Extensions', component: AgentExtensions, name: 'AgentExtensions' },
     { path: '/Automations', component: AgentAutomations, name: 'AgentAutomations' },
     { path: '/FirstRun', component: FirstRun, name: 'FirstRun' },
     { path: '/Extension/:name/:path*', component: ExtensionView, name: 'ExtensionView' },

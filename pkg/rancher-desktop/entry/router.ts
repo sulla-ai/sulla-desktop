@@ -4,7 +4,6 @@ import Containers from '../pages/Containers.vue';
 import DenyRoot from '../pages/DenyRoot.vue';
 import Diagnostics from '../pages/Diagnostics.vue';
 import Dialog from '../pages/Dialog.vue';
-import Extensions from '../pages/Extensions.vue';
 import FirstRun from '../pages/FirstRun.vue';
 import General from '../pages/General.vue';
 import Images from '../pages/Images.vue';
@@ -68,9 +67,6 @@ export default createRouter({
     },
     {
       path: '/Diagnostics', component: Diagnostics, name: 'Diagnostics',
-    },
-    {
-      path: '/Extensions', component: Extensions, name: 'Extensions',
     },
     {
       path: '/extensions/:id/:root(.*)/:src', component: ExtensionsItem, name: 'rdx-root-src-id',

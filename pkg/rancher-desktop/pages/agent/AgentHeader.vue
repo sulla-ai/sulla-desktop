@@ -52,6 +52,13 @@
           Integrations
         </router-link>
         <router-link
+          to="/Extensions"
+          class="text-sm font-semibold"
+          :class="route.path === '/Extensions' ? 'text-[#0d0d0d] dark:text-white' : 'text-[#0d0d0d]/60 hover:text-[#0d0d0d] dark:text-white/60 dark:hover:text-white'"
+        >
+          Extensions
+        </router-link>
+        <router-link
           v-for="item in extensionMenuItems"
           :key="item.link"
           :to="item.link"
@@ -142,6 +149,14 @@
           @click="toggleMobileMenu"
         >
           Integrations
+        </router-link>
+        <router-link
+          to="/Extensions"
+          class="block py-3 px-4 text-base font-semibold rounded-lg transition-colors"
+          :class="route.path === '/Extensions' ? 'text-[#0d0d0d] bg-slate-100 dark:text-white dark:bg-slate-800' : 'text-[#0d0d0d]/60 hover:text-[#0d0d0d] hover:bg-slate-50 dark:text-white/60 dark:hover:text-white dark:hover:bg-slate-800'"
+          @click="toggleMobileMenu"
+        >
+          Extensions
         </router-link>
         <router-link
           v-for="item in extensionMenuItems"

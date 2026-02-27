@@ -7,5 +7,4 @@ export const mainRoutes = [
   { route: '/Snapshots' },
   { route: '/Troubleshooting' },
   { route: '/Diagnostics' },
-  { route: '/Extensions' },
 ];
