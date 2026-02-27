@@ -92,6 +92,12 @@ export interface Extension {
   readonly labels: Promise<Record<string, string>>;
 
   /**
+   * Extra URLs registered by this extension (e.g. dashboards, webmail).
+   * Legacy extensions return an empty array.
+   */
+  readonly extraUrls: Promise<Array<{ label: string; url: string }>>;
+
+  /**
    * Install this extension.
    * @param allowedImages The list of extension images that are allowed to be
    *        used; if all images are allowed, pass in undefined.
@@ -122,6 +128,18 @@ export interface Extension {
    * directory name).
    */
   extractFile(sourcePath: string, destinationPath: string): Promise<void>;
+
+  /**
+   * Start this extension (e.g. docker compose up).
+   * Called after install and on platform boot.
+   */
+  start(): Promise<void>;
+
+  /**
+   * Perform any shutdown tasks for this extension (e.g. stop containers).
+   * Called when the application is quitting.
+   */
+  shutdown(): Promise<void>;
 }
 
 export interface ExtensionManager {

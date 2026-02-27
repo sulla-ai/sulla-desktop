@@ -16,6 +16,7 @@ import * as serverHelper from '@pkg/main/serverHelper';
 import { Snapshot } from '@pkg/main/snapshots/types';
 import Logging from '@pkg/utils/logging';
 import paths from '@pkg/utils/paths';
+import { sullaLog } from '@pkg/utils/sullaLog';
 import { jsonStringifyWithWhiteSpace } from '@pkg/utils/stringify';
 import { RecursivePartial } from '@pkg/utils/typeUtils';
 
@@ -242,7 +243,7 @@ export class HttpCommandServer {
       next();
     }
 
-    console.log(`Error handling ${ request.path }`, err);
+    sullaLog({ topic: 'http-server', level: 'error', message: `500 error handling ${ request.method } ${ request.path }`, error: err, data: { query: request.query } });
     response.type('txt').sendStatus(500);
   }
 
@@ -730,6 +731,7 @@ export class HttpCommandServer {
       response.status(400).type('txt').send(`Invalid extension id ${ JSON.stringify(id) }: not a string.`);
     } else {
       response.writeProcessing();
+      sullaLog({ topic: 'http-server', level: 'info', message: `Installing extension: ${ id }` });
       const { status, data } = await this.commandWorker.installExtension(id, 'install');
 
       if (data) {

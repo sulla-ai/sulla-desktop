@@ -1,0 +1,65 @@
+/**
+ * InstallationManifest matches the schema of a remote installation.yaml file
+ * from the sulla-recipes repository.
+ *
+ * The system is intentionally dumb:
+ *  - `setup` is a list of shell commands run in order during install.
+ *  - `commands` are shell commands for start/stop/restart/status/update/logs.
+ *  - `${APP_DIR}` is replaced with the extension directory path.
+ *  - `${COMPOSE_FILE}` is replaced with the full path to the compose file.
+ *  - The recipe author is responsible for putting the right commands in setup
+ *    (e.g. git clone, generate config, etc.)
+ */
+export interface InstallationManifest {
+  id:          string;
+  name:        string;
+  description: string;
+  icon:        string;
+  version:     string;
+  category:    string;
+
+  compose?: {
+    composeFile?: string;
+    envFile?:     string;
+  };
+
+  setup?: SetupStep[];
+
+  commands?: {
+    start?:   string;
+    stop?:    string;
+    restart?: string;
+    status?:  string;
+    update?:  string;
+    logs?:    string;
+  };
+
+  defaultPort?:   number;
+  adminPath?:     string;
+  webmailPath?:   string;
+  openInBrowser?: boolean;
+
+  extraUrls?: ExtraUrl[];
+
+  env?: Record<string, string>;
+}
+
+/**
+ * A setup step is simply a shell command to run during installation.
+ * The system runs each command in order via /bin/sh.
+ * `${APP_DIR}` is substituted with the extension directory.
+ */
+export interface SetupStep {
+  command:   string;
+  cwd?:      string;
+  /**
+   * If true (default), a failure in this step will not block installation.
+   * The error is logged and the next step proceeds.
+   */
+  optional?: boolean;
+}
+
+export interface ExtraUrl {
+  label: string;
+  url:   string;
+}

@@ -71,6 +71,12 @@ export class Tray {
     },
     { type: 'separator' },
     {
+      id:      'extensions',
+      label:   'Extensions',
+      submenu: [{ label: 'No extensions installed', enabled: false }],
+    },
+    { type: 'separator' },
+    {
       id:    'help',
       label: 'Help',
       icon:  path.join(paths.resources, 'icons', 'help-circle-16.png'),
@@ -235,6 +241,12 @@ export class Tray {
     mainEvents.emit('backend-locked-check');
     mainEvents.on('k8s-check-state', this.k8sStateChangedEvent);
     mainEvents.on('settings-update', this.settingsUpdateEvent);
+
+    // Refresh the Extensions submenu when extensions change
+    mainEvents.on('settings-update', () => {
+      this.refreshExtensionsMenu();
+    });
+    this.refreshExtensionsMenu();
 
     // If the network connectivity diagnostic changes results, update it here.
     mainEvents.on('diagnostics-event', payload => {
@@ -469,5 +481,78 @@ export class Tray {
 
       this.trayMenu.setContextMenu(contextMenu);
     });
+  }
+
+  /**
+   * Refresh the Extensions submenu from the backend API.
+   * Each installed extension with extraUrls gets a submenu entry;
+   * hovering over the extension name shows its registered URLs.
+   */
+  protected async refreshExtensionsMenu(): Promise<void> {
+    try {
+      const credentials = await mainEvents.invoke('api-get-credentials');
+
+      if (!credentials) {
+        return;
+      }
+
+      const authHeader = `Basic ${ Buffer.from(`${ credentials.user }:${ credentials.password }`).toString('base64') }`;
+      const response = await fetch('http://127.0.0.1:6107/v1/extensions', {
+        headers: { Authorization: authHeader },
+      });
+
+      if (!response.ok) {
+        return;
+      }
+
+      const data: Record<string, {
+        version: string;
+        metadata: any;
+        labels: Record<string, string>;
+        extraUrls?: Array<{ label: string; url: string }>;
+      }> = await response.json();
+
+      const extensionsMenu = this.contextMenuItems.find(item => item.id === 'extensions');
+
+      if (!extensionsMenu) {
+        return;
+      }
+
+      const entries = Object.entries(data);
+
+      if (entries.length === 0) {
+        extensionsMenu.submenu = [{ label: 'No extensions installed', enabled: false }];
+      } else {
+        extensionsMenu.submenu = entries.map(([id, ext]) => {
+          const title = ext.labels?.['org.opencontainers.image.title'] || id;
+          const urls = ext.extraUrls ?? [];
+
+          if (urls.length === 0) {
+            return {
+              label:   title,
+              enabled: false,
+            };
+          }
+
+          return {
+            label:   title,
+            submenu: urls.map(link => ({
+              label: link.label,
+              click: () => {
+                void Electron.shell.openExternal(link.url);
+              },
+            })),
+          };
+        });
+      }
+
+      if (!this.trayMenu.isDestroyed()) {
+        const contextMenu = Electron.Menu.buildFromTemplate(this.contextMenuItems);
+
+        this.trayMenu.setContextMenu(contextMenu);
+      }
+    } catch (ex) {
+      console.debug(`Failed to refresh extensions tray menu: ${ ex }`);
+    }
   }
 }

@@ -9,6 +9,7 @@ import _ from 'lodash';
 import semver from 'semver';
 
 import { ExtensionErrorImpl, ExtensionImpl } from './extensions';
+import { createRecipeExtension, RecipeExtensionImpl } from './recipeExtension';
 import {
   Extension, ExtensionErrorCode, ExtensionManager, SpawnOptions, SpawnResult,
 } from './types';
@@ -59,6 +60,12 @@ export class ExtensionManagerImpl implements ExtensionManager {
    * extensions are listed.
    */
   protected extensions: Record<string, Record<string, ExtensionImpl>> = {};
+
+  /**
+   * Recipe-based extensions keyed by slug, then version.
+   * These use an installation.yaml manifest instead of Docker image metadata.
+   */
+  protected recipeExtensions: Record<string, Record<string, RecipeExtensionImpl>> = {};
 
   constructor(client: ContainerEngineClient, containerd: boolean) {
     this.client = client;
@@ -301,6 +308,9 @@ export class ExtensionManagerImpl implements ExtensionManager {
     }
     await Promise.all(tasks);
 
+    // Start all installed extensions (recipe extensions run their start command)
+    await this.startInstalledExtensions();
+
     // Register a listener to shut down extensions on quit
     mainEvents.handle('extensions/shutdown', this.triggerExtensionShutdown);
   }
@@ -351,18 +361,25 @@ export class ExtensionManagerImpl implements ExtensionManager {
     // The build process uses an older TypeScript that can't infer imageName correctly.
     imageName ??= image;
 
-    this.extensions[imageName] ??= {};
-    const extGroup = this.extensions[imageName];
     const preferInstalled = options?.preferInstalled ?? true;
 
+    // Check if this is a recipe-based extension (has an installable URL in the catalog)
+    const recipeExt = await this.getRecipeExtension(imageName, tag, preferInstalled);
+
+    if (recipeExt) {
+      return recipeExt;
+    }
+
+    // Fall back to legacy Docker-image-based extension
+    this.extensions[imageName] ??= {};
+    const extGroup = this.extensions[imageName];
+
     if (tag) {
-      // Requested a specific tag; create it if we don't have it.
       extGroup[tag] ||= new ExtensionImpl(imageName, tag, this.client);
 
       return extGroup[tag];
     }
 
-    // No tag specified; grab the installed version, if available
     if (preferInstalled) {
       for (const ext of Object.values(extGroup)) {
         if (await ext.isInstalled()) {
@@ -371,11 +388,70 @@ export class ExtensionManagerImpl implements ExtensionManager {
       }
     }
 
-    // If we get here, no tag is specified and nothing is installed.
     tag = await this.findBestVersion(imageName);
     extGroup[tag] ||= new ExtensionImpl(imageName, tag, this.client);
 
     return extGroup[tag];
+  }
+
+  /**
+   * Check the marketplace catalog for a recipe-based extension.
+   * Returns a RecipeExtensionImpl if the catalog entry has an installable URL,
+   * otherwise returns undefined to fall back to the legacy flow.
+   */
+  protected async getRecipeExtension(
+    slug: string,
+    tag: string | undefined,
+    preferInstalled: boolean,
+  ): Promise<RecipeExtensionImpl | undefined> {
+    // Check if we already have a cached recipe extension
+    const recipeGroup = this.recipeExtensions[slug];
+
+    if (recipeGroup) {
+      if (tag && recipeGroup[tag]) {
+        return recipeGroup[tag];
+      }
+      if (preferInstalled) {
+        for (const ext of Object.values(recipeGroup)) {
+          if (await ext.isInstalled()) {
+            return ext;
+          }
+        }
+      }
+      if (tag) {
+        // We know this slug is recipe-based; create a new version entry
+        const ext = await createRecipeExtension(slug, tag);
+
+        if (ext) {
+          recipeGroup[tag] = ext;
+
+          return ext;
+        }
+      }
+    }
+
+    // Check marketplace catalog
+    const entries = await fetchMarketplaceData();
+    const entry = entries.find(e => e.slug === slug);
+
+    if (!entry?.installable) {
+      return undefined;
+    }
+
+    // This is a recipe-based extension
+    const version = tag || entry.version;
+
+    this.recipeExtensions[slug] ??= {};
+
+    if (!this.recipeExtensions[slug][version]) {
+      const ext = await createRecipeExtension(slug, version);
+
+      if (ext) {
+        this.recipeExtensions[slug][version] = ext;
+      }
+    }
+
+    return this.recipeExtensions[slug][version];
   }
 
   /**
@@ -424,10 +500,13 @@ export class ExtensionManagerImpl implements ExtensionManager {
   }
 
   async getInstalledExtensions() {
-    // Get a list of all extensions, installed or not.
-    const exts = Object.values(this.extensions).flatMap(group => Object.values(group));
+    // Get a list of all extensions (legacy + recipe), installed or not.
+    const legacyExts: Extension[] = Object.values(this.extensions).flatMap(group => Object.values(group));
+    const recipeExts: Extension[] = Object.values(this.recipeExtensions).flatMap(group => Object.values(group));
+    const allExts = [...legacyExts, ...recipeExts];
+
     // Calculate if each is installed (in parallel).
-    const states = await Promise.all(exts.map(async ext => [ext, await ext.isInstalled()] as const));
+    const states = await Promise.all(allExts.map(async ext => [ext, await ext.isInstalled()] as const));
 
     // Return the extensions that are marked as installed.
     return states.filter(([, state]) => state).map(([ext]) => ext);
@@ -638,6 +717,22 @@ export class ExtensionManagerImpl implements ExtensionManager {
     }));
 
     mainEvents.handle('extensions/shutdown', undefined);
+  }
+
+  /**
+   * Start all installed extensions. Recipe extensions will run their
+   * `commands.start` from installation.yaml; legacy extensions are a no-op.
+   */
+  protected async startInstalledExtensions(): Promise<void> {
+    const installed = await this.getInstalledExtensions();
+
+    await Promise.allSettled(installed.map(async(ext) => {
+      try {
+        await ext.start();
+      } catch (ex) {
+        console.error(`Failed to start extension ${ ext.id } on boot:`, ex);
+      }
+    }));
   }
 
   triggerExtensionShutdown = async() => {

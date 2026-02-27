@@ -233,6 +233,36 @@
 
                     <div class="flex items-center justify-between mt-3">
                       <div class="flex items-center gap-2">
+                        <!-- Extra URLs dropdown -->
+                        <div
+                          v-if="ext.extraUrls && ext.extraUrls.length > 0"
+                          class="relative"
+                        >
+                          <button
+                            class="inline-flex items-center gap-1 rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-emerald-700"
+                            @click="toggleUrlDropdown(ext.id)"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+                            Open
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                          </button>
+                          <div
+                            v-if="openDropdown === ext.id"
+                            class="absolute left-0 bottom-full mb-1 z-50 min-w-48 rounded-lg border border-gray-200 bg-white py-1 shadow-lg dark:border-gray-600 dark:bg-slate-700"
+                          >
+                            <a
+                              v-for="(link, idx) in ext.extraUrls"
+                              :key="idx"
+                              :href="link.url"
+                              class="flex items-center gap-2 px-3 py-2 text-xs text-slate-700 transition-colors hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-600"
+                              @click.prevent="openExternalUrl(link.url)"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 shrink-0 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+                              {{ link.label }}
+                            </a>
+                          </div>
+                        </div>
+
                         <button
                           v-if="!busy[ext.id] && ext.canUpgrade"
                           class="inline-flex items-center rounded-md bg-sky-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-sky-700"
@@ -291,6 +321,25 @@ const marketplaceData = ref<MarketplaceEntry[]>([]);
 const installedExtensions = ref<InstalledExtension[]>([]);
 const busy = reactive<Record<string, string | null>>({});
 const errors = reactive<Record<string, string | null>>({});
+const openDropdown = ref<string | null>(null);
+
+function toggleUrlDropdown(id: string) {
+  openDropdown.value = openDropdown.value === id ? null : id;
+}
+
+function openExternalUrl(url: string) {
+  openDropdown.value = null;
+  window.open(url, '_blank');
+}
+
+// Close dropdown when clicking outside
+if (typeof document !== 'undefined') {
+  document.addEventListener('click', (e: MouseEvent) => {
+    if (openDropdown.value && !(e.target as HTMLElement).closest?.('.relative')) {
+      openDropdown.value = null;
+    }
+  });
+}
 
 const categories = computed(() => {
   const counts = new Map<string, number>();

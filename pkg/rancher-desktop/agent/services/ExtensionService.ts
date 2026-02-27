@@ -25,6 +25,7 @@ export interface InstalledExtension {
   version:          string;
   metadata:         ExtensionMetadata;
   labels:           Record<string, string>;
+  extraUrls:        Array<{ label: string; url: string }>;
   availableVersion?: string;
   canUpgrade:       boolean;
 }
@@ -224,7 +225,7 @@ export class ExtensionService {
         return [];
       }
 
-      const data: Record<string, { version: string; metadata: ExtensionMetadata; labels: Record<string, string> }> = await response.json();
+      const data: Record<string, { version: string; metadata: ExtensionMetadata; labels: Record<string, string>; extraUrls?: Array<{ label: string; url: string }> }> = await response.json();
       const marketplace = await this.fetchMarketplaceData();
 
       return Object.entries(data).map(([id, ext]) => {
@@ -243,6 +244,7 @@ export class ExtensionService {
           version:          ext.version,
           metadata:         ext.metadata,
           labels:           ext.labels,
+          extraUrls:        ext.extraUrls ?? [],
           availableVersion: marketEntry?.version,
           canUpgrade,
         };

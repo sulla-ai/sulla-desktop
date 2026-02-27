@@ -1722,9 +1722,10 @@ class BackgroundCommandWorker implements CommandWorkerInterface {
     }
     const extensions = await extensionManager.getInstalledExtensions();
     const entries = await Promise.all(extensions.map(async x => [x.id, {
-      version:  x.version,
-      metadata: await x.metadata,
-      labels:   await x.labels,
+      version:   x.version,
+      metadata:  await x.metadata,
+      labels:    await x.labels,
+      extraUrls: await x.extraUrls,
     }] as const));
 
     return Object.fromEntries(entries);

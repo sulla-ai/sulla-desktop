@@ -189,6 +189,10 @@ export class ExtensionImpl implements Extension {
     }
   }
 
+  get extraUrls(): Promise<Array<{ label: string; url: string }>> {
+    return Promise.resolve([]);
+  }
+
   /** Extension image labels */
   get labels(): Promise<Record<string, string>> {
     this._labels ??= (async() => {
@@ -754,6 +758,11 @@ export class ExtensionImpl implements Extension {
 
   async readFile(sourcePath: string): Promise<string> {
     return await this.client.readFile(this.image, sourcePath, { namespace: this.extensionNamespace });
+  }
+
+  async start() {
+    // Legacy Docker-image-based extensions don't have a start command.
+    // Their containers are managed by the container engine directly.
   }
 
   async shutdown() {
