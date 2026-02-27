@@ -3,7 +3,7 @@ import type { ToolManifest } from '../registry';
 export const skillsToolManifests: ToolManifest[] = [
   {
     name: 'search_skills',
-    description: 'Search available skills by description or tag. ALWAYS call this first for any non-trivial or repeatable task.',
+    description: 'Search available skills by description or tag. Use when you intend to load or create a skill.',
     category: 'meta',
     schemaDef: {
       query: { type: 'string', description: 'Search query — keywords to match against skill names, descriptions, and tags.' },

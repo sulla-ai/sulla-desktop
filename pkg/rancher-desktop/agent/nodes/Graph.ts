@@ -13,7 +13,6 @@ import { PlannerNode } from './PlannerNode';
 import { ReasoningNode } from './ReasoningNode';
 import { ActionNode } from './ActionNode';
 import { AgentNode } from './AgentNode';
-import { MacroNode } from './MacroNode';
 import { SkillCriticNode } from './SkillCriticNode';
 import { OutputNode } from './OutputNode';
 
@@ -25,6 +24,7 @@ import { OutputNode } from './OutputNode';
 const MAX_PLANNER_RETRIES = 15;
 const MAX_REASONING_RETRIES = 15;
 const MAX_ACTION_LOOPS = 14;
+const MAX_AGENT_LOOPS = 20;
 
 // ============================================================================
 // DEFAULT SETTINGS
@@ -243,19 +243,6 @@ export interface AgentGraphState extends BaseThreadState {
       updatedAt?: number;
     };
     agentLoopCount?: number;
-    macro?: {
-      prd?: string;
-      next_step?: string;
-      status?: 'DRAFT' | 'FINAL' | 'SKIP';
-      skipped?: boolean;
-      cycle_count?: number;
-      attempts?: Array<{
-        status: string;
-        summary: string;
-        timestamp: number;
-      }>;
-      updatedAt?: number;
-    };
   };
 }
 
@@ -715,13 +702,7 @@ export function createGeneralGraph(): Graph<GeneralGraphState> {
 /**
  * Create the AgentGraph for independent agent execution.
  * 
- * This graph is a simplified alternative to SkillGraph:
- * - MacroNode builds/maintains a PRD and produces next-steps
- * - AgentNode executes with full tool access, guided by PRD
- * - Single message thread (no separate lanes)
- * - Agent node loops on itself until DONE or BLOCKED
- * 
- * Flow: Input → Macro → Agent (loop until done)
+ * Flow: Input → Agent (loops on itself up to 20 times until DONE or BLOCKED)
  * 
  * @returns {Graph} Fully configured AgentGraph
  */
@@ -729,14 +710,12 @@ export function createAgentGraph(): Graph<AgentGraphState> {
   const graph = new Graph<AgentGraphState>();
 
   graph.addNode(new InputHandlerNode());  // id: 'input_handler'
-  graph.addNode(new MacroNode());         // id: 'macro'
   graph.addNode(new AgentNode());         // id: 'agent'
 
-  // Sequential entry: Input → Macro → Agent
-  graph.addEdge('input_handler', 'macro');
-  graph.addEdge('macro', 'agent');
+  // Input → Agent
+  graph.addEdge('input_handler', 'agent');
 
-  // Agent routing: done/blocked → end, continue → macro, in_progress → agent
+  // Agent routing: done/blocked → end, otherwise loop up to MAX_AGENT_LOOPS
   graph.addConditionalEdge('agent', state => {
     const agentMeta = (state.metadata as any).agent || {};
     const agentStatus = String(agentMeta.status || '').trim().toLowerCase();
@@ -756,20 +735,12 @@ export function createAgentGraph(): Graph<AgentGraphState> {
     const newLoopCount = currentLoopCount + 1;
     (state.metadata as any).agentLoopCount = newLoopCount;
 
-    if (newLoopCount >= MAX_ACTION_LOOPS) {
-      console.log(`[AgentGraph] Agent hit max loops (${MAX_ACTION_LOOPS}) - routing back to macro for reassessment`);
-      (state.metadata as any).agentLoopCount = 0;
-      return 'macro';
+    if (newLoopCount >= MAX_AGENT_LOOPS) {
+      console.log(`[AgentGraph] Agent hit max loops (${MAX_AGENT_LOOPS}) - ending`);
+      return 'end';
     }
 
-    // CONTINUE → back to macro for PRD reassessment + next step
-    if (agentStatus === 'continue') {
-      console.log(`[AgentGraph] Agent reported CONTINUE (cycle ${newLoopCount}) - routing to macro`);
-      return 'macro';
-    }
-
-    // in_progress (legacy/no wrapper) → keep looping agent
-    console.log(`[AgentGraph] Agent in progress (cycle ${newLoopCount}) - continuing`);
+    console.log(`[AgentGraph] Agent cycle ${newLoopCount}/${MAX_AGENT_LOOPS} - continuing`);
     return 'agent';
   });
 

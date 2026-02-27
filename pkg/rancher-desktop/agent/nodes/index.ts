@@ -8,4 +8,3 @@ export { SummaryNode } from './SummaryNode';
 export { ReasoningNode } from './ReasoningNode';
 export { ActionNode } from './ActionNode';
 export { AgentNode } from './AgentNode';
-export { MacroNode } from './MacroNode';

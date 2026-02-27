@@ -224,28 +224,29 @@ export class ProjectRegistry {
     return `Project '${name}' not found. Available: ${available}`;
   }
 
-  async createProject(projectName: string, content: string): Promise<string> {
+  async createProject(projectName: string, content?: string): Promise<string> {
     const name = String(projectName || '').trim();
     if (!name) return 'Project name is required.';
 
     const userDir = this.getUserProjectsDir();
     const projectDir = path.join(userDir, name);
     const projectFile = path.join(projectDir, 'PROJECT.md');
+    const projectContent = this.normalizeCreateProjectContent(name, content);
 
     try {
       await mkdir(projectDir, { recursive: true });
-      await writeFile(projectFile, content, 'utf8');
+      await writeFile(projectFile, projectContent, 'utf8');
 
       // Scaffold README.md if it doesn't exist
       const readmeFile = path.join(projectDir, 'README.md');
       if (!fs.existsSync(readmeFile)) {
-        const service = ProjectService.fromRaw('filesystem', name, content);
+        const service = ProjectService.fromRaw('filesystem', name, projectContent);
         const readmeContent = this.scaffoldReadme(service);
         await writeFile(readmeFile, readmeContent, 'utf8');
       }
 
       // Reload from the new file so the registry picks it up immediately
-      const service = ProjectService.fromRaw('filesystem', name, content);
+      const service = ProjectService.fromRaw('filesystem', name, projectContent);
       if (service) {
         this.projectsBySlug.set(service.slug, service);
         this.cachedSummaries = this.buildSummariesFromCurrentMap();
@@ -482,6 +483,46 @@ ${description}
 
 ## Development
 ...
+`;
+  }
+
+  private normalizeCreateProjectContent(projectName: string, content?: string): string {
+    const provided = String(content || '').trim();
+    if (provided) return provided;
+
+    const title = projectName
+      .split('-')
+      .filter(Boolean)
+      .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(' ') || projectName;
+    const now = new Date().toISOString();
+
+    return `---
+schemaversion: 1
+slug: ${projectName}
+title: "${title}"
+section: Projects
+status: active
+created_at: "${now}"
+updated_at: "${now}"
+---
+
+## Description
+
+## Project Goal
+
+## User Stories
+
+## Must Haves
+
+## Should Haves
+
+## Nice-to-Haves
+
+## Execution Checklist
+- [ ] Define scope
+- [ ] Implement
+- [ ] Validate
 `;
   }
 

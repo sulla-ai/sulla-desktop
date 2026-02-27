@@ -10,7 +10,7 @@ import type { ChatMessage } from '../languagemodels/BaseLanguageModel';
 // Works directly with the user message thread and tools.
 // ============================================================================
 
-const AGENT_PROMPT_BASE = `You are an independent Agent working directly with the user.
+const AGENT_PROMPT_BASE = `# You are an independent Agent working directly with the user.
 You get right to work on whatever the user asks;
 You take massive action and you don't let things stand in your way;
 You're incredible about finding ways of getting things accomplished;
@@ -34,6 +34,20 @@ The user messages are your source of truth for objective, constraints, and conte
   • What you plan to do next
   • Any blockers or decisions
 - Use short, direct sentences.
+
+## Tool Result Narration (critical for memory)
+
+Tool results are ephemeral — they exist only during the current model call and are NOT saved to the conversation history. If you do not narrate what a tool returned, that knowledge is permanently lost to you on the next cycle.
+
+**After every tool call, you MUST summarize the key findings in your own words as part of your response.** This is the ONLY way to retain context across cycles. For example:
+- After reading a file: "Found the config at /path/file.ts — the database host is set to localhost:5432 and uses pool size 10."
+- After searching: "search_projects returned 2 matches: 'sulla-recipes' (active) and 'sulla-voice' (completed)."
+- After executing a command: "git_status shows 3 modified files on branch feature/xyz: src/a.ts, src/b.ts, src/c.ts."
+
+Never just call a tool and move on silently. Always narrate what you learned so your future self can read the conversation history and know what happened.
+
+## Completion Wrappers
+
 - You MUST end every response with exactly ONE of the three wrapper blocks: DONE, BLOCKED, or CONTINUE.
 - If the task is fully accomplished, output the DONE wrapper.
 - If execution is blocked and you cannot proceed, output the BLOCKED wrapper.
@@ -108,17 +122,7 @@ export class AgentNode extends BaseNode {
     // ----------------------------------------------------------------
     // 1. BUILD SYSTEM PROMPT
     // ----------------------------------------------------------------
-    let prdBlock = '';
-    let nextStepBlock = '';
-    const macro = (state.metadata as any).macro;
-    if (macro?.prd && typeof macro.prd === 'string' && macro.prd.trim()) {
-      prdBlock = `\n\n## Project Requirements Document (PRD)\n${macro.prd}`;
-    }
-    if (macro?.next_step && typeof macro.next_step === 'string' && macro.next_step.trim() && macro.next_step.trim() !== 'SKIP') {
-      nextStepBlock = `\n\n## Current Step (from Macro Planner)\n${macro.next_step}`;
-    }
-
-    const systemPrompt = `${AGENT_PROMPT_BASE}\n\n${AGENT_PROMPT_DIRECTIVE}${prdBlock}${nextStepBlock}\n\n${AGENT_PROMPT_COMPLETION_WRAPPERS}`;
+    const systemPrompt = `${AGENT_PROMPT_BASE}\n\n${AGENT_PROMPT_DIRECTIVE}\n\n${AGENT_PROMPT_COMPLETION_WRAPPERS}`;
 
     const enrichedPrompt = await this.enrichPrompt(systemPrompt, state, {
       includeSoul: true,
@@ -126,10 +130,6 @@ export class AgentNode extends BaseNode {
       includeEnvironment: true,
       includeMemory: false,
     });
-
-    // Inject Macro next step into the graph thread as a synthetic user message
-    // so the agent executes the planner instruction as direct user intent.
-    this.injectMacroNextStepAsUserMessage(state);
 
     // ----------------------------------------------------------------
     // 2. EXECUTE — LLM reads conversation, calls tools, responds
@@ -197,50 +197,6 @@ export class AgentNode extends BaseNode {
   // ======================================================================
   // AGENT EXECUTION
   // ======================================================================
-
-  private injectMacroNextStepAsUserMessage(state: BaseThreadState): void {
-    const metadataAny = state.metadata as any;
-    const macro = metadataAny.macro || {};
-    const nextStep = String(macro.next_step || '').trim();
-
-    if (!nextStep || nextStep.toUpperCase() === 'SKIP') {
-      return;
-    }
-
-    const agentMeta = metadataAny.agent || {};
-    const macroUpdatedAt = Number(macro.updatedAt || 0);
-
-    if (
-      agentMeta.lastMacroStepAppliedAt === macroUpdatedAt
-      && String(agentMeta.lastMacroStepAppliedText || '') === nextStep
-    ) {
-      return;
-    }
-
-    if (!Array.isArray(state.messages)) {
-      state.messages = [];
-    }
-
-    state.messages.push({
-      role: 'user',
-      content: nextStep,
-      metadata: {
-        nodeId: 'macro',
-        nodeName: 'Macro',
-        kind: 'macro_next_step_user_message',
-        synthetic: true,
-        timestamp: Date.now(),
-      },
-    } as ChatMessage);
-
-    metadataAny.agent = {
-      ...agentMeta,
-      lastMacroStepAppliedAt: macroUpdatedAt || Date.now(),
-      lastMacroStepAppliedText: nextStep,
-    };
-
-    this.bumpStateVersion(state);
-  }
 
   private async executeAgent(
     systemPrompt: string,

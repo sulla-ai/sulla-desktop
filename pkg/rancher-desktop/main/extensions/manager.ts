@@ -1,7 +1,8 @@
+// sulla-desktop/pkg/rancher-desktop/main/extensions/manager.ts
 import { ChildProcessByStdio, spawn, SpawnOptionsWithStdioTuple } from 'child_process';
 import http from 'http';
 import path from 'path';
-import { Readable } from 'stream';
+import { Readable } from 'stream';import * as yaml from 'js-yaml';
 
 import Electron, { IpcMainEvent, IpcMainInvokeEvent, net } from 'electron';
 import _ from 'lodash';

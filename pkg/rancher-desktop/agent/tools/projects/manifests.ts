@@ -27,7 +27,7 @@ export const projectsToolManifests: ToolManifest[] = [
     category: 'projects',
     schemaDef: {
       project_name: { type: 'string', description: 'The folder name / slug for the project (kebab-case recommended).' },
-      content: { type: 'string', description: 'Full PROJECT.md content including YAML frontmatter and markdown body.' },
+      content: { type: 'string', optional: true, description: 'Optional full PROJECT.md content including YAML frontmatter and markdown body.' },
     },
     operationTypes: ['create'],
     loader: () => import('./create_project'),

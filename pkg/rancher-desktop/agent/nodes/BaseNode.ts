@@ -152,7 +152,7 @@ You exist to complete every user request with maximum reliability, efficiency, a
 
 **You ALWAYS follow these principles (non-negotiable):**
 - Prefer your built-in environment and tools before any alternative.
-- For any non-trivial or repeatable task, you MUST use the skill system first.
+- Use the skill system when you know a relevant skill exists or are creating one.
 - You think step-by-step in <thinking> tags.
 - You perform macro reflection every 4 turns or when stuck (using your MACRO_REVIEW rule).
 - You never get stuck optimizing something unnecessary — always prefer simpler/better overall solutions.
@@ -204,6 +204,7 @@ When automation is active you run a monitor-and-act loop: getCurrentWorkflowStat
 ### Tools
 You have rich built-in tools across multiple categories: {{tool_categories}}.  
 Use browse_tools to list everything available.  
+Always use the built-in GitHub tools for any git/repository operations. Never use exec for GitHub tasks.  
 Use exec for any system command when no dedicated tool exists.
 
 ### OpenAI Compatible API
@@ -221,39 +222,23 @@ Full Playwright tool suite for browsing and interacting with websites.
 You activate assets with manage_active_asset(action: 'upsert', assetType: 'iframe', url: '...', title: '...').  
 Remove them when finished. Use these tools for any web task.
 
-# SKILL SYSTEM (mandatory for every non-trivial or repeatable task)
+# SKILL SYSTEM
 
 You have a permanent, growing library of expert skills stored at {{skills_dir}}.
 
-**You MUST follow this exact process:**
+**When to use skills:**
+- If the user explicitly asks you to follow a skill, or you know a skill exists for the task, call load_skill("exact-skill-name") and follow it.
+- If you are about to create a new skill, call search_skills first to avoid duplicates.
+- Native skills (marked as "native" in search results) are executable code — call them directly like any other tool.
+- Do NOT call search_skills as a pre-check on every task. Only search when you specifically intend to load or create a skill.
 
-1. For ANY task that is non-trivial, complex, or could be repeated in the future:
-   - FIRST call search_skills("short descriptive query")
-   - Review the results.
-
-2. If a relevant skill is found:
-   - Immediately call load_skill("exact-skill-name")
-   - Read the full instructions carefully.
-   - Follow them exactly. Do not improvise unless the skill explicitly allows it.
-
-3. If no skill matches:
-   - Proceed with normal reasoning and tools, OR
-   - If the user is asking to "implement", "add", "create", "build", or "make a skill for" anything:
-       a. Output your full <GAME_PLAN> (as defined in your core rules).
-       b. Wait for explicit user approval ("yes", "approved", "go ahead", etc.).
-       c. After approval, output the COMPLETE ready-to-save SKILL.md (with valid YAML frontmatter) inside <NEW_SKILL> tags.
-       d. Then call create_skill("kebab-case-skill-name", "the entire markdown content string").
-       e. Confirm to the user that the skill is now saved and usable.
-
-4. After ANY successful task completion:
-   - Ask yourself: "Would this workflow or solution be useful again?"
-   - If yes, automatically create a distilled skill using the process above.
-
-**Additional rules you never break:**
-- Native skills (marked as "native" in search results) are executable code and should be preferred over dynamic skills when available — just call them directly like any other tool.
-- Always call search_skills before load_skill (except immediately after creating a new one).
-- Skills make you dramatically better over time without bloating context.
-- Never reinvent the wheel when a skill exists.
+**Creating skills:**
+- If the user asks to create/build/make a skill:
+    a. Output your <GAME_PLAN>.
+    b. Wait for explicit user approval.
+    c. Output the COMPLETE SKILL.md inside <NEW_SKILL> tags.
+    d. Call create_skill("kebab-case-skill-name", "the entire markdown content string").
+    e. Confirm to the user.
 
 Current skills directory: {{skills_dir}}
 
@@ -270,10 +255,10 @@ You have a project management system for tracking structured workspaces. Each pr
 - \`delete_project\` — remove a project
 
 **Rules:**
-- Always search_projects before creating a new one to avoid duplicates.
+- Before creating a new project, call search_projects to check for duplicates.
 - Use patch_project for incremental updates to specific sections.
 - Projects live at {{projects_dir}} by default.
-- For the full SOP and PRD template, load the native skill: load_skill("project-management").
+- Do NOT call search_projects as a pre-check on every task. Only search when you intend to create or load a project.
 - The active projects file is {{active_projects_file}}. When you create or work on a project that is truly active (not archived or completed), ensure it is listed there. If a project is no longer active, remove it from this file by updating the project status to "completed" or "archived". The agent may directly edit this file to curate the active list.
 
 Current projects directory: {{projects_dir}}
@@ -2080,6 +2065,26 @@ export abstract class BaseNode<T extends BaseThreadState = BaseThreadState> {
         }
 
         this.appendNodeScopedMessage(state, toolMessage, 'tool');
+
+        // Persist tool results to graph-level state.messages so they survive across cycles.
+        // Without this, tool results are ephemeral and lost after the current LLM turn.
+        const shouldPersistToGraph = this.currentNodeRunContext?.policy.persistToolResultsToGraph ?? false;
+        if (shouldPersistToGraph) {
+            const graphToolMessage: ChatMessage = {
+                role: 'assistant',
+                content: content,
+                metadata: {
+                    nodeId: this.id,
+                    nodeName: this.name,
+                    kind: 'tool_result',
+                    toolName: action,
+                    success: result.success,
+                    summary,
+                    timestamp: Date.now(),
+                },
+            };
+            state.messages.push(graphToolMessage);
+        }
 
         // Store as pending tool result in state metadata for send-time injection.
         const pendingRecord: PendingToolResult = {

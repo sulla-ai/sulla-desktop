@@ -3,11 +3,13 @@ import { dailyIntelligenceMonitorSkill } from './daily-intelligence-monitor';
 import { n8nWorkflowAutomationsSkill } from './n8n-workflow-automations';
 import { softwareDevelopmentSkill } from './software-development';
 import { projectManagementSkill } from './project-management';
+import { gitOperationsSkill } from './git-operations';
 
 // Register all native skills here
 nativeSkillRegistry.register(dailyIntelligenceMonitorSkill);
 nativeSkillRegistry.register(n8nWorkflowAutomationsSkill);
 nativeSkillRegistry.register(softwareDevelopmentSkill);
 nativeSkillRegistry.register(projectManagementSkill);
+nativeSkillRegistry.register(gitOperationsSkill);
 
 export { nativeSkillRegistry };
