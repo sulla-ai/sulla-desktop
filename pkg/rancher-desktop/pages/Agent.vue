@@ -558,6 +558,12 @@ const renderMarkdown = (markdown: string): string => {
 
 const sanitizeAssetHtml = (html: string): string => {
   const raw = typeof html === 'string' ? html : String(html || '');
+  const looksLikeHtml = /<\/?[a-z][\s\S]*>/i.test(raw);
+
+  if (!looksLikeHtml) {
+    return renderMarkdown(raw);
+  }
+
   return DOMPurify.sanitize(raw, {
     USE_PROFILES: { html: true },
     ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto|tel):|data:image\/(?:png|gif|jpe?g|webp);base64,|\/|\.|#)/i,

@@ -59,6 +59,11 @@ export class BrowseToolsWorker extends BaseTool {
       }
     }
 
+    // Deterministic asset activation: when n8n tools are browsed, activate the n8n asset
+    if (category === 'n8n' && this.state && filteredTools.length > 0) {
+      this.activateN8nAsset();
+    }
+
     // Attach found tools to state for LLM access
     if (this.state) {
       // Accumulate found tools (append to existing)
@@ -91,6 +96,53 @@ export class BrowseToolsWorker extends BaseTool {
       responseString: `Found ${filteredTools.length} tools${category ? ` in category "${category}"` : ""}${query ? ` matching "${query}"` : ""}${requestedOperationTypes.length ? ` for operation type(s) "${requestedOperationTypes.join(', ')}"` : ''}.
 ${JSON.stringify(toolDetails, null, 2)}`
     };
+  }
+
+  private activateN8nAsset(): void {
+    const stateAny = this.state as any;
+    if (!stateAny || stateAny.metadata?.__n8nAssetActivated) {
+      return;
+    }
+
+    // Fire-and-forget: start the n8n stream via the node that's executing us.
+    // The node injects itself as __executingNode on the state before tool invocation
+    // isn't available, so we dispatch the WS message directly instead.
+    (async () => {
+      try {
+        const { getN8nBridgeService } = await import('../../services/N8nBridgeService');
+        const bridge = getN8nBridgeService();
+        await bridge.start();
+
+        stateAny.metadata.__n8nAssetActivated = true;
+
+        const wsChannel = String(stateAny.metadata?.wsChannel || 'chat-controller');
+        const selectedSkillSlug = String(stateAny.metadata?.planRetrieval?.selected_skill_slug || '');
+        const n8nRootUrl = String(bridge.getAppRootUrl() || 'http://127.0.0.1:30119/').trim();
+
+        const { getWebSocketClientService } = await import('../../services/WebSocketClientService');
+        const wsService = getWebSocketClientService();
+        await wsService.send(wsChannel, {
+          type: 'register_or_activate_asset',
+          data: {
+            asset: {
+              type: 'iframe',
+              id: 'sulla_n8n',
+              title: 'Sulla n8n',
+              url: n8nRootUrl,
+              active: true,
+              collapsed: true,
+              skillSlug: selectedSkillSlug,
+              refKey: `graph.skill.${selectedSkillSlug || 'workflow'}.website_url`,
+            },
+          },
+          timestamp: Date.now(),
+        });
+
+        console.log('[BrowseTools] n8n asset activated via browse_tools category lookup');
+      } catch (error) {
+        console.warn('[BrowseTools] Failed to activate n8n asset:', error);
+      }
+    })();
   }
 
   private normalizeOperationTypes(single?: unknown, many?: unknown): ToolOperation[] {

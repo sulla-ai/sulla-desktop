@@ -42,12 +42,17 @@ You own the Project Resource Document (PRD) for this project. Your responsibilit
 - Use short, direct sentences.
 - However, when the entire task is finished you MUST stop all explanation and output ONLY the final wrapper blocks with nothing after them.
 
-## Tool Call Strategy (strict - highest priority)
+## Tool Call Strategy (ABSOLUTE — highest priority, non-negotiable)
 
-- In your VERY FIRST response you MUST make ONE single large parallel batch containing EVERY tool call you believe is needed to achieve complete understanding and create the full PRD.
-- You are allowed and encouraged to call up to 50 tools in parallel in that first batch.
-- Do NOT make small incremental calls (no 1-2 tools at a time).
-- Critical: As soon as you've got everything you need from the context, stop and create the PRD. Time is of the essence.
+**TIME IS OF THE ESSENCE.** Every second you spend deliberating is a second wasted. Act NOW.
+
+- You MUST be hyper-aggressive with tool calls. Call 10-20+ tools in parallel in EVERY batch.
+- Your VERY FIRST response MUST be ONE massive parallel batch of EVERY tool call needed to gather complete context. Do NOT think first then call tools — call them ALL immediately.
+- After receiving results, if you still need more information, fire another batch of 10-20+ parallel calls immediately. No hesitation.
+- NEVER make small incremental calls (1-3 tools at a time). That is unacceptable. Always batch aggressively.
+- As SOON as you have enough information to produce the PRD, STOP gathering and produce it. Do not over-research. Do not make "one more call to be sure." Ship it.
+- The ideal flow: one massive tool batch → results arrive → produce PRD. Two batches maximum for complex projects. Three is too many.
+- You are a decisive architect, not a cautious researcher. Gather fast, decide fast, ship fast.
 
 ## PRD Rules (must follow)
 
@@ -60,6 +65,16 @@ You own the Project Resource Document (PRD) for this project. Your responsibilit
 - **Always start with the simplest viable approach.** Only add complexity when simpler attempts have failed or are proven insufficient.
 - If a previous PRD exists, evaluate what has been tried. If the current approach is failing, pivot. If it's working, continue and refine. Don't rewrite from scratch unless the approach fundamentally changes.
 - The PRD is a living document — update it every cycle based on evidence.
+
+## Blocker Self-Check (MANDATORY when any step is blocked or stuck)
+
+Before escalating complexity or retrying a blocked step, you MUST ask yourself:
+1. "Are we optimizing something that does not need to exist?"
+2. "Is this item a MUST-HAVE, critical to the original user goal?"
+3. If the answer to #1 is yes or #2 is no — **remove the item from the PRD entirely.** Do not retry it, do not work around it. Cut it.
+- Only MUST-HAVE items from the original user goal survive a blocker review.
+- Nice-to-haves and Should-haves that are blocked get dropped immediately.
+- The fastest path to done is eliminating unnecessary work, not solving unnecessary problems.
 
 ## Attempt History Evaluation
 
@@ -112,7 +127,8 @@ async function getExamplePrd(): Promise<string> {
 const MACRO_PRD_REGEX = /<MACRO_PRD>([\s\S]*?)<\/MACRO_PRD>/i;
 const MACRO_NEXT_STEP_REGEX = /<MACRO_NEXT_STEP>([\s\S]*?)<\/MACRO_NEXT_STEP>/i;
 const MACRO_STATUS_REGEX = /<MACRO_STATUS>([\s\S]*?)<\/MACRO_STATUS>/i;
-const MAX_MACRO_SELF_LOOPS = 5;
+const MAX_MACRO_SELF_LOOPS = 10;
+const FORCE_PRD_CYCLE = 5;
 type MacroStatus = 'DRAFT' | 'FINAL' | 'SKIP';
 
 // ============================================================================
@@ -142,6 +158,11 @@ export class MacroNode extends BaseNode {
   async execute(state: BaseThreadState): Promise<NodeResult<BaseThreadState>> {
     const startTime = Date.now();
     const metadataAny = state.metadata as any;
+
+    // ----------------------------------------------------------------
+    // 0. MESSAGE BUDGET — trim before each cycle to prevent bloat
+    // ----------------------------------------------------------------
+    await this.ensureMessageBudget(state);
 
     // ----------------------------------------------------------------
     // 1. GATHER CONTEXT
@@ -190,6 +211,13 @@ export class MacroNode extends BaseNode {
     while (macroCycles < MAX_MACRO_SELF_LOOPS) {
       macroCycles += 1;
 
+      const forcePrd = macroCycles >= FORCE_PRD_CYCLE;
+
+      // After FORCE_PRD_CYCLE: strip tools, demand output
+      const cyclePolicy: Required<NodeRunPolicy> = forcePrd
+        ? { ...policy, persistToolResultsToNodeState: false }
+        : policy;
+
       // Build the prompt with the right PRD context (example vs existing)
       const promptWithPrd = await this.buildPromptWithPrdContext(workingPrd);
       const enrichedPrompt = await this.enrichPrompt(promptWithPrd, state, {
@@ -199,22 +227,40 @@ export class MacroNode extends BaseNode {
         includeMemory: false,
       });
 
-      const userDirective = `${this.buildUserDirective(userGoal, workingPrd, attempts)}
+      let userDirective: string;
+      if (forcePrd) {
+        userDirective = `${this.buildUserDirective(userGoal, workingPrd, attempts)}
+
+## MANDATORY — PRODUCE PRD NOW (cycle ${macroCycles}/${MAX_MACRO_SELF_LOOPS})
+
+**You have used ${macroCycles - 1} cycles gathering information. That phase is OVER.**
+**DO NOT call any tools. DO NOT request more information. DO NOT return DRAFT.**
+**You MUST produce the PRD RIGHT NOW with whatever information you have.**
+
+If the project is trivial, output <MACRO_STATUS>SKIP</MACRO_STATUS>.
+Otherwise output <MACRO_STATUS>FINAL</MACRO_STATUS> with a complete PRD and next step.
+
+There are NO more research cycles. Produce or skip. Nothing else is acceptable.
+`;
+      } else {
+        userDirective = `${this.buildUserDirective(userGoal, workingPrd, attempts)}
 
 ## Macro Self-Loop Control
-Cycle: ${macroCycles}/${MAX_MACRO_SELF_LOOPS}
+Cycle: ${macroCycles}/${MAX_MACRO_SELF_LOOPS} (tools disabled after cycle ${FORCE_PRD_CYCLE - 1})
 - Return <MACRO_STATUS>DRAFT</MACRO_STATUS> while still drafting PRD.
 - Return <MACRO_STATUS>FINAL</MACRO_STATUS> only when the PRD is complete and execution-ready.
 - Return <MACRO_STATUS>SKIP</MACRO_STATUS> when the project is too small/simple and should skip PRD entirely.
 `;
+      }
 
       const reply = await this.normalizedChat(state, enrichedPrompt, {
-        temperature: 0.3,
+        temperature: forcePrd ? 0.1 : 0.3,
         maxTokens: 6144,
-        nodeRunPolicy: policy,
+        nodeRunPolicy: cyclePolicy,
         nodeRunMessages: {
           userMessages: [{ role: 'user', content: userDirective } as ChatMessage],
         },
+        disableTools: forcePrd,
       });
 
       const contentStr = reply ? (typeof reply.content === 'string' ? reply.content : String(reply.content)) : '';
@@ -263,11 +309,25 @@ Cycle: ${macroCycles}/${MAX_MACRO_SELF_LOOPS}
     };
 
     // ----------------------------------------------------------------
-    // 5. NEXT STEP DELIVERY
+    // 5. REGISTER PRD AS ACTIVE DOCUMENT ASSET
     // ----------------------------------------------------------------
-    // PRD and next_step live on state.metadata.macro — AgentNode reads them
-    // directly. No assistant message injection into graph thread (avoids
-    // duplicate assistant messages that violate API contracts).
+    if (prd) {
+      const wsChannel = String(metadataAny.wsChannel || 'chat-controller');
+      void this.dispatchToWebSocket(wsChannel, {
+        type: 'register_or_activate_asset',
+        data: {
+          asset: {
+            type: 'document',
+            id: 'macro_prd',
+            title: 'Project PRD',
+            content: prd,
+            active: true,
+            collapsed: true,
+          },
+        },
+        timestamp: Date.now(),
+      });
+    }
 
     // ----------------------------------------------------------------
     // 6. LOG

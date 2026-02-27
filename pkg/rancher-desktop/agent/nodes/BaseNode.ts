@@ -457,6 +457,98 @@ export abstract class BaseNode<T extends BaseThreadState = BaseThreadState> {
     }
 
     /**
+     * Deterministic message maintenance: awaits chat summary condensation and
+     * observational awareness trimming before continuing. Use this at the top
+     * of any node's execute() that runs in a loop (AgentNode, MacroNode) to
+     * prevent unbounded message growth between cycles.
+     *
+     * Fast-path: if messages are below the threshold, returns immediately.
+     * Slow-path: calls ConversationSummaryService.summarizeNow() which batches
+     * the oldest messages into observational memory, then trims observations.
+     */
+    protected async ensureMessageBudget(state: BaseThreadState): Promise<void> {
+        const messageCount = state.messages.length;
+        const charWeight = state.messages.reduce((sum, m) => {
+            const content = typeof m.content === 'string' ? m.content : JSON.stringify(m.content);
+            return sum + content.length;
+        }, 0);
+
+        // Hard character budget: ~384k chars ≈ 96k tokens at 4 chars/token
+        const HARD_CHAR_BUDGET = 384_000;
+        // Soft message count threshold — triggers LLM summarization
+        const SOFT_MESSAGE_THRESHOLD = 20;
+
+        if (messageCount <= SOFT_MESSAGE_THRESHOLD && charWeight <= HARD_CHAR_BUDGET) {
+            return;
+        }
+
+        // If over hard char budget, do a fast synchronous trim first (no LLM)
+        if (charWeight > HARD_CHAR_BUDGET) {
+            this.fastTrimByWeight(state, HARD_CHAR_BUDGET);
+        }
+
+        // Then run the LLM-backed summarization to compress further
+        if (state.messages.length > SOFT_MESSAGE_THRESHOLD) {
+            console.log(`[${this.name}] ensureMessageBudget: ${messageCount} messages, ${Math.round(charWeight / 1000)}k chars — running summarization`);
+            await ConversationSummaryService.summarizeNow(state);
+            ObservationalSummaryService.triggerBackgroundTrimming(state);
+        }
+    }
+
+    /**
+     * Fast synchronous trim: evicts oldest non-protected messages by character
+     * weight until under budget. No LLM call. Protects system messages and the
+     * latest user message.
+     */
+    private fastTrimByWeight(state: BaseThreadState, charBudget: number): void {
+        const messages = state.messages;
+        if (messages.length === 0) return;
+
+        // Find latest user message
+        let latestUserIdx = -1;
+        for (let i = messages.length - 1; i >= 0; i--) {
+            if (messages[i].role === 'user') { latestUserIdx = i; break; }
+        }
+
+        // Calculate total chars of protected messages
+        const protectedChars = messages.reduce((sum, m, i) => {
+            if (m.role === 'system' || i === latestUserIdx) {
+                const c = typeof m.content === 'string' ? m.content : JSON.stringify(m.content);
+                return sum + c.length;
+            }
+            return sum;
+        }, 0);
+
+        const budgetForRest = charBudget - protectedChars;
+        if (budgetForRest <= 0) return;
+
+        // Walk from newest to oldest, keep until budget exhausted
+        const kept = new Set<number>();
+        let usedBudget = 0;
+
+        for (let i = messages.length - 1; i >= 0; i--) {
+            const m = messages[i];
+            if (m.role === 'system' || i === latestUserIdx) {
+                kept.add(i);
+                continue;
+            }
+            const content = typeof m.content === 'string' ? m.content : JSON.stringify(m.content);
+            if (usedBudget + content.length <= budgetForRest) {
+                kept.add(i);
+                usedBudget += content.length;
+            }
+        }
+
+        const before = messages.length;
+        state.messages = messages.filter((_, i) => kept.has(i));
+        const after = state.messages.length;
+
+        if (before !== after) {
+            console.log(`[${this.name}] fastTrimByWeight: ${before} → ${after} messages`);
+        }
+    }
+
+    /**
      * Unified chat: takes state + new system prompt + user message.
      * - Replaces last system prompt (or appends new one)
      * - Appends user message
@@ -511,9 +603,6 @@ export abstract class BaseNode<T extends BaseThreadState = BaseThreadState> {
 
         const previousToolAccessPolicy = (state.metadata as any).__toolAccessPolicy;
         (state.metadata as any).__toolAccessPolicy = callToolAccessPolicy;
-
-        const toolNames = Array.isArray(llmTools) ? llmTools.map((t: any) => t?.function?.name).filter(Boolean) : [];
-        console.log(`[${this.name}] LLM request — ${toolNames.length} tools: [${toolNames.join(', ')}]`);
 
         const conversationId = typeof state.metadata.threadId === 'string' ? state.metadata.threadId : undefined;
         const nodeName = this.name;
@@ -1997,5 +2086,248 @@ export abstract class BaseNode<T extends BaseThreadState = BaseThreadState> {
         const args = execArgs.length === 1 ? { content: execArgs[0] } : execArgs;
         const normalized = { name, args };
         await this.executeToolCalls(state, [normalized]);
+    }
+
+    // ======================================================================
+    // N8N ACTIVE ASSET + LIVE EVENT STREAM
+    // ======================================================================
+
+    private static n8nBridgeStartPromise: Promise<void> | null = null;
+
+    /**
+     * Start the live n8n action stream: registers the n8n iframe as an active
+     * asset and subscribes to bridge socket events. Idempotent — if the asset
+     * has already been activated for this state, this is a no-op.
+     *
+     * Called from browse_tools when the n8n category is loaded, and can also
+     * be called directly by any node that needs it.
+     */
+    async startLiveN8nActionStream(state: BaseThreadState): Promise<() => void> {
+        const metadataAny = state.metadata as any;
+
+        // Idempotent: skip if already activated for this state
+        if (metadataAny.__n8nAssetActivated) {
+            return () => {};
+        }
+
+        try {
+            const { getN8nBridgeService } = await import('../services/N8nBridgeService');
+            const bridge = getN8nBridgeService();
+
+            if (!BaseNode.n8nBridgeStartPromise) {
+                BaseNode.n8nBridgeStartPromise = bridge.start().catch((error) => {
+                    BaseNode.n8nBridgeStartPromise = null;
+                    throw error;
+                });
+            }
+
+            await BaseNode.n8nBridgeStartPromise;
+
+            // Mark activated before dispatching to prevent re-entry
+            metadataAny.__n8nAssetActivated = true;
+
+            const wsChannel = String(metadataAny.wsChannel || 'chat-controller');
+            const selectedSkillSlug = String(metadataAny.planRetrieval?.selected_skill_slug || '');
+            const n8nRootUrl = String(bridge.getAppRootUrl() || 'http://127.0.0.1:30119/').trim();
+            const bridgeSocketUnsubs = this.subscribeToN8nBridgeSocketEvents(state, bridge);
+
+            void this.dispatchToWebSocket(wsChannel, {
+                type: 'register_or_activate_asset',
+                data: {
+                    asset: {
+                        type: 'iframe',
+                        id: 'sulla_n8n',
+                        title: 'Sulla n8n',
+                        url: n8nRootUrl,
+                        active: true,
+                        collapsed: true,
+                        skillSlug: selectedSkillSlug,
+                        refKey: `graph.skill.${selectedSkillSlug || 'workflow'}.website_url`,
+                    },
+                },
+                timestamp: Date.now(),
+            });
+
+            console.log('[BaseNode] n8n asset activated and live stream started');
+
+            return () => {
+                for (const unsub of bridgeSocketUnsubs) {
+                    try { unsub(); } catch { /* no-op */ }
+                }
+            };
+        } catch (error) {
+            console.warn('[BaseNode] Unable to start live n8n event stream:', error);
+            return () => {};
+        }
+    }
+
+    private subscribeToN8nBridgeSocketEvents(state: BaseThreadState, bridge: any): Array<() => void> {
+        const unsubs: Array<() => void> = [];
+        const n8nInterfaceChannel = 'n8n_interface';
+
+        type N8nLiveEvent = {
+            timestamp: string;
+            type: 'websocket' | 'execution' | 'error';
+            action?: string;
+            workflowId?: string;
+            executionId?: string;
+            nodeName?: string;
+            message?: string;
+            data?: unknown;
+        };
+
+        const onSocketEvent = <K extends string>(
+            event: K,
+            toEventEntry: (payload: any) => Omit<N8nLiveEvent, 'timestamp'>,
+        ) => {
+            unsubs.push(bridge.on(event, (payload: any) => {
+                const entry: N8nLiveEvent = {
+                    ...toEventEntry(payload),
+                    timestamp: new Date().toISOString(),
+                };
+                const formatted = this.formatN8nLiveEvent(entry);
+
+                if (formatted && this.shouldAppendN8nLiveEvent(state, formatted)) {
+                    this.appendN8nLiveMessage(state, formatted, entry);
+                }
+            }));
+        };
+
+        onSocketEvent('workflowUpdated', payload => ({
+            type: 'websocket',
+            action: 'workflowUpdated',
+            workflowId: payload.workflowId,
+            data: payload.raw,
+        }));
+
+        onSocketEvent('executionStarted', payload => ({
+            type: 'execution',
+            action: 'started',
+            executionId: payload.executionId,
+            workflowId: payload.workflowId,
+            data: payload.raw,
+        }));
+
+        onSocketEvent('nodeExecuted', payload => ({
+            type: 'execution',
+            action: 'nodeExecuted',
+            executionId: payload.executionId,
+            workflowId: payload.workflowId,
+            nodeName: payload.nodeName,
+            data: payload.raw,
+        }));
+
+        onSocketEvent('errorOccurred', payload => ({
+            type: 'error',
+            action: 'bridgeError',
+            message: payload.message,
+            data: payload.raw,
+        }));
+
+        onSocketEvent('rawMessage', payload => ({
+            type: 'websocket',
+            action: 'rawMessage',
+            data: payload,
+        }));
+
+        this.connectWebSocket(n8nInterfaceChannel);
+        const n8nInterfaceUnsub = this.listenToWebSocket(n8nInterfaceChannel, (msg: any) => {
+            if (msg.type !== 'n8n_vue_bridge_event') {
+                return;
+            }
+
+            const data = (msg.data && typeof msg.data === 'object') ? (msg.data as any) : null;
+            const payloadThreadId = String(data?.threadId || '').trim();
+            const stateThreadId = String((state.metadata as any).threadId || '').trim();
+            if (payloadThreadId && stateThreadId && payloadThreadId !== stateThreadId) {
+                return;
+            }
+
+            const content = String(data?.content || '').trim();
+            if (!content) {
+                return;
+            }
+
+            const entry: N8nLiveEvent = {
+                timestamp: new Date().toISOString(),
+                type: 'websocket',
+                action: `ui:${String(data?.eventType || 'event').trim() || 'event'}`,
+                data: data?.payload,
+            };
+
+            if (this.shouldAppendN8nLiveEvent(state, content)) {
+                this.appendN8nLiveMessage(state, content, entry);
+            }
+        });
+
+        if (n8nInterfaceUnsub) {
+            unsubs.push(n8nInterfaceUnsub);
+        }
+
+        return unsubs;
+    }
+
+    private formatN8nLiveEvent(entry: { type: string; action?: string; workflowId?: string; executionId?: string; nodeName?: string; message?: string }): string {
+        if (!entry) return '';
+        if (entry.action === 'rawMessage') return '';
+
+        const head = entry.type === 'websocket' ? '[n8n wss]' : `[n8n ${entry.type}]`;
+        const action = entry.action ? ` ${entry.action}` : '';
+        const workflow = entry.workflowId ? ` workflow=${entry.workflowId}` : '';
+        const execution = entry.executionId ? ` execution=${entry.executionId}` : '';
+        const node = entry.nodeName ? ` node=${entry.nodeName}` : '';
+        const message = entry.message ? ` — ${entry.message}` : '';
+
+        return `${head}${action}${workflow}${execution}${node}${message}`.trim();
+    }
+
+    private shouldAppendN8nLiveEvent(state: BaseThreadState, content: string): boolean {
+        const metadataAny = state.metadata as any;
+        const liveMeta = metadataAny.__n8nLiveEvent || {};
+        const now = Date.now();
+
+        if (liveMeta.lastContent === content && now - Number(liveMeta.lastAt || 0) < 1000) {
+            return false;
+        }
+
+        metadataAny.__n8nLiveEvent = {
+            lastContent: content,
+            lastAt: now,
+        };
+
+        return true;
+    }
+
+    private appendN8nLiveMessage(
+        state: BaseThreadState,
+        content: string,
+        entry: { type: string; action?: string; workflowId?: string; executionId?: string; timestamp: string },
+    ): void {
+        const normalizedContent = entry.type === 'websocket' && !String(content).startsWith('[WSS]')
+            ? `[WSS] ${content}`
+            : content;
+
+        const message: ChatMessage = {
+            role: 'assistant',
+            content: normalizedContent,
+            metadata: {
+                nodeId: this.id,
+                nodeName: this.name,
+                kind: 'action_live_n8n_event',
+                source: 'n8n_event_stream',
+                transport: entry.type === 'websocket' ? 'wss' : 'internal',
+                eventType: entry.type,
+                action: entry.action,
+                workflowId: entry.workflowId,
+                executionId: entry.executionId,
+                timestamp: Date.now(),
+            },
+        };
+
+        state.messages.push(message);
+        this.bumpStateVersion(state);
+        if (entry.type !== 'websocket') {
+            void this.wsChatMessage(state, normalizedContent, 'assistant', 'progress');
+        }
     }
 }

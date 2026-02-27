@@ -101,6 +101,11 @@ export class AgentNode extends BaseNode {
     const startTime = Date.now();
 
     // ----------------------------------------------------------------
+    // 0. MESSAGE BUDGET — trim before each cycle to prevent bloat
+    // ----------------------------------------------------------------
+    await this.ensureMessageBudget(state);
+
+    // ----------------------------------------------------------------
     // 1. BUILD SYSTEM PROMPT
     // ----------------------------------------------------------------
     let prdBlock = '';
@@ -121,6 +126,10 @@ export class AgentNode extends BaseNode {
       includeEnvironment: true,
       includeMemory: false,
     });
+
+    // Inject Macro next step into the graph thread as a synthetic user message
+    // so the agent executes the planner instruction as direct user intent.
+    this.injectMacroNextStepAsUserMessage(state);
 
     // ----------------------------------------------------------------
     // 2. EXECUTE — LLM reads conversation, calls tools, responds
@@ -177,6 +186,50 @@ export class AgentNode extends BaseNode {
   // ======================================================================
   // AGENT EXECUTION
   // ======================================================================
+
+  private injectMacroNextStepAsUserMessage(state: BaseThreadState): void {
+    const metadataAny = state.metadata as any;
+    const macro = metadataAny.macro || {};
+    const nextStep = String(macro.next_step || '').trim();
+
+    if (!nextStep || nextStep.toUpperCase() === 'SKIP') {
+      return;
+    }
+
+    const agentMeta = metadataAny.agent || {};
+    const macroUpdatedAt = Number(macro.updatedAt || 0);
+
+    if (
+      agentMeta.lastMacroStepAppliedAt === macroUpdatedAt
+      && String(agentMeta.lastMacroStepAppliedText || '') === nextStep
+    ) {
+      return;
+    }
+
+    if (!Array.isArray(state.messages)) {
+      state.messages = [];
+    }
+
+    state.messages.push({
+      role: 'user',
+      content: nextStep,
+      metadata: {
+        nodeId: 'macro',
+        nodeName: 'Macro',
+        kind: 'macro_next_step_user_message',
+        synthetic: true,
+        timestamp: Date.now(),
+      },
+    } as ChatMessage);
+
+    metadataAny.agent = {
+      ...agentMeta,
+      lastMacroStepAppliedAt: macroUpdatedAt || Date.now(),
+      lastMacroStepAppliedText: nextStep,
+    };
+
+    this.bumpStateVersion(state);
+  }
 
   private async executeAgent(
     systemPrompt: string,

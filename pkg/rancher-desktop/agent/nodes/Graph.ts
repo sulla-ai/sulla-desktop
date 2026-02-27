@@ -24,7 +24,7 @@ import { OutputNode } from './OutputNode';
 // SkillGraph retry configuration
 const MAX_PLANNER_RETRIES = 15;
 const MAX_REASONING_RETRIES = 15;
-const MAX_ACTION_LOOPS = 20;
+const MAX_ACTION_LOOPS = 14;
 
 // ============================================================================
 // DEFAULT SETTINGS
@@ -757,8 +757,9 @@ export function createAgentGraph(): Graph<AgentGraphState> {
     (state.metadata as any).agentLoopCount = newLoopCount;
 
     if (newLoopCount >= MAX_ACTION_LOOPS) {
-      console.log(`[AgentGraph] Agent hit max loops (${MAX_ACTION_LOOPS}) - ending`);
-      return 'end';
+      console.log(`[AgentGraph] Agent hit max loops (${MAX_ACTION_LOOPS}) - routing back to macro for reassessment`);
+      (state.metadata as any).agentLoopCount = 0;
+      return 'macro';
     }
 
     // CONTINUE → back to macro for PRD reassessment + next step

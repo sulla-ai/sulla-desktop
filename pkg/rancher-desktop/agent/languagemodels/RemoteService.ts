@@ -259,6 +259,14 @@ export class RemoteModelService extends BaseLanguageModel {
         processedMessages.push({ role: 'user', content: toolResultBlocks });
       }
 
+      // Anthropic requires the final turn to be a user message.
+      // If the conversation currently ends on assistant output,
+      // append a synthetic user continuation turn.
+      const lastProcessedMessage = processedMessages[processedMessages.length - 1];
+      if (!lastProcessedMessage || lastProcessedMessage.role !== 'user') {
+        processedMessages.push({ role: 'user', content: 'continue' });
+      }
+
       const anthropicBody: any = {
         model: this.model,
         max_tokens: options.maxTokens ?? 1024,
