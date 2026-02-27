@@ -11,6 +11,8 @@ import {
   Extension, ExtensionError, ExtensionErrorCode, ExtensionErrorMarker, ExtensionMetadata, SpawnOptions,
 } from './types';
 
+import { fetchMarketplaceData } from './marketplaceData';
+
 import type { ContainerEngineClient } from '@pkg/backend/containerClient';
 import mainEvents from '@pkg/main/mainEvents';
 import { spawnFile } from '@pkg/utils/childProcess';
@@ -128,17 +130,63 @@ export class ExtensionImpl implements Extension {
           return result;
         }
       } catch (ex: any) {
-        console.error(`Failed to read metadata for ${ this.id }: ${ ex }`);
+        console.debug(`Failed to read metadata from image for ${ this.id }, trying marketplace catalog: ${ ex }`);
+        // Fall back to marketplace catalog
+        const catalogMeta = await this.fetchMetadataFromCatalog();
+
+        if (catalogMeta) {
+          return catalogMeta;
+        }
         // Unset metadata so we can try again later
         this._metadata = undefined;
         throw new ExtensionErrorImpl(ExtensionErrorCode.INVALID_METADATA, 'Could not read extension metadata', ex);
       }
       // If we reach here, we got the metadata but there was no icon set.
-      // There's no point in retrying in that case.
+      // Try the catalog as a fallback.
+      const catalogMeta = await this.fetchMetadataFromCatalog();
+
+      if (catalogMeta) {
+        return catalogMeta;
+      }
       throw new ExtensionErrorImpl(ExtensionErrorCode.INVALID_METADATA, 'Invalid extension: missing icon');
     })();
 
     return this._metadata;
+  }
+
+  /**
+   * Attempt to construct ExtensionMetadata from the remote marketplace catalog.
+   * Uses the plugin slug (this.id) to find the matching entry.
+   */
+  protected async fetchMetadataFromCatalog(): Promise<ExtensionMetadata | undefined> {
+    try {
+      const entries = await fetchMarketplaceData();
+      const entry = entries.find(e => e.slug === this.id);
+
+      if (!entry) {
+        console.debug(`No marketplace catalog entry found for ${ this.id }`);
+
+        return undefined;
+      }
+
+      const icon = entry.logo || entry.labels?.['com.docker.desktop.extension.icon'] || entry.labels?.['com.docker.extension.icon'] || '';
+
+      if (!icon) {
+        console.debug(`Marketplace catalog entry for ${ this.id } has no icon`);
+
+        return undefined;
+      }
+
+      const metadata: ExtensionMetadata = { icon };
+
+      console.log(`Using marketplace catalog metadata for ${ this.id }`);
+
+      return metadata;
+    } catch (ex) {
+      console.error(`Failed to fetch marketplace catalog metadata for ${ this.id }: ${ ex }`);
+
+      return undefined;
+    }
   }
 
   /** Extension image labels */
@@ -158,6 +206,13 @@ export class ExtensionImpl implements Extension {
 
         return JSON.parse(info.stdout);
       } catch (ex: any) {
+        console.debug(`Failed to read labels from image for ${ this.id }, trying marketplace catalog: ${ ex }`);
+        // Fall back to marketplace catalog labels
+        const catalogLabels = await this.fetchLabelsFromCatalog();
+
+        if (catalogLabels) {
+          return catalogLabels;
+        }
         // Unset cached value so we can try again later
         this._labels = undefined;
         throw new ExtensionErrorImpl(ExtensionErrorCode.INVALID_METADATA, 'Could not read image labels', ex);
@@ -165,6 +220,30 @@ export class ExtensionImpl implements Extension {
     })();
 
     return this._labels;
+  }
+
+  /**
+   * Attempt to fetch labels from the remote marketplace catalog.
+   */
+  protected async fetchLabelsFromCatalog(): Promise<Record<string, string> | undefined> {
+    try {
+      const entries = await fetchMarketplaceData();
+      const entry = entries.find(e => e.slug === this.id);
+
+      if (!entry?.labels) {
+        console.debug(`No marketplace catalog labels found for ${ this.id }`);
+
+        return undefined;
+      }
+
+      console.log(`Using marketplace catalog labels for ${ this.id }`);
+
+      return entry.labels;
+    } catch (ex) {
+      console.error(`Failed to fetch marketplace catalog labels for ${ this.id }: ${ ex }`);
+
+      return undefined;
+    }
   }
 
   protected _iconName: Promise<string> | undefined;
@@ -314,15 +393,28 @@ export class ExtensionImpl implements Extension {
 
   protected async installIcon(workDir: string, metadata: ExtensionMetadata): Promise<void> {
     try {
-      const origIconName = path.basename(metadata.icon);
+      if (/^https?:\/\//.test(metadata.icon)) {
+        // Icon is a remote URL (from marketplace catalog); download it.
+        const response = await fetch(metadata.icon);
 
-      try {
-        await this.client.copyFile(this.image, metadata.icon, workDir, { namespace: this.extensionNamespace });
-      } catch (ex) {
-        throw new ExtensionErrorImpl(ExtensionErrorCode.FILE_NOT_FOUND, `Could not copy icon file ${ metadata.icon }`, ex as Error);
-      }
-      if (origIconName !== await this.iconName) {
-        await fs.promises.rename(path.join(workDir, origIconName), path.join(workDir, await this.iconName));
+        if (!response.ok) {
+          throw new ExtensionErrorImpl(ExtensionErrorCode.FILE_NOT_FOUND, `Could not download icon from ${ metadata.icon }: ${ response.status }`);
+        }
+        const iconData = Buffer.from(await response.arrayBuffer());
+        const destPath = path.join(workDir, await this.iconName);
+
+        await fs.promises.writeFile(destPath, iconData);
+      } else {
+        const origIconName = path.basename(metadata.icon);
+
+        try {
+          await this.client.copyFile(this.image, metadata.icon, workDir, { namespace: this.extensionNamespace });
+        } catch (ex) {
+          throw new ExtensionErrorImpl(ExtensionErrorCode.FILE_NOT_FOUND, `Could not copy icon file ${ metadata.icon }`, ex as Error);
+        }
+        if (origIconName !== await this.iconName) {
+          await fs.promises.rename(path.join(workDir, origIconName), path.join(workDir, await this.iconName));
+        }
       }
     } catch (ex) {
       console.error(`Could not copy icon for extension ${ this.id }: ${ ex }`);
