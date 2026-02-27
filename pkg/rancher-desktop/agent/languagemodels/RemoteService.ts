@@ -211,52 +211,64 @@ export class RemoteModelService extends BaseLanguageModel {
 
       // Inject pending tool results with their paired assistant tool_use message
       if (pendingToolResults.length > 0) {
-        const toolUseIds = new Set(
-          pendingToolResults
-            .map((tr: any) => String(tr.toolCallId || '').trim())
-            .filter((id: string) => id.length > 0)
-        );
+        const pendingWithIds = pendingToolResults
+          .map((tr: any) => ({
+            ...tr,
+            toolCallId: String(tr.toolCallId || '').trim(),
+            toolName: String(tr.toolName || '').trim(),
+          }))
+          .filter((tr: any) => tr.toolCallId.length > 0);
 
-        // Emit assistant tool_use blocks that exactly match the pending tool_result ids.
-        // This avoids replaying unmatched tool_use ids when a run is interrupted mid-tool-loop.
-        const assistantToolUseBlocks: any[] = [];
-        const seenToolUseIds = new Set<string>();
-        for (const tr of pendingToolResults) {
-          const raw = tr.rawProviderContent;
-          if (!Array.isArray(raw)) {
-            continue;
+        if (pendingWithIds.length > 0) {
+          // First collect any provider-native tool_use blocks we can recover.
+          const recoveredToolUseById = new Map<string, any>();
+          for (const tr of pendingWithIds) {
+            const raw = tr.rawProviderContent;
+            if (!Array.isArray(raw)) {
+              continue;
+            }
+
+            for (const block of raw) {
+              if (!block || typeof block !== 'object') {
+                continue;
+              }
+
+              const blockType = String((block as any).type || '');
+              const blockId = String((block as any).id || '').trim();
+              if (blockType !== 'tool_use' || !blockId) {
+                continue;
+              }
+
+              if (!recoveredToolUseById.has(blockId)) {
+                recoveredToolUseById.set(blockId, block);
+              }
+            }
           }
 
-          for (const block of raw) {
-            if (!block || typeof block !== 'object') {
-              continue;
+          // Anthropic requires every tool_result id to be present in the immediately
+          // previous assistant tool_use message. Synthesize missing ones deterministically.
+          const assistantToolUseBlocks = pendingWithIds.map((tr: any) => {
+            const recovered = recoveredToolUseById.get(tr.toolCallId);
+            if (recovered) {
+              return recovered;
             }
 
-            const blockType = String((block as any).type || '');
-            const blockId = String((block as any).id || '').trim();
-            if (blockType !== 'tool_use' || !blockId) {
-              continue;
-            }
-
-            if (!toolUseIds.has(blockId) || seenToolUseIds.has(blockId)) {
-              continue;
-            }
-
-            seenToolUseIds.add(blockId);
-            assistantToolUseBlocks.push(block);
-          }
-        }
-
-        if (assistantToolUseBlocks.length > 0) {
+            return {
+              type: 'tool_use',
+              id: tr.toolCallId,
+              name: tr.toolName || 'unknown_tool',
+              input: {},
+            };
+          });
           processedMessages.push({ role: 'assistant', content: assistantToolUseBlocks });
-        }
 
-        const toolResultBlocks = pendingToolResults.map((tr: any) => ({
-          type: 'tool_result',
-          tool_use_id: tr.toolCallId,
-          content: typeof tr.content === 'string' ? tr.content : JSON.stringify(tr.content),
-        }));
-        processedMessages.push({ role: 'user', content: toolResultBlocks });
+          const toolResultBlocks = pendingWithIds.map((tr: any) => ({
+            type: 'tool_result',
+            tool_use_id: tr.toolCallId,
+            content: typeof tr.content === 'string' ? tr.content : JSON.stringify(tr.content),
+          }));
+          processedMessages.push({ role: 'user', content: toolResultBlocks });
+        }
       }
 
       // Anthropic requires the final turn to be a user message.

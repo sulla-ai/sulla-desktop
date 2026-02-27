@@ -16,6 +16,30 @@ import { initSullaEvents } from '@pkg/main/sullaEvents';
 import * as path from 'path';
 import { app } from 'electron';
 import { execSync } from 'child_process';
+import * as fs from 'fs';
+
+/** Track whether Sulla services were actually started during this session. */
+let sullaDockerServicesStarted = false;
+
+export function markSullaDockerServicesStarted(): void {
+  sullaDockerServicesStarted = true;
+}
+
+/**
+ * Check if the Docker daemon socket is reachable before attempting compose commands.
+ */
+const isDockerDaemonRunning = (): boolean => {
+  try {
+    // Quick socket existence check first
+    if (!fs.existsSync('/var/run/docker.sock')) {
+      return false;
+    }
+    execSync('docker info', { encoding: 'utf8', timeout: 5000, stdio: 'pipe' });
+    return true;
+  } catch {
+    return false;
+  }
+};
 
 const checkDockerMode = async () => {
   try {
@@ -39,8 +63,29 @@ const checkDockerMode = async () => {
     // We're in Docker mode if VM is not running OR Kubernetes is not enabled
     return !vmRunning || !k8sEnabled;
   } catch (err) {
-    // If we can't check, assume Docker mode (VM not accessible)
-    return true;
+    // If we can't determine state, do NOT assume Docker mode — nothing to tear down
+    return false;
+  }
+};
+
+/**
+ * Attempt to stop Sulla Docker Compose services.
+ * Only runs if services were actually started this session AND Docker daemon is reachable.
+ */
+const trySullaComposeDown = (): void => {
+  if (!sullaDockerServicesStarted) {
+    return;
+  }
+  if (!isDockerDaemonRunning()) {
+    console.log('[Shutdown] Docker daemon not running, skipping compose down');
+    return;
+  }
+  try {
+    const composeFilePath = path.join(process.cwd(), 'pkg/rancher-desktop/assets/sulla-docker-compose.yaml');
+    execSync(`docker-compose -f "${composeFilePath}" down`, { cwd: process.cwd(), stdio: 'inherit', timeout: 30000 });
+    console.log('[Shutdown] Docker containers stopped');
+  } catch (err) {
+    console.warn('[Shutdown] Docker compose down failed:', err);
   }
 };
 
@@ -155,17 +200,6 @@ export async function onMainProxyLoad(ipcMainProxy: any) {
             firstRunWindow.close();
         }
 
-        // Stop Docker containers early if in Docker mode
-        if (await checkDockerMode()) {
-          try {
-            const composeFilePath = path.join(process.cwd(), 'pkg/rancher-desktop/assets/sulla-docker-compose.yaml');
-            execSync(`docker-compose -f "${composeFilePath}" down`, { cwd: process.cwd(), stdio: 'inherit' });
-            console.log('[Shutdown] Local Docker containers stopped');
-          } catch (err) {
-            console.warn('[Shutdown] Docker compose down failed:', err);
-          }
-        }
-
         app.quit();
     });
 }
@@ -214,31 +248,13 @@ export function hookSullaEnd(Electron: any, mainEvents: any, window:any) {
             console.warn('[Shutdown] Postgres close failed:', errorMessage);
         }
 
-        // Stop Docker containers if in Docker mode
-        if (await checkDockerMode()) {
-          try {
-            const composeFilePath = path.join(process.cwd(), 'pkg/rancher-desktop/assets/sulla-docker-compose.yaml');
-            execSync(`docker-compose -f "${composeFilePath}" down`, { cwd: process.cwd(), stdio: 'inherit' });
-            console.log('[Shutdown] Docker containers stopped');
-          } catch (err) {
-            console.warn('[Shutdown] Docker compose down failed:', err);
-          }
-        }
+        // Stop Docker containers only if they were started this session
+        trySullaComposeDown();
     });
 
     Electron.app.on('before-quit', async () => {
         try {
             await getDatabaseManager().stop();
-            // Stop Docker containers if in Docker mode
-            if (await checkDockerMode()) {
-              try {
-                const composeFilePath = path.join(process.cwd(), 'pkg/rancher-desktop/assets/sulla-docker-compose.yaml');
-                execSync(`docker-compose -f "${composeFilePath}" down`, { cwd: process.cwd(), stdio: 'inherit' });
-                console.log('[Shutdown] Docker containers stopped');
-              } catch (err) {
-                console.warn('[Shutdown] Docker compose down failed:', err);
-              }
-            }
         } catch { } // swallow any remaining errors
     });
 

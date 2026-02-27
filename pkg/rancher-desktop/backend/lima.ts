@@ -64,7 +64,7 @@ import { defined, RecursivePartial } from '@pkg/utils/typeUtils';
 import { openSudoPrompt } from '@pkg/window';
 import { SullaSettingsModel } from '@pkg/agent/database/models/SullaSettingsModel';
 import SULLA_DOCKER_COMPOSE from '@pkg/assets/sulla-docker-compose.yaml';
-import { instantiateSullaStart } from '@pkg/sulla';
+import { instantiateSullaStart, markSullaDockerServicesStarted } from '@pkg/sulla';
 
 /* eslint @typescript-eslint/switch-exhaustiveness-check: "error" */
 
@@ -2159,6 +2159,7 @@ export default class LimaBackend extends events.EventEmitter implements VMBacken
       await this.pullNomicEmbedModel();
     });
 
+    markSullaDockerServicesStarted();
     instantiateSullaStart();
     mainEvents.emit('sulla-first-run-complete');
 

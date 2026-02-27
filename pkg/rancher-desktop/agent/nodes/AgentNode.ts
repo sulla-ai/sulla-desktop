@@ -160,17 +160,28 @@ export class AgentNode extends BaseNode {
       if (!Array.isArray(state.messages)) {
         state.messages = [];
       }
-      state.messages.push({
-        role: 'assistant',
-        content: userVisibleResultText,
-        metadata: {
-          nodeId: this.id,
-          nodeName: this.name,
-          kind: 'agent_result',
-          timestamp: Date.now(),
-        },
-      } as ChatMessage);
-      this.bumpStateVersion(state);
+      const normalizedUserVisibleResult = userVisibleResultText.trim();
+      const lastMessage = state.messages[state.messages.length - 1] as ChatMessage | undefined;
+      if (
+        normalizedUserVisibleResult
+        && !(
+          lastMessage?.role === 'assistant'
+          && typeof lastMessage.content === 'string'
+          && lastMessage.content.trim() === normalizedUserVisibleResult
+        )
+      ) {
+        state.messages.push({
+          role: 'assistant',
+          content: normalizedUserVisibleResult,
+          metadata: {
+            nodeId: this.id,
+            nodeName: this.name,
+            kind: 'agent_result',
+            timestamp: Date.now(),
+          },
+        } as ChatMessage);
+        this.bumpStateVersion(state);
+      }
       await this.wsChatMessage(state, userVisibleResultText, 'assistant');
     }
 

@@ -29,7 +29,6 @@ describe('fs tool category', () => {
     const workspaceName = `jest-fs-workspace-${Date.now()}`;
     const workspaceRoot = path.join(
       os.homedir(),
-      'Library/Application Support/rancher-desktop',
       'workspaces',
       workspaceName
     );

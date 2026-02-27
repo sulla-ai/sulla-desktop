@@ -19,7 +19,6 @@ describe('create_workspace tool', () => {
     const workspaceName = `jest-create-workspace-${Date.now()}`;
     const workspaceDir = path.join(
       os.homedir(),
-      'Library/Application Support/rancher-desktop',
       'workspaces',
       workspaceName
     );
@@ -27,7 +26,7 @@ describe('create_workspace tool', () => {
     const result = await worker.invoke({ name: workspaceName });
 
     expect(result.success).toBe(true);
-    expect(result.result).toContain(`workspaces/${workspaceName}`);
+    expect(result.result).toBe(workspaceDir);
     expect(fs.existsSync(workspaceDir)).toBe(true);
   });
 

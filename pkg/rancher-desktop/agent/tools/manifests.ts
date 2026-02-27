@@ -4,7 +4,6 @@
 
 import { toolRegistry } from './registry';
 
-import { browserToolManifests } from './browser/manifests';
 import { calendarToolManifests } from './calendar/manifests';
 import { dockerToolManifests } from './docker/manifests';
 import { fsToolManifests } from './fs/manifests';
@@ -23,7 +22,6 @@ import { slackToolManifests } from './slack/manifests';
 import { workspaceToolManifests } from './workspace/manifests';
 
 toolRegistry.registerManifests([
-  ...browserToolManifests,
   ...calendarToolManifests,
   ...dockerToolManifests,
   ...fsToolManifests,

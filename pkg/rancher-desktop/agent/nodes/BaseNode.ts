@@ -141,13 +141,17 @@ async function getSoulPrompt(): Promise<string> {
 }
 
 
-export const ENVIRONMENT_PROMPT = `Core Identity & Principles and Environment & Tools
+export const ENVIRONMENT_PROMPT = `---
+# Core Identity & Principles and Environment & Tools
+
+Prefer the use of your purpose built environment and tools before resorting to alternatives.
+Here is your environment, that is your playground to help you achieve your goals:
 
 ## Tool responses
 Tool responses are delivered back as assistant messages.
 
 ## Persistent Environment & Tools
-The agent operates inside a custom runtime that contains the following built-in persistent systems.
+You operate inside a custom runtime that contains the following built-in persistent systems.
 
 Current datetime: {{formattedTime}}
 Computer time zone: {{timeZone}}
@@ -180,6 +184,7 @@ Workspaces are dedicated folders in the user data directory for persistent files
 
 ### Docker Environment
 The runtime runs on Docker with full host access. Safe containers and images from the internet can be launched. Workspace directories are mounted into containers via docker-compose for hot reloading.
+You have a full set of docker tools available for managing containers in your environment.
 
 ### Automation Workflows (n8n)
 n8n is the automation workflow engine. It includes access to thousands of community templates and is fully integrated into this runtime.
@@ -214,6 +219,15 @@ All endpoints are prefixed with /v1/.
 Your agent codebase is located at https://github.com/sulla-ai/sulla-desktop.  
 Architecture and system documentation reside in the /doc folder.
 
+### Playwright, webbrowsing and interactive with websites
+You have a full suite of playwright tools at your disposal in the playwright tool category.
+You can call the meta skill manage_active_asset with action: 'upsert', assetType: 'iframe', url: 'https://google.com', title: 'Google'
+When you activate an asset that asset will become navigable through thee playwright tools
+When done, you can call manage_active_asset with action: 'remove', assetId: '...' to clean up
+If you need to search for something you can do so using these playwright tools
+
+That was the core of your environment
+---
 `;
 
 // ============================================================================
@@ -282,11 +296,6 @@ export abstract class BaseNode<T extends BaseThreadState = BaseThreadState> {
             if (soulPrompt.trim()) {
                 parts.push(soulPrompt);
             }
-        }
-
-        // Always preserve the caller's base prompt and enrich around it.
-        if (basePrompt?.trim()) {
-            parts.push(basePrompt.trim());
         }
 
         let AwarenessMessage = ENVIRONMENT_PROMPT;
@@ -374,56 +383,11 @@ export abstract class BaseNode<T extends BaseThreadState = BaseThreadState> {
             parts.push(OBSERVATIONAL_MEMORY_SOP);
         }
         
-
-        /////////////////////////////////////////////////////////////////
-        // adds instructions for the planning graph
-        /////////////////////////////////////////////////////////////////
-        if (options.includeStrategicPlan) {
-            const planBlock = this.buildStrategicPlanContextBlock(state);
-            if (planBlock) {
-                this.insertAssistantContextBeforeLatestUser(state, {
-                    role: 'assistant',
-                    content: planBlock,
-                    metadata: {
-                        nodeId: this.id,
-                        timestamp: Date.now()
-                    }
-                });
-                this.bumpStateVersion(state);
-            }
-        }
-
-        if (options.includeTacticalPlan) {
-            const planBlock = this.buildTacticalPlanContextBlock(state);
-            if (planBlock) {
-                this.insertAssistantContextBeforeLatestUser(state, {
-                    role: 'assistant',
-                    content: planBlock,
-                    metadata: {
-                        nodeId: this.id,
-                        timestamp: Date.now()
-                    }
-                });
-                this.bumpStateVersion(state);
-            }
-        }
-
-        /////////////////////////////////////////////////////////////////
-        // adds instructions for the knowledgebase node graph
-        /////////////////////////////////////////////////////////////////
-        if (options.includeKnowledgeBaseSections) {
-            try {
-                const { SectionsRegistry } = await import('../database/registry/SectionsRegistry');
-                const registry = SectionsRegistry.getInstance();
-                const sections = await registry.getSectionsWithCategories();
-
-                if (sections.length > 0) {
-                    const sectionsTree = this.formatSectionsTree(sections);
-                    parts.push(`Knowledge Base Organization Structure:\n${sectionsTree}\n\nWhen creating articles, choose the most appropriate section and category from this structure. Only create new sections/categories if they provide significant organizational benefit.`);
-                }
-            } catch (error) {
-                console.warn('[BaseNode] Failed to load knowledge base sections:', error);
-            }
+        // Always preserve the caller's base prompt and enrich around it.
+        // Keep this after soul + environment context so node-specific directives
+        // are anchored by runtime constraints and active asset state.
+        if (basePrompt?.trim()) {
+            parts.push(basePrompt.trim());
         }
 
         return parts.join('\n\n');
@@ -1343,6 +1307,10 @@ export abstract class BaseNode<T extends BaseThreadState = BaseThreadState> {
     protected async appendResponse(state: BaseThreadState, content: string, rawProviderContent?: any): Promise<void> {
         // Ensure content is a string
         const contentStr = typeof content === 'string' ? content : JSON.stringify(content);
+        const normalizedContent = contentStr.trim();
+        if (!normalizedContent) {
+            return;
+        }
 
         const messageMeta: Record<string, any> = {
             nodeId: this.id,
@@ -1355,14 +1323,14 @@ export abstract class BaseNode<T extends BaseThreadState = BaseThreadState> {
         if (this.currentNodeRunContext) {
             this.currentNodeRunContext.messages.push({
                 role: 'assistant',
-                content: contentStr,
+                content: normalizedContent,
                 metadata: messageMeta,
             });
         }
 
         this.appendNodeScopedMessage(state, {
             role: 'assistant',
-            content: contentStr,
+            content: normalizedContent,
             metadata: messageMeta,
         }, 'assistant');
 
@@ -1370,9 +1338,18 @@ export abstract class BaseNode<T extends BaseThreadState = BaseThreadState> {
             return;
         }
         
+        const lastGraphMessage = state.messages[state.messages.length - 1] as ChatMessage | undefined;
+        if (
+            lastGraphMessage?.role === 'assistant'
+            && typeof lastGraphMessage.content === 'string'
+            && lastGraphMessage.content.trim() === normalizedContent
+        ) {
+            return;
+        }
+
         state.messages.push({
             role: 'assistant',
-            content: contentStr,
+            content: normalizedContent,
             metadata: messageMeta,
         });
         this.bumpStateVersion(state);

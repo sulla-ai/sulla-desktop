@@ -554,6 +554,17 @@ export class AgentPersonaService {
         });
         return;
       }
+      case 'deactivate_asset': {
+        const data = (msg.data && typeof msg.data === 'object') ? (msg.data as any) : null;
+        const assetId = String(data?.assetId || '').trim();
+        if (assetId) {
+          this.removeAsset(assetId);
+          console.log(`[AgentPersonaModel] deactivate_asset: removed ${assetId}`);
+        } else {
+          console.error('[AgentPersonaModel] deactivate_asset: missing assetId', { data });
+        }
+        return;
+      }
       case 'progress':
       case 'plan_update': {
         // Progress and plan_update messages contain plan updates, tool calls, etc.
