@@ -4,7 +4,7 @@ import { getIntegrationService } from '../../services/IntegrationService';
 /**
  * GitHub Comment on Issue Tool - Worker class for execution
  */
-class GitHubCommentOnIssueWorker extends BaseTool {
+export class GitHubCommentOnIssueWorker extends BaseTool {
   name: string = '';
   description: string = '';
 

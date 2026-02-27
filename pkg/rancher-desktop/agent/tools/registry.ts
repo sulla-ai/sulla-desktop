@@ -344,7 +344,10 @@ export class ToolRegistry { private static registrations = new Map<string, ToolR
       }
     }
 
-    return Promise.all(names.map(name => this.getTool(name)));
+    const results = await Promise.allSettled(names.map(name => this.getTool(name)));
+    return results
+      .filter((r): r is PromiseFulfilledResult<any> => r.status === 'fulfilled')
+      .map(r => r.value);
   }
 
   getCategories(): string[] {
