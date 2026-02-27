@@ -445,6 +445,9 @@ export class RecipeExtensionImpl implements Extension {
       movies:    path.join(home, 'Movies'),
       music:     path.join(home, 'Music'),
       pictures:  path.join(home, 'Pictures'),
+      images:    path.join(home, 'Pictures'),
+      photos:    path.join(home, 'Pictures'),
+      videos:    path.join(home, 'Movies'),
       data:      path.join(this.dir, 'data'),
       appdir:    this.dir,
     };

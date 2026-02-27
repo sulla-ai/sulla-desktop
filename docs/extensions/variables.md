@@ -28,9 +28,14 @@ All `{{variables}}` available for use in `docker-compose.yml` and the `env` fiel
 {{path.movies}}
 {{path.music}}
 {{path.pictures}}
+{{path.images}}
+{{path.photos}}
+{{path.videos}}
 {{path.data}}
 {{path.appdir}}
 ```
+
+Aliases: `images` and `photos` → Pictures, `videos` → Movies.
 
 ---
 
