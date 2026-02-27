@@ -66,7 +66,7 @@ export class Tray {
       icon:  path.join(paths.resources, 'icons', 'voice-ai.png'),
       type:  'normal',
       click() {
-        void Electron.shell.openExternal('https://hub.docker.com/repository/docker/alancarvalho/voice-ai');
+        void Electron.shell.openExternal('http://127.0.0.1:3010');
       },
     },
     { type: 'separator' },
