@@ -1,5 +1,6 @@
 import type { BaseThreadState, NodeResult } from './Graph';
 import type { ToolResult, ToolCall, ThreadState, PendingToolResult } from '../types';
+import path from 'node:path';
 import type { WebSocketMessageHandler } from '../services/WebSocketClientService';
 import { getCurrentMode, getLocalService, getService } from '../languagemodels';
 import { parseJson } from '../services/JsonParseService';
@@ -12,6 +13,7 @@ import { BaseTool } from '../tools/base';
 import { Article } from '../database/models/Article';
 import { ConversationSummaryService } from '../services/ConversationSummaryService';
 import { ObservationalSummaryService } from '../services/ObservationalSummaryService';
+import { resolveSullaProjectsDir } from '../utils/sullaPaths';
 
 // ============================================================================
 // DEFAULT SETTINGS
@@ -270,10 +272,11 @@ You have a project management system for tracking structured workspaces. Each pr
 **Rules:**
 - Always search_projects before creating a new one to avoid duplicates.
 - Use patch_project for incremental updates to specific sections.
-- Projects live in ~/sulla/projects/ by default.
+- Projects live at {{projects_dir}} by default.
 - For the full SOP and PRD template, load the native skill: load_skill("project-management").
+- The active projects file is {{active_projects_file}}. When you create or work on a project that is truly active (not archived or completed), ensure it is listed there. If a project is no longer active, remove it from this file by updating the project status to "completed" or "archived". The agent may directly edit this file to curate the active list.
 
-Current projects directory: projects/
+Current projects directory: {{projects_dir}}
 ---
 `;
 
@@ -371,9 +374,13 @@ export abstract class BaseNode<T extends BaseThreadState = BaseThreadState> {
                 hour12: true,
             });
             const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'unknown';
+            const projectsDir = resolveSullaProjectsDir();
+            const activeProjectsFile = path.join(projectsDir, 'ACTIVE_PROJECTS.md');
 
             AwarenessMessage = AwarenessMessage.replace('{{formattedTime}}', formattedTime);
             AwarenessMessage = AwarenessMessage.replace('{{timeZone}}', timeZone);
+            AwarenessMessage = AwarenessMessage.replace('{{projects_dir}}', projectsDir);
+            AwarenessMessage = AwarenessMessage.replace('{{active_projects_file}}', activeProjectsFile);
 
         if (options.includeEnvironment !== false) {
             parts.push(AwarenessMessage);

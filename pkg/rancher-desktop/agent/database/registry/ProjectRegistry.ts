@@ -1,6 +1,5 @@
 import { readdir, readFile, mkdir, writeFile, rm } from 'node:fs/promises';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { Article } from '../models/Article';
 import { redisClient } from '../RedisClient';
@@ -9,6 +8,7 @@ import {
   type ProjectSummarySchema,
 } from '../../services/ProjectService';
 import { grepSearchFilesDetailed } from '../../../utils/grepSearch';
+import { resolveSullaProjectsDir } from '../../utils/sullaPaths';
 
 export interface ProjectRegistryInitOptions {
   filesystemProjectDirs?: string[];
@@ -564,11 +564,7 @@ ${description}
   }
 
   getUserProjectsDir(): string {
-    const envPath = String(process.env.SULLA_PROJECTS_DIR || '').trim();
-    if (envPath) {
-      return path.isAbsolute(envPath) ? envPath : path.resolve(envPath);
-    }
-    return path.join(os.homedir(), 'sulla', 'projects');
+    return resolveSullaProjectsDir();
   }
 
   private buildSummariesFromCurrentMap(): ProjectSummarySchema[] {

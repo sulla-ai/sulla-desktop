@@ -1,6 +1,5 @@
 import { readdir, readFile, mkdir, writeFile } from 'node:fs/promises';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { Article } from '../models/Article';
 import { redisClient } from '../RedisClient';
@@ -10,6 +9,7 @@ import {
   type SkillSummarySchema,
 } from '../../services/SkillService';
 import { grepSearchFilesDetailed } from '../../../utils/grepSearch';
+import { resolveSullaSkillsDir } from '../../utils/sullaPaths';
 
 export interface SkillRegistryInitOptions {
   filesystemSkillDirs?: string[];
@@ -295,7 +295,7 @@ export class SkillsRegistry {
     if (envPath) {
       return path.isAbsolute(envPath) ? envPath : path.resolve(envPath);
     }
-    return path.join(os.homedir(), 'sulla', 'skills');
+    return resolveSullaSkillsDir();
   }
 
   private async collectMarkdownFiles(dirPath: string): Promise<string[]> {
