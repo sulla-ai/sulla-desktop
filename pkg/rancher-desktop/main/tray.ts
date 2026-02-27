@@ -60,6 +60,15 @@ export class Tray {
         void Electron.shell.openExternal('http://127.0.0.1:30119');
       },
     },
+    {
+      id:    'ai-voice',
+      label: 'Open AI Voice',
+      icon:  path.join(paths.resources, 'icons', 'voice-ai.svg'),
+      type:  'normal',
+      click() {
+        void Electron.shell.openExternal('https://hub.docker.com/repository/docker/alancarvalho/voice-ai');
+      },
+    },
     { type: 'separator' },
     {
       id:    'help',
