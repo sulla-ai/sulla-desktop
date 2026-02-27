@@ -1,16 +1,15 @@
 import type { BaseThreadState, NodeResult } from './Graph';
-import type { ToolResult, ToolCall, ThreadState, PendingToolResult } from '../types';
-import path from 'node:path';
+import type { ToolResult, ThreadState } from '../types';
+import path from 'node:path'; // used by enrichPrompt for active_projects_file
 import type { WebSocketMessageHandler } from '../services/WebSocketClientService';
 import { getCurrentMode, getLocalService, getService } from '../languagemodels';
 import { parseJson } from '../services/JsonParseService';
 import { getWebSocketClientService } from '../services/WebSocketClientService';
 import { SullaSettingsModel } from '../database/models/SullaSettingsModel';
 import { BaseLanguageModel, ChatMessage, NormalizedResponse } from '../languagemodels/BaseLanguageModel';
-import { abortIfSignalReceived, throwIfAborted } from '../services/AbortService';
+import { throwIfAborted } from '../services/AbortService';
 import { toolRegistry } from '../tools/registry';
 import { BaseTool } from '../tools/base';
-import { Article } from '../database/models/Article';
 import { ConversationSummaryService } from '../services/ConversationSummaryService';
 import { ObservationalSummaryService } from '../services/ObservationalSummaryService';
 import { resolveSullaProjectsDir, resolveSullaSkillsDir } from '../utils/sullaPaths';
@@ -66,24 +65,13 @@ export interface LLMCallOptions {
     signal?: AbortSignal;
     disableTools?: boolean;
     nodeRunPolicy?: NodeRunPolicy;
-    nodeRunMessages?: {
-      assistantMessages?: ChatMessage[];
-      userMessages?: ChatMessage[];
-      systemPrompt?: string;
-    };
     allowedToolCategories?: string[];
     allowedToolNames?: string[];
 }
 
 export interface NodeRunPolicy {
-    messageSource?: 'graph' | 'node-local' | 'custom';
+    messageSource?: 'graph';
     persistAssistantToGraph?: boolean;
-    persistToolResultsToGraph?: boolean;
-    persistAssistantToNodeState?: boolean;
-    persistToolResultsToNodeState?: boolean;
-    nodeStateNamespace?: string;
-    includeGraphAssistantMessages?: boolean;
-    includeGraphUserMessages?: boolean;
 }
 
 export interface NodeRunContext {
@@ -108,21 +96,8 @@ export interface PromptEnrichmentOptions {
   includeEnvironment?: boolean;
   includeMemory?: boolean;
   includeTools?: boolean;
-  includeStrategicPlan?: boolean;
-  includeTacticalPlan?: boolean;
-  includeKnowledgebasePlan?: boolean;
-  includeKnowledgeBaseSections?: boolean;
 }
 
-export interface StructuredArticlePreparationOptions {
-    fallbackSlugSource: string;
-    fallbackTitle: string;
-    fallbackHeader: string;
-    defaultSection?: string;
-    defaultCategory?: string;
-    defaultTags?: string[];
-    placeholderPattern?: RegExp;
-}
 
 
 // ============================================================================
@@ -464,7 +439,7 @@ export abstract class BaseNode<T extends BaseThreadState = BaseThreadState> {
     /**
      * Deterministic message maintenance: awaits chat summary condensation and
      * observational awareness trimming before continuing. Use this at the top
-     * of any node's execute() that runs in a loop (AgentNode, MacroNode) to
+     * of any node's execute() that runs in a loop (AgentNode) to
      * prevent unbounded message growth between cycles.
      *
      * Fast-path: if messages are below the threshold, returns immediately.
@@ -575,9 +550,6 @@ export abstract class BaseNode<T extends BaseThreadState = BaseThreadState> {
         const nodeRunContext = this.createNodeRunContext(state, {
             systemPrompt,
             policy: options.nodeRunPolicy,
-            assistantMessages: options.nodeRunMessages?.assistantMessages,
-            userMessages: options.nodeRunMessages?.userMessages,
-            systemMessageOverride: options.nodeRunMessages?.systemPrompt,
         });
 
         const callToolAccessPolicy = this.buildToolAccessPolicyForCall(options);
@@ -617,7 +589,6 @@ export abstract class BaseNode<T extends BaseThreadState = BaseThreadState> {
             // Primary attempt
             state.metadata.hadToolCalls = false;
             state.metadata.hadUserMessages = false;
-            const pendingToolResults = (state.metadata as any).__pendingToolResults ?? [];
             let reply: NormalizedResponse | null = await this.llm.chat(messages, {
                 model: state.metadata.llmModel,
                 maxTokens: options.maxTokens,
@@ -627,20 +598,12 @@ export abstract class BaseNode<T extends BaseThreadState = BaseThreadState> {
                 tools: llmTools,
                 conversationId,
                 nodeName,
-                pendingToolResults,
             });
 
             if (!reply) throw new Error('No response from primary LLM');
 
-            // Clear pending tool results — they were injected into this request
-            (state.metadata as any).__pendingToolResults = [];
-
-            // Append to state
+            // Append to state — stores native tool_use content arrays when present
             this.appendResponse(state, reply.content, reply.metadata.rawProviderContent);
-
-            // Preserve raw provider content for this turn so every pending tool result
-            // can carry it even if execution is interrupted mid-tool-loop.
-            (state.metadata as any).__activeRawProviderContent = reply.metadata.rawProviderContent;
 
             // Send token information to AgentPersona
             this.dispatchTokenInfoToAgentPersona(state, reply);
@@ -692,7 +655,6 @@ export abstract class BaseNode<T extends BaseThreadState = BaseThreadState> {
 
             return null;
         } finally {
-            delete (state.metadata as any).__activeRawProviderContent;
             this.currentNodeRunContext = previousRunContext;
             (state.metadata as any).__toolAccessPolicy = previousToolAccessPolicy;
         }
@@ -770,143 +732,6 @@ export abstract class BaseNode<T extends BaseThreadState = BaseThreadState> {
         return {
             messageSource: 'graph',
             persistAssistantToGraph: true,
-            persistToolResultsToGraph: true,
-            persistAssistantToNodeState: false,
-            persistToolResultsToNodeState: false,
-            nodeStateNamespace: '',
-            includeGraphAssistantMessages: true,
-            includeGraphUserMessages: true,
-        };
-    }
-
-    private appendNodeScopedMessage(state: BaseThreadState, message: ChatMessage, messageType: 'assistant' | 'tool'): void {
-        if (!this.currentNodeRunContext) {
-            return;
-        }
-
-        const policy = this.currentNodeRunContext.policy;
-        let namespace = String(policy.nodeStateNamespace || '').trim();
-        if (!namespace) {
-            namespace = `__messages_${this.id}`;
-        }
-        if (!namespace) {
-            return;
-        }
-
-        this.ensureNodeMessageLaneInitializedFromGraph(state, namespace);
-
-        const shouldPersist = messageType === 'assistant'
-            ? (policy.persistAssistantToNodeState || !policy.persistAssistantToGraph)
-            : (policy.persistToolResultsToNodeState || !policy.persistToolResultsToGraph);
-
-        if (!shouldPersist) {
-            return;
-        }
-
-        const metadataAny = state.metadata as any;
-        if (!metadataAny[namespace] || typeof metadataAny[namespace] !== 'object') {
-            metadataAny[namespace] = {};
-        }
-
-        if (!Array.isArray(metadataAny[namespace].messages)) {
-            metadataAny[namespace].messages = [];
-        }
-
-        const persistedMessage: ChatMessage = messageType === 'tool'
-            ? {
-                role: 'assistant',
-                content: message.content,
-                metadata: {
-                    ...(message.metadata || {}),
-                    originalRole: 'tool',
-                },
-            }
-            : { ...message };
-
-        metadataAny[namespace].messages.push(persistedMessage);
-        this.bumpStateVersion(state);
-    }
-
-    private ensureNodeMessageLaneInitializedFromGraph(state: BaseThreadState, namespace: string): void {
-        const metadataAny = state.metadata as any;
-        if (!metadataAny[namespace] || typeof metadataAny[namespace] !== 'object') {
-            metadataAny[namespace] = {};
-        }
-
-        if (metadataAny[namespace].graphSeedInitialized === true) {
-            if (!Array.isArray(metadataAny[namespace].messages)) {
-                metadataAny[namespace].messages = [];
-            }
-            return;
-        }
-
-        const graphMessages = Array.isArray(state.messages)
-            ? state.messages.map((msg) => ({ ...msg }))
-            : [];
-
-        metadataAny[namespace].messages = graphMessages;
-        metadataAny[namespace].graphSeedInitialized = true;
-    }
-
-    protected buildAssistantMessagesForNode(
-        state: BaseThreadState,
-        policy: Required<NodeRunPolicy>,
-        override?: ChatMessage[],
-    ): ChatMessage[] {
-        if (override) {
-            const overrideAssistant = override.filter(msg => msg.role === 'assistant').map(msg => ({ ...msg }));
-            if (!policy.includeGraphAssistantMessages) {
-                return overrideAssistant;
-            }
-
-            const graphAssistant = (state.messages || [])
-                .filter(msg => msg.role === 'assistant')
-                .map(msg => ({ ...msg }));
-
-            return [...graphAssistant, ...overrideAssistant];
-        }
-
-        if (!policy.includeGraphAssistantMessages) {
-            return [];
-        }
-
-        return (state.messages || [])
-            .filter(msg => msg.role === 'assistant')
-            .map(msg => ({ ...msg }));
-    }
-
-    protected buildUserMessagesForNode(
-        state: BaseThreadState,
-        policy: Required<NodeRunPolicy>,
-        override?: ChatMessage[],
-    ): ChatMessage[] {
-        if (override) {
-            const overrideUser = override.filter(msg => msg.role === 'user').map(msg => ({ ...msg }));
-            if (!policy.includeGraphUserMessages) {
-                return overrideUser;
-            }
-
-            const graphUser = (state.messages || [])
-                .filter(msg => msg.role === 'user')
-                .map(msg => ({ ...msg }));
-
-            return [...graphUser, ...overrideUser];
-        }
-
-        if (!policy.includeGraphUserMessages) {
-            return [];
-        }
-
-        return (state.messages || [])
-            .filter(msg => msg.role === 'user')
-            .map(msg => ({ ...msg }));
-    }
-
-    protected buildSystemPromptForNode(systemPrompt: string, override?: string): ChatMessage {
-        const content = (override ?? systemPrompt ?? '').trim();
-        return {
-            role: 'system',
-            content,
         };
     }
 
@@ -915,9 +740,6 @@ export abstract class BaseNode<T extends BaseThreadState = BaseThreadState> {
         input: {
             systemPrompt: string;
             policy?: NodeRunPolicy;
-            assistantMessages?: ChatMessage[];
-            userMessages?: ChatMessage[];
-            systemMessageOverride?: string;
         },
     ): NodeRunContext {
         const defaults = this.getDefaultNodeRunPolicy();
@@ -926,38 +748,15 @@ export abstract class BaseNode<T extends BaseThreadState = BaseThreadState> {
             ...(input.policy || {}),
         };
 
-        let namespace = String(policy.nodeStateNamespace || '').trim();
-        if (!namespace) {
-            namespace = `__messages_${this.id}`;
-        }
-        if (namespace) {
-            this.ensureNodeMessageLaneInitializedFromGraph(state, namespace);
-        }
+        const systemMessage: ChatMessage = {
+            role: 'system',
+            content: (input.systemPrompt ?? '').trim(),
+        };
 
-        const systemMessage = this.buildSystemPromptForNode(input.systemPrompt, input.systemMessageOverride);
-        let mergedMessages: ChatMessage[] = [];
-
-        if (policy.messageSource === 'graph' && !input.assistantMessages && !input.userMessages) {
-            mergedMessages = [
-                ...(state.messages || []).filter(msg => msg.role !== 'system').map(msg => ({ ...msg })),
-                systemMessage,
-            ];
-        } else if (policy.messageSource === 'node-local' && this.currentNodeRunContext?.messages?.length) {
-            mergedMessages = [
-                ...this.currentNodeRunContext.messages
-                    .filter(msg => msg.role !== 'system')
-                    .map(msg => ({ ...msg })),
-                systemMessage,
-            ];
-        } else {
-            const assistantMessages = this.buildAssistantMessagesForNode(state, policy, input.assistantMessages);
-            const userMessages = this.buildUserMessagesForNode(state, policy, input.userMessages);
-            mergedMessages = [
-                ...assistantMessages,
-                ...userMessages,
-                systemMessage,
-            ];
-        }
+        const mergedMessages: ChatMessage[] = [
+            ...(state.messages || []).filter(msg => msg.role !== 'system').map(msg => ({ ...msg })),
+            systemMessage,
+        ];
 
         return {
             runId: `${this.id}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
@@ -988,191 +787,6 @@ export abstract class BaseNode<T extends BaseThreadState = BaseThreadState> {
         return parseJson(raw);
     }
 
-    protected prepareArticleFromStructuredOutput(
-        rawOutput: string,
-        options: StructuredArticlePreparationOptions,
-    ): { meta: Record<string, any>; document: string } {
-        const normalizedOutput = this.normalizeStructuredOutput(rawOutput);
-        const fmMatch = normalizedOutput.match(/---\s*\n([\s\S]*?)\n---\s*\n?([\s\S]*)/);
-        const rawMeta = fmMatch ? this.parseYamlFrontmatter(fmMatch[1]) : {};
-
-        const sanitizedFallbackSlug = this.sanitizeText(options.fallbackSlugSource, options.placeholderPattern);
-        const rawSlug = this.sanitizeText(rawMeta.slug || sanitizedFallbackSlug || options.fallbackHeader, options.placeholderPattern);
-        let slug = this.normalizeSlug(rawSlug);
-
-        if (!slug) {
-            const headerSlug = this.normalizeSlug(options.fallbackHeader) || 'document';
-            slug = `${headerSlug}-${Date.now()}`;
-        }
-
-        const title = this.sanitizeText(rawMeta.title || options.fallbackTitle || slug, options.placeholderPattern) || slug;
-        const section = this.sanitizeText(rawMeta.section || options.defaultSection || 'Projects', options.placeholderPattern) || 'Projects';
-        const category = this.sanitizeText(rawMeta.category || options.defaultCategory || 'Projects', options.placeholderPattern) || 'Projects';
-        const defaultTags = options.defaultTags?.length ? options.defaultTags : ['skill'];
-        const tags = this.sanitizeStringArray(rawMeta.tags, options.placeholderPattern).length
-            ? this.sanitizeStringArray(rawMeta.tags, options.placeholderPattern)
-            : defaultTags;
-        const mentions = this.sanitizeStringArray(rawMeta.mentions, options.placeholderPattern);
-        const relatedEntities = this.sanitizeStringArray(rawMeta.related_entities, options.placeholderPattern);
-        const document = this.buildSafeDocumentBody(
-            fmMatch?.[2],
-            normalizedOutput,
-            title,
-            options.fallbackHeader,
-            `${this.name} generated this document.`,
-        );
-
-        return {
-            meta: {
-                schemaversion: Number(rawMeta.schemaversion) || 1,
-                slug,
-                title,
-                section,
-                category,
-                tags,
-                mentions,
-                related_entities: relatedEntities,
-            },
-            document,
-        };
-    }
-
-    protected async saveArticleAsync(meta: Record<string, any>, document: string, nodeLabel: string): Promise<void> {
-        try {
-            const article = new Article();
-            article.fill({
-                schemaversion: meta.schemaversion,
-                slug: meta.slug,
-                title: meta.title,
-                section: meta.section,
-                category: meta.category,
-                tags: meta.tags,
-                mentions: meta.mentions,
-                related_entities: meta.related_entities,
-                document,
-            });
-
-            await article.save();
-            console.log(`[${nodeLabel}] Saved article asynchronously: ${meta.slug}`);
-        } catch (error) {
-            console.warn(`[${nodeLabel}] Failed to save article asynchronously:`, error);
-        }
-    }
-
-    protected normalizeStructuredOutput(content: string): string {
-        const trimmed = String(content || '').trim();
-        const fencedMatch = trimmed.match(/^```(?:markdown|md|yaml)?\s*\n([\s\S]*?)\n```$/i);
-        return fencedMatch ? fencedMatch[1].trim() : trimmed;
-    }
-
-    protected parseYamlFrontmatter(frontmatter: string): Record<string, any> {
-        const result: Record<string, any> = {};
-        let currentArrayKey: string | null = null;
-
-        for (const rawLine of frontmatter.split('\n')) {
-            const line = rawLine.replace(/\t/g, '  ');
-            const trimmed = line.trim();
-            if (!trimmed) continue;
-
-            const keyValueMatch = trimmed.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*:\s*(.*)$/);
-            if (keyValueMatch) {
-                const key = keyValueMatch[1];
-                const value = keyValueMatch[2].trim();
-
-                if (!value) {
-                    result[key] = [];
-                    currentArrayKey = key;
-                    continue;
-                }
-
-                currentArrayKey = null;
-                const unquoted = value.replace(/^"([\s\S]*)"$/, '$1').replace(/^'([\s\S]*)'$/, '$1');
-                const inlineArrayMatch = unquoted.match(/^\[(.*)\]$/);
-                if (inlineArrayMatch) {
-                    result[key] = inlineArrayMatch[1]
-                        .split(',')
-                        .map(item => item.trim())
-                        .filter(Boolean);
-                    continue;
-                }
-
-                result[key] = unquoted;
-                continue;
-            }
-
-            const arrayItemMatch = trimmed.match(/^-\s+(.*)$/);
-            if (arrayItemMatch && currentArrayKey) {
-                if (!Array.isArray(result[currentArrayKey])) {
-                    result[currentArrayKey] = [];
-                }
-                result[currentArrayKey].push(arrayItemMatch[1].trim());
-            }
-        }
-
-        return result;
-    }
-
-    protected sanitizeText(value: any, placeholderPattern?: RegExp): string {
-        const text = String(value || '')
-            .replace(/^"|"$/g, '')
-            .replace(/^'|'$/g, '')
-            .trim();
-
-        if (!text) return '';
-
-        const defaultPlaceholderPattern = /(your-|goes-here|slugs-to-|the\s+project\s+title|the\s+actin\s+step\s+name|the\s+category\s+this\s+would\s+fall\s+under)/i;
-        const pattern = placeholderPattern || defaultPlaceholderPattern;
-        if (pattern.test(text)) {
-            return '';
-        }
-
-        return text;
-    }
-
-    protected sanitizeStringArray(value: any, placeholderPattern?: RegExp): string[] {
-        const raw = Array.isArray(value)
-            ? value
-            : typeof value === 'string'
-                ? value.split(',')
-                : [];
-
-        const out = raw
-            .map(item => this.sanitizeText(item, placeholderPattern))
-            .filter(Boolean);
-
-        return Array.from(new Set(out));
-    }
-
-    protected buildSafeDocumentBody(
-        body: string | undefined,
-        source: string,
-        title: string,
-        fallbackHeader: string,
-        fallbackDescription: string,
-    ): string {
-        const cleanedBody = String(body || '').trim();
-        if (cleanedBody.length > 24) {
-            return cleanedBody;
-        }
-
-        const strippedFrontmatter = source.replace(/---\s*\n[\s\S]*?\n---\s*\n?/m, '').trim();
-        if (strippedFrontmatter.length > 24) {
-            return strippedFrontmatter;
-        }
-
-        const safeTitle = title || fallbackHeader;
-        return `# ${fallbackHeader}\n\nTitle: ${safeTitle}\n\n${fallbackDescription}`;
-    }
-
-    protected normalizeSlug(value: string): string {
-        return String(value)
-            .toLowerCase()
-            .trim()
-            .replace(/['"]/g, '')
-            .replace(/[^a-z0-9]+/g, '-')
-            .replace(/^-+|-+$/g, '');
-    }
- 
     /**
      * Helper method to respond gracefully when abort is detected
      */
@@ -1182,215 +796,55 @@ export abstract class BaseNode<T extends BaseThreadState = BaseThreadState> {
     }
 
     /**
-     * Build a context block showing strategic plan progress
-     */
-    protected buildStrategicPlanContextBlock(state: any): string | null {
-        const plan = state.metadata.plan;
-        if (!plan || !plan.model || !plan.milestones || plan.milestones.length === 0) {
-            return null;
-        }
-
-        const goal = plan.model.attributes.goal || '';
-        const goaldescription = plan.model.attributes.goaldescription || '';
-        const activeIndex = plan.activeMilestoneIndex;
-
-        const milestoneLines = plan.milestones.map((mWrapper: { model: { status?: string, title?: string } }, idx: number) => {
-            const m = mWrapper.model;
-            const status = m.status || 'pending';
-            let statusIcon = '○';
-            if (status === 'done') statusIcon = '✓';
-            else if (status === 'in_progress') statusIcon = '→';
-            else if (status === 'blocked') statusIcon = '✗';
-
-            const isActive = idx === activeIndex || status === 'in_progress';
-            const title = isActive ? `**${m.title}**` : m.title;
-
-            return ` ${statusIcon} Milestone ${idx + 1}: ${title} [${status}]`;
-        });
-
-        return `## Strategic Plan\nGoal: ${goal}\nGoal Description: ${goaldescription}\n\n### Milestones:\n${milestoneLines.join('\n')}`;
-    }
-
-    /**
-     * Build a context block showing tactical plan progress for current milestone
-     */
-    protected buildTacticalPlanContextBlock(state: any): string | null {
-        const steps = state.metadata.currentSteps;
-        if (!steps || steps.length === 0) {
-            return null;
-        }
-
-        const activeIndex = state.metadata.activeStepIndex;
-
-        const stepLines = steps.map((s:any, idx:number) => {
-            const status = s.done ? 'done' : (idx === activeIndex ? 'in_progress' : 'pending');
-            let statusIcon = '○';
-            if (status === 'done') statusIcon = '✓';
-            else if (status === 'in_progress') statusIcon = '→';
-
-            const isActive = status === 'in_progress';
-            const description = isActive ? `**${s.description}**` : s.description;
-
-            return ` ${statusIcon} Step ${idx + 1}: ${description} [${status}]`;
-        });
-
-        return `#### Tactical Plan (Current Milestone)\nSteps:\n${stepLines.join('\n')}`;
-    }
-
-    /**
-     * Build a context block showing knowledge base article progress and content
-     */
-    protected buildKnowledgeBaseContextBlock(state: any): string | null {
-        const parts: string[] = [];
-
-        // Action plan steps
-        const steps = state.metadata.kbCurrentSteps || [];
-        if (steps.length > 0) {
-            const activeIndex = state.metadata.kbActiveStepIndex;
-            const stepLines = steps.map((s: any, idx: number) => {
-                const status = s.done ? 'done' : (idx === activeIndex ? 'in_progress' : 'pending');
-                let statusIcon = '○';
-                if (status === 'done') statusIcon = '✓';
-                else if (status === 'in_progress') statusIcon = '→';
-
-                const isActive = status === 'in_progress';
-                const description = isActive ? `**${s.description}**` : s.description;
-
-                return ` ${statusIcon} Step ${idx + 1}: ${description} [${status}]`;
-            });
-
-            parts.push(`### Action Plan\nSteps:\n${stepLines.join('\n')}`);
-        }
-
-        // Article schema
-        const schema = state.metadata.kbArticleSchema || {};
-        const schemaLines = Object.entries(schema).map(([key, value]) => {
-            const valStr = Array.isArray(value) ? value.join(', ') : value?.toString() || 'Not set';
-            return `- **${key}**: ${valStr}`;
-        });
-        if (schemaLines.length > 0) {
-            parts.push(`### Article Schema\n${schemaLines.join('\n')}`);
-        }
-
-        // Article research (JSON block)
-        const research = state.metadata.kbArticleResearch;
-        if (research?.trim()) {
-            parts.push(`### Article Research\n\`\`\`json\n${research.trim()}\n\`\`\``);
-        }
-
-        // Final content (Markdown block)
-        const finalContent = state.metadata.kbFinalContent;
-        if (finalContent?.trim()) {
-            parts.push(`### Final Content\n\`\`\`markdown\n${finalContent.trim()}\n\`\`\``);
-        }
-
-        return parts.length > 0 ? parts.join('\n\n') : null;
-    }
-
-    /**
-     * Format sections and categories as a hierarchical tree view
-     */
-    protected formatSectionsTree(sections: any[]): string {
-        if (!sections || sections.length === 0) {
-            return 'No sections available.';
-        }
-
-        const lines: string[] = [];
-
-        for (const section of sections) {
-            // Add section with tree branch symbol
-            lines.push(`${lines.length === 0 ? '┌─' : '├─'} ${section.name}`);
-            lines.push(`│  ${section.description}`);
-
-            // Add categories under this section
-            if (section.categories && section.categories.length > 0) {
-                for (let i = 0; i < section.categories.length; i++) {
-                    const category = section.categories[i];
-                    const isLast = i === section.categories.length - 1;
-                    const prefix = isLast ? '│  └─' : '│  ├─';
-                    lines.push(`${prefix} ${category.name}`);
-                    if (category.description && category.description !== category.name) {
-                        lines.push(`│     ${category.description}`);
-                    }
-                }
-            } else {
-                lines.push('│  └─ No categories');
-            }
-
-            // Add spacing between sections
-            if (sections.indexOf(section) < sections.length - 1) {
-                lines.push('│');
-            }
-        }
-
-        return lines.join('\n');
-    }
-    
-    /**
-     * Pull a model from Ollama (only works for local mode)
-     */
-    protected async pullModel(modelName: string): Promise<boolean> {
-        const mode = await getCurrentMode();
-        if (mode !== 'local') {
-            console.warn(`[Agent:${this.name}] Cannot pull model in remote mode`);
-            return false;
-        }
-
-        const ollama = (await getService('local', modelName)) as any;
-        return ollama.pullModel?.(modelName) ?? false;
-    }
-
-    /**
      * Optional: append assistant response to state.messages
-     * rawProviderContent: raw content array from provider (e.g. Anthropic tool_use blocks) stored
-     * on the message so buildRequestBody can pass it through as-is on the next turn.
+     * rawProviderContent: raw content array from provider (e.g. Anthropic tool_use blocks).
+     * When present and containing tool_use blocks, the native content array is stored directly
+     * so buildRequestBody can pass it through as-is on subsequent turns.
      */
     protected async appendResponse(state: BaseThreadState, content: string, rawProviderContent?: any): Promise<void> {
-        // Ensure content is a string
         const contentStr = typeof content === 'string' ? content : JSON.stringify(content);
         const normalizedContent = contentStr.trim();
-        if (!normalizedContent) {
+
+        // Determine if the raw provider content has tool_use blocks
+        const hasToolUseBlocks = Array.isArray(rawProviderContent)
+            && rawProviderContent.some((b: any) => b?.type === 'tool_use');
+
+        // If pure tool_use response with no text, still store the native content
+        if (!normalizedContent && !hasToolUseBlocks) {
             return;
         }
+
+        // Use native content array when tool_use blocks are present
+        const messageContent: any = hasToolUseBlocks ? rawProviderContent : normalizedContent;
 
         const messageMeta: Record<string, any> = {
             nodeId: this.id,
             timestamp: Date.now(),
         };
-        if (rawProviderContent !== undefined) {
-            messageMeta.rawProviderContent = rawProviderContent;
-        }
 
         if (this.currentNodeRunContext) {
             this.currentNodeRunContext.messages.push({
                 role: 'assistant',
-                content: normalizedContent,
+                content: normalizedContent || '',
                 metadata: messageMeta,
             });
         }
 
-        this.appendNodeScopedMessage(state, {
-            role: 'assistant',
-            content: normalizedContent,
-            metadata: messageMeta,
-        }, 'assistant');
-
-        if (this.currentNodeRunContext && !this.currentNodeRunContext.policy.persistAssistantToGraph) {
-            return;
-        }
-        
-        const lastGraphMessage = state.messages[state.messages.length - 1] as ChatMessage | undefined;
-        if (
-            lastGraphMessage?.role === 'assistant'
-            && typeof lastGraphMessage.content === 'string'
-            && lastGraphMessage.content.trim() === normalizedContent
-        ) {
-            return;
+        // Deduplicate — don't push if last message is identical string content
+        if (typeof messageContent === 'string') {
+            const lastGraphMessage = state.messages[state.messages.length - 1] as ChatMessage | undefined;
+            if (
+                lastGraphMessage?.role === 'assistant'
+                && typeof lastGraphMessage.content === 'string'
+                && lastGraphMessage.content.trim() === messageContent
+            ) {
+                return;
+            }
         }
 
         state.messages.push({
             role: 'assistant',
-            content: normalizedContent,
+            content: messageContent,
             metadata: messageMeta,
         });
         this.bumpStateVersion(state);
@@ -1635,10 +1089,6 @@ export abstract class BaseNode<T extends BaseThreadState = BaseThreadState> {
             error?: string;
         },
     ): void {
-        if (!this.currentNodeRunContext) {
-            return;
-        }
-
         const metadataAny = state.metadata as any;
         const dedupeKey = this.buildToolRunDedupeKey(payload.toolName, payload.args);
         const record = {
@@ -1662,22 +1112,6 @@ export abstract class BaseNode<T extends BaseThreadState = BaseThreadState> {
         }
         metadataAny.__toolRuns.push(record);
         metadataAny.__toolRunIndex[dedupeKey] = record;
-
-        const namespace = String(this.currentNodeRunContext.policy.nodeStateNamespace || '').trim();
-        if (namespace) {
-            this.ensureNodeMessageLaneInitializedFromGraph(state, namespace);
-
-            if (!Array.isArray(metadataAny[namespace].toolRuns)) {
-                metadataAny[namespace].toolRuns = [];
-            }
-
-            if (!metadataAny[namespace].toolRunIndex || typeof metadataAny[namespace].toolRunIndex !== 'object') {
-                metadataAny[namespace].toolRunIndex = {};
-            }
-
-            metadataAny[namespace].toolRuns.push(record);
-            metadataAny[namespace].toolRunIndex[dedupeKey] = record;
-        }
         this.bumpStateVersion(state);
     }
 
@@ -1926,446 +1360,100 @@ export abstract class BaseNode<T extends BaseThreadState = BaseThreadState> {
     }
 
     /**
-     * Store tool result in state.metadata.__pendingToolResults.
-     * Results are NOT pushed to state.messages here.
-     * Instead they are injected into the outbound message array at send-time
-     * by the provider adapter (RemoteService / OllamaService) in the correct
-     * provider-specific format (Anthropic tool_result block, OpenAI tool role, etc.).
+     * Append tool result to state.messages as a proper role:'user' message with
+     * native tool_result content blocks (matching the tool_use_id from the
+     * assistant's tool_use call).  This is the format Anthropic/OpenAI expect
+     * and it persists across graph cycles so the LLM always sees the full
+     * tool_use → tool_result conversation.
      */
     public async appendToolResultMessage(
         state: BaseThreadState,
         action: string,
         result: ToolResult
     ): Promise<void> {
-        // Skip appending tool results for tools that should not add message payloads.
         if (action === 'emit_chat_message') {
             return;
         }
 
-        const summary = result.success
-            ? `Tool ${action} succeeded`
-            : `Tool ${action} failed: ${result.error || 'unknown error'}`;
+        // --- Format the result payload into a readable string ---
 
-        const normalizeResultPayload = (payload: unknown): unknown => {
-            if (typeof payload !== 'string') {
-                return payload;
+        const formatPayload = (payload: unknown, maxLen?: number): string => {
+            if (payload == null) return 'null';
+
+            let parsed = payload;
+            if (typeof parsed === 'string') {
+                const trimmed = parsed.trim();
+                if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+                    try { parsed = JSON.parse(trimmed); } catch { /* keep as string */ }
+                }
             }
 
-            const trimmed = payload.trim();
-            if (!trimmed) {
-                return payload;
+            // Unwrap tool envelope: { result: ..., toolName, success, ... } → just result
+            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                const record = parsed as Record<string, any>;
+                if ('result' in record && ('toolName' in record || 'tool' in record || 'success' in record || 'toolCallId' in record)) {
+                    parsed = record.result;
+                }
             }
 
-            if (!(trimmed.startsWith('{') || trimmed.startsWith('['))) {
-                return payload;
+            const serialized = typeof parsed === 'string' ? parsed : JSON.stringify(parsed, null, 2);
+            if (maxLen && serialized.length > maxLen) {
+                return `${serialized.substring(0, maxLen)}...`;
             }
-
-            try {
-                return JSON.parse(trimmed);
-            } catch {
-                return payload;
-            }
+            return serialized;
         };
 
-        const unwrapToolEnvelope = (payload: unknown): unknown => {
-            if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
-                return payload;
-            }
+        const contentText = formatPayload(result.result, 5000);
+        const errorText = String(result.error || 'unknown error').trim();
+        const showDetails = contentText.trim().length > 0 && contentText.trim() !== errorText;
 
-            const record = payload as Record<string, any>;
-            if ('result' in record && (
-                'toolName' in record ||
-                'tool' in record ||
-                'success' in record ||
-                'toolCallId' in record
-            )) {
-                return record.result;
-            }
+        const resultContent = result.success
+            ? `tool: ${action}\nresult:\n${contentText}`
+            : `tool: ${action}\nerror: ${errorText}${showDetails ? `\nresult:\n${contentText}` : ''}`;
 
-            return payload;
-        };
+        const toolCallId = result.toolCallId || `${action}_${Date.now()}`;
 
-        const formatForMessage = (payload: unknown): string => {
-            if (payload == null) {
-                return 'null';
-            }
-
-            const serialized = typeof payload === 'string'
-                ? payload
-                : JSON.stringify(payload, null, 2);
-
-            if (serialized.length <= 5000) {
-                return serialized;
-            }
-
-            return `${serialized.substring(0, 5000)}...`;
-        };
-
-        const formatForPendingToolResult = (payload: unknown): string => {
-            if (payload == null) {
-                return 'null';
-            }
-
-            return typeof payload === 'string'
-                ? payload
-                : JSON.stringify(payload, null, 2);
-        };
-
-        const normalizedResult = normalizeResultPayload(result.result);
-        const compactResult = unwrapToolEnvelope(normalizedResult);
-        const detailText = compactResult == null ? '' : formatForMessage(compactResult);
-        const normalizedErrorText = String(result.error || 'unknown error').trim();
-        const normalizedDetailText = detailText.trim();
-        const includeDetails = normalizedDetailText.length > 0 && normalizedDetailText !== normalizedErrorText;
-
-        const content = result.success
-            ? [
-                `tool: ${action}`,
-                'result:',
-                formatForMessage(compactResult),
-            ].join('\n')
-            : [
-                `tool: ${action}`,
-                `error: ${normalizedErrorText || 'unknown error'}`,
-                includeDetails ? `result:\n${detailText}` : '',
-            ].filter(Boolean).join('\n');
-
-        const pendingContent = result.success
-            ? [
-                `tool: ${action}`,
-                'result:',
-                formatForPendingToolResult(compactResult),
-            ].join('\n')
-            : [
-                `tool: ${action}`,
-                `error: ${normalizedErrorText || 'unknown error'}`,
-                includeDetails ? `result:\n${formatForPendingToolResult(compactResult)}` : '',
-            ].filter(Boolean).join('\n');
-
-        const toolMessage: ChatMessage = {
-            role: 'tool',
-            content,
-            name: action,
-            tool_call_id: result.toolCallId,
-            metadata: {
-                nodeId: this.id,
-                nodeName: this.name,
-                kind: 'tool_result',
-                toolName: action,
-                success: result.success,
-                summary,
-                timestamp: Date.now()
-            }
-        };
-
-        // Keep tool message in node run context so the ReAct loop within this
-        // node execution can still see previous tool outputs mid-turn.
+        // --- 1. Node run context (current LLM turn visibility) ---
         if (this.currentNodeRunContext) {
-            this.currentNodeRunContext.messages.push(toolMessage);
-        }
-
-        this.appendNodeScopedMessage(state, toolMessage, 'tool');
-
-        // Persist tool results to graph-level state.messages so they survive across cycles.
-        // Without this, tool results are ephemeral and lost after the current LLM turn.
-        const shouldPersistToGraph = this.currentNodeRunContext?.policy.persistToolResultsToGraph ?? false;
-        if (shouldPersistToGraph) {
-            const graphToolMessage: ChatMessage = {
-                role: 'assistant',
-                content: content,
+            this.currentNodeRunContext.messages.push({
+                role: 'tool',
+                content: resultContent,
+                name: action,
+                tool_call_id: toolCallId,
                 metadata: {
                     nodeId: this.id,
                     nodeName: this.name,
                     kind: 'tool_result',
                     toolName: action,
                     success: result.success,
-                    summary,
                     timestamp: Date.now(),
                 },
-            };
-            state.messages.push(graphToolMessage);
+            } as ChatMessage);
         }
 
-        // Store as pending tool result in state metadata for send-time injection.
-        const pendingRecord: PendingToolResult = {
-            toolCallId: result.toolCallId || `${action}_${Date.now()}`,
-            toolName: action,
-            success: result.success,
-            result: result.result,
-            error: result.error,
-            content: pendingContent,
-            nodeId: this.id,
-            nodeName: this.name,
-            timestamp: Date.now(),
-            rawProviderContent: undefined,
-        };
-
-        const metadataAny = state.metadata as any;
-        if (metadataAny.__activeRawProviderContent !== undefined) {
-            pendingRecord.rawProviderContent = metadataAny.__activeRawProviderContent;
-        }
-        if (!Array.isArray(metadataAny.__pendingToolResults)) {
-            metadataAny.__pendingToolResults = [];
-        }
-        metadataAny.__pendingToolResults.push(pendingRecord);
-
-        this.bumpStateVersion(state);
-    }
-
-    /**
-     * Execute a single tool call using the standard executeToolCalls method
-     * This provides consistent reporting and success/failure feedback
-     */
-    protected async executeSingleTool(state: any, toolCall: any[]): Promise<void> {
-        // Normalize exec-form array to normalized object
-        const name = toolCall[0];
-        const execArgs = toolCall.slice(1);
-        // For now, assume single arg tools like emit_chat_message where args[0] is the content
-        const args = execArgs.length === 1 ? { content: execArgs[0] } : execArgs;
-        const normalized = { name, args };
-        await this.executeToolCalls(state, [normalized]);
-    }
-
-    // ======================================================================
-    // N8N ACTIVE ASSET + LIVE EVENT STREAM
-    // ======================================================================
-
-    private static n8nBridgeStartPromise: Promise<void> | null = null;
-
-    /**
-     * Start the live n8n action stream: registers the n8n iframe as an active
-     * asset and subscribes to bridge socket events. Idempotent — if the asset
-     * has already been activated for this state, this is a no-op.
-     *
-     * Called from browse_tools when the n8n category is loaded, and can also
-     * be called directly by any node that needs it.
-     */
-    async startLiveN8nActionStream(state: BaseThreadState): Promise<() => void> {
-        const metadataAny = state.metadata as any;
-
-        // Idempotent: skip if already activated for this state
-        if (metadataAny.__n8nAssetActivated) {
-            return () => {};
-        }
-
-        try {
-            const { getN8nBridgeService } = await import('../services/N8nBridgeService');
-            const bridge = getN8nBridgeService();
-
-            if (!BaseNode.n8nBridgeStartPromise) {
-                BaseNode.n8nBridgeStartPromise = bridge.start().catch((error) => {
-                    BaseNode.n8nBridgeStartPromise = null;
-                    throw error;
-                });
-            }
-
-            await BaseNode.n8nBridgeStartPromise;
-
-            // Mark activated before dispatching to prevent re-entry
-            metadataAny.__n8nAssetActivated = true;
-
-            const wsChannel = String(metadataAny.wsChannel || 'chat-controller');
-            const selectedSkillSlug = String(metadataAny.planRetrieval?.selected_skill_slug || '');
-            const n8nRootUrl = String(bridge.getAppRootUrl() || 'http://127.0.0.1:30119/').trim();
-            const bridgeSocketUnsubs = this.subscribeToN8nBridgeSocketEvents(state, bridge);
-
-            void this.dispatchToWebSocket(wsChannel, {
-                type: 'register_or_activate_asset',
-                data: {
-                    asset: {
-                        type: 'iframe',
-                        id: 'sulla_n8n',
-                        title: 'Sulla n8n',
-                        url: n8nRootUrl,
-                        active: true,
-                        collapsed: true,
-                        skillSlug: selectedSkillSlug,
-                        refKey: `graph.skill.${selectedSkillSlug || 'workflow'}.website_url`,
-                    },
+        // --- 2. Persist to state.messages as native tool_result (user role) ---
+        // The assistant's tool_use message was already stored by appendResponse
+        // with the native content array. Now store the matching tool_result.
+        state.messages.push({
+            role: 'user',
+            content: [
+                {
+                    type: 'tool_result',
+                    tool_use_id: toolCallId,
+                    content: resultContent,
                 },
-                timestamp: Date.now(),
-            });
-
-            console.log('[BaseNode] n8n asset activated and live stream started');
-
-            return () => {
-                for (const unsub of bridgeSocketUnsubs) {
-                    try { unsub(); } catch { /* no-op */ }
-                }
-            };
-        } catch (error) {
-            console.warn('[BaseNode] Unable to start live n8n event stream:', error);
-            return () => {};
-        }
-    }
-
-    private subscribeToN8nBridgeSocketEvents(state: BaseThreadState, bridge: any): Array<() => void> {
-        const unsubs: Array<() => void> = [];
-        const n8nInterfaceChannel = 'n8n_interface';
-
-        type N8nLiveEvent = {
-            timestamp: string;
-            type: 'websocket' | 'execution' | 'error';
-            action?: string;
-            workflowId?: string;
-            executionId?: string;
-            nodeName?: string;
-            message?: string;
-            data?: unknown;
-        };
-
-        const onSocketEvent = <K extends string>(
-            event: K,
-            toEventEntry: (payload: any) => Omit<N8nLiveEvent, 'timestamp'>,
-        ) => {
-            unsubs.push(bridge.on(event, (payload: any) => {
-                const entry: N8nLiveEvent = {
-                    ...toEventEntry(payload),
-                    timestamp: new Date().toISOString(),
-                };
-                const formatted = this.formatN8nLiveEvent(entry);
-
-                if (formatted && this.shouldAppendN8nLiveEvent(state, formatted)) {
-                    this.appendN8nLiveMessage(state, formatted, entry);
-                }
-            }));
-        };
-
-        onSocketEvent('workflowUpdated', payload => ({
-            type: 'websocket',
-            action: 'workflowUpdated',
-            workflowId: payload.workflowId,
-            data: payload.raw,
-        }));
-
-        onSocketEvent('executionStarted', payload => ({
-            type: 'execution',
-            action: 'started',
-            executionId: payload.executionId,
-            workflowId: payload.workflowId,
-            data: payload.raw,
-        }));
-
-        onSocketEvent('nodeExecuted', payload => ({
-            type: 'execution',
-            action: 'nodeExecuted',
-            executionId: payload.executionId,
-            workflowId: payload.workflowId,
-            nodeName: payload.nodeName,
-            data: payload.raw,
-        }));
-
-        onSocketEvent('errorOccurred', payload => ({
-            type: 'error',
-            action: 'bridgeError',
-            message: payload.message,
-            data: payload.raw,
-        }));
-
-        onSocketEvent('rawMessage', payload => ({
-            type: 'websocket',
-            action: 'rawMessage',
-            data: payload,
-        }));
-
-        this.connectWebSocket(n8nInterfaceChannel);
-        const n8nInterfaceUnsub = this.listenToWebSocket(n8nInterfaceChannel, (msg: any) => {
-            if (msg.type !== 'n8n_vue_bridge_event') {
-                return;
-            }
-
-            const data = (msg.data && typeof msg.data === 'object') ? (msg.data as any) : null;
-            const payloadThreadId = String(data?.threadId || '').trim();
-            const stateThreadId = String((state.metadata as any).threadId || '').trim();
-            if (payloadThreadId && stateThreadId && payloadThreadId !== stateThreadId) {
-                return;
-            }
-
-            const content = String(data?.content || '').trim();
-            if (!content) {
-                return;
-            }
-
-            const entry: N8nLiveEvent = {
-                timestamp: new Date().toISOString(),
-                type: 'websocket',
-                action: `ui:${String(data?.eventType || 'event').trim() || 'event'}`,
-                data: data?.payload,
-            };
-
-            if (this.shouldAppendN8nLiveEvent(state, content)) {
-                this.appendN8nLiveMessage(state, content, entry);
-            }
-        });
-
-        if (n8nInterfaceUnsub) {
-            unsubs.push(n8nInterfaceUnsub);
-        }
-
-        return unsubs;
-    }
-
-    private formatN8nLiveEvent(entry: { type: string; action?: string; workflowId?: string; executionId?: string; nodeName?: string; message?: string }): string {
-        if (!entry) return '';
-        if (entry.action === 'rawMessage') return '';
-
-        const head = entry.type === 'websocket' ? '[n8n wss]' : `[n8n ${entry.type}]`;
-        const action = entry.action ? ` ${entry.action}` : '';
-        const workflow = entry.workflowId ? ` workflow=${entry.workflowId}` : '';
-        const execution = entry.executionId ? ` execution=${entry.executionId}` : '';
-        const node = entry.nodeName ? ` node=${entry.nodeName}` : '';
-        const message = entry.message ? ` — ${entry.message}` : '';
-
-        return `${head}${action}${workflow}${execution}${node}${message}`.trim();
-    }
-
-    private shouldAppendN8nLiveEvent(state: BaseThreadState, content: string): boolean {
-        const metadataAny = state.metadata as any;
-        const liveMeta = metadataAny.__n8nLiveEvent || {};
-        const now = Date.now();
-
-        if (liveMeta.lastContent === content && now - Number(liveMeta.lastAt || 0) < 1000) {
-            return false;
-        }
-
-        metadataAny.__n8nLiveEvent = {
-            lastContent: content,
-            lastAt: now,
-        };
-
-        return true;
-    }
-
-    private appendN8nLiveMessage(
-        state: BaseThreadState,
-        content: string,
-        entry: { type: string; action?: string; workflowId?: string; executionId?: string; timestamp: string },
-    ): void {
-        const normalizedContent = entry.type === 'websocket' && !String(content).startsWith('[WSS]')
-            ? `[WSS] ${content}`
-            : content;
-
-        const message: ChatMessage = {
-            role: 'assistant',
-            content: normalizedContent,
+            ],
             metadata: {
                 nodeId: this.id,
                 nodeName: this.name,
-                kind: 'action_live_n8n_event',
-                source: 'n8n_event_stream',
-                transport: entry.type === 'websocket' ? 'wss' : 'internal',
-                eventType: entry.type,
-                action: entry.action,
-                workflowId: entry.workflowId,
-                executionId: entry.executionId,
+                kind: 'tool_result',
+                toolName: action,
+                success: result.success,
                 timestamp: Date.now(),
             },
-        };
+        } as any);
 
-        state.messages.push(message);
         this.bumpStateVersion(state);
-        if (entry.type !== 'websocket') {
-            void this.wsChatMessage(state, normalizedContent, 'assistant', 'progress');
-        }
     }
+
 }

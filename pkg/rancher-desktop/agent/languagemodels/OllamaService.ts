@@ -151,26 +151,20 @@ export class OllamaService extends BaseLanguageModel {
    * Build the request body for Ollama /api/chat
    */
   private buildRequestBody(messages: ChatMessage[], options: any): Record<string, any> {
-    const pendingToolResults: any[] = Array.isArray(options.pendingToolResults) ? options.pendingToolResults : [];
-
+    // Strip legacy role:tool messages; tool results now persist natively in state.messages.
+    // For Ollama, flatten native content arrays to string since Ollama uses OpenAI format.
     const cleanMessages = messages
       .filter((m: ChatMessage) => m.role !== 'tool')
-      .filter((m: ChatMessage) => (m as any).metadata?.kind !== 'tool_result');
-
-    const outboundMessages: any[] = [...cleanMessages];
-
-    for (const tr of pendingToolResults) {
-      outboundMessages.push({
-        role: 'tool',
-        tool_call_id: tr.toolCallId,
-        name: tr.toolName,
-        content: typeof tr.content === 'string' ? tr.content : JSON.stringify(tr.content),
+      .map((m: ChatMessage) => {
+        if (Array.isArray(m.content)) {
+          return { ...m, content: JSON.stringify(m.content) };
+        }
+        return m;
       });
-    }
 
     const body: Record<string, any> = {
       model: options.model ?? this.model,
-      messages: outboundMessages,
+      messages: cleanMessages,
       stream: false,
       keep_alive: -1,
     };

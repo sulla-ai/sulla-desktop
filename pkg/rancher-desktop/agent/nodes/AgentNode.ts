@@ -206,12 +206,6 @@ export class AgentNode extends BaseNode {
       const policy: Required<NodeRunPolicy> = {
         messageSource: 'graph',
         persistAssistantToGraph: true,
-        persistToolResultsToGraph: true,
-        persistAssistantToNodeState: false,
-        persistToolResultsToNodeState: false,
-        nodeStateNamespace: '',
-        includeGraphAssistantMessages: true,
-        includeGraphUserMessages: true,
       };
 
       const chatResult = await this.chat(state, systemPrompt, {

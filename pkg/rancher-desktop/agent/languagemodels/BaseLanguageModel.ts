@@ -181,7 +181,6 @@ export abstract class BaseLanguageModel {
       tools?: any;
       conversationId?: string;
       nodeName?: string;
-      pendingToolResults?: import('../types').PendingToolResult[];
     } = {}
   ): Promise<NormalizedResponse | null> {
     const startTime = performance.now();

@@ -186,20 +186,28 @@ export class RemoteModelService extends BaseLanguageModel {
 
   /**
    * Build provider-specific request body.
-   * Pending tool results (from state.metadata.__pendingToolResults) are injected
-   * here in the correct format for the target provider.
+   * Tool results persist natively in state.messages as proper tool_use/tool_result
+   * content arrays and are passed through as-is for Anthropic.
    */
   private buildRequestBody(messages: ChatMessage[], options: any, overrides: any): any {
-    const pendingToolResults: any[] = Array.isArray(options.pendingToolResults) ? options.pendingToolResults : [];
-
+    // Sanitize messages: preserve native content arrays (tool_use/tool_result blocks),
+    // trim string content, strip role:tool legacy messages.
     const sanitizedMessages = messages
-      .filter(m => m.role !== 'tool') // strip legacy role:tool messages
-      .filter(m => (m as any).metadata?.kind !== 'tool_result') // strip assistant-role tool results written by node-scoped lane
-      .map(m => ({
-        ...m,
-        content: typeof m.content === 'string' ? m.content.trim() : String(m.content ?? '').trim(),
-      }))
-      .filter(m => m.content.length > 0 || (m as any).metadata?.rawProviderContent !== undefined);
+      .filter(m => m.role !== 'tool')
+      .map(m => {
+        if (Array.isArray(m.content)) {
+          // Native content array (tool_use or tool_result blocks) — pass through as-is
+          return { ...m };
+        }
+        return {
+          ...m,
+          content: typeof m.content === 'string' ? m.content.trim() : String(m.content ?? '').trim(),
+        };
+      })
+      .filter(m => {
+        if (Array.isArray(m.content)) return m.content.length > 0;
+        return typeof m.content === 'string' && m.content.length > 0;
+      });
 
     // ── Anthropic ─────────────────────────────────────────────────────────────
     if (this.config.id === 'anthropic') {
@@ -209,71 +217,8 @@ export class RemoteModelService extends BaseLanguageModel {
         .filter(m => m.role !== 'system')
         .map(m => ({ role: m.role, content: m.content }));
 
-      // Inject pending tool results with their paired assistant tool_use message
-      if (pendingToolResults.length > 0) {
-        const pendingWithIds = pendingToolResults
-          .map((tr: any) => ({
-            ...tr,
-            toolCallId: String(tr.toolCallId || '').trim(),
-            toolName: String(tr.toolName || '').trim(),
-          }))
-          .filter((tr: any) => tr.toolCallId.length > 0);
-
-        if (pendingWithIds.length > 0) {
-          // First collect any provider-native tool_use blocks we can recover.
-          const recoveredToolUseById = new Map<string, any>();
-          for (const tr of pendingWithIds) {
-            const raw = tr.rawProviderContent;
-            if (!Array.isArray(raw)) {
-              continue;
-            }
-
-            for (const block of raw) {
-              if (!block || typeof block !== 'object') {
-                continue;
-              }
-
-              const blockType = String((block as any).type || '');
-              const blockId = String((block as any).id || '').trim();
-              if (blockType !== 'tool_use' || !blockId) {
-                continue;
-              }
-
-              if (!recoveredToolUseById.has(blockId)) {
-                recoveredToolUseById.set(blockId, block);
-              }
-            }
-          }
-
-          // Anthropic requires every tool_result id to be present in the immediately
-          // previous assistant tool_use message. Synthesize missing ones deterministically.
-          const assistantToolUseBlocks = pendingWithIds.map((tr: any) => {
-            const recovered = recoveredToolUseById.get(tr.toolCallId);
-            if (recovered) {
-              return recovered;
-            }
-
-            return {
-              type: 'tool_use',
-              id: tr.toolCallId,
-              name: tr.toolName || 'unknown_tool',
-              input: {},
-            };
-          });
-          processedMessages.push({ role: 'assistant', content: assistantToolUseBlocks });
-
-          const toolResultBlocks = pendingWithIds.map((tr: any) => ({
-            type: 'tool_result',
-            tool_use_id: tr.toolCallId,
-            content: typeof tr.content === 'string' ? tr.content : JSON.stringify(tr.content),
-          }));
-          processedMessages.push({ role: 'user', content: toolResultBlocks });
-        }
-      }
-
       // Anthropic requires the final turn to be a user message.
-      // If the conversation currently ends on assistant output,
-      // append a synthetic user continuation turn.
+      // If tool_use/tool_result pairs are stored properly this should rarely fire.
       const lastProcessedMessage = processedMessages[processedMessages.length - 1];
       if (!lastProcessedMessage || lastProcessedMessage.role !== 'user') {
         processedMessages.push({ role: 'user', content: 'continue' });
@@ -310,21 +255,8 @@ export class RemoteModelService extends BaseLanguageModel {
     if (this.config.id === 'google') {
       const contents: any[] = sanitizedMessages.map(m => ({
         role: m.role === 'assistant' ? 'model' : m.role,
-        parts: [{ text: m.content }],
+        parts: Array.isArray(m.content) ? [{ text: JSON.stringify(m.content) }] : [{ text: m.content }],
       }));
-
-      // Inject pending tool results as functionResponse parts in a user turn
-      if (pendingToolResults.length > 0) {
-        contents.push({
-          role: 'user',
-          parts: pendingToolResults.map((tr: any) => ({
-            functionResponse: {
-              name: tr.toolName,
-              response: { content: tr.content },
-            },
-          })),
-        });
-      }
 
       return {
         contents,
@@ -334,18 +266,6 @@ export class RemoteModelService extends BaseLanguageModel {
 
     // ── OpenAI / Grok / Azure / Mistral / Groq (OpenAI-compatible) ───────────
     const baseMessages: any[] = sanitizedMessages.map(m => ({ role: m.role, content: m.content }));
-
-    // Inject pending tool results as role:tool messages with tool_call_id
-    if (pendingToolResults.length > 0) {
-      for (const tr of pendingToolResults) {
-        baseMessages.push({
-          role: 'tool',
-          tool_call_id: tr.toolCallId,
-          name: tr.toolName,
-          content: typeof tr.content === 'string' ? tr.content : JSON.stringify(tr.content),
-        });
-      }
-    }
 
     const baseBody: any = {
       model: options.model ?? this.model,

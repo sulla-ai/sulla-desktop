@@ -1,4 +1,4 @@
-import { Graph, createOverlordGraph, createAgentGraph, OverlordThreadState, BaseThreadState, AgentGraphState, GeneralGraphState, createSkillGraph, SkillGraphState } from '../nodes/Graph';
+import { Graph, createOverlordGraph, createAgentGraph, OverlordThreadState, BaseThreadState, AgentGraphState, GeneralGraphState } from '../nodes/Graph';
 import { SullaSettingsModel } from '../database/models/SullaSettingsModel';
 import { getCurrentModel, getCurrentMode } from '../languagemodels';
 
@@ -13,7 +13,6 @@ const registry = new Map<string, {
 export const GraphRegistry = {
   /**
    * Get existing graph for thread, or create new if not found.
-   * Use this when resuming a known threadId.
    */
   get(threadId: string): {
     graph: Graph<any>;
@@ -32,17 +31,15 @@ export const GraphRegistry = {
     threadId: string;
   }> {
     const threadId = nextThreadId();
-    const graph = createSkillGraph();
-
-    const state = await buildSkillState(wsChannel, threadId);
+    const graph = createAgentGraph();
+    const state = await buildAgentState(wsChannel, threadId);
 
     registry.set(threadId, { graph, state });
     return { graph, state, threadId };
   },
 
   /**
-   * Get or create — resumes if threadId exists, creates new if not.
-   * Use in normal message flow.
+   * Get or create Overlord graph.
    */
   getOrCreateOverlordGraph: async function(wsChannel: string, prompt?: string): Promise<{
     graph: Graph<OverlordThreadState>;
@@ -52,9 +49,7 @@ export const GraphRegistry = {
       return Promise.resolve(registry.get(wsChannel)!);
     }
 
-    // No existing → create new under this threadId
     const graph = createOverlordGraph();
-
     const state = await buildOverlordState(wsChannel, prompt ?? '');
 
     registry.set(wsChannel, { graph, state });
@@ -62,52 +57,9 @@ export const GraphRegistry = {
   },
 
   /**
-   * Get or create — resumes if threadId exists, creates new if not.
-   * Use in normal message flow.
+   * Get or create AgentGraph — the standard graph for all tasks.
    */
   getOrCreate: async function(wsChannel: string, threadId: string): Promise<{
-    graph: Graph<SkillGraphState>;
-    state: SkillGraphState;
-  }> {
-    if (registry.has(threadId)) {
-      return Promise.resolve(registry.get(threadId)!);
-    }
-
-    // No existing → create new SkillGraph under this threadId
-    const graph = createSkillGraph();
-
-    const state = await buildSkillState(wsChannel, threadId);
-
-    registry.set(threadId, { graph, state });
-    return { graph, state };
-  },
-
-  /**
-   * Get or create SkillGraph — skill-aware ReAct planning and execution.
-   * Use for tasks that require skill template following and evidence verification.
-   */
-  getOrCreateSkillGraph: async function(wsChannel: string, threadId: string): Promise<{
-    graph: Graph<SkillGraphState>;
-    state: SkillGraphState;
-  }> {
-    if (registry.has(threadId)) {
-      return Promise.resolve(registry.get(threadId)!);
-    }
-
-    // No existing → create new SkillGraph under this threadId
-    const graph = createSkillGraph();
-
-    const state = await buildSkillState(wsChannel, threadId);
-
-    registry.set(threadId, { graph, state });
-    return { graph, state };
-  },
-
-  /**
-   * Get or create AgentGraph — simple independent agent execution.
-   * No planning, reasoning, or critic nodes. Single message thread.
-   */
-  getOrCreateAgentGraph: async function(wsChannel: string, threadId: string): Promise<{
     graph: Graph<AgentGraphState>;
     state: AgentGraphState;
   }> {
@@ -122,12 +74,17 @@ export const GraphRegistry = {
     return { graph, state };
   },
 
-  // Back-compat alias while callers migrate to AgentGraph naming.
-  getOrCreateGeneralGraph: async function(wsChannel: string, threadId: string): Promise<{
-    graph: Graph<GeneralGraphState>;
-    state: GeneralGraphState;
-  }> {
-    return this.getOrCreateAgentGraph(wsChannel, threadId);
+  // Aliases — all point to AgentGraph now
+  getOrCreateSkillGraph: async function(wsChannel: string, threadId: string) {
+    return this.getOrCreate(wsChannel, threadId);
+  },
+
+  getOrCreateAgentGraph: async function(wsChannel: string, threadId: string) {
+    return this.getOrCreate(wsChannel, threadId);
+  },
+
+  getOrCreateGeneralGraph: async function(wsChannel: string, threadId: string) {
+    return this.getOrCreate(wsChannel, threadId);
   },
 
   delete(threadId: string): void {
@@ -182,25 +139,17 @@ export function nextMessageId(): string {
   return `msg_${Date.now()}_${++messageCounter}`;
 }
 
-/**
- * 
- * @param wsChannel 
- * @param prompt 
- * @returns 
- */
 async function buildOverlordState(wsChannel: string, prompt: string): Promise<OverlordThreadState> {
-  // Build a minimal ThreadState and execute nodes directly (skip Sensory/ContextDetector/ConversationThread)
-
   let heartbeartModeheal = await SullaSettingsModel.get('heartbeatModel', 'default');
 
   const now = Date.now();
   const threadId = `overlord_${ now }`;
 
   const state: OverlordThreadState = {
-    messages:        [{
-      role:      'user',
-      content:   prompt,
-      metadata:  { source: 'system' },
+    messages: [{
+      role: 'user',
+      content: prompt,
+      metadata: { source: 'system' },
     }],
     metadata: {
       action: 'direct_answer',
@@ -240,7 +189,6 @@ async function buildOverlordState(wsChannel: string, prompt: string): Promise<Ov
   return state;
 }
 
-
 async function resolveModel(setting: string): Promise<string> {
   if (setting === 'default') return await getCurrentModel();
 
@@ -256,14 +204,6 @@ async function resolveIsLocal(setting: string): Promise<boolean> {
   return setting.startsWith('local:');
 }
 
-
-/**
- * Build initial state for GeneralGraph execution
- * Minimal state for independent agent execution
- * @param wsChannel 
- * @param threadId 
- * @returns 
- */
 async function buildAgentState(wsChannel: string, threadId?: string): Promise<AgentGraphState> {
   const id = threadId ?? nextThreadId();
 
@@ -304,73 +244,8 @@ async function buildAgentState(wsChannel: string, threadId?: string): Promise<Ag
       n8nLiveEventsEnabled: false,
       returnTo: null,
 
-      // AgentGraph-specific metadata properties
       agent: undefined,
       agentLoopCount: 0
-    }
-  };
-}
-
-// Back-compat alias while callers migrate to AgentGraph naming.
-async function buildGeneralState(wsChannel: string, threadId?: string): Promise<GeneralGraphState> {
-  return buildAgentState(wsChannel, threadId);
-}
-
-/**
- * Build initial state for SkillGraph execution
- * Optimized for skill-aware ReAct planning and execution
- * @param wsChannel 
- * @param threadId 
- * @returns 
- */
-async function buildSkillState(wsChannel: string, threadId?: string): Promise<SkillGraphState> {
-  const id = threadId ?? nextThreadId();
-
-  const mode = await SullaSettingsModel.get('modelMode', 'local');
-  const llmModel = mode === 'remote' ? await SullaSettingsModel.get('remoteModel', 'grok-4-1-fast-reasoning') : await SullaSettingsModel.get('sullaModel', 'tinyllama:latest');
-  const llmLocal = mode === 'local';
-
-  return {
-    messages: [],
-    metadata: {
-      action: 'direct_answer',
-      threadId: id,
-      wsChannel: wsChannel,
-      
-      cycleComplete: false,
-      waitingForUser: false,
-
-      llmModel,
-      llmLocal,
-      options: { abort: undefined },
-      currentNodeId: 'input_handler', // SkillGraph entry point
-      consecutiveSameNode: 0,
-      iterations: 0,
-      revisionCount: 0,
-      maxIterationsReached: false,
-      memory: {
-        knowledgeBaseContext: '',
-        chatSummariesContext: ''
-      },
-      subGraph: {
-        state: 'completed',
-        name: 'hierarchical',
-        prompt: '',
-        response: ''
-      },
-      finalSummary: '',
-      finalState: 'running',
-      n8nLiveEventsEnabled: false,
-      returnTo: null,
-
-      // SkillGraph-specific metadata properties
-      planRetrieval: undefined,
-      planner: undefined, 
-      reasoning: undefined,
-      actions: undefined,
-      skillCritic: undefined,
-      output: undefined,
-      reactLoopCount: 0
     }
   };
 }
