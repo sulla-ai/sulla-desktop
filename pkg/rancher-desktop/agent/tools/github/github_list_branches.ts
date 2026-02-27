@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from "../base";
+import { BaseTool, ToolResponse } from "../base";
 import { Octokit } from "@octokit/rest";
 import { getIntegrationService } from '../../services/IntegrationService';
 
@@ -8,7 +8,6 @@ import { getIntegrationService } from '../../services/IntegrationService';
 export class GitHubListBranchesWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { owner, repo, protected: isProtected } = input;
 
@@ -58,17 +57,3 @@ export class GitHubListBranchesWorker extends BaseTool {
     }
   }
 }
-
-// Export the complete tool registration with type enforcement
-export const gitHubListBranchesRegistration: ToolRegistration = {
-  name: "github_list_branches",
-  description: "List branches in a GitHub repository.",
-  category: "github",
-  operationTypes: ['read'],
-  schemaDef: {
-    owner: { type: 'string' as const, description: "Repository owner (username or organization)" },
-    repo: { type: 'string' as const, description: "Repository name" },
-    protected: { type: 'boolean' as const, optional: true, description: "Filter for protected branches only" },
-  },
-  workerClass: GitHubListBranchesWorker,
-};

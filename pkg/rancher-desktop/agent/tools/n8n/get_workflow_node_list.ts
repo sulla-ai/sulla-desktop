@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from '../base';
+import { BaseTool, ToolResponse } from '../base';
 import { createN8nService } from '../../services/N8nService';
 import { countNodeConnections } from './workflow_node_utils';
 
@@ -41,7 +41,6 @@ function collectConnectionEdges(connections: Record<string, any>): Array<{ fromN
 export class GetWorkflowNodeListWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
 
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     try {
@@ -92,14 +91,3 @@ export class GetWorkflowNodeListWorker extends BaseTool {
   }
 }
 
-export const getWorkflowNodeListRegistration: ToolRegistration = {
-  name: 'get_workflow_node_list',
-  description: 'Get a lightweight node list and connection edges for a workflow (without full node definitions).',
-  category: 'n8n',
-  operationTypes: ['read'],
-  schemaDef: {
-    workflowId: { type: 'string' as const, description: 'Workflow ID' },
-    excludePinnedData: { type: 'boolean' as const, optional: true, description: 'Exclude pinned data from workflow fetch' },
-  },
-  workerClass: GetWorkflowNodeListWorker,
-};

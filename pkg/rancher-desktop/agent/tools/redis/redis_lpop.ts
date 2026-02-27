@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from "../base";
+import { BaseTool, ToolResponse } from "../base";
 import { redisClient } from "../../database/RedisClient";
 
 /**
@@ -7,7 +7,6 @@ import { redisClient } from "../../database/RedisClient";
 export class RedisLpopWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { key } = input;
 
@@ -26,15 +25,3 @@ export class RedisLpopWorker extends BaseTool {
     }
   }
 }
-
-// Export the complete tool registration with type enforcement
-export const redisLpopRegistration: ToolRegistration = {
-  name: "redis_lpop",
-  description: "Remove and return the first element of a Redis list.",
-  category: "redis",
-  operationTypes: ['execute'],
-  schemaDef: {
-    key: { type: 'string' as const, description: "The Redis list key" },
-  },
-  workerClass: RedisLpopWorker,
-};

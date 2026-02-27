@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from "../base";
+import { BaseTool, ToolResponse } from "../base";
 import { resolveBridge, isBridgeResolved } from "./resolve_bridge";
 
 /**
@@ -7,7 +7,6 @@ import { resolveBridge, isBridgeResolved } from "./resolve_bridge";
 export class GetFormValuesWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
 
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     const result = resolveBridge(input.assetId);
@@ -37,13 +36,3 @@ export class GetFormValuesWorker extends BaseTool {
   }
 }
 
-export const getFormValuesRegistration: ToolRegistration = {
-  name: "get_form_values",
-  description: "Get a map of all visible form field values (inputs, textareas, selects) from a website asset. Omit assetId to target the active asset.",
-  category: "playwright",
-  operationTypes: ['read'],
-  schemaDef: {
-    assetId: { type: 'string' as const, optional: true, description: "Target asset ID (omit for the currently active website)" },
-  },
-  workerClass: GetFormValuesWorker,
-};

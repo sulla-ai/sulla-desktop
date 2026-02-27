@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from "../base";
+import { BaseTool, ToolResponse } from "../base";
 import { postgresClient } from "../../database/PostgresClient";
 
 /**
@@ -7,7 +7,6 @@ import { postgresClient } from "../../database/PostgresClient";
 export class PgCountWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { sql, params = [] } = input;
 
@@ -27,16 +26,3 @@ export class PgCountWorker extends BaseTool {
     }
   }
 }
-
-// Export the complete tool registration with type enforcement
-export const pgCountRegistration: ToolRegistration = {
-  name: "pg_count",
-  description: "Execute a PostgreSQL count query and return the count.",
-  category: "pg",
-  operationTypes: ['read'],
-  schemaDef: {
-    sql: { type: 'string' as const, description: "The SQL count query to execute" },
-    params: { type: 'array' as const, items: { type: 'string' as const }, optional: true, description: "Parameters for the query" },
-  },
-  workerClass: PgCountWorker,
-};

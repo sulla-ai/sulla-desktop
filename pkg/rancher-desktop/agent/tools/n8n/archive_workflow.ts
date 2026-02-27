@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from "../base";
+import { BaseTool, ToolResponse } from "../base";
 import { createN8nService } from "../../services/N8nService";
 
 /**
@@ -7,7 +7,6 @@ import { createN8nService } from "../../services/N8nService";
 export class ArchiveWorkflowWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
 
   private normalizeAction(input: any): 'archive' | 'unarchive' {
     const action = String(input?.action || 'archive').trim().toLowerCase();
@@ -43,20 +42,3 @@ Updated: ${workflow?.updatedAt ? new Date(workflow.updatedAt).toLocaleString() :
   }
 }
 
-export const archiveWorkflowRegistration: ToolRegistration = {
-  name: "archive_workflow",
-  description: "Archive or unarchive a workflow in n8n.",
-  category: "n8n",
-  operationTypes: ['update'],
-  schemaDef: {
-    id: { type: 'string' as const, description: "Workflow ID" },
-    action: {
-      type: 'enum' as const,
-      enum: ['archive', 'unarchive'],
-      optional: true,
-      default: 'archive',
-      description: "Archive behavior: archive (default) or unarchive.",
-    },
-  },
-  workerClass: ArchiveWorkflowWorker,
-};

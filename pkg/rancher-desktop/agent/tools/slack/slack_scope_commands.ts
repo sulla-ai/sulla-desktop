@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from "../base";
+import { BaseTool, ToolResponse } from "../base";
 import { registry } from "../../integrations";
 import type { SlackClient } from "../../integrations/slack/SlackClient";
 
@@ -117,17 +117,6 @@ export class SlackScopeCommandWorker extends BaseTool {
   }
 }
 
-export const slackScopeToolRegistrations: ToolRegistration[] = SCOPE_CONFIGS.map(scopeConfig => ({
-  name: scopeToToolName(scopeConfig.scope),
-  description: `Slack scope command for ${scopeConfig.scope}: ${scopeConfig.description}`,
-  category: 'slack',
-  schemaDef: {
-    apiMethod: { type: 'string' as const, description: 'Slack Web API method name to call (example: conversations.history, users.list, chat.postMessage)' },
-    params: { type: 'object' as const, optional: true, description: 'Parameters object for the Slack Web API method' },
-  },
-  operationTypes: [scopeConfig.scope.includes('read') || scopeConfig.scope.includes('history') ? 'read' : 'update'],
-  workerClass: SlackScopeCommandWorker,
-}));
 
 type ApiCommandConfig = {
   name: string;
@@ -228,13 +217,3 @@ export class SlackApiCommandWorker extends BaseTool {
   }
 }
 
-export const slackApiMethodToolRegistrations: ToolRegistration[] = API_COMMAND_CONFIGS.map(command => ({
-  name: command.name,
-  description: command.description,
-  category: 'slack',
-  schemaDef: {
-    params: { type: 'object' as const, optional: true, description: `Parameters for Slack API method ${command.apiMethod}` },
-  },
-  operationTypes: [inferOperationType(command.name)],
-  workerClass: SlackApiCommandWorker,
-}));

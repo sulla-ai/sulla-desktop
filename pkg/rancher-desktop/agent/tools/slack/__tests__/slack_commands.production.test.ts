@@ -8,10 +8,9 @@ import { SlackApiCommandWorker, slackApiMethodToolRegistrations } from '../slack
 const SLACK_ID = 'slack';
 const service = getIntegrationService();
 
-async function invokeTool(name: string, input: Record<string, any>) {
-  const registration = slackApiMethodToolRegistrations.find(r => r.name === name);
+async function invokeTool(name: string, input: Record<string, any>) { const registration = slackApiMethodToolRegistrations.find(r => r.name === name);
   if (!registration) {
-    throw new Error(`Missing registration for ${name}`);
+    throw new Error(`Missing registration for ${name }`);
   }
 
   const tool = new SlackApiCommandWorker();

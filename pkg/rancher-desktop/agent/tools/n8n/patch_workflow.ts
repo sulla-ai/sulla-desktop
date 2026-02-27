@@ -1,14 +1,12 @@
-import { BaseTool, ToolRegistration, ToolResponse } from '../base';
+import { BaseTool, ToolResponse } from '../base';
 import { createN8nService } from '../../services/N8nService';
-import {
-  cloneWorkflowGraph,
+import { cloneWorkflowGraph,
   countNodeConnections,
   ensureNodeId,
   ensureUniqueNodeName,
   removeNodeFromConnections,
   resolveNodeIndex,
-  rewriteConnectionsForNodeRename,
-} from './workflow_node_utils';
+  rewriteConnectionsForNodeRename, } from './workflow_node_utils';
 
 type JsonRecord = Record<string, any>;
 type PatchOp = 'add' | 'update' | 'remove';
@@ -436,7 +434,6 @@ function connectionExists(connectionsRaw: unknown, source: string, connectionTar
 export class PatchWorkflowWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
 
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     try {
@@ -766,32 +763,3 @@ export class PatchWorkflowWorker extends BaseTool {
   }
 }
 
-export const patchWorkflowRegistration: ToolRegistration = {
-  name: 'patch_workflow',
-  description: 'Apply node and connection add/update/remove operations to an n8n workflow in one atomic update.',
-  category: 'n8n',
-  operationTypes: ['update'],
-  schemaDef: {
-    workflowId: { type: 'string' as const, description: 'Workflow ID' },
-    operations: {
-      type: 'array' as const,
-      description: 'Patch operations applied in sequence, then persisted in one atomic update. Node ops: target=node with op=add/update/remove. Connection ops: target=connection with op=add/remove, source (or connectionSource), connectionTarget, sourceOutputIndex/sourceIndex, targetInputIndex/targetIndex.',
-      items: {
-        type: 'object',
-        properties: {
-          target: { type: 'enum', enum: ['node', 'connection'], description: 'Operation target.' },
-          op: { type: 'enum', enum: ['add', 'update', 'remove'], description: 'Operation verb.' },
-          node: { type: 'object', description: 'For node add: full node object. For node update: optional full node object to replace/update complex nested fields reliably.' },
-          nodeId: { type: 'string', description: 'For node update/remove: node ID selector.' },
-          nodeName: { type: 'string', description: 'For node update/remove: node name selector.' },
-          patch: { type: 'object', description: 'For node update: partial node patch object.' },
-          source: { type: 'string', description: 'For connection add/remove: source node name (aliases: connectionSource, sourceNodeName).' },
-          connectionTarget: { type: 'string', description: 'For connection add/remove: destination node name. You can also pass an object { node, index }.' },
-          sourceOutputIndex: { type: 'number', description: 'For connection add/remove: source output index (alias: sourceIndex). Default 0.' },
-          targetInputIndex: { type: 'number', description: 'For connection add/remove: destination input index (alias: targetIndex). Default 0.' },
-        },
-      },
-    },
-  },
-  workerClass: PatchWorkflowWorker,
-};

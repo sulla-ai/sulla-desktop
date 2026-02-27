@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from "../base";
+import { BaseTool, ToolResponse } from "../base";
 import { calendarClient } from "../../services/CalendarClient";
 
 /**
@@ -7,7 +7,6 @@ import { calendarClient } from "../../services/CalendarClient";
 export class CalendarListUpcomingWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { days = 7 } = input;
 
@@ -49,15 +48,3 @@ export class CalendarListUpcomingWorker extends BaseTool {
     }
   }
 }
-
-// Export the complete tool registration with type enforcement
-export const calendarListUpcomingRegistration: ToolRegistration = {
-  name: "calendar_list_upcoming",
-  description: "List upcoming calendar events for the next specified number of days.",
-  category: "calendar",
-  operationTypes: ['read'],
-  schemaDef: {
-    days: { type: 'number' as const, default: 7, description: "Number of days from now to list upcoming events" },
-  },
-  workerClass: CalendarListUpcomingWorker,
-};

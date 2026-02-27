@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from "../base";
+import { BaseTool, ToolResponse } from "../base";
 import { runCommand } from "../util/CommandRunner";
 
 /**
@@ -7,7 +7,6 @@ import { runCommand } from "../util/CommandRunner";
 export class DockerExecWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
 
   private formatFailure(container: string, res: { exitCode: number; stderr?: string; stdout?: string }): string {
     const details = (res.stderr || res.stdout || '').trim() || '(no stderr/stdout output)';
@@ -46,16 +45,3 @@ export class DockerExecWorker extends BaseTool {
     }
   }
 }
-
-// Export the complete tool registration with type enforcement
-export const dockerExecRegistration: ToolRegistration = {
-  name: "docker_exec",
-  description: "Execute a command in a running Docker container.",
-  category: "docker",
-  operationTypes: ['execute'],
-  schemaDef: {
-    container: { type: 'string' as const, description: "Container name or ID" },
-    command: { type: 'string' as const, description: "Command to execute in the container" },
-  },
-  workerClass: DockerExecWorker,
-};

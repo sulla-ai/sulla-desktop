@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from '../base';
+import { BaseTool, ToolResponse } from '../base';
 import { createN8nService } from '../../services/N8nService';
 
 function deepClone<T>(value: T): T {
@@ -8,7 +8,6 @@ function deepClone<T>(value: T): T {
 export class CloneWorkflowWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
 
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     try {
@@ -59,14 +58,3 @@ export class CloneWorkflowWorker extends BaseTool {
   }
 }
 
-export const cloneWorkflowRegistration: ToolRegistration = {
-  name: 'clone_workflow',
-  description: 'Clone an existing n8n workflow into a new workflow name for safe experimentation.',
-  category: 'n8n',
-  operationTypes: ['read', 'create'],
-  schemaDef: {
-    workflowId: { type: 'string' as const, description: 'Source workflow ID to clone.' },
-    newName: { type: 'string' as const, description: 'Name for the cloned workflow.' },
-  },
-  workerClass: CloneWorkflowWorker,
-};

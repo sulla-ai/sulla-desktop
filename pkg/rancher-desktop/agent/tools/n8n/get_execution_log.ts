@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from '../base';
+import { BaseTool, ToolResponse } from '../base';
 import { createN8nService } from '../../services/N8nService';
 
 type JsonRecord = Record<string, any>;
@@ -14,7 +14,6 @@ function asRecord(value: unknown): JsonRecord {
 export class GetExecutionLogWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
 
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     try {
@@ -81,13 +80,3 @@ export class GetExecutionLogWorker extends BaseTool {
   }
 }
 
-export const getExecutionLogRegistration: ToolRegistration = {
-  name: 'get_execution_log',
-  description: 'Get full node-by-node execution output for a specific n8n execution ID, including per-node errors.',
-  category: 'n8n',
-  operationTypes: ['read'],
-  schemaDef: {
-    executionId: { type: 'string' as const, description: 'Execution ID to inspect.' },
-  },
-  workerClass: GetExecutionLogWorker,
-};

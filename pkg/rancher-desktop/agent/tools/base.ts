@@ -38,7 +38,7 @@ export type ToolRegistration = {
   name: string;
   description: string;
   category: string;
-  schemaDef: InputSchemaDef;
+  schemaDef?: InputSchemaDef;
   workerClass: new () => BaseTool;
   operationTypes?: ToolOperation[];
 };
@@ -46,7 +46,7 @@ export type ToolRegistration = {
 export abstract class BaseTool<TState = any> {
   abstract name: string;
   abstract description: string;
-  abstract schemaDef: InputSchemaDef;
+  schemaDef: InputSchemaDef = {};
 
   metadata: ToolMetadata = { category: "general" };
 

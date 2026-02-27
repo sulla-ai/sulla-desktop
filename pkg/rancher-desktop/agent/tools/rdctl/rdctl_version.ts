@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from "../base";
+import { BaseTool, ToolResponse } from "../base";
 import { runCommand } from "../util/CommandRunner";
 
 /**
@@ -7,7 +7,6 @@ import { runCommand } from "../util/CommandRunner";
 export class RdctlVersionWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     try {
       const res = await runCommand('rdctl', ['version'], { timeoutMs: 60_000, maxOutputChars: 160_000 });
@@ -31,13 +30,3 @@ export class RdctlVersionWorker extends BaseTool {
     }
   }
 }
-
-// Export the complete tool registration with type enforcement
-export const rdctlVersionRegistration: ToolRegistration = {
-  name: "rdctl_version",
-  description: "Shows the CLI version.",
-  category: "rdctl",
-  operationTypes: ['read'],
-  schemaDef: {},
-  workerClass: RdctlVersionWorker,
-};

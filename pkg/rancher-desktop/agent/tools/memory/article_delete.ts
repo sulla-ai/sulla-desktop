@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from "../base";
+import { BaseTool, ToolResponse } from "../base";
 import { Article } from "../../database/models/Article";
 
 /**
@@ -7,7 +7,6 @@ import { Article } from "../../database/models/Article";
 export class ArticleDeleteWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { slug } = input;
 
@@ -43,15 +42,3 @@ Title: ${article.attributes.title}`
     }
   }
 }
-
-// Export the complete tool registration with type enforcement
-export const articleDeleteRegistration: ToolRegistration = {
-  name: "article_delete",
-  description: "Delete an article from the knowledge base by its slug. This action is permanent.",
-  category: "memory",
-  operationTypes: ['delete'],
-  schemaDef: {
-    slug: { type: 'string' as const, description: "Slug of the article to delete" },
-  },
-  workerClass: ArticleDeleteWorker,
-};

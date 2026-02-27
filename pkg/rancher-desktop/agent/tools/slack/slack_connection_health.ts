@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from "../base";
+import { BaseTool, ToolResponse } from "../base";
 import { registry } from "../../integrations";
 import { slackClient } from "../../integrations/slack/SlackClient";
 import type { SlackClient } from "../../integrations/slack/SlackClient";
@@ -22,7 +22,6 @@ function runtimeContext() {
 export class SlackConnectionHealthWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
 
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     const invocationId = `health-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -277,37 +276,3 @@ export class SlackConnectionHealthWorker extends BaseTool {
   }
 }
 
-export const slackConnectionHealthRegistration: ToolRegistration = {
-  name: "slack_connection_health",
-  description: "Check Slack integration health and auto-reinitialize if disconnected/unhealthy.",
-  category: "slack",
-  operationTypes: ['read'],
-  schemaDef: {
-    reinitializeIfNeeded: {
-      type: 'boolean' as const,
-      optional: true,
-      description: 'When true (default), invalidate and reinitialize Slack if missing or unhealthy.',
-    },
-    recoveryAttempts: {
-      type: 'number' as const,
-      optional: true,
-      description: `Number of reconnect attempts when reinitializing (default: ${DEFAULT_RECOVERY_ATTEMPTS}).`,
-    },
-    recoveryDelayMs: {
-      type: 'number' as const,
-      optional: true,
-      description: `Delay in ms between reconnect attempts (default: ${DEFAULT_RECOVERY_DELAY_MS}).`,
-    },
-    validateAuth: {
-      type: 'boolean' as const,
-      optional: true,
-      description: 'When true (default), run Slack auth.test as a live health check.',
-    },
-    validateDataPull: {
-      type: 'boolean' as const,
-      optional: true,
-      description: `When true (default: ${DEFAULT_VALIDATE_DATA_PULL}), run users.list(limit=1) to verify real Slack data read access.`,
-    },
-  },
-  workerClass: SlackConnectionHealthWorker,
-};

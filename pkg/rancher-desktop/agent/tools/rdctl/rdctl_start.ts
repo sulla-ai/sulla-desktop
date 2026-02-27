@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from "../base";
+import { BaseTool, ToolResponse } from "../base";
 import { runCommand } from "../util/CommandRunner";
 
 /**
@@ -7,7 +7,6 @@ import { runCommand } from "../util/CommandRunner";
 export class RdctlStartWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     try {
       const res = await runCommand('rdctl', ['start'], { timeoutMs: 300_000, maxOutputChars: 160_000 }); // Longer timeout for starting
@@ -31,13 +30,3 @@ export class RdctlStartWorker extends BaseTool {
     }
   }
 }
-
-// Export the complete tool registration with type enforcement
-export const rdctlStartRegistration: ToolRegistration = {
-  name: "rdctl_start",
-  description: "Start up Sulla Desktop, or update its settings.",
-  category: "rdctl",
-  operationTypes: ['execute'],
-  schemaDef: {},
-  workerClass: RdctlStartWorker,
-};

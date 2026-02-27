@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from "../base";
+import { BaseTool, ToolResponse } from "../base";
 import { Article } from "../../database/models/Article";
 
 /**
@@ -7,7 +7,6 @@ import { Article } from "../../database/models/Article";
 export class ArticleFindWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { slug } = input;
 
@@ -60,15 +59,3 @@ ${article.attributes.document}`;
     }
   }
 }
-
-// Export the complete tool registration with type enforcement
-export const articleFindRegistration: ToolRegistration = {
-  name: "article_find",
-  description: "Find and retrieve a single article by its slug. Returns the full article metadata and content.",
-  category: "memory",
-  operationTypes: ['read'],
-  schemaDef: {
-    slug: { type: 'string' as const, description: "The unique slug identifier of the article to find" },
-  },
-  workerClass: ArticleFindWorker,
-};

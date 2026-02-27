@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from "../base";
+import { BaseTool, ToolResponse } from "../base";
 import { resolveBridge, isBridgeResolved } from "./resolve_bridge";
 
 /**
@@ -7,7 +7,6 @@ import { resolveBridge, isBridgeResolved } from "./resolve_bridge";
 export class SetFieldWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
 
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { handle, value } = input;
@@ -36,15 +35,3 @@ export class SetFieldWorker extends BaseTool {
   }
 }
 
-export const setFieldRegistration: ToolRegistration = {
-  name: "set_field",
-  description: "Set the value of a form field (input, textarea, select) on a website asset. Use handles from get_page_snapshot (e.g. @field-email, @field-username). Omit assetId to target the active asset.",
-  category: "playwright",
-  operationTypes: ['update'],
-  schemaDef: {
-    handle: { type: 'string' as const, description: "The field handle (@field-<id|name>) or element id/name" },
-    value: { type: 'string' as const, description: "The value to set" },
-    assetId: { type: 'string' as const, optional: true, description: "Target asset ID (omit for the currently active website)" },
-  },
-  workerClass: SetFieldWorker,
-};

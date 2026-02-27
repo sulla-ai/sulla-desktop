@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from "../base";
+import { BaseTool, ToolResponse } from "../base";
 import { runCommand } from "../util/CommandRunner";
 
 /**
@@ -7,7 +7,6 @@ import { runCommand } from "../util/CommandRunner";
 export class DockerPsWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { all, format } = input;
 
@@ -41,16 +40,3 @@ export class DockerPsWorker extends BaseTool {
     }
   }
 }
-
-// Export the complete tool registration with type enforcement
-export const dockerPsRegistration: ToolRegistration = {
-  name: "docker_ps",
-  description: "List Docker containers.",
-  category: "docker",
-  operationTypes: ['read', 'execute'],
-  schemaDef: {
-    all: { type: 'boolean' as const, optional: true, description: "Show all containers (default: only running)" },
-    format: { type: 'string' as const, optional: true, description: "Format output (e.g., 'table {{.Names}}\\t{{.Status}}')" },
-  },
-  workerClass: DockerPsWorker,
-};

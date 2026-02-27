@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from "../base";
+import { BaseTool, ToolResponse } from "../base";
 import { runCommand } from "../util/CommandRunner";
 
 /**
@@ -7,7 +7,6 @@ import { runCommand } from "../util/CommandRunner";
 export class KubectlDescribeWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { resource, name, namespace } = input;
 
@@ -41,17 +40,3 @@ export class KubectlDescribeWorker extends BaseTool {
     }
   }
 }
-
-// Export the complete tool registration with type enforcement
-export const kubectlDescribeRegistration: ToolRegistration = {
-  name: "kubectl_describe",
-  description: "Describe Kubernetes resources.",
-  category: "kubectl",
-  operationTypes: ['read'],
-  schemaDef: {
-    resource: { type: 'string' as const, description: "The resource type, e.g., pods, services" },
-    name: { type: 'string' as const, description: "Specific resource name" },
-    namespace: { type: 'string' as const, optional: true, description: "Namespace" },
-  },
-  workerClass: KubectlDescribeWorker,
-};

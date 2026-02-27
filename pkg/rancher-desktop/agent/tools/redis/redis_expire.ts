@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from "../base";
+import { BaseTool, ToolResponse } from "../base";
 import { redisClient } from "../../database/RedisClient";
 
 /**
@@ -7,7 +7,6 @@ import { redisClient } from "../../database/RedisClient";
 export class RedisExpireWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { key, seconds } = input;
 
@@ -26,16 +25,3 @@ export class RedisExpireWorker extends BaseTool {
     }
   }
 }
-
-// Export the complete tool registration with type enforcement
-export const redisExpireRegistration: ToolRegistration = {
-  name: "redis_expire",
-  description: "Set a timeout on a Redis key.",
-  category: "redis",
-  operationTypes: ['execute'],
-  schemaDef: {
-    key: { type: 'string' as const, description: "The Redis key to set expiration on" },
-    seconds: { type: 'number' as const, description: "The expiration time in seconds" },
-  },
-  workerClass: RedisExpireWorker,
-};

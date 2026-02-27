@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from "../base";
+import { BaseTool, ToolResponse } from "../base";
 import { redisClient } from "../../database/RedisClient";
 
 /**
@@ -7,7 +7,6 @@ import { redisClient } from "../../database/RedisClient";
 export class RedisDelWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { keys } = input;
 
@@ -26,15 +25,3 @@ export class RedisDelWorker extends BaseTool {
     }
   }
 }
-
-// Export the complete tool registration with type enforcement
-export const redisDelRegistration: ToolRegistration = {
-  name: "redis_del",
-  description: "Delete one or more Redis keys.",
-  category: "redis",
-  operationTypes: ['execute'],
-  schemaDef: {
-    keys: { type: 'array' as const, items: { type: 'string' as const }, description: "The Redis keys to delete" },
-  },
-  workerClass: RedisDelWorker,
-};

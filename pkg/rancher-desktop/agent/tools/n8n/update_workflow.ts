@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from "../base";
+import { BaseTool, ToolResponse } from "../base";
 import { createN8nService } from "../../services/N8nService";
 
 /**
@@ -7,7 +7,6 @@ import { createN8nService } from "../../services/N8nService";
 export class UpdateWorkflowWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
 
   private normalizeSaveDataSuccessExecution(value: unknown): 'none' | 'all' {
     const normalized = String(value || '').trim().toLowerCase();
@@ -156,35 +155,3 @@ Owner: ${workflow.owner?.email || 'N/A'}`;
     }
   }
 }
-
-// Export the complete tool registration with type enforcement
-export const updateWorkflowRegistration: ToolRegistration = {
-  name: "update_workflow",
-  description: "Update an existing workflow in n8n.",
-  category: "n8n",
-  operationTypes: ['update'],
-  schemaDef: {
-    id: { type: 'string' as const, description: "Workflow ID" },
-    name: { type: 'string' as const, optional: true, description: "Workflow name (defaults to existing workflow name if omitted)" },
-    active: { type: 'boolean' as const, optional: true, description: "Set workflow active state on update" },
-    nodes: { type: 'array' as const, items: { type: 'object' as const }, optional: true, description: "Workflow nodes as n8n node objects. Defaults to existing workflow nodes if omitted." },
-    connections: { type: 'object' as const, optional: true, description: "Workflow connections object keyed by source node name. Defaults to existing connections if omitted." },
-    settings: { type: 'object' as const, properties: {
-      saveExecutionProgress: { type: 'boolean' as const, optional: true },
-      saveManualExecutions: { type: 'boolean' as const, optional: true },
-      saveDataErrorExecution: { type: 'string' as const, optional: true },
-      saveDataSuccessExecution: { type: 'enum' as const, enum: ['none', 'all'], optional: true },
-      executionTimeout: { type: 'number' as const, optional: true },
-      errorWorkflow: { type: 'string' as const, optional: true },
-      timezone: { type: 'string' as const, optional: true },
-      executionOrder: { type: 'string' as const, optional: true },
-      callerPolicy: { type: 'string' as const, optional: true },
-      callerIds: { type: 'string' as const, optional: true },
-      timeSavedPerExecution: { type: 'number' as const, optional: true },
-      availableInMCP: { type: 'boolean' as const, optional: true },
-    }, optional: true, description: "Workflow settings (defaults to existing workflow settings if omitted)" },
-    shared: { type: 'array' as const, items: { type: 'object' as const }, optional: true, description: "Shared users" },
-    staticData: { type: 'object' as const, optional: true, description: "Static data" },
-  },
-  workerClass: UpdateWorkflowWorker,
-};

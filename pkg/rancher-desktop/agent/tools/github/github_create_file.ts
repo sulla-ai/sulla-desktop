@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from "../base";
+import { BaseTool, ToolResponse } from "../base";
 import { Octokit } from "@octokit/rest";
 import { getIntegrationService } from '../../services/IntegrationService';
 
@@ -8,7 +8,6 @@ import { getIntegrationService } from '../../services/IntegrationService';
 export class GitHubCreateFileWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { owner, repo, path, content, message, branch } = input;
 
@@ -53,20 +52,3 @@ Content SHA: ${response.data.content?.sha || 'N/A'}`;
     }
   }
 }
-
-// Export the complete tool registration with type enforcement
-export const gitHubCreateFileRegistration: ToolRegistration = {
-  name: "github_create_file",
-  description: "Create a new file in a GitHub repository.",
-  category: "github",
-  operationTypes: ['create'],
-  schemaDef: {
-    owner: { type: 'string' as const, description: "Repository owner (username or organization)" },
-    repo: { type: 'string' as const, description: "Repository name" },
-    path: { type: 'string' as const, description: "Path where the file should be created" },
-    content: { type: 'string' as const, description: "Content of the file" },
-    message: { type: 'string' as const, description: "Commit message" },
-    branch: { type: 'string' as const, optional: true, description: "Branch to create the file on" },
-  },
-  workerClass: GitHubCreateFileWorker,
-};

@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from "../base";
+import { BaseTool, ToolResponse } from "../base";
 import { createN8nService } from "../../services/N8nService";
 
 /**
@@ -7,7 +7,6 @@ import { createN8nService } from "../../services/N8nService";
 export class SearchTemplatesWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
 
   private getTemplatesFromResult(result: any): any[] {
     if (Array.isArray(result?.workflows)) {
@@ -187,19 +186,3 @@ export class SearchTemplatesWorker extends BaseTool {
     }
   }
 }
-
-// Export the complete tool registration with type enforcement
-export const searchTemplatesRegistration: ToolRegistration = {
-  name: "search_templates",
-  description: "Search n8n workflow templates from the public n8n template library. Supports keyword search, category filtering, node filtering, and pagination.",
-  category: "n8n",
-  operationTypes: ['read'],
-  schemaDef: {
-    search: { type: 'string' as const, optional: true, description: "Keyword or phrase to search for" },
-    category: { type: 'string' as const, optional: true, description: "Category to filter templates by" },
-    nodes: { type: 'string' as const, optional: true, description: "Specific nodes used in the template to filter by" },
-    page: { type: 'number' as const, optional: true, description: "Page number for pagination" },
-    limit: { type: 'number' as const, optional: true, description: "Number of results per page" },
-  },
-  workerClass: SearchTemplatesWorker,
-};

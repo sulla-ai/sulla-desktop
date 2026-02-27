@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from "../base";
+import { BaseTool, ToolResponse } from "../base";
 import DuckDuckGoService from 'ddgs';
 
 /**
@@ -7,7 +7,6 @@ import DuckDuckGoService from 'ddgs';
 export class DuckDuckGoSearchWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { query, maxResults = 10 } = input;
 
@@ -38,16 +37,3 @@ export class DuckDuckGoSearchWorker extends BaseTool {
     }
   }
 }
-
-// Export the complete tool registration with type enforcement
-export const duckDuckGoSearchRegistration: ToolRegistration = {
-  name: "duckduckgo_search",
-  description: "Search the web using DuckDuckGo for privacy-focused and comprehensive results.",
-  category: "browser",
-  operationTypes: ['read'],
-  schemaDef: {
-    query: { type: 'string' as const, description: "The search query to execute" },
-    maxResults: { type: 'number' as const, optional: true, default: 10, description: "Maximum number of search results to return" },
-  },
-  workerClass: DuckDuckGoSearchWorker,
-};

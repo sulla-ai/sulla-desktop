@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from "../base";
+import { BaseTool, ToolResponse } from "../base";
 import { runCommand } from "../util/CommandRunner";
 
 /**
@@ -7,7 +7,6 @@ import { runCommand } from "../util/CommandRunner";
 export class KubectlDeleteWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { resource, name, namespace, force, gracePeriod } = input;
 
@@ -49,19 +48,3 @@ export class KubectlDeleteWorker extends BaseTool {
     }
   }
 }
-
-// Export the complete tool registration with type enforcement
-export const kubectlDeleteRegistration: ToolRegistration = {
-  name: "kubectl_delete",
-  description: "Delete Kubernetes resources.",
-  category: "kubectl",
-  operationTypes: ['delete'],
-  schemaDef: {
-    resource: { type: 'string' as const, description: "The resource type, e.g., pods, services" },
-    name: { type: 'string' as const, description: "Specific resource name" },
-    namespace: { type: 'string' as const, optional: true, description: "Namespace" },
-    force: { type: 'boolean' as const, optional: true, description: "Force deletion" },
-    gracePeriod: { type: 'number' as const, optional: true, description: "Seconds to wait before force killing the pod" },
-  },
-  workerClass: KubectlDeleteWorker,
-};

@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from "../base";
+import { BaseTool, ToolResponse } from "../base";
 import { ArticlesRegistry } from "../../database/registry/ArticlesRegistry";
 
 /**
@@ -7,7 +7,6 @@ import { ArticlesRegistry } from "../../database/registry/ArticlesRegistry";
 export class ArticleListWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { limit = 10 } = input;
 
@@ -47,15 +46,3 @@ export class ArticleListWorker extends BaseTool {
     }
   }
 }
-
-// Export the complete tool registration with type enforcement
-export const articleListRegistration: ToolRegistration = {
-  name: "article_list",
-  description: "List articles ordered by their order field. Returns article metadata without full content.",
-  category: "memory",
-  operationTypes: ['read'],
-  schemaDef: {
-    limit: { type: 'number' as const, optional: true, default: 10, description: "Maximum number of articles to return" },
-  },
-  workerClass: ArticleListWorker,
-};

@@ -1,13 +1,12 @@
 import fs from 'fs';
 import path from 'path';
 
-import { BaseTool, ToolRegistration, ToolResponse } from '../base';
+import { BaseTool, ToolResponse } from '../base';
 import { resolveFsPath } from './path_utils';
 
 export class FsAppendFileWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
 
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     const targetPath = resolveFsPath(input.path);
@@ -32,15 +31,3 @@ export class FsAppendFileWorker extends BaseTool {
   }
 }
 
-export const fsAppendFileRegistration: ToolRegistration = {
-  name: 'fs_append_file',
-  description: 'Append text content to a file.',
-  category: 'fs',
-  operationTypes: ['update'],
-  schemaDef: {
-    path: { type: 'string' as const, description: 'File path to append to.' },
-    content: { type: 'string' as const, description: 'Content to append to file.' },
-    createDirs: { type: 'boolean' as const, optional: true, description: 'Create parent directories if missing. Default true.' },
-  },
-  workerClass: FsAppendFileWorker,
-};

@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from "../base";
+import { BaseTool, ToolResponse } from "../base";
 import { execSync } from 'child_process';
 
 /**
@@ -7,7 +7,6 @@ import { execSync } from 'child_process';
 export class GitHubAddRemoteWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
 
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { absolutePath, remoteName, remoteUrl } = input;
@@ -43,17 +42,3 @@ ${remotesOutput.trim()}`;
     }
   }
 }
-
-// Register the tool statically
-export const gitHubAddRemoteRegistration: ToolRegistration = {
-  name: "github_add_remote",
-  description: "Add a remote repository to an existing git repository.",
-  category: "github",
-  operationTypes: ['create'],
-  schemaDef: {
-    absolutePath: { type: 'string' as const, description: "Absolute path to the git repository" },
-    remoteName: { type: 'string' as const, description: "Name of the remote (usually 'origin')" },
-    remoteUrl: { type: 'string' as const, description: "URL of the remote repository" },
-  },
-  workerClass: GitHubAddRemoteWorker,
-};

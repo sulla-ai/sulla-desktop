@@ -1,10 +1,9 @@
-import { BaseTool, ToolRegistration, ToolResponse } from '../base';
+import { BaseTool, ToolResponse } from '../base';
 import { createN8nService } from '../../services/N8nService';
 
 export class SetWorkflowActiveWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
 
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     try {
@@ -44,15 +43,3 @@ export class SetWorkflowActiveWorker extends BaseTool {
   }
 }
 
-export const setWorkflowActiveRegistration: ToolRegistration = {
-  name: 'set_workflow_active',
-  description: 'Toggle a workflow active state on/off without doing a full workflow update.',
-  category: 'n8n',
-  operationTypes: ['update'],
-  schemaDef: {
-    workflowId: { type: 'string' as const, description: 'Workflow ID' },
-    active: { type: 'boolean' as const, description: 'true to activate, false to deactivate' },
-    versionId: { type: 'string' as const, optional: true, description: 'Optional version ID when activating.' },
-  },
-  workerClass: SetWorkflowActiveWorker,
-};

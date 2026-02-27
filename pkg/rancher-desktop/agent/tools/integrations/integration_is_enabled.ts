@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from "../base";
+import { BaseTool, ToolResponse } from "../base";
 import { getIntegrationService } from "../../services/IntegrationService";
 import { integrations } from "../../integrations/catalog";
 import { getExtensionService } from "@pkg/agent/services/ExtensionService";
@@ -9,7 +9,6 @@ import { getExtensionService } from "@pkg/agent/services/ExtensionService";
 export class IntegrationIsEnabledWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { integration_slug } = input;
 
@@ -59,15 +58,3 @@ Last sync at: ${status.last_sync_at ? new Date(status.last_sync_at).toLocaleStri
     }
   }
 }
-
-// Export the complete tool registration with type enforcement
-export const integrationIsEnabledRegistration: ToolRegistration = {
-  name: "integration_is_enabled",
-  description: "Check whether a specific integration is enabled (connected). Returns the enabled status along with connection timestamps.",
-  category: "integrations",
-  operationTypes: ['read'],
-  schemaDef: {
-    integration_slug: { type: 'string' as const, description: "The slug identifier of the integration (e.g. 'slack', 'github', 'n8n')" },
-  },
-  workerClass: IntegrationIsEnabledWorker,
-};

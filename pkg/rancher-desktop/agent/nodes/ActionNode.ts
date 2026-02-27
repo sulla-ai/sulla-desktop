@@ -203,7 +203,7 @@ export class ActionNode extends BaseNode {
         persistAssistantToNodeState: false,
         persistToolResultsToNodeState: false,
         nodeStateNamespace: '',
-        includeGraphAssistantMessages: true,
+        includeGraphAssistantMessages: false,
         includeGraphUserMessages: true,
       };
 
@@ -549,7 +549,45 @@ export class ActionNode extends BaseNode {
     assistantMessages: ChatMessage[];
     userMessages: ChatMessage[];
   } {
-    const actionScopedHistory = (((state.metadata as any).__messages_action?.messages || []) as ChatMessage[])
+    const metadataAny = state.metadata as any;
+    const namespace = '__messages_action';
+    if (!metadataAny[namespace] || !Array.isArray(metadataAny[namespace].messages)) {
+      metadataAny[namespace] = { messages: [], graphSeedInitialized: true };
+    }
+
+    const laneMessages = (metadataAny[namespace].messages || []) as ChatMessage[];
+    const technicalInstructions = String(metadataAny.technical_instructions || '').trim();
+
+    if (technicalInstructions) {
+      const hasSeededTechnicalInstructions = laneMessages.some((message) => {
+        if (message.role !== 'user') {
+          return false;
+        }
+
+        const kind = String((message as any)?.metadata?.kind || '').trim();
+        if (kind === 'action_seed_user_instructions') {
+          return true;
+        }
+
+        return String(message.content || '').trim() === technicalInstructions;
+      });
+
+      if (!hasSeededTechnicalInstructions) {
+        laneMessages.push({
+          role: 'user',
+          content: technicalInstructions,
+          metadata: {
+            nodeId: this.id,
+            nodeName: this.name,
+            kind: 'action_seed_user_instructions',
+            timestamp: Date.now(),
+          },
+        } as ChatMessage);
+        this.bumpStateVersion(state);
+      }
+    }
+
+    const actionScopedHistory = laneMessages
       .filter((message) => {
         if (message.role !== 'assistant') {
           return false;
@@ -575,17 +613,10 @@ export class ActionNode extends BaseNode {
       .slice(-20)
       .map((message) => ({ ...message }));
 
-    const technicalInstructions = String((state.metadata as any).technical_instructions || '').trim();
-
     const assistantMessages = actionScopedHistory;
-    const userMessages: ChatMessage[] = [];
-
-    if (technicalInstructions) {
-      userMessages.push({
-        role: 'user',
-        content: `${technicalInstructions}`,
-      });
-    }
+    const userMessages: ChatMessage[] = laneMessages
+      .filter((message) => message.role === 'user')
+      .map((message) => ({ ...message }));
 
     return {
       assistantMessages,

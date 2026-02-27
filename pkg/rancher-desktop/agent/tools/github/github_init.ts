@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from "../base";
+import { BaseTool, ToolResponse } from "../base";
 import { execSync } from 'child_process';
 import path from 'path';
 
@@ -8,7 +8,6 @@ import path from 'path';
 export class GitHubInitWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
 
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { absolutePath } = input;
@@ -38,15 +37,3 @@ export class GitHubInitWorker extends BaseTool {
     }
   }
 }
-
-// Register the tool statically
-export const gitHubInitRegistration: ToolRegistration = {
-  name: "github_init",
-  description: "Initialize a git repository at the specified absolute path.",
-  category: "github",
-  operationTypes: ['execute', 'create'],
-  schemaDef: {
-    absolutePath: { type: 'string' as const, description: "Absolute path where the git repository should be initialized" },
-  },
-  workerClass: GitHubInitWorker,
-};

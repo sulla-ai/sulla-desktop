@@ -1,11 +1,10 @@
-import { BaseTool, ToolRegistration, ToolResponse } from '../base';
+import { BaseTool, ToolResponse } from '../base';
 import { createN8nService } from '../../services/N8nService';
 import { countNodeConnections, resolveNodeIndex } from './workflow_node_utils';
 
 export class GetWorkflowNodeWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
 
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     try {
@@ -45,16 +44,3 @@ export class GetWorkflowNodeWorker extends BaseTool {
   }
 }
 
-export const getWorkflowNodeRegistration: ToolRegistration = {
-  name: 'get_workflow_node',
-  description: 'Get a single node from a n8n workflow by nodeId or nodeName.',
-  category: 'n8n',
-  operationTypes: ['read'],
-  schemaDef: {
-    workflowId: { type: 'string' as const, description: 'Workflow ID' },
-    nodeId: { type: 'string' as const, optional: true, description: 'Node ID (preferred)' },
-    nodeName: { type: 'string' as const, optional: true, description: 'Node name (must be unique if used)' },
-    excludePinnedData: { type: 'boolean' as const, optional: true, description: 'Exclude pinned data from workflow fetch' },
-  },
-  workerClass: GetWorkflowNodeWorker,
-};

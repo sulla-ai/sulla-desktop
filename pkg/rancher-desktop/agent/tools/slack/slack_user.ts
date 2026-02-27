@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from "../base";
+import { BaseTool, ToolResponse } from "../base";
 import { registry } from "../../integrations";
 import type { SlackClient } from "../../integrations/slack/SlackClient";
 
@@ -8,7 +8,6 @@ import type { SlackClient } from "../../integrations/slack/SlackClient";
 export class SlackUserWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
 
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { userId } = input;
@@ -34,15 +33,3 @@ export class SlackUserWorker extends BaseTool {
     }
   }
 }
-
-// Export the complete tool registration with type enforcement
-export const slackUserRegistration: ToolRegistration = {
-  name: "slack_user",
-  description: "Get information about a Slack user.",
-  category: "slack",
-  operationTypes: ['read'],
-  schemaDef: {
-    userId: { type: 'string' as const, description: "User ID to get info for" },
-  },
-  workerClass: SlackUserWorker,
-};

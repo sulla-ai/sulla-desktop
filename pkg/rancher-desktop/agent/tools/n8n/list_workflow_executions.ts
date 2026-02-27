@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from '../base';
+import { BaseTool, ToolResponse } from '../base';
 import { createN8nService } from '../../services/N8nService';
 
 type JsonRecord = Record<string, any>;
@@ -84,7 +84,6 @@ function extractErrorMessage(execution: JsonRecord): string | null {
 export class ListWorkflowExecutionsWorker extends BaseTool {
   name = '';
   description = '';
-  schemaDef: any = {};
 
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     try {
@@ -136,14 +135,3 @@ export class ListWorkflowExecutionsWorker extends BaseTool {
   }
 }
 
-export const listWorkflowExecutionsRegistration: ToolRegistration = {
-  name: 'list_workflow_executions',
-  description: 'List recent executions for a workflow with a compact summary (status, start time, duration, error).',
-  category: 'n8n',
-  operationTypes: ['read'],
-  schemaDef: {
-    workflowId: { type: 'string' as const, description: 'Workflow ID' },
-    limit: { type: 'number' as const, optional: true, default: 20, description: 'Max executions to return (1-250).' },
-  },
-  workerClass: ListWorkflowExecutionsWorker,
-};

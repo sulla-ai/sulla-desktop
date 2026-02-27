@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from "../base";
+import { BaseTool, ToolResponse } from "../base";
 import { registry } from "../../integrations";
 import type { SlackClient } from "../../integrations/slack/SlackClient";
 
@@ -8,7 +8,6 @@ import type { SlackClient } from "../../integrations/slack/SlackClient";
 export class SlackThreadWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { channel, ts } = input;
 
@@ -40,16 +39,3 @@ export class SlackThreadWorker extends BaseTool {
     }
   }
 }
-
-// Export the complete tool registration with type enforcement
-export const slackThreadRegistration: ToolRegistration = {
-  name: "slack_thread",
-  description: "Get replies in a Slack thread.",
-  category: "slack",
-  operationTypes: ['read'],
-  schemaDef: {
-    channel: { type: 'string' as const, description: "Channel ID where the thread is" },
-    ts: { type: 'string' as const, description: "Timestamp of the parent message" },
-  },
-  workerClass: SlackThreadWorker,
-};

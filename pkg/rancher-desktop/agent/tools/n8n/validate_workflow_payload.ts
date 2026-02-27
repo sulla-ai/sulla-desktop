@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from "../base";
+import { BaseTool, ToolResponse } from "../base";
 import { createN8nService } from "../../services/N8nService";
 
 /**
@@ -7,7 +7,6 @@ import { createN8nService } from "../../services/N8nService";
 export class ValidateWorkflowPayloadWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
 
   private parseJsonIfString(value: any, field: string): any {
     if (typeof value !== 'string') {
@@ -95,19 +94,3 @@ export class ValidateWorkflowPayloadWorker extends BaseTool {
   }
 }
 
-export const validateWorkflowPayloadRegistration: ToolRegistration = {
-  name: "validate_workflow_payload",
-  description: "Validate an n8n workflow payload (nodes/connections/settings) before create/update.",
-  category: "n8n",
-  operationTypes: ['execute'],
-  schemaDef: {
-    name: { type: 'string' as const, description: "Workflow name" },
-    nodes: { type: 'array' as const, items: { type: 'object' as const }, description: "Workflow nodes as n8n node objects." },
-    connections: { type: 'object' as const, description: "Workflow connections object keyed by source node name." },
-    settings: { type: 'object' as const, optional: true, default: {}, description: "Workflow settings object." },
-    shared: { type: 'array' as const, items: { type: 'object' as const }, optional: true, description: "Shared users array." },
-    staticData: { type: 'object' as const, optional: true, description: "Workflow staticData object." },
-    checkConnection: { type: 'boolean' as const, optional: true, default: true, description: "When true, also checks n8n API health connectivity." },
-  },
-  workerClass: ValidateWorkflowPayloadWorker,
-};

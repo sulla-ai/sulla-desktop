@@ -1,10 +1,9 @@
-import { BaseTool, ToolRegistration, ToolResponse } from '../base';
+import { BaseTool, ToolResponse } from '../base';
 import { getAgentPersonaRegistry } from '../../database/registry/AgentPersonaRegistry';
 
 export class ManageActiveAssetWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
 
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     if (!this.state) {
@@ -105,22 +104,3 @@ export class ManageActiveAssetWorker extends BaseTool {
   }
 }
 
-export const manageActiveAssetRegistration: ToolRegistration = {
-  name: 'manage_active_asset',
-  description: 'Create, update, or remove active sidebar assets (iframe URLs/documents) attached to the current agent persona. Use stable skill IDs (e.g. workflow skill -> sulla_n8n) to keep URL updates on the same asset.',
-  category: 'meta',
-  operationTypes: ['create', 'update', 'delete'],
-  schemaDef: {
-    action: { type: 'enum' as const, enum: ['upsert', 'remove'], default: 'upsert', description: 'upsert creates/updates an asset; remove deletes by assetId.' },
-    assetType: { type: 'enum' as const, optional: true, enum: ['iframe', 'document'], description: 'Required for upsert.' },
-    assetId: { type: 'string' as const, optional: true, description: 'Stable asset ID. For workflow websites use sulla_n8n.' },
-    skillSlug: { type: 'string' as const, optional: true, description: 'Optional skill slug to bind website assets to a skill.' },
-    title: { type: 'string' as const, optional: true },
-    url: { type: 'string' as const, optional: true, description: 'Required for iframe upsert.' },
-    content: { type: 'string' as const, optional: true, description: 'Document HTML/markdown content.' },
-    active: { type: 'boolean' as const, optional: true, default: true },
-    collapsed: { type: 'boolean' as const, optional: true, default: true },
-    refKey: { type: 'string' as const, optional: true },
-  },
-  workerClass: ManageActiveAssetWorker,
-};

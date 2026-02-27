@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from "../base";
+import { BaseTool, ToolResponse } from "../base";
 import { runCommand } from "../util/CommandRunner";
 
 /**
@@ -7,7 +7,6 @@ import { runCommand } from "../util/CommandRunner";
 export class RdctlSnapshotWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { subcommand, args = [] } = input;
 
@@ -35,16 +34,3 @@ export class RdctlSnapshotWorker extends BaseTool {
     }
   }
 }
-
-// Export the complete tool registration with type enforcement
-export const rdctlSnapshotRegistration: ToolRegistration = {
-  name: "rdctl_snapshot",
-  description: "Manage Sulla Desktop snapshots.",
-  category: "rdctl",
-  operationTypes: ['execute'],
-  schemaDef: {
-    subcommand: { type: 'string' as const, description: "Snapshot subcommand, e.g., list, create, delete" },
-    args: { type: 'array' as const, items: { type: 'string' as const }, optional: true, description: "Arguments for the subcommand" },
-  },
-  workerClass: RdctlSnapshotWorker,
-};

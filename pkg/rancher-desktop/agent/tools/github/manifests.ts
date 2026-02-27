@@ -1,0 +1,106 @@
+import type { ToolManifest } from '../registry';
+
+export const githubToolManifests: ToolManifest[] = [
+  {
+    name: 'github_add_remote',
+    description: 'Add a remote repository to an existing git repository.',
+    category: 'github',
+    schemaDef: {
+    absolutePath: { type: 'string', description: "Absolute path to the git repository" },
+    remoteName: { type: 'string', description: "Name of the remote (usually 'origin')" },
+    remoteUrl: { type: 'string', description: "URL of the remote repository" },
+  },
+    operationTypes: ['create'],
+    loader: () => import('./github_add_remote'),
+  },
+  {
+    name: 'github_comment_on_issue',
+    description: 'Add a comment to a GitHub issue.',
+    category: 'github',
+    schemaDef: {
+    owner: { type: 'string', description: "Repository owner (username or organization)" },
+    repo: { type: 'string', description: "Repository name" },
+    issue_number: { type: 'number', description: "Issue number" },
+    body: { type: 'string', description: "Comment body" },
+  },
+    operationTypes: ['execute', 'create'],
+    loader: () => import('./github_comment_on_issue'),
+  },
+  {
+    name: 'github_create_file',
+    description: 'Create a new file in a GitHub repository.',
+    category: 'github',
+    schemaDef: {
+    owner: { type: 'string', description: "Repository owner (username or organization)" },
+    repo: { type: 'string', description: "Repository name" },
+    path: { type: 'string', description: "Path where the file should be created" },
+    content: { type: 'string', description: "Content of the file" },
+    message: { type: 'string', description: "Commit message" },
+    branch: { type: 'string', optional: true, description: "Branch to create the file on" },
+  },
+    operationTypes: ['create'],
+    loader: () => import('./github_create_file'),
+  },
+  {
+    name: 'github_get_issue',
+    description: 'Get details of a specific GitHub issue.',
+    category: 'github',
+    schemaDef: {
+    owner: { type: 'string', description: "Repository owner (username or organization)" },
+    repo: { type: 'string', description: "Repository name" },
+    issue_number: { type: 'number', description: "Issue number" },
+  },
+    operationTypes: ['read'],
+    loader: () => import('./github_get_issue'),
+  },
+  {
+    name: 'github_get_issues',
+    description: 'Get issues from a GitHub repository.',
+    category: 'github',
+    schemaDef: {
+    owner: { type: 'string', description: "Repository owner (username or organization)" },
+    repo: { type: 'string', description: "Repository name" },
+    state: { type: 'enum', enum: ['open', 'closed', 'all'], default: 'open', description: "Issue state filter" },
+    labels: { type: 'array', items: { type: 'string' }, optional: true, description: "Labels to filter issues" },
+    since: { type: 'string', optional: true, description: "Only issues updated after this ISO 8601 timestamp" },
+    limit: { type: 'number', optional: true, default: 10, description: "Maximum number of issues to return" },
+  },
+    operationTypes: ['read'],
+    loader: () => import('./github_get_issues'),
+  },
+  {
+    name: 'github_init',
+    description: 'Initialize a git repository at the specified absolute path.',
+    category: 'github',
+    schemaDef: {
+    absolutePath: { type: 'string', description: "Absolute path where the git repository should be initialized" },
+  },
+    operationTypes: ['execute', 'create'],
+    loader: () => import('./github_init'),
+  },
+  {
+    name: 'github_list_branches',
+    description: 'List branches in a GitHub repository.',
+    category: 'github',
+    schemaDef: {
+    owner: { type: 'string', description: "Repository owner (username or organization)" },
+    repo: { type: 'string', description: "Repository name" },
+    protected: { type: 'boolean', optional: true, description: "Filter for protected branches only" },
+  },
+    operationTypes: ['read'],
+    loader: () => import('./github_list_branches'),
+  },
+  {
+    name: 'github_read_file',
+    description: 'Read the contents of a file from a GitHub repository.',
+    category: 'github',
+    schemaDef: {
+    owner: { type: 'string', description: "Repository owner (username or organization)" },
+    repo: { type: 'string', description: "Repository name" },
+    path: { type: 'string', description: "Path to the file in the repository" },
+    ref: { type: 'string', optional: true, description: "Branch, tag, or commit SHA" },
+  },
+    operationTypes: ['read'],
+    loader: () => import('./github_read_file'),
+  },
+];

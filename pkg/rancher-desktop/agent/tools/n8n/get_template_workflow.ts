@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from "../base";
+import { BaseTool, ToolResponse } from "../base";
 import { createN8nService } from "../../services/N8nService";
 
 /**
@@ -7,7 +7,6 @@ import { createN8nService } from "../../services/N8nService";
 export class GetTemplateWorkflowWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     try {
       const service = await createN8nService();
@@ -35,15 +34,3 @@ Updated: ${template.updatedAt ? new Date(template.updatedAt).toLocaleString() : 
     }
   }
 }
-
-// Export the complete tool registration with type enforcement
-export const getTemplateWorkflowRegistration: ToolRegistration = {
-  name: "get_template_workflow",
-  description: "Get the details of a single n8n workflow template by its ID from the public n8n template library.",
-  category: "n8n",
-  operationTypes: ['read'],
-  schemaDef: {
-    id: { type: 'number' as const, description: "Template workflow ID" },
-  },
-  workerClass: GetTemplateWorkflowWorker,
-};

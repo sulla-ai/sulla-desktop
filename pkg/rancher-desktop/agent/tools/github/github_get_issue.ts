@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from "../base";
+import { BaseTool, ToolResponse } from "../base";
 import { Octokit } from "@octokit/rest";
 import { getIntegrationService } from '../../services/IntegrationService';
 
@@ -8,7 +8,6 @@ import { getIntegrationService } from '../../services/IntegrationService';
 export class GitHubGetIssueWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { owner, repo, issue_number } = input;
 
@@ -63,17 +62,3 @@ ${issue.body || 'No description provided.'}`;
     }
   }
 }
-
-// Export the complete tool registration with type enforcement
-export const gitHubGetIssueRegistration: ToolRegistration = {
-  name: "github_get_issue",
-  description: "Get details of a specific GitHub issue.",
-  category: "github",
-  operationTypes: ['read'],
-  schemaDef: {
-    owner: { type: 'string' as const, description: "Repository owner (username or organization)" },
-    repo: { type: 'string' as const, description: "Repository name" },
-    issue_number: { type: 'number' as const, description: "Issue number" },
-  },
-  workerClass: GitHubGetIssueWorker,
-};

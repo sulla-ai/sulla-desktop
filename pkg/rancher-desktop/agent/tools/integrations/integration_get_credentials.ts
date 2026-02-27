@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from "../base";
+import { BaseTool, ToolResponse } from "../base";
 import { getIntegrationService } from "../../services/IntegrationService";
 import { integrations } from "../../integrations/catalog";
 import { getExtensionService } from "@pkg/agent/services/ExtensionService";
@@ -9,7 +9,6 @@ import { getExtensionService } from "@pkg/agent/services/ExtensionService";
 export class IntegrationGetCredentialsWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { integration_slug } = input;
 
@@ -83,15 +82,3 @@ Credentials:\n`;
     }
   }
 }
-
-// Export the complete tool registration with type enforcement
-export const integrationGetCredentialsRegistration: ToolRegistration = {
-  name: "integration_get_credentials",
-  description: "Retrieve the credentials and connection status for a specific integration. Returns each credential property name, title, type, whether it is required, and its stored value, along with whether the integration is enabled.",
-  category: "integrations",
-  operationTypes: ['read'],
-  schemaDef: {
-    integration_slug: { type: 'string' as const, description: "The slug identifier of the integration (e.g. 'slack', 'github', 'n8n')" },
-  },
-  workerClass: IntegrationGetCredentialsWorker,
-};

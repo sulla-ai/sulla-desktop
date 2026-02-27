@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from "../base";
+import { BaseTool, ToolResponse } from "../base";
 import { SullaSettingsModel } from '../../database/models/SullaSettingsModel';
 import { parseJson } from '../../services/JsonParseService';
 
@@ -18,7 +18,6 @@ function generateTinyId(): string {
 export class AddObservationalMemoryWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
   
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { priority, content } = input;
@@ -76,16 +75,3 @@ export class AddObservationalMemoryWorker extends BaseTool {
     };
   }
 }
-
-// Export the complete tool registration with type enforcement
-export const addObservationalMemoryRegistration: ToolRegistration = {
-  name: "add_observational_memory",
-  description: "Use this tool to store the observations you make into long-term memory.",
-  category: "meta",
-  operationTypes: ['create','read','update','delete'],
-  schemaDef: {
-    priority: { type: 'enum' as const, enum: ["🔴", "🟡", "⚪"], default: "🟡" },
-    content: { type: 'string' as const, description: "One sentence only — extremely concise, always include the context" },
-  },
-  workerClass: AddObservationalMemoryWorker,
-};

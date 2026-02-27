@@ -1,10 +1,9 @@
-import { BaseTool, ToolRegistration, ToolResponse } from '../base';
+import { BaseTool, ToolResponse } from '../base';
 import { createN8nService } from '../../services/N8nService';
 
 export class GetCredentialWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
 
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     try {
@@ -44,13 +43,3 @@ export class GetCredentialWorker extends BaseTool {
   }
 }
 
-export const getCredentialRegistration: ToolRegistration = {
-  name: 'get_credential',
-  description: 'Get one n8n credential by ID.',
-  category: 'n8n',
-  operationTypes: ['read'],
-  schemaDef: {
-    id: { type: 'string' as const, description: 'Credential ID' },
-  },
-  workerClass: GetCredentialWorker,
-};

@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from "../base";
+import { BaseTool, ToolResponse } from "../base";
 import { calendarClient } from "../../services/CalendarClient";
 
 /**
@@ -7,7 +7,6 @@ import { calendarClient } from "../../services/CalendarClient";
 export class CalendarCreateWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     try {
       const event = await calendarClient.create(input);
@@ -43,22 +42,3 @@ ID: ${event.id || 'N/A'}`;
     }
   }
 }
-
-// Export the complete tool registration with type enforcement
-export const calendarCreateRegistration: ToolRegistration = {
-  name: "calendar_create",
-  description: "Create a new calendar event or reminder.",
-  category: "calendar",
-  operationTypes: ['create'],
-  schemaDef: {
-    title: { type: 'string' as const, description: "Event title" },
-    start: { type: 'string' as const, description: "Start time in ISO format" },
-    end: { type: 'string' as const, description: "End time in ISO format" },
-    description: { type: 'string' as const, optional: true, description: "Event description" },
-    location: { type: 'string' as const, optional: true, description: "Event location" },
-    people: { type: 'array' as const, items: { type: 'string' as const }, optional: true, description: "List of attendee emails" },
-    calendarId: { type: 'string' as const, optional: true, description: "Calendar ID" },
-    allDay: { type: 'boolean' as const, optional: true, description: "Whether this is an all-day event" },
-  },
-  workerClass: CalendarCreateWorker,
-};

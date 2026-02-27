@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from "../base";
+import { BaseTool, ToolResponse } from "../base";
 import { createN8nService } from "../../services/N8nService";
 
 /**
@@ -7,7 +7,6 @@ import { createN8nService } from "../../services/N8nService";
 export class GetTagsWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     try {
       const service = await createN8nService();
@@ -41,13 +40,3 @@ export class GetTagsWorker extends BaseTool {
     }
   }
 }
-
-// Export the complete tool registration with type enforcement
-export const getTagsRegistration: ToolRegistration = {
-  name: "get_tags",
-  description: "Get all tags from n8n.",
-  category: "n8n",
-  operationTypes: ['read'],
-  schemaDef: {},
-  workerClass: GetTagsWorker,
-};

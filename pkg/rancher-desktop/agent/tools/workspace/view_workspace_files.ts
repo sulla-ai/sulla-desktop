@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from '../base';
+import { BaseTool, ToolResponse } from '../base';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
@@ -9,7 +9,6 @@ import os from 'os';
 export class ViewWorkspaceFilesWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
 
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { name } = input;
@@ -31,15 +30,3 @@ export class ViewWorkspaceFilesWorker extends BaseTool {
     }
   }
 }
-
-// Export the complete tool registration with type enforcement
-export const viewWorkspaceFilesRegistration: ToolRegistration = {
-  name: "view_workspace_files",
-  description: "List files in a workspace directory in the Rancher Desktop data directory.",
-  category: "workspace",
-  operationTypes: ['read'],
-  schemaDef: {
-    name: { type: 'string' as const, description: 'The name of the workspace to view.' },
-  },
-  workerClass: ViewWorkspaceFilesWorker,
-};

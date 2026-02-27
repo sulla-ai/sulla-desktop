@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse, ToolOperation } from "../base";
+import { BaseTool, ToolResponse, ToolOperation } from "../base";
 import { toolRegistry } from "../registry";
 
 /**
@@ -7,7 +7,6 @@ import { toolRegistry } from "../registry";
 export class BrowseToolsWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
 
   private getToolSignature(tool: any): any {
     try {
@@ -120,18 +119,3 @@ ${JSON.stringify(toolDetails, null, 2)}`
     return Array.from(set);
   }
 }
-
-// Export the complete tool registration with type enforcement
-export const browseToolsRegistration: ToolRegistration = {
-  name: "browse_tools",
-  description: "List available tools by category or search term. Use this when you need a tool but don't know its exact name or category yet.",
-  category: "meta",
-  operationTypes: ['read','create','update','delete'],
-  schemaDef: {
-    category: { type: 'string' as const, optional: true, description: "Specific category of tools (e.g. meta, fs, workspace, slack, n8n)" },
-    query: { type: 'string' as const, optional: true, description: "Keyword to filter tool names/descriptions" },
-    operationType: { type: 'enum' as const, optional: true, enum: ['read', 'create', 'update', 'delete', 'execute'], description: "Filter tools by a single operation type." },
-    operationTypes: { type: 'array' as const, optional: true, description: "Filter tools by multiple operation types.", items: { type: 'enum' as const, enum: ['read', 'create', 'update', 'delete', 'execute'] } },
-  },
-  workerClass: BrowseToolsWorker,
-};

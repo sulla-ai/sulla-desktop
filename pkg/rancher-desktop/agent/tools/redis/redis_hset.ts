@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from "../base";
+import { BaseTool, ToolResponse } from "../base";
 import { redisClient } from "../../database/RedisClient";
 
 /**
@@ -7,7 +7,6 @@ import { redisClient } from "../../database/RedisClient";
 export class RedisHsetWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { key, field, value } = input;
 
@@ -26,17 +25,3 @@ export class RedisHsetWorker extends BaseTool {
     }
   }
 }
-
-// Export the complete tool registration with type enforcement
-export const redisHsetRegistration: ToolRegistration = {
-  name: "redis_hset",
-  description: "Set the value of a field in a Redis hash.",
-  category: "redis",
-  operationTypes: ['execute'],
-  schemaDef: {
-    key: { type: 'string' as const, description: "The Redis hash key" },
-    field: { type: 'string' as const, description: "The field in the hash" },
-    value: { type: 'string' as const, description: "The value to set" },
-  },
-  workerClass: RedisHsetWorker,
-};

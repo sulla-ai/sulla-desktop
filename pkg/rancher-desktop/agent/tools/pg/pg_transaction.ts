@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from "../base";
+import { BaseTool, ToolResponse } from "../base";
 import { postgresClient } from "../../database/PostgresClient";
 
 /**
@@ -7,7 +7,6 @@ import { postgresClient } from "../../database/PostgresClient";
 export class PgTransactionWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { sql } = input;
 
@@ -49,15 +48,3 @@ Results: ${result.map(r => `${r.command} (${r.rowCount} rows)`).join(', ')}`;
     }
   }
 }
-
-// Export the complete tool registration with type enforcement
-export const pgTransactionRegistration: ToolRegistration = {
-  name: "pg_transaction",
-  description: "Execute multiple PostgreSQL statements in a transaction.",
-  category: "pg",
-  operationTypes: ['execute'],
-  schemaDef: {
-    sql: { type: 'string' as const, description: "SQL statements separated by semicolons to execute in a transaction" },
-  },
-  workerClass: PgTransactionWorker,
-};

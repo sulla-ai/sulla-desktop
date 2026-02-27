@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from "../base";
+import { BaseTool, ToolResponse } from "../base";
 import { runCommand } from "../util/CommandRunner";
 
 /**
@@ -7,7 +7,6 @@ import { runCommand } from "../util/CommandRunner";
 export class LimaDeleteWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { instance, force } = input;
 
@@ -41,16 +40,3 @@ export class LimaDeleteWorker extends BaseTool {
     }
   }
 }
-
-// Export the complete tool registration with type enforcement
-export const limaDeleteRegistration: ToolRegistration = {
-  name: "lima_delete",
-  description: "Delete a Lima virtual machine instance.",
-  category: "lima",
-  operationTypes: ['delete'],
-  schemaDef: {
-    instance: { type: 'string' as const, description: "Name of the Lima instance" },
-    force: { type: 'boolean' as const, optional: true, description: "Force deletion without confirmation" },
-  },
-  workerClass: LimaDeleteWorker,
-};

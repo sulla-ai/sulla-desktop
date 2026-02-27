@@ -222,9 +222,6 @@ const ensureBridgeEventStreaming = (): void => {
     return;
   }
 
-  bridgeUnsubs.push(n8nVueBridgeService.on('injected', (payload) => {
-    void publishBridgeEventToActionNote('injected', payload);
-  }));
   bridgeUnsubs.push(n8nVueBridgeService.on('routeChanged', (payload) => {
     void publishBridgeEventToActionNote('routeChanged', payload);
   }));

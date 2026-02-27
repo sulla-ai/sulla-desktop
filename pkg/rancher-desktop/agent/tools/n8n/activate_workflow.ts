@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from "../base";
+import { BaseTool, ToolResponse } from "../base";
 import { createN8nService } from "../../services/N8nService";
 
 /**
@@ -7,7 +7,6 @@ import { createN8nService } from "../../services/N8nService";
 export class ActivateWorkflowWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
 
   private normalizeActivationOptions(input: any): { versionId?: string } | undefined {
     const rawVersionId = input?.versionId;
@@ -43,16 +42,3 @@ Created: ${new Date(result.createdAt).toLocaleString()}`;
     }
   }
 }
-
-// Export the complete tool registration with type enforcement
-export const activateWorkflowRegistration: ToolRegistration = {
-  name: "activate_workflow",
-  description: "Activate a workflow in n8n.",
-  category: "n8n",
-  operationTypes: ['update','create'],
-  schemaDef: {
-    id: { type: 'string' as const, description: "Workflow ID" },
-    versionId: { type: 'string' as const, optional: true, description: "Version ID to activate" },
-  },
-  workerClass: ActivateWorkflowWorker,
-};

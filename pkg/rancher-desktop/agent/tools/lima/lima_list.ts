@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from "../base";
+import { BaseTool, ToolResponse } from "../base";
 import { runCommand } from "../util/CommandRunner";
 
 /**
@@ -7,7 +7,6 @@ import { runCommand } from "../util/CommandRunner";
 export class LimaListWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { json } = input;
 
@@ -41,15 +40,3 @@ export class LimaListWorker extends BaseTool {
     }
   }
 }
-
-// Export the complete tool registration with type enforcement
-export const limaListRegistration: ToolRegistration = {
-  name: "lima_list",
-  description: "List Lima virtual machine instances.",
-  category: "lima",
-  operationTypes: ['read'],
-  schemaDef: {
-    json: { type: 'boolean' as const, optional: true, description: "Output in JSON format" },
-  },
-  workerClass: LimaListWorker,
-};

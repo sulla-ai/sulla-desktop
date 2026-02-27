@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from "../base";
+import { BaseTool, ToolResponse } from "../base";
 import { getWebSocketClientService } from '../../services/WebSocketClientService';
 
 type PlanStatus = 'active' | 'completed';
@@ -42,7 +42,6 @@ interface FrontendPlan {
 export class CreatePlanWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
 
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     console.log('[CreatePlanTool] updatePlan started');
@@ -109,32 +108,3 @@ export class CreatePlanWorker extends BaseTool {
     };
   }
 }
-
-// Export the complete tool registration with type enforcement
-export const createPlanRegistration: ToolRegistration = {
-  name: "create_plan",
-  description: "Create a structured, trackable plan with milestones. The UI will show it as a live checklist.",
-  category: "meta",
-  operationTypes: ['read','create','update','delete'],
-  schemaDef: {
-    goal: { type: 'string' as const, description: "Short title of the overall goal" },
-    goaldescription: { type: 'string' as const, description: "1-2 sentence description of what success looks like" },
-    requirestools: { type: 'boolean' as const },
-    estimatedcomplexity: { type: 'enum' as const, enum: ["simple", "moderate", "complex"] },
-    milestones: { type: 'array' as const, items: {
-      type: 'object' as const,
-      properties: {
-        id: { type: 'string' as const },
-        title: { type: 'string' as const },
-        description: { type: 'string' as const },
-        successcriteria: { type: 'string' as const },
-        dependson: { type: 'array' as const, items: { type: 'string' as const } }
-      }
-    }, description: "List of steps to achieve the goal" },
-    responseguidance: { type: 'object' as const, properties: {
-      tone: { type: 'string' as const },
-      format: { type: 'string' as const }
-    }}
-  },
-  workerClass: CreatePlanWorker,
-};

@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from "../base";
+import { BaseTool, ToolResponse } from "../base";
 import { createN8nService } from "../../services/N8nService";
 
 /**
@@ -7,7 +7,6 @@ import { createN8nService } from "../../services/N8nService";
 export class GetWorkflowWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     try {
       const service = await createN8nService();
@@ -27,16 +26,3 @@ export class GetWorkflowWorker extends BaseTool {
     }
   }
 }
-
-// Export the complete tool registration with type enforcement
-export const getWorkflowRegistration: ToolRegistration = {
-  name: "get_workflow",
-  description: "Get a specific workflow by ID from n8n.",
-  category: "n8n",
-  operationTypes: ['read'],
-  schemaDef: {
-    id: { type: 'string' as const, description: "Workflow ID" },
-    excludePinnedData: { type: 'boolean' as const, optional: true, description: "Exclude pinned data" },
-  },
-  workerClass: GetWorkflowWorker,
-};

@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from '../base';
+import { BaseTool, ToolResponse } from '../base';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
@@ -9,7 +9,6 @@ import os from 'os';
 export class DeleteWorkspaceWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
 
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { name } = input;
@@ -30,15 +29,3 @@ export class DeleteWorkspaceWorker extends BaseTool {
     }
   }
 }
-
-// Export the complete tool registration with type enforcement
-export const deleteWorkspaceRegistration: ToolRegistration = {
-  name: 'delete_workspace',
-  description: 'Delete an existing workspace directory in the Rancher Desktop data directory.',
-  category: "workspace",
-  operationTypes: ['delete'],
-  schemaDef: {
-    name: { type: 'string' as const, description: 'The name of the workspace to delete.' },
-  },
-  workerClass: DeleteWorkspaceWorker,
-};

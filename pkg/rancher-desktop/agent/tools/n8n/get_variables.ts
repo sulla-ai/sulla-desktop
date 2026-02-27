@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from "../base";
+import { BaseTool, ToolResponse } from "../base";
 import { createN8nService } from "../../services/N8nService";
 import { postgresClient } from "../../database/PostgresClient";
 
@@ -21,7 +21,6 @@ function formatVariableDate(value: unknown): string {
 export class GetVariablesWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
 
   private async getVariablesFromPostgres(input: any): Promise<any[]> {
     await postgresClient.initialize();
@@ -107,18 +106,3 @@ export class GetVariablesWorker extends BaseTool {
     }
   }
 }
-
-// Export the complete tool registration with type enforcement
-export const getVariablesRegistration: ToolRegistration = {
-  name: "get_variables",
-  description: "Get all variables from n8n with optional filtering.",
-  category: "n8n",
-  operationTypes: ['read'],
-  schemaDef: {
-    limit: { type: 'number' as const, optional: true, description: "Maximum number of results" },
-    cursor: { type: 'string' as const, optional: true, description: "Cursor for pagination" },
-    projectId: { type: 'string' as const, optional: true, description: "Filter by project ID" },
-    state: { type: 'enum' as const, enum: ["empty"], optional: true, description: "Filter by state" },
-  },
-  workerClass: GetVariablesWorker,
-};

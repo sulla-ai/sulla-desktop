@@ -1,6 +1,9 @@
-import { Graph, createOverlordGraph, OverlordThreadState, BaseThreadState, createSkillGraph, SkillGraphState } from '../nodes/Graph';
+import { Graph, createOverlordGraph, createAgentGraph, OverlordThreadState, BaseThreadState, AgentGraphState, GeneralGraphState, createSkillGraph, SkillGraphState } from '../nodes/Graph';
 import { SullaSettingsModel } from '../database/models/SullaSettingsModel';
 import { getCurrentModel, getCurrentMode } from '../languagemodels';
+
+// Side-effect: ensure tool manifests are registered before any graph runs
+import '../tools/manifests';
 
 const registry = new Map<string, {
   graph: Graph<any>;
@@ -98,6 +101,33 @@ export const GraphRegistry = {
 
     registry.set(threadId, { graph, state });
     return { graph, state };
+  },
+
+  /**
+   * Get or create AgentGraph — simple independent agent execution.
+   * No planning, reasoning, or critic nodes. Single message thread.
+   */
+  getOrCreateAgentGraph: async function(wsChannel: string, threadId: string): Promise<{
+    graph: Graph<AgentGraphState>;
+    state: AgentGraphState;
+  }> {
+    if (registry.has(threadId)) {
+      return Promise.resolve(registry.get(threadId)!);
+    }
+
+    const graph = createAgentGraph();
+    const state = await buildAgentState(wsChannel, threadId);
+
+    registry.set(threadId, { graph, state });
+    return { graph, state };
+  },
+
+  // Back-compat alias while callers migrate to AgentGraph naming.
+  getOrCreateGeneralGraph: async function(wsChannel: string, threadId: string): Promise<{
+    graph: Graph<GeneralGraphState>;
+    state: GeneralGraphState;
+  }> {
+    return this.getOrCreateAgentGraph(wsChannel, threadId);
   },
 
   delete(threadId: string): void {
@@ -226,6 +256,65 @@ async function resolveIsLocal(setting: string): Promise<boolean> {
   return setting.startsWith('local:');
 }
 
+
+/**
+ * Build initial state for GeneralGraph execution
+ * Minimal state for independent agent execution
+ * @param wsChannel 
+ * @param threadId 
+ * @returns 
+ */
+async function buildAgentState(wsChannel: string, threadId?: string): Promise<AgentGraphState> {
+  const id = threadId ?? nextThreadId();
+
+  const mode = await SullaSettingsModel.get('modelMode', 'local');
+  const llmModel = mode === 'remote' ? await SullaSettingsModel.get('remoteModel', 'grok-4-1-fast-reasoning') : await SullaSettingsModel.get('sullaModel', 'tinyllama:latest');
+  const llmLocal = mode === 'local';
+
+  return {
+    messages: [],
+    metadata: {
+      action: 'direct_answer',
+      threadId: id,
+      wsChannel: wsChannel,
+
+      cycleComplete: false,
+      waitingForUser: false,
+
+      llmModel,
+      llmLocal,
+      options: { abort: undefined },
+      currentNodeId: 'input_handler',
+      consecutiveSameNode: 0,
+      iterations: 0,
+      revisionCount: 0,
+      maxIterationsReached: false,
+      memory: {
+        knowledgeBaseContext: '',
+        chatSummariesContext: ''
+      },
+      subGraph: {
+        state: 'completed',
+        name: 'hierarchical',
+        prompt: '',
+        response: ''
+      },
+      finalSummary: '',
+      finalState: 'running',
+      n8nLiveEventsEnabled: false,
+      returnTo: null,
+
+      // AgentGraph-specific metadata properties
+      agent: undefined,
+      agentLoopCount: 0
+    }
+  };
+}
+
+// Back-compat alias while callers migrate to AgentGraph naming.
+async function buildGeneralState(wsChannel: string, threadId?: string): Promise<GeneralGraphState> {
+  return buildAgentState(wsChannel, threadId);
+}
 
 /**
  * Build initial state for SkillGraph execution

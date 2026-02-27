@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from "../base";
+import { BaseTool, ToolResponse } from "../base";
 import { calendarClient } from "../../services/CalendarClient";
 
 /**
@@ -7,7 +7,6 @@ import { calendarClient } from "../../services/CalendarClient";
 export class CalendarGetWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { eventId } = input;
 
@@ -44,15 +43,3 @@ Status: ${event.status || 'N/A'}`;
     }
   }
 }
-
-// Export the complete tool registration with type enforcement
-export const calendarGetRegistration: ToolRegistration = {
-  name: "calendar_get",
-  description: "Get details of a specific calendar event by ID.",
-  category: "calendar",
-  operationTypes: ['read'],
-  schemaDef: {
-    eventId: { type: 'number' as const, description: "The ID of the calendar event" },
-  },
-  workerClass: CalendarGetWorker,
-};

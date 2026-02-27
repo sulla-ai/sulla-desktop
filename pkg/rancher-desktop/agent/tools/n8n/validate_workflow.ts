@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from '../base';
+import { BaseTool, ToolResponse } from '../base';
 import { createN8nService } from '../../services/N8nService';
 
 type JsonRecord = Record<string, any>;
@@ -85,7 +85,6 @@ function collectEdges(connectionsRaw: unknown): {
 export class ValidateWorkflowWorker extends BaseTool {
   name = '';
   description = '';
-  schemaDef: any = {};
 
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     try {
@@ -230,13 +229,3 @@ export class ValidateWorkflowWorker extends BaseTool {
   }
 }
 
-export const validateWorkflowRegistration: ToolRegistration = {
-  name: 'validate_workflow',
-  description: 'Validate an existing n8n workflow by ID and return graph health issues: floating nodes, missing credentials, broken connections, and nodes without type.',
-  category: 'n8n',
-  operationTypes: ['read', 'execute'],
-  schemaDef: {
-    workflowId: { type: 'string' as const, description: 'Workflow ID to validate.' },
-  },
-  workerClass: ValidateWorkflowWorker,
-};

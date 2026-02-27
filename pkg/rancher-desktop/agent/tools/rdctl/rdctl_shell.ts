@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from "../base";
+import { BaseTool, ToolResponse } from "../base";
 import { runCommand } from "../util/CommandRunner";
 
 /**
@@ -7,7 +7,6 @@ import { runCommand } from "../util/CommandRunner";
 export class RdctlShellWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { command } = input;
 
@@ -39,15 +38,3 @@ export class RdctlShellWorker extends BaseTool {
     }
   }
 }
-
-// Export the complete tool registration with type enforcement
-export const rdctlShellRegistration: ToolRegistration = {
-  name: "rdctl_shell",
-  description: "Run an interactive shell or a command in a Sulla Desktop-managed VM.",
-  category: "rdctl",
-  operationTypes: ['execute'],
-  schemaDef: {
-    command: { type: 'string' as const, optional: true, description: "Command to execute in the VM shell" },
-  },
-  workerClass: RdctlShellWorker,
-};

@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from "../base";
+import { BaseTool, ToolResponse } from "../base";
 import { getIntegrationService } from "../../services/IntegrationService";
 import { integrations } from "../../integrations/catalog";
 import { getExtensionService } from "@pkg/agent/services/ExtensionService";
@@ -9,7 +9,6 @@ import { getExtensionService } from "@pkg/agent/services/ExtensionService";
 export class IntegrationListWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
 
   protected async _validatedCall(_input: any): Promise<ToolResponse> {
 
@@ -76,11 +75,3 @@ export class IntegrationListWorker extends BaseTool {
   }
 }
 
-export const integrationListRegistration: ToolRegistration = {
-  name: "integration_list",
-  description: "List all integrations and their connection status, including whether each integration is enabled.",
-  category: "integrations",
-  operationTypes: ['read'],
-  schemaDef: {},
-  workerClass: IntegrationListWorker,
-};

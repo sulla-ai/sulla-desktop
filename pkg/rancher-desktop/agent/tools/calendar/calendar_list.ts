@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from "../base";
+import { BaseTool, ToolResponse } from "../base";
 import { calendarClient } from "../../services/CalendarClient";
 
 /**
@@ -7,7 +7,6 @@ import { calendarClient } from "../../services/CalendarClient";
 export class CalendarListWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     try {
       const events = await calendarClient.getEvents(input);
@@ -43,17 +42,3 @@ export class CalendarListWorker extends BaseTool {
     }
   }
 }
-
-// Export the complete tool registration with type enforcement
-export const calendarListRegistration: ToolRegistration = {
-  name: "calendar_list",
-  description: "List calendar events within a date range.",
-  category: "calendar",
-  operationTypes: ['read'],
-  schemaDef: {
-    startAfter: { type: 'string' as const, optional: true, description: "Start date filter in ISO format" },
-    endBefore: { type: 'string' as const, optional: true, description: "End date filter in ISO format" },
-    calendarId: { type: 'string' as const, optional: true, description: "Calendar ID filter" },
-  },
-  workerClass: CalendarListWorker,
-};

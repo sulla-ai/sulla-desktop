@@ -6,14 +6,14 @@ import { throwIfAborted } from '../services/AbortService';
 import { getWebSocketClientService } from '../services/WebSocketClientService';
 import type { ChatMessage } from '../languagemodels/BaseLanguageModel';
 import { SullaSettingsModel } from '../database/models/SullaSettingsModel';
-import { 
-  OverLordPlannerNode,
-  InputHandlerNode,
-  PlanRetrievalNode
-} from './index';
+import { OverLordPlannerNode } from './OverLordPlannerNode';
+import { InputHandlerNode } from './InputHandlerNode';
+import { PlanRetrievalNode } from './PlanRetrievalNode';
 import { PlannerNode } from './PlannerNode';
 import { ReasoningNode } from './ReasoningNode';
 import { ActionNode } from './ActionNode';
+import { AgentNode } from './AgentNode';
+import { MacroNode } from './MacroNode';
 import { SkillCriticNode } from './SkillCriticNode';
 import { OutputNode } from './OutputNode';
 
@@ -227,6 +227,40 @@ export interface BaseThreadState {
     __pendingToolResults?: import('../types').PendingToolResult[];
   };
 }
+
+/**
+ * AgentGraph-specific thread state interface
+ * Minimal state for the independent agent graph (InputHandler → Agent loop)
+ */
+export interface AgentGraphState extends BaseThreadState {
+  metadata: BaseThreadState['metadata'] & {
+    agent?: {
+      status?: 'done' | 'blocked' | 'continue' | 'in_progress';
+      status_report?: string | null;
+      response?: string | null;
+      blocker_reason?: string | null;
+      unblock_requirements?: string | null;
+      updatedAt?: number;
+    };
+    agentLoopCount?: number;
+    macro?: {
+      prd?: string;
+      next_step?: string;
+      status?: 'DRAFT' | 'FINAL' | 'SKIP';
+      skipped?: boolean;
+      cycle_count?: number;
+      attempts?: Array<{
+        status: string;
+        summary: string;
+        timestamp: number;
+      }>;
+      updatedAt?: number;
+    };
+  };
+}
+
+// Back-compat alias while callers migrate to AgentGraph naming.
+export type GeneralGraphState = AgentGraphState;
 
 export interface OverlordThreadState extends BaseThreadState {
   messages: ChatMessage[];
@@ -669,6 +703,77 @@ export function createOverlordGraph(): Graph<OverlordThreadState> {
 
   graph.setEntryPoint('input_handler');
   graph.setEndPoints('overlord_planner');
+
+  return graph;
+}
+
+// Back-compat alias while callers migrate to AgentGraph naming.
+export function createGeneralGraph(): Graph<GeneralGraphState> {
+  return createAgentGraph();
+}
+
+/**
+ * Create the AgentGraph for independent agent execution.
+ * 
+ * This graph is a simplified alternative to SkillGraph:
+ * - MacroNode builds/maintains a PRD and produces next-steps
+ * - AgentNode executes with full tool access, guided by PRD
+ * - Single message thread (no separate lanes)
+ * - Agent node loops on itself until DONE or BLOCKED
+ * 
+ * Flow: Input → Macro → Agent (loop until done)
+ * 
+ * @returns {Graph} Fully configured AgentGraph
+ */
+export function createAgentGraph(): Graph<AgentGraphState> {
+  const graph = new Graph<AgentGraphState>();
+
+  graph.addNode(new InputHandlerNode());  // id: 'input_handler'
+  graph.addNode(new MacroNode());         // id: 'macro'
+  graph.addNode(new AgentNode());         // id: 'agent'
+
+  // Sequential entry: Input → Macro → Agent
+  graph.addEdge('input_handler', 'macro');
+  graph.addEdge('macro', 'agent');
+
+  // Agent routing: done/blocked → end, continue → macro, in_progress → agent
+  graph.addConditionalEdge('agent', state => {
+    const agentMeta = (state.metadata as any).agent || {};
+    const agentStatus = String(agentMeta.status || '').trim().toLowerCase();
+
+    if (agentStatus === 'done') {
+      console.log('[AgentGraph] Agent reported DONE - ending');
+      return 'end';
+    }
+
+    if (agentStatus === 'blocked') {
+      console.log('[AgentGraph] Agent reported BLOCKED - ending');
+      return 'end';
+    }
+
+    // Loop counter safety
+    const currentLoopCount = (state.metadata as any).agentLoopCount || 0;
+    const newLoopCount = currentLoopCount + 1;
+    (state.metadata as any).agentLoopCount = newLoopCount;
+
+    if (newLoopCount >= MAX_ACTION_LOOPS) {
+      console.log(`[AgentGraph] Agent hit max loops (${MAX_ACTION_LOOPS}) - ending`);
+      return 'end';
+    }
+
+    // CONTINUE → back to macro for PRD reassessment + next step
+    if (agentStatus === 'continue') {
+      console.log(`[AgentGraph] Agent reported CONTINUE (cycle ${newLoopCount}) - routing to macro`);
+      return 'macro';
+    }
+
+    // in_progress (legacy/no wrapper) → keep looping agent
+    console.log(`[AgentGraph] Agent in progress (cycle ${newLoopCount}) - continuing`);
+    return 'agent';
+  });
+
+  graph.setEntryPoint('input_handler');
+  graph.setEndPoints('agent');
 
   return graph;
 }

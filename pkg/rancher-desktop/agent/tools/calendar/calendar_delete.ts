@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from "../base";
+import { BaseTool, ToolResponse } from "../base";
 import { calendarClient } from "../../services/CalendarClient";
 
 /**
@@ -7,7 +7,6 @@ import { calendarClient } from "../../services/CalendarClient";
 export class CalendarDeleteWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { eventId } = input;
 
@@ -32,15 +31,3 @@ export class CalendarDeleteWorker extends BaseTool {
     }
   }
 }
-
-// Export the complete tool registration with type enforcement
-export const calendarDeleteRegistration: ToolRegistration = {
-  name: "calendar_delete",
-  description: "Delete a calendar event by ID.",
-  category: "calendar",
-  operationTypes: ['delete'],
-  schemaDef: {
-    eventId: { type: 'number' as const, description: "The ID of the calendar event to delete" },
-  },
-  workerClass: CalendarDeleteWorker,
-};

@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from "../base";
+import { BaseTool, ToolResponse } from "../base";
 import { resolveBridge, isBridgeResolved } from "./resolve_bridge";
 
 /**
@@ -7,7 +7,6 @@ import { resolveBridge, isBridgeResolved } from "./resolve_bridge";
 export class GetPageTextWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
 
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     const result = resolveBridge(input.assetId);
@@ -38,13 +37,3 @@ export class GetPageTextWorker extends BaseTool {
   }
 }
 
-export const getPageTextRegistration: ToolRegistration = {
-  name: "get_page_text",
-  description: "Get the visible text content (innerText) of a website asset, including the page title and URL. Omit assetId to target the active asset.",
-  category: "playwright",
-  operationTypes: ['read'],
-  schemaDef: {
-    assetId: { type: 'string' as const, optional: true, description: "Target asset ID (omit for the currently active website)" },
-  },
-  workerClass: GetPageTextWorker,
-};

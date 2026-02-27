@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from "../base";
+import { BaseTool, ToolResponse } from "../base";
 import { runCommand } from "../util/CommandRunner";
 
 /**
@@ -7,7 +7,6 @@ import { runCommand } from "../util/CommandRunner";
 export class DockerStopWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { container } = input;
 
@@ -33,15 +32,3 @@ export class DockerStopWorker extends BaseTool {
     }
   }
 }
-
-// Export the complete tool registration with type enforcement
-export const dockerStopRegistration: ToolRegistration = {
-  name: "docker_stop",
-  description: "Stop a running Docker container.",
-  category: "docker",
-  operationTypes: ['execute', 'delete'],
-  schemaDef: {
-    container: { type: 'string' as const, description: "Container name or ID to stop" },
-  },
-  workerClass: DockerStopWorker,
-};

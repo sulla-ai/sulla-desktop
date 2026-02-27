@@ -1,12 +1,11 @@
 import fs from 'fs';
 
-import { BaseTool, ToolRegistration, ToolResponse } from '../base';
+import { BaseTool, ToolResponse } from '../base';
 import { resolveFsPath } from './path_utils';
 
 export class FsListDirWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
 
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     const targetPath = resolveFsPath(input.path);
@@ -27,13 +26,3 @@ export class FsListDirWorker extends BaseTool {
   }
 }
 
-export const fsListDirRegistration: ToolRegistration = {
-  name: 'fs_list_dir',
-  description: 'List files and directories at a path.',
-  category: 'fs',
-  operationTypes: ['read'],
-  schemaDef: {
-    path: { type: 'string' as const, description: 'Directory path to list.' },
-  },
-  workerClass: FsListDirWorker,
-};

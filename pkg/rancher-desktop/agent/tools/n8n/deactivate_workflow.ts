@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from "../base";
+import { BaseTool, ToolResponse } from "../base";
 import { createN8nService } from "../../services/N8nService";
 
 /**
@@ -7,7 +7,6 @@ import { createN8nService } from "../../services/N8nService";
 export class DeactivateWorkflowWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     try {
       const service = await createN8nService();
@@ -29,15 +28,3 @@ Deactivation completed at: ${new Date().toLocaleString()}`;
     }
   }
 }
-
-// Export the complete tool registration with type enforcement
-export const deactivateWorkflowRegistration: ToolRegistration = {
-  name: "deactivate_workflow",
-  description: "Deactivate a workflow in n8n.",
-  category: "n8n",
-  operationTypes: ['update'],
-  schemaDef: {
-    id: { type: 'string' as const, description: "Workflow ID" },
-  },
-  workerClass: DeactivateWorkflowWorker,
-};

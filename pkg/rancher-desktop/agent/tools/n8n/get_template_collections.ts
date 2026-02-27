@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from "../base";
+import { BaseTool, ToolResponse } from "../base";
 import { createN8nService } from "../../services/N8nService";
 
 /**
@@ -7,7 +7,6 @@ import { createN8nService } from "../../services/N8nService";
 export class GetTemplateCollectionsWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     try {
       const service = await createN8nService();
@@ -44,16 +43,3 @@ export class GetTemplateCollectionsWorker extends BaseTool {
     }
   }
 }
-
-// Export the complete tool registration with type enforcement
-export const getTemplateCollectionsRegistration: ToolRegistration = {
-  name: "get_template_collections",
-  description: "Browse n8n template collections from the public n8n template library. Supports pagination.",
-  category: "n8n",
-  operationTypes: ['read'],
-  schemaDef: {
-    page: { type: 'number' as const, optional: true, description: "Page number for pagination" },
-    limit: { type: 'number' as const, optional: true, description: "Number of results per page" },
-  },
-  workerClass: GetTemplateCollectionsWorker,
-};

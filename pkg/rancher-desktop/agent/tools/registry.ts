@@ -15,42 +15,38 @@ export interface ToolRegistration {
   name: string;
   description: string;
   category: string;
-  schemaDef: any;
+  schemaDef?: any;
   workerClass: new () => any;
   operationTypes?: ToolOperation[];
 }
 
-export class ToolRegistry {
-  private static registrations = new Map<string, ToolRegistration>();
+/**
+ * Lightweight manifest — plain data only, no class references.
+ * Used for registering tool metadata without importing heavy deps.
+ */
+export interface ToolManifest {
+  name: string;
+  description: string;
+  category: string;
+  schemaDef: Record<string, any>;
+  operationTypes?: ToolOperation[];
+  loader: () => Promise<any>;
+}
+
+export class ToolRegistry { private static registrations = new Map<string, ToolRegistration>();
   private loaders = new Map<string, ToolLoader>();
   private instances = new Map<string, any>();
-  private llmSchemaCache = new Map<string, any>();           // NEW: cache converted schemas
+  private llmSchemaCache = new Map<string, any>();
   private categories = new Map<string, string[]>();
   private descriptions = new Map<string, string>();
+  private schemaDefs = new Map<string, Record<string, any>>();
+  private operationTypesMap = new Map<string, ToolOperation[]>();
   private categoriesList = [
-    'meta', 'memory', 'browser', 'calendar', 'docker', 'fs', 'github',
-    'integrations', 'kubectl', 'n8n', 'playwright', 'slack', 'workspace', 'redis', 'pg', 'rdctl', 'lima'
+    'meta', 'memory', 'browser', 'calendar', 'docker', 'fs', 'github', 'integrations', 'kubectl', 'n8n', 'playwright', 'slack', 'workspace', 'redis', 'pg', 'rdctl', 'lima'
   ];
 
   private categoryDescriptions: Record<string, string> = {
-    meta: "Tools for browsing available tools, installing skills, and meta management.",
-    memory: "Tools for finding and managing memory articles.",
-    browser: "Web search tools like Brave and DuckDuckGo.",
-    calendar: "Tools for managing calendar events.",
-    docker: "Tools for Docker container management.",
-    fs: "File system operations tools for creating, reading, writing, moving, copying, and deleting files/directories.",
-    github: "GitHub repository management tools.",
-    kubectl: "Kubernetes cluster management tools.",
-    n8n: "Tools for managing n8n workflows, executions, credentials, tags, variables, and data tables.",
-    slack: "Slack messaging and reaction tools.",
-    workspace: "Tools for managing workspace folders in the Rancher Desktop data directory.",
-    redis: "Redis key/value store operations.",
-    pg: "PostgreSQL database queries and transactions.",
-    rdctl: "Sulla Desktop / rdctl management commands.",
-    integrations: "Tools for checking integration status and retrieving integration credentials.",
-    lima: "Lima VM instance management.",
-    playwright: "Tools for interacting with website assets — click elements, fill forms, scroll, and read page text. DOM changes, navigation, and dialog alerts are streamed automatically."
-  };
+    meta: "Tools for browsing available tools, installing skills, and meta management.", memory: "Tools for finding and managing memory articles.", browser: "Web search tools like Brave and DuckDuckGo.", calendar: "Tools for managing calendar events.", docker: "Tools for Docker container management.", fs: "File system operations tools for creating, reading, writing, moving, copying, and deleting files/directories.", github: "GitHub repository management tools.", kubectl: "Kubernetes cluster management tools.", n8n: "Tools for managing n8n workflows, executions, credentials, tags, variables, and data tables.", slack: "Slack messaging and reaction tools.", workspace: "Tools for managing workspace folders in the Rancher Desktop data directory.", redis: "Redis key/value store operations.", pg: "PostgreSQL database queries and transactions.", rdctl: "Sulla Desktop / rdctl management commands.", integrations: "Tools for checking integration status and retrieving integration credentials.", lima: "Lima VM instance management.", playwright: "Tools for interacting with website assets — click elements, fill forms, scroll, and read page text. DOM changes, navigation, and dialog alerts are streamed automatically." };
 
   static register(registration: ToolRegistration) {
     this.registrations.set(registration.name, registration);
@@ -72,15 +68,52 @@ export class ToolRegistry {
     entries.forEach(e => this.register(e.name, e.description, e.category, e.loader));
   }
 
+  /**
+   * Register from lightweight manifests — no workerClass import needed.
+   * schemaDef is stored for LLM schema generation without instantiation.
+   * loader uses dynamic import() so webpack doesn't bundle tool deps eagerly.
+   */
+  registerManifests(manifests: ToolManifest[]) {
+    for (const m of manifests) {
+      if (this.loaders.has(m.name)) continue;
+      this.schemaDefs.set(m.name, m.schemaDef);
+      this.operationTypesMap.set(m.name, Array.isArray(m.operationTypes) ? [...m.operationTypes] : []);
+      this.register(m.name, m.description, m.category, async () => {
+        const mod = await m.loader();
+        const workerClass: any = mod && typeof mod === 'object'
+          ? Object.values(mod).find((v: any) =>
+              typeof v === 'function' &&
+              v?.prototype &&
+              typeof v.prototype._validatedCall === 'function')
+          : null;
+        if (!workerClass) {
+          throw new Error(`Tool ${m.name}: loader did not export a worker class`);
+        }
+        const instance = new workerClass();
+        instance.schemaDef = m.schemaDef;
+        instance.name = m.name;
+        instance.description = m.description;
+        instance.metadata.category = m.category;
+        instance.metadata.operationTypes = Array.isArray(m.operationTypes) ? [...m.operationTypes] : [];
+        return instance;
+      });
+    }
+    console.log(`[ToolRegistry] Registered ${manifests.length} tool manifests`);
+  }
+
   registerAllRegistrations(registrations: ToolRegistration[]) {
     const entries = registrations.map((reg) => {
+      if (reg.schemaDef) {
+        this.schemaDefs.set(reg.name, reg.schemaDef);
+      }
+      this.operationTypesMap.set(reg.name, Array.isArray(reg.operationTypes) ? [...reg.operationTypes] : []);
       const entry = {
         name: reg.name,
         description: reg.description,
         category: reg.category,
         loader: async () => {
           const instance = new reg.workerClass();
-          instance.schemaDef = reg.schemaDef;
+          instance.schemaDef = reg.schemaDef || {};
           instance.name = reg.name;
           instance.description = reg.description;
           instance.metadata.category = reg.category;
@@ -110,7 +143,31 @@ export class ToolRegistry {
     return Promise.all(names.map(name => this.getTool(name)));
   }
 
+  /**
+   * Build LLM tool schema from stored schemaDef — no instantiation needed.
+   * Accepts a tool name (string) or an already-loaded tool instance.
+   */
   async convertToolToLLM(toolOrName: string | any): Promise<any> {
+    const name = typeof toolOrName === 'string' ? toolOrName : toolOrName?.name;
+
+    if (name && this.llmSchemaCache.has(name)) {
+      return this.llmSchemaCache.get(name);
+    }
+
+    // Try building from stored schemaDef first (lightweight path — no instantiation)
+    if (typeof toolOrName === 'string' && this.schemaDefs.has(toolOrName)) {
+      const schemaDef = this.schemaDefs.get(toolOrName)!;
+      const description = this.descriptions.get(toolOrName) || '';
+      const parameters = ToolRegistry.schemaDefToJsonSchema(schemaDef);
+      const formatted = {
+        type: 'function',
+        function: { name: toolOrName, description, parameters },
+      };
+      this.llmSchemaCache.set(toolOrName, formatted);
+      return formatted;
+    }
+
+    // Fallback: load tool instance (for tools registered via legacy path)
     let tool: any;
     if (typeof toolOrName === 'string') {
       tool = await this.getTool(toolOrName);
@@ -118,15 +175,9 @@ export class ToolRegistry {
       tool = toolOrName;
     }
 
-    if (this.llmSchemaCache.has(tool.name)) {
-      return this.llmSchemaCache.get(tool.name);
-    }
-
-    // Use the tool's own jsonSchema getter (from BaseTool)
     const parameters = tool.jsonSchema;
-
     const formatted = {
-      type: "function",
+      type: 'function',
       function: {
         name: tool.name,
         description: tool.description,
@@ -136,6 +187,61 @@ export class ToolRegistry {
 
     this.llmSchemaCache.set(tool.name, formatted);
     return formatted;
+  }
+
+  /**
+   * Pure conversion: schemaDef → OpenAI-compatible JSON schema.
+   * Mirrors BaseTool.jsonSchema getter logic exactly.
+   */
+  static schemaDefToJsonSchema(schemaDef: Record<string, any>): any {
+    const properties: Record<string, any> = {};
+    const required: string[] = [];
+
+    for (const [key, spec] of Object.entries(schemaDef)) {
+      const field: any = { description: spec.description || '' };
+
+      switch (spec.type) {
+        case 'string':  field.type = 'string'; break;
+        case 'number':  field.type = 'number'; break;
+        case 'boolean': field.type = 'boolean'; break;
+        case 'enum':
+          field.type = 'string';
+          field.enum = spec.enum;
+          break;
+        case 'array':
+          field.type = 'array';
+          if (spec.items) {
+            const itemField: any = { type: spec.items.type === 'enum' ? 'string' : spec.items.type };
+            if (spec.items.enum) itemField.enum = spec.items.enum;
+            if (spec.items.description) itemField.description = spec.items.description;
+            field.items = itemField;
+          }
+          break;
+        case 'object':
+          field.type = 'object';
+          if (spec.properties) {
+            field.properties = Object.fromEntries(
+              Object.entries(spec.properties).map(([k, v]: [string, any]) => {
+                const sub: any = { type: v.type === 'enum' ? 'string' : v.type };
+                if (v.enum) sub.enum = v.enum;
+                if (v.description) sub.description = v.description;
+                return [k, sub];
+              })
+            );
+          }
+          break;
+      }
+
+      if (spec.default !== undefined) field.default = spec.default;
+      properties[key] = field;
+      if (!spec.optional) required.push(key);
+    }
+
+    return { type: 'object', properties, required, additionalProperties: false };
+  }
+
+  getOperationTypes(name: string): ToolOperation[] {
+    return this.operationTypesMap.get(name) || [];
   }
 
   getLLMToolsForCategory(category: string): () => Promise<any[]> {

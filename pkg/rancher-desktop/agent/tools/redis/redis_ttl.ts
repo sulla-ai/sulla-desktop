@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from "../base";
+import { BaseTool, ToolResponse } from "../base";
 import { redisClient } from "../../database/RedisClient";
 
 /**
@@ -7,7 +7,6 @@ import { redisClient } from "../../database/RedisClient";
 export class RedisTtlWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { key } = input;
 
@@ -26,15 +25,3 @@ export class RedisTtlWorker extends BaseTool {
     }
   }
 }
-
-// Export the complete tool registration with type enforcement
-export const redisTtlRegistration: ToolRegistration = {
-  name: "redis_ttl",
-  description: "Get the time to live (TTL) of a Redis key.",
-  category: "redis",
-  operationTypes: ['execute'],
-  schemaDef: {
-    key: { type: 'string' as const, description: "The Redis key to check TTL for" },
-  },
-  workerClass: RedisTtlWorker,
-};

@@ -7,7 +7,7 @@ import { getWebSocketClientService } from '../services/WebSocketClientService';
 import { SullaSettingsModel } from '../database/models/SullaSettingsModel';
 import { BaseLanguageModel, ChatMessage, NormalizedResponse } from '../languagemodels/BaseLanguageModel';
 import { abortIfSignalReceived, throwIfAborted } from '../services/AbortService';
-import { tools, toolRegistry } from '../tools';
+import { toolRegistry } from '../tools/registry';
 import { BaseTool } from '../tools/base';
 import { Article } from '../database/models/Article';
 import { ConversationSummaryService } from '../services/ConversationSummaryService';
@@ -240,6 +240,28 @@ export abstract class BaseNode<T extends BaseThreadState = BaseThreadState> {
         // Version tracking removed: state mutations are applied on live references.
     }
 
+    protected insertAssistantContextBeforeLatestUser(state: BaseThreadState, message: ChatMessage): void {
+        const target = Array.isArray(state.messages) ? state.messages : [];
+        if (!Array.isArray(state.messages)) {
+            state.messages = target;
+        }
+
+        let latestUserIndex = -1;
+        for (let i = target.length - 1; i >= 0; i--) {
+            if (target[i]?.role === 'user') {
+                latestUserIndex = i;
+                break;
+            }
+        }
+
+        if (latestUserIndex >= 0) {
+            target.splice(latestUserIndex, 0, message);
+            return;
+        }
+
+        target.push(message);
+    }
+
     /**
      * 
      * @param basePrompt 
@@ -337,7 +359,7 @@ export abstract class BaseNode<T extends BaseThreadState = BaseThreadState> {
                     ).join('\n');
                 }
                 
-                state.messages.push({
+                this.insertAssistantContextBeforeLatestUser(state, {
                     role: 'assistant',
                     content: `\nYour Observational Memory Storage:\n${memoryText}`,
                     metadata: {
@@ -359,7 +381,7 @@ export abstract class BaseNode<T extends BaseThreadState = BaseThreadState> {
         if (options.includeStrategicPlan) {
             const planBlock = this.buildStrategicPlanContextBlock(state);
             if (planBlock) {
-                state.messages.push({
+                this.insertAssistantContextBeforeLatestUser(state, {
                     role: 'assistant',
                     content: planBlock,
                     metadata: {
@@ -374,7 +396,7 @@ export abstract class BaseNode<T extends BaseThreadState = BaseThreadState> {
         if (options.includeTacticalPlan) {
             const planBlock = this.buildTacticalPlanContextBlock(state);
             if (planBlock) {
-                state.messages.push({
+                this.insertAssistantContextBeforeLatestUser(state, {
                     role: 'assistant',
                     content: planBlock,
                     metadata: {
@@ -489,6 +511,9 @@ export abstract class BaseNode<T extends BaseThreadState = BaseThreadState> {
 
         const previousToolAccessPolicy = (state.metadata as any).__toolAccessPolicy;
         (state.metadata as any).__toolAccessPolicy = callToolAccessPolicy;
+
+        const toolNames = Array.isArray(llmTools) ? llmTools.map((t: any) => t?.function?.name).filter(Boolean) : [];
+        console.log(`[${this.name}] LLM request — ${toolNames.length} tools: [${toolNames.join(', ')}]`);
 
         const conversationId = typeof state.metadata.threadId === 'string' ? state.metadata.threadId : undefined;
         const nodeName = this.name;

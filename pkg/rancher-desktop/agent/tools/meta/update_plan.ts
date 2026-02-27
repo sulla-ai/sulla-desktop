@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from "../base";
+import { BaseTool, ToolResponse } from "../base";
 
 type MilestoneStatus = 'pending' | 'in_progress' | 'done' | 'blocked';
 
@@ -24,7 +24,6 @@ interface FrontendPlan {
 export class UpdatePlanWorker extends BaseTool<any> {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
 
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { milestoneId, status, note } = input;
@@ -71,17 +70,3 @@ export class UpdatePlanWorker extends BaseTool<any> {
     };
   }
 }
-
-// Export the complete tool registration with type enforcement
-export const updatePlanRegistration: ToolRegistration = {
-  name: "update_plan",
-  description: "Mark milestones as complete, add notes, or update progress on the current plan.",
-  category: "meta",
-  operationTypes: ['read','create','update','delete'],
-  schemaDef: {
-    milestoneId: { type: 'string' as const },
-    status: { type: 'enum' as const, enum: ["done", "in_progress", "blocked", "pending"], default: "done" },
-    note: { type: 'string' as const, optional: true },
-  },
-  workerClass: UpdatePlanWorker,
-};

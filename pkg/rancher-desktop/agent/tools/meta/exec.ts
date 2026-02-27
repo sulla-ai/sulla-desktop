@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from "../base";
+import { BaseTool, ToolResponse } from "../base";
 import { runCommand } from "../util/CommandRunner";
 
 /**
@@ -7,7 +7,6 @@ import { runCommand } from "../util/CommandRunner";
 export class ExecWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
 
   private getForbiddenPattern(command: string): RegExp | null {
     // Guardrails: block dangerous commands only (avoid broad substring matches)
@@ -76,16 +75,3 @@ export class ExecWorker extends BaseTool {
     }
   }
 }
-
-// Export the complete tool registration with type enforcement
-export const execRegistration: ToolRegistration = {
-  name: "exec",
-  description: "Execute a shell command and return output. Use only when explicitly needed.",
-  category: "meta",
-  operationTypes: ['execute'],
-  schemaDef: {
-    command: { type: 'string' as const, optional: true, description: 'The exact shell command to run' },
-    cmd: { type: 'string' as const, optional: true, description: 'Alias for command' },
-  },
-  workerClass: ExecWorker,
-};

@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from "../base";
+import { BaseTool, ToolResponse } from "../base";
 import { redisClient } from "../../database/RedisClient";
 
 /**
@@ -7,7 +7,6 @@ import { redisClient } from "../../database/RedisClient";
 export class RedisDecrWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { key } = input;
 
@@ -26,15 +25,3 @@ export class RedisDecrWorker extends BaseTool {
     }
   }
 }
-
-// Export the complete tool registration with type enforcement
-export const redisDecrRegistration: ToolRegistration = {
-  name: "redis_decr",
-  description: "Decrement the integer value of a Redis key by one.",
-  category: "redis",
-  operationTypes: ['execute'],
-  schemaDef: {
-    key: { type: 'string' as const, description: "The Redis key to decrement" },
-  },
-  workerClass: RedisDecrWorker,
-};

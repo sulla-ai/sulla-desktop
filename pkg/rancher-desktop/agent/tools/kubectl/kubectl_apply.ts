@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from "../base";
+import { BaseTool, ToolResponse } from "../base";
 import { runCommand } from "../util/CommandRunner";
 
 /**
@@ -7,7 +7,6 @@ import { runCommand } from "../util/CommandRunner";
 export class KubectlApplyWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { file, namespace, dryRun } = input;
 
@@ -45,17 +44,3 @@ export class KubectlApplyWorker extends BaseTool {
     }
   }
 }
-
-// Export the complete tool registration with type enforcement
-export const kubectlApplyRegistration: ToolRegistration = {
-  name: "kubectl_apply",
-  description: "Apply a Kubernetes manifest file.",
-  category: "kubectl",
-  operationTypes: ['execute', 'update'],
-  schemaDef: {
-    file: { type: 'string' as const, description: "Path to the manifest file" },
-    namespace: { type: 'string' as const, optional: true, description: "Namespace to apply to" },
-    dryRun: { type: 'string' as const, optional: true, description: "Dry run mode: client, server, or none" },
-  },
-  workerClass: KubectlApplyWorker,
-};

@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from '../base';
+import { BaseTool, ToolResponse } from '../base';
 import { createN8nService } from '../../services/N8nService';
 
 type JsonRecord = Record<string, unknown>;
@@ -72,7 +72,6 @@ function flattenWorkflowConnections(connections: unknown): Record<string, Record
 export class GetWorkflowConnectionsWorker extends BaseTool {
   name = '';
   description = '';
-  schemaDef: any = {};
 
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     try {
@@ -99,14 +98,3 @@ export class GetWorkflowConnectionsWorker extends BaseTool {
   }
 }
 
-export const getWorkflowConnectionsRegistration: ToolRegistration = {
-  name: 'get_workflow_connections',
-  description: 'Get only the workflow connections graph in a flattened, readable JSON shape.',
-  category: 'n8n',
-  operationTypes: ['read'],
-  schemaDef: {
-    id: { type: 'string' as const, description: 'Workflow ID' },
-    excludePinnedData: { type: 'boolean' as const, optional: true, description: 'Exclude pinned data' },
-  },
-  workerClass: GetWorkflowConnectionsWorker,
-};

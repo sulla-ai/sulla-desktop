@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from "../base";
+import { BaseTool, ToolResponse } from "../base";
 import { ArticlesRegistry } from "../../database/registry/ArticlesRegistry";
 
 /**
@@ -7,7 +7,6 @@ import { ArticlesRegistry } from "../../database/registry/ArticlesRegistry";
 export class ArticleFindRelatedWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { slug, relType = "MENTIONS", limit = 10 } = input;
 
@@ -45,17 +44,3 @@ export class ArticleFindRelatedWorker extends BaseTool {
     }
   }
 }
-
-// Export the complete tool registration with type enforcement
-export const articleFindRelatedRegistration: ToolRegistration = {
-  name: "article_find_related",
-  description: "Find articles related to a given slug via graph relationships. Returns up to 10 related articles by default.",
-  category: "memory",
-  operationTypes: ['read'],
-  schemaDef: {
-    slug: { type: 'string' as const, description: "The slug of the article to find related articles for" },
-    relType: { type: 'string' as const, optional: true, default: "MENTIONS", description: "Type of relationship to search (e.g., MENTIONS)" },
-    limit: { type: 'number' as const, optional: true, default: 10, description: "Maximum number of related articles to return" },
-  },
-  workerClass: ArticleFindRelatedWorker,
-};

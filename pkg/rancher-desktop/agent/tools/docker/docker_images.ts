@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from "../base";
+import { BaseTool, ToolResponse } from "../base";
 import { runCommand } from "../util/CommandRunner";
 
 /**
@@ -7,7 +7,6 @@ import { runCommand } from "../util/CommandRunner";
 export class DockerImagesWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { all } = input;
 
@@ -38,15 +37,3 @@ export class DockerImagesWorker extends BaseTool {
     }
   }
 }
-
-// Export the complete tool registration with type enforcement
-export const dockerImagesRegistration: ToolRegistration = {
-  name: "docker_images",
-  description: "List Docker images.",
-  category: "docker",
-  operationTypes: ['read', 'update', 'create', 'delete'],
-  schemaDef: {
-    all: { type: 'boolean' as const, optional: true, description: "Show all images (default: only top-level images)" },
-  },
-  workerClass: DockerImagesWorker,
-};

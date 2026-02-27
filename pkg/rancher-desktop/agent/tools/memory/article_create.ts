@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from "../base";
+import { BaseTool, ToolResponse } from "../base";
 import { Article } from "../../database/models/Article";
 
 /**
@@ -7,7 +7,6 @@ import { Article } from "../../database/models/Article";
 export class ArticleCreateWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     const {
       slug,
@@ -77,26 +76,3 @@ Order: ${order}`;
     }
   }
 }
-
-// Export the complete tool registration with type enforcement
-export const articleCreateRegistration: ToolRegistration = {
-  name: "article_create",
-  description: "Create a new article in the knowledge base with the specified content and metadata.",
-  category: "memory",
-  operationTypes: ['create'],
-  schemaDef: {
-    slug: { type: 'string' as const, description: "Unique slug identifier for the article" },
-    title: { type: 'string' as const, description: "Title of the article" },
-    content: { type: 'string' as const, description: "Full markdown content of the article" },
-    section: { type: 'string' as const, optional: true, description: "Section this article belongs to" },
-    category: { type: 'string' as const, optional: true, description: "Category within the section" },
-    tags: { type: 'string' as const, optional: true, default: "", description: "Comma-separated list of tags for the article" },
-    order: { type: 'string' as const, optional: true, default: "100", description: "Order field for sorting (string)" },
-    locked: { type: 'boolean' as const, optional: true, default: false, description: "Whether the article is locked for editing" },
-    author: { type: 'string' as const, optional: true, default: "Jonathon Byrdziak", description: "Author of the article" },
-    related_slugs: { type: 'string' as const, optional: true, default: "", description: "Comma-separated legacy related slugs" },
-    mentions: { type: 'string' as const, optional: true, default: "", description: "Comma-separated slugs/entities mentioned" },
-    related_entities: { type: 'string' as const, optional: true, default: "", description: "Comma-separated related entity IDs/names" },
-  },
-  workerClass: ArticleCreateWorker,
-};

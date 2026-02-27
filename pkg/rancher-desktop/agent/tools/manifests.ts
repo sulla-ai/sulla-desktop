@@ -1,0 +1,43 @@
+// Lightweight manifest registration — plain data only, no tool worker imports.
+// Each category manifests.ts holds schemaDefs inline and uses dynamic import()
+// for lazy-loading workers. This keeps the webpack bundle small at startup.
+
+import { toolRegistry } from './registry';
+
+import { browserToolManifests } from './browser/manifests';
+import { calendarToolManifests } from './calendar/manifests';
+import { dockerToolManifests } from './docker/manifests';
+import { fsToolManifests } from './fs/manifests';
+import { githubToolManifests } from './github/manifests';
+import { integrationsToolManifests } from './integrations/manifests';
+import { kubectlToolManifests } from './kubectl/manifests';
+import { limaToolManifests } from './lima/manifests';
+import { memoryToolManifests } from './memory/manifests';
+import { metaToolManifests } from './meta/manifests';
+import { n8nToolManifests } from './n8n/manifests';
+import { pgToolManifests } from './pg/manifests';
+import { playwrightToolManifests } from './playwright/manifests';
+import { rdctlToolManifests } from './rdctl/manifests';
+import { redisToolManifests } from './redis/manifests';
+import { slackToolManifests } from './slack/manifests';
+import { workspaceToolManifests } from './workspace/manifests';
+
+toolRegistry.registerManifests([
+  ...browserToolManifests,
+  ...calendarToolManifests,
+  ...dockerToolManifests,
+  ...fsToolManifests,
+  ...githubToolManifests,
+  ...integrationsToolManifests,
+  ...kubectlToolManifests,
+  ...limaToolManifests,
+  ...memoryToolManifests,
+  ...metaToolManifests,
+  ...n8nToolManifests,
+  ...pgToolManifests,
+  ...playwrightToolManifests,
+  ...rdctlToolManifests,
+  ...redisToolManifests,
+  ...slackToolManifests,
+  ...workspaceToolManifests,
+]);

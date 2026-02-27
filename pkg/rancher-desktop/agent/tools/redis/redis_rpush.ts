@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from "../base";
+import { BaseTool, ToolResponse } from "../base";
 import { redisClient } from "../../database/RedisClient";
 
 /**
@@ -7,7 +7,6 @@ import { redisClient } from "../../database/RedisClient";
 export class RedisRpushWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { key, values } = input;
 
@@ -26,16 +25,3 @@ export class RedisRpushWorker extends BaseTool {
     }
   }
 }
-
-// Export the complete tool registration with type enforcement
-export const redisRpushRegistration: ToolRegistration = {
-  name: "redis_rpush",
-  description: "Append one or more values to a Redis list.",
-  category: "redis",
-  operationTypes: ['execute'],
-  schemaDef: {
-    key: { type: 'string' as const, description: "The Redis list key" },
-    values: { type: 'array' as const, items: { type: 'string' as const }, description: "The values to append" },
-  },
-  workerClass: RedisRpushWorker,
-};

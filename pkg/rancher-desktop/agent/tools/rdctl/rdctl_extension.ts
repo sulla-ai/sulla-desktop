@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from "../base";
+import { BaseTool, ToolResponse } from "../base";
 import { runCommand } from "../util/CommandRunner";
 
 /**
@@ -7,7 +7,6 @@ import { runCommand } from "../util/CommandRunner";
 export class RdctlExtensionWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { subcommand, args = [] } = input;
 
@@ -35,16 +34,3 @@ export class RdctlExtensionWorker extends BaseTool {
     }
   }
 }
-
-// Export the complete tool registration with type enforcement
-export const rdctlExtensionRegistration: ToolRegistration = {
-  name: "rdctl_extension",
-  description: "Manage extensions.",
-  category: "rdctl",
-  operationTypes: ['execute'],
-  schemaDef: {
-    subcommand: { type: 'string' as const, description: "Extension subcommand, e.g., install, uninstall, list" },
-    args: { type: 'array' as const, items: { type: 'string' as const }, optional: true, description: "Arguments for the subcommand" },
-  },
-  workerClass: RdctlExtensionWorker,
-};

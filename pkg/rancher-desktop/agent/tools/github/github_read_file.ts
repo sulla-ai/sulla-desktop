@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from "../base";
+import { BaseTool, ToolResponse } from "../base";
 import { Octokit } from "@octokit/rest";
 import { getIntegrationService } from '../../services/IntegrationService';
 
@@ -8,7 +8,6 @@ import { getIntegrationService } from '../../services/IntegrationService';
 export class GitHubReadFileWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { owner, repo, path, ref } = input;
 
@@ -68,18 +67,3 @@ ${content}`;
     }
   }
 }
-
-// Export the complete tool registration with type enforcement
-export const gitHubReadFileRegistration: ToolRegistration = {
-  name: "github_read_file",
-  description: "Read the contents of a file from a GitHub repository.",
-  category: "github",
-  operationTypes: ['read'],
-  schemaDef: {
-    owner: { type: 'string' as const, description: "Repository owner (username or organization)" },
-    repo: { type: 'string' as const, description: "Repository name" },
-    path: { type: 'string' as const, description: "Path to the file in the repository" },
-    ref: { type: 'string' as const, optional: true, description: "Branch, tag, or commit SHA" },
-  },
-  workerClass: GitHubReadFileWorker,
-};

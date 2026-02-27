@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from "../base";
+import { BaseTool, ToolResponse } from "../base";
 import { runCommand } from "../util/CommandRunner";
 
 /**
@@ -7,7 +7,6 @@ import { runCommand } from "../util/CommandRunner";
 export class RdctlSetWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { field, value } = input;
 
@@ -35,16 +34,3 @@ export class RdctlSetWorker extends BaseTool {
     }
   }
 }
-
-// Export the complete tool registration with type enforcement
-export const rdctlSetRegistration: ToolRegistration = {
-  name: "rdctl_set",
-  description: "Update selected fields in the Rancher Desktop UI and restart the backend.",
-  category: "rdctl",
-  operationTypes: ['update'],
-  schemaDef: {
-    field: { type: 'string' as const, description: "The field to update" },
-    value: { type: 'string' as const, description: "The value to set (as string)" },
-  },
-  workerClass: RdctlSetWorker,
-};

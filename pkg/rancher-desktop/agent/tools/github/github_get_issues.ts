@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from "../base";
+import { BaseTool, ToolResponse } from "../base";
 import { Octokit } from "@octokit/rest";
 import { getIntegrationService } from '../../services/IntegrationService';
 
@@ -8,7 +8,6 @@ import { getIntegrationService } from '../../services/IntegrationService';
 export class GitHubGetIssuesWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { owner, repo, state = 'open', labels, since, limit = 10 } = input;
 
@@ -68,20 +67,3 @@ export class GitHubGetIssuesWorker extends BaseTool {
     }
   }
 }
-
-// Export the complete tool registration with type enforcement
-export const gitHubGetIssuesRegistration: ToolRegistration = {
-  name: "github_get_issues",
-  description: "Get issues from a GitHub repository.",
-  category: "github",
-  operationTypes: ['read'],
-  schemaDef: {
-    owner: { type: 'string' as const, description: "Repository owner (username or organization)" },
-    repo: { type: 'string' as const, description: "Repository name" },
-    state: { type: 'enum' as const, enum: ['open', 'closed', 'all'], default: 'open', description: "Issue state filter" },
-    labels: { type: 'array' as const, items: { type: 'string' as const }, optional: true, description: "Labels to filter issues" },
-    since: { type: 'string' as const, optional: true, description: "Only issues updated after this ISO 8601 timestamp" },
-    limit: { type: 'number' as const, optional: true, default: 10, description: "Maximum number of issues to return" },
-  },
-  workerClass: GitHubGetIssuesWorker,
-};

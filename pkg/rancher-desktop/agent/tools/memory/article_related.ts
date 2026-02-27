@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from "../base";
+import { BaseTool, ToolResponse } from "../base";
 import { ArticlesRegistry } from "../../database/registry/ArticlesRegistry";
 
 /**
@@ -7,7 +7,6 @@ import { ArticlesRegistry } from "../../database/registry/ArticlesRegistry";
 export class ArticleRelatedWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { slug, relationship = 'MENTIONS' } = input;
 
@@ -44,16 +43,3 @@ export class ArticleRelatedWorker extends BaseTool {
     }
   }
 }
-
-// Export the complete tool registration with type enforcement
-export const articleRelatedRegistration: ToolRegistration = {
-  name: "article_related",
-  description: "Get related articles by graph relationship.",
-  category: "memory",
-  operationTypes: ['read'],
-  schemaDef: {
-    slug: { type: 'string' as const, description: "The slug of the article" },
-    relationship: { type: 'string' as const, optional: true, description: "Relationship type (default: MENTIONS)" },
-  },
-  workerClass: ArticleRelatedWorker,
-};

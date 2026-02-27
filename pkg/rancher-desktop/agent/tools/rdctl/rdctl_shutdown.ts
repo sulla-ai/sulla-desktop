@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from "../base";
+import { BaseTool, ToolResponse } from "../base";
 import { runCommand } from "../util/CommandRunner";
 
 /**
@@ -7,7 +7,6 @@ import { runCommand } from "../util/CommandRunner";
 export class RdctlShutdownWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     try {
       const res = await runCommand('rdctl', ['shutdown'], { timeoutMs: 60_000, maxOutputChars: 160_000 });
@@ -31,13 +30,3 @@ export class RdctlShutdownWorker extends BaseTool {
     }
   }
 }
-
-// Export the complete tool registration with type enforcement
-export const rdctlShutdownRegistration: ToolRegistration = {
-  name: "rdctl_shutdown",
-  description: "Shuts down the running Sulla Desktop application.",
-  category: "rdctl",
-  operationTypes: ['execute'],
-  schemaDef: {},
-  workerClass: RdctlShutdownWorker,
-};

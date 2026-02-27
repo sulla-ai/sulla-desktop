@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from "../base";
+import { BaseTool, ToolResponse } from "../base";
 import { createN8nService } from "../../services/N8nService";
 
 /**
@@ -7,7 +7,6 @@ import { createN8nService } from "../../services/N8nService";
 export class HealthCheckWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     try {
       const service = await createN8nService();
@@ -32,13 +31,3 @@ export class HealthCheckWorker extends BaseTool {
     }
   }
 }
-
-// Export the complete tool registration with type enforcement
-export const healthCheckRegistration: ToolRegistration = {
-  name: "health_check",
-  description: "Check if n8n API is accessible and healthy.",
-  category: "n8n",
-  operationTypes: ['read'],
-  schemaDef: {},
-  workerClass: HealthCheckWorker,
-};

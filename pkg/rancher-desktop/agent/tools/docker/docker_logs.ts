@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from "../base";
+import { BaseTool, ToolResponse } from "../base";
 import { runCommand } from "../util/CommandRunner";
 
 /**
@@ -7,7 +7,6 @@ import { runCommand } from "../util/CommandRunner";
 export class DockerLogsWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { container, follow, tail } = input;
 
@@ -41,17 +40,3 @@ export class DockerLogsWorker extends BaseTool {
     }
   }
 }
-
-// Export the complete tool registration with type enforcement
-export const dockerLogsRegistration: ToolRegistration = {
-  name: "docker_logs",
-  description: "Fetch the logs of a Docker container.",
-  category: "docker",
-  operationTypes: ['read'],
-  schemaDef: {
-    container: { type: 'string' as const, description: "Container name or ID" },
-    follow: { type: 'boolean' as const, optional: true, description: "Follow log output" },
-    tail: { type: 'number' as const, optional: true, description: "Number of lines to show from the end" },
-  },
-  workerClass: DockerLogsWorker,
-};

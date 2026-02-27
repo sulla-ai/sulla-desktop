@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from "../base";
+import { BaseTool, ToolResponse } from "../base";
 import { createN8nService } from "../../services/N8nService";
 
 /**
@@ -7,7 +7,6 @@ import { createN8nService } from "../../services/N8nService";
 export class ListCredentialsWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
 
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     try {
@@ -40,17 +39,3 @@ export class ListCredentialsWorker extends BaseTool {
     }
   }
 }
-
-// Export the complete tool registration with type enforcement
-export const listCredentialsRegistration: ToolRegistration = {
-  name: "list_credentials",
-  description: "List n8n credentials with optional type filtering.",
-  category: "n8n",
-  operationTypes: ['read'],
-  schemaDef: {
-    type: { type: 'string' as const, optional: true, description: "Optional credential type filter (e.g. twitterOAuth2Api)." },
-    limit: { type: 'number' as const, optional: true, description: "Maximum number of results" },
-    cursor: { type: 'string' as const, optional: true, description: "Cursor for pagination" },
-  },
-  workerClass: ListCredentialsWorker,
-};

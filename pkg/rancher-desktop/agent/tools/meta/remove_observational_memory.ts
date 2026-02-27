@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from "../base";
+import { BaseTool, ToolResponse } from "../base";
 import { SullaSettingsModel } from '../../database/models/SullaSettingsModel';
 import { parseJson } from '../../services/JsonParseService';
 
@@ -8,7 +8,6 @@ import { parseJson } from '../../services/JsonParseService';
 export class RemoveObservationalMemoryWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
 
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { id } = input;
@@ -69,15 +68,3 @@ export class RemoveObservationalMemoryWorker extends BaseTool {
     };
   }
 }
-
-// Export the complete tool registration with type enforcement
-export const removeObservationalMemoryRegistration: ToolRegistration = {
-  name: "remove_observational_memory",
-  description: "Remove a specific observational memory by its ID to delete it from long-term memory.",
-  category: "meta",
-  operationTypes: ['delete'],
-  schemaDef: {
-    id: { type: 'string' as const, description: "The 4-character ID of the memory to remove." },
-  },
-  workerClass: RemoveObservationalMemoryWorker,
-};

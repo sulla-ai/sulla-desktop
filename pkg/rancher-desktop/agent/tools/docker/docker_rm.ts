@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from "../base";
+import { BaseTool, ToolResponse } from "../base";
 import { runCommand } from "../util/CommandRunner";
 
 /**
@@ -7,7 +7,6 @@ import { runCommand } from "../util/CommandRunner";
 export class DockerRmWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { container, force } = input;
 
@@ -39,16 +38,3 @@ export class DockerRmWorker extends BaseTool {
     }
   }
 }
-
-// Export the complete tool registration with type enforcement
-export const dockerRmRegistration: ToolRegistration = {
-  name: "docker_rm",
-  description: "Remove one or more Docker containers.",
-  category: "docker",
-  operationTypes: ['delete'],
-  schemaDef: {
-    container: { type: 'string' as const, description: "Container name or ID to remove" },
-    force: { type: 'boolean' as const, optional: true, description: "Force removal of running containers" },
-  },
-  workerClass: DockerRmWorker,
-};

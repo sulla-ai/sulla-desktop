@@ -50,13 +50,7 @@ function sanitizeEventPayload(event: LLMLogEvent): unknown {
     return event.payload;
   }
 
-  const payload = { ...(event.payload as Record<string, unknown>) };
-
-  if ('tools' in payload) {
-    delete payload.tools;
-  }
-
-  return payload;
+  return event.payload;
 }
 
 export function writeLLMConversationEvent(event: LLMLogEvent): void {

@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from "../base";
+import { BaseTool, ToolResponse } from "../base";
 import { postgresClient } from "../../database/PostgresClient";
 
 /**
@@ -7,7 +7,6 @@ import { postgresClient } from "../../database/PostgresClient";
 export class PgExecuteWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     const sql = String(input.sql ?? input.query ?? input.statement ?? '').trim();
     const params = Array.isArray(input.params) ? input.params : [];
@@ -41,18 +40,3 @@ OID: ${res.oid || 'N/A'}`;
     }
   }
 }
-
-// Export the complete tool registration with type enforcement
-export const pgExecuteRegistration: ToolRegistration = {
-  name: "pg_execute",
-  description: "Execute a PostgreSQL statement and return execution results.",
-  category: "pg",
-  operationTypes: ['execute'],
-  schemaDef: {
-    sql: { type: 'string' as const, optional: true, description: "The SQL statement to execute" },
-    query: { type: 'string' as const, optional: true, description: "Alias for sql" },
-    statement: { type: 'string' as const, optional: true, description: "Alias for sql" },
-    params: { type: 'array' as const, items: { type: 'string' as const }, optional: true, description: "Parameters for the statement" },
-  },
-  workerClass: PgExecuteWorker,
-};

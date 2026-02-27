@@ -1,5 +1,5 @@
 import type { Ref } from 'vue';
-import type { SkillGraphState } from '../nodes/Graph';
+import type { AgentGraphState } from '../nodes/Graph';
 import { getWebSocketClientService, type WebSocketMessage } from './WebSocketClientService';
 import { AbortService } from './AbortService';
 import { GraphRegistry, nextThreadId, nextMessageId } from './GraphRegistry';
@@ -68,8 +68,8 @@ export class FrontendGraphWebSocketService {
     const channelId = 'chat-controller';
     const threadId = threadIdFromMsg || nextThreadId();
     
-    // Get or create persistent SkillGraph for this thread - do this outside try/catch
-    const { graph, state } = await GraphRegistry.getOrCreateSkillGraph(channelId, threadId) as { graph: any; state: SkillGraphState };
+    // Get or create persistent AgentGraph for this thread - do this outside try/catch
+    const { graph, state } = await GraphRegistry.getOrCreateAgentGraph(channelId, threadId) as { graph: any; state: AgentGraphState };
 
     // Create a fresh AbortService for this run and wire it into state
     const abort = new AbortService();
@@ -125,8 +125,7 @@ export class FrontendGraphWebSocketService {
       state.metadata.cycleComplete = false;
       state.metadata.waitingForUser = false;
 
-      // Execute on the persistent SkillGraph starting from input_handler
-      // The graph nodes (especially OutputNode) will send WebSocket messages directly
+      // Execute on the persistent AgentGraph starting from input_handler
       await graph.execute(state, shouldResumeFromCurrentNode ? resumeNodeId : 'input_handler');
     } catch (err: any) {
       if (err.name === 'AbortError') {

@@ -1,12 +1,11 @@
 import fs from 'fs';
 
-import { BaseTool, ToolRegistration, ToolResponse } from '../base';
+import { BaseTool, ToolResponse } from '../base';
 import { resolveFsPath } from './path_utils';
 
 export class FsPathInfoWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
 
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     const targetPath = resolveFsPath(input.path);
@@ -42,13 +41,3 @@ export class FsPathInfoWorker extends BaseTool {
   }
 }
 
-export const fsPathInfoRegistration: ToolRegistration = {
-  name: 'fs_path_info',
-  description: 'Get metadata for a filesystem path.',
-  category: 'fs',
-  operationTypes: ['read'],
-  schemaDef: {
-    path: { type: 'string' as const, description: 'Path to inspect.' },
-  },
-  workerClass: FsPathInfoWorker,
-};

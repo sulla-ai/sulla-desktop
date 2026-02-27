@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from "../base";
+import { BaseTool, ToolResponse } from "../base";
 import { runCommand } from "../util/CommandRunner";
 
 /**
@@ -7,7 +7,6 @@ import { runCommand } from "../util/CommandRunner";
 export class DockerBuildWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { path, tag, options } = input;
 
@@ -39,17 +38,3 @@ export class DockerBuildWorker extends BaseTool {
     }
   }
 }
-
-// Export the complete tool registration with type enforcement
-export const dockerBuildRegistration: ToolRegistration = {
-  name: "docker_build",
-  description: "Build a Docker image from a Dockerfile.",
-  category: "docker",
-  operationTypes: ['create', 'update', 'execute'],
-  schemaDef: {
-    path: { type: 'string' as const, description: "Path to the directory containing the Dockerfile" },
-    tag: { type: 'string' as const, description: "Tag for the built image" },
-    options: { type: 'string' as const, optional: true, description: "Additional docker build options" },
-  },
-  workerClass: DockerBuildWorker,
-};

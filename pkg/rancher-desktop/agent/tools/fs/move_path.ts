@@ -1,13 +1,12 @@
 import fs from 'fs';
 import path from 'path';
 
-import { BaseTool, ToolRegistration, ToolResponse } from '../base';
+import { BaseTool, ToolResponse } from '../base';
 import { resolveFsPath } from './path_utils';
 
 export class FsMovePathWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
 
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     const sourcePath = resolveFsPath(input.sourcePath);
@@ -32,15 +31,3 @@ export class FsMovePathWorker extends BaseTool {
   }
 }
 
-export const fsMovePathRegistration: ToolRegistration = {
-  name: 'fs_move_path',
-  description: 'Move or rename a file/directory path.',
-  category: 'fs',
-  operationTypes: ['update'],
-  schemaDef: {
-    sourcePath: { type: 'string' as const, description: 'Source file or directory path.' },
-    destinationPath: { type: 'string' as const, description: 'Destination file or directory path.' },
-    createDirs: { type: 'boolean' as const, optional: true, description: 'Create parent directory for destination if missing. Default true.' },
-  },
-  workerClass: FsMovePathWorker,
-};

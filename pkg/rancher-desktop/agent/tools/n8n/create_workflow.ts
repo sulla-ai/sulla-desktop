@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from "../base";
+import { BaseTool, ToolResponse } from "../base";
 import { createN8nService } from "../../services/N8nService";
 
 /**
@@ -7,7 +7,6 @@ import { createN8nService } from "../../services/N8nService";
 export class CreateWorkflowWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
 
   private normalizeSaveDataSuccessExecution(value: unknown): 'none' | 'all' {
     const normalized = String(value || '').trim().toLowerCase();
@@ -95,33 +94,3 @@ Owner: ${workflow.owner?.email || 'N/A'}`;
     }
   }
 }
-
-// Export the complete tool registration with type enforcement
-export const createWorkflowRegistration: ToolRegistration = {
-  name: "create_workflow",
-  description: "Create a new workflow in n8n.",
-  category: "n8n",
-  operationTypes: ['create'],
-  schemaDef: {
-    name: { type: 'string' as const, description: "Workflow name" },
-    nodes: { type: 'array' as const, items: { type: 'object' as const }, description: "Workflow nodes as n8n node objects." },
-    connections: { type: 'object' as const, description: "Workflow connections object keyed by source node name." },
-    settings: { type: 'object' as const, properties: {
-      saveExecutionProgress: { type: 'boolean' as const, optional: true },
-      saveManualExecutions: { type: 'boolean' as const, optional: true },
-      saveDataErrorExecution: { type: 'string' as const, optional: true },
-      saveDataSuccessExecution: { type: 'enum' as const, enum: ['none', 'all'], optional: true },
-      executionTimeout: { type: 'number' as const, optional: true },
-      errorWorkflow: { type: 'string' as const, optional: true },
-      timezone: { type: 'string' as const, optional: true },
-      executionOrder: { type: 'string' as const, optional: true },
-      callerPolicy: { type: 'string' as const, optional: true },
-      callerIds: { type: 'string' as const, optional: true },
-      timeSavedPerExecution: { type: 'number' as const, optional: true },
-      availableInMCP: { type: 'boolean' as const, optional: true },
-    }, optional: true, default: {}, description: "Workflow settings" },
-    shared: { type: 'array' as const, items: { type: 'object' as const }, optional: true, description: "Shared users" },
-    staticData: { type: 'object' as const, optional: true, description: "Static data" },
-  },
-  workerClass: CreateWorkflowWorker,
-};

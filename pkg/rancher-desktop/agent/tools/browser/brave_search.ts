@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from "../base";
+import { BaseTool, ToolResponse } from "../base";
 import { getIntegrationService } from '../../services/IntegrationService';
 
 /**
@@ -7,7 +7,6 @@ import { getIntegrationService } from '../../services/IntegrationService';
 export class BraveSearchWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
 
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { query, count = 10 } = input;
@@ -70,16 +69,3 @@ export class BraveSearchWorker extends BaseTool {
     }
   }
 }
-
-// Export the complete tool registration with type enforcement
-export const braveSearchRegistration: ToolRegistration = {
-  name: "brave_search",
-  description: "Search the web using Brave Search API for current and comprehensive results.",
-  category: "browser",
-  operationTypes: ['read'],
-  schemaDef: {
-    query: { type: 'string' as const, description: "The search query to execute" },
-    count: { type: 'number' as const, optional: true, default: 10, description: "Number of search results to return (max 20)" },
-  },
-  workerClass: BraveSearchWorker,
-};

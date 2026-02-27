@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from "../base";
+import { BaseTool, ToolResponse } from "../base";
 import { calendarClient } from "../../services/CalendarClient";
 
 /**
@@ -7,7 +7,6 @@ import { calendarClient } from "../../services/CalendarClient";
 export class CalendarUpdateWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { eventId, ...updates } = input;
 
@@ -45,23 +44,3 @@ ID: ${updated.id || 'N/A'}`;
     }
   }
 }
-
-// Export the complete tool registration with type enforcement
-export const calendarUpdateRegistration: ToolRegistration = {
-  name: "calendar_update",
-  description: "Update an existing calendar event.",
-  category: "calendar",
-  operationTypes: ['update'],
-  schemaDef: {
-    eventId: { type: 'number' as const, description: "The ID of the calendar event to update" },
-    title: { type: 'string' as const, optional: true, description: "New event title" },
-    start: { type: 'string' as const, optional: true, description: "New start time in ISO format" },
-    end: { type: 'string' as const, optional: true, description: "New end time in ISO format" },
-    description: { type: 'string' as const, optional: true, description: "New event description" },
-    location: { type: 'string' as const, optional: true, description: "New event location" },
-    people: { type: 'array' as const, items: { type: 'string' as const }, optional: true, description: "New list of attendee emails" },
-    calendarId: { type: 'string' as const, optional: true, description: "New calendar ID" },
-    allDay: { type: 'boolean' as const, optional: true, description: "New all-day flag" },
-  },
-  workerClass: CalendarUpdateWorker,
-};

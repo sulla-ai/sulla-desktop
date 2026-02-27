@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from "../base";
+import { BaseTool, ToolResponse } from "../base";
 import { Article } from "../../database/models/Article";
 
 /**
@@ -7,7 +7,6 @@ import { Article } from "../../database/models/Article";
 export class ArticleUpdateWorker extends BaseTool {
   name: string = '';
   description: string = '';
-  schemaDef: any = {};
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     const { slug, title, content, section, category, tags, order, locked, author, related_slugs, mentions, related_entities } = input;
 
@@ -98,26 +97,3 @@ Current locked: ${existing.attributes.locked ? 'Yes' : 'No'}`;
     }
   }
 }
-
-// Export the complete tool registration with type enforcement
-export const articleUpdateRegistration: ToolRegistration = {
-  name: "article_update",
-  description: "Update an existing article's metadata. Note: content updates require full replacement.",
-  category: "memory",
-  operationTypes: ['update'],
-  schemaDef: {
-    slug: { type: 'string' as const, description: "Slug of the article to update" },
-    title: { type: 'string' as const, optional: true, description: "New title for the article" },
-    content: { type: 'string' as const, optional: true, description: "New full markdown content (replaces existing)" },
-    section: { type: 'string' as const, optional: true, description: "New section" },
-    category: { type: 'string' as const, optional: true, description: "New category" },
-    tags: { type: 'array' as const, items: { type: 'string' as const }, optional: true, description: "New array of tags" },
-    order: { type: 'string' as const, optional: true, description: "New order field" },
-    locked: { type: 'boolean' as const, optional: true, description: "New locked status" },
-    author: { type: 'string' as const, optional: true, description: "New author" },
-    related_slugs: { type: 'array' as const, items: { type: 'string' as const }, optional: true, description: "New array of related slugs" },
-    mentions: { type: 'array' as const, items: { type: 'string' as const }, optional: true, description: "New array of mentions" },
-    related_entities: { type: 'array' as const, items: { type: 'string' as const }, optional: true, description: "New array of related entities" },
-  },
-  workerClass: ArticleUpdateWorker,
-};

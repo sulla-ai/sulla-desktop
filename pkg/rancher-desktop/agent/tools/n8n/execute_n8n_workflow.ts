@@ -1,4 +1,4 @@
-import { BaseTool, ToolRegistration, ToolResponse } from '../base';
+import { BaseTool, ToolResponse } from '../base';
 import { getN8nRuntime } from '../../services/N8nRuntimeService';
 import { createN8nService } from '../../services/N8nService';
 import { WebhookEntityModel } from '../../database/models/WebhookEntityModel';
@@ -6,7 +6,6 @@ import { WebhookEntityModel } from '../../database/models/WebhookEntityModel';
 export class ExecuteN8nWorkflowBridgeWorker extends BaseTool {
   name = '';
   description = '';
-  schemaDef: any = {};
 
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     const logPrefix = '[execute_n8n_workflow]';
@@ -358,16 +357,3 @@ export class ExecuteN8nWorkflowBridgeWorker extends BaseTool {
   }
 }
 
-export const executeN8nWorkflowBridgeRegistration: ToolRegistration = {
-  name: 'execute_n8n_workflow',
-  description: 'Execute a workflow through a dedicated universal gateway workflow webhook, creating/activating the gateway if needed.',
-  category: 'n8n',
-  operationTypes: ['execute'],
-  schemaDef: {
-    workflowId: { type: 'string' as const, description: 'Workflow ID.' },
-    data: { type: 'object' as const, optional: true, description: 'Optional run payload.' },
-    mode: { type: 'string' as const, optional: true, description: 'Execution mode: async (default) or sync.' },
-    timeoutMs: { type: 'number' as const, optional: true, description: 'Only for mode=sync: max wait time in milliseconds (default 30000).' },
-  },
-  workerClass: ExecuteN8nWorkflowBridgeWorker,
-};
