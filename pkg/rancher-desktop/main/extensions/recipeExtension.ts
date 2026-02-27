@@ -11,6 +11,8 @@ import {
   Extension, ExtensionErrorCode, ExtensionMetadata,
 } from './types';
 
+import { SullaSettingsModel } from '@pkg/agent/database/models/SullaSettingsModel';
+import { getIntegrationService } from '@pkg/agent/services/IntegrationService';
 import mainEvents from '@pkg/main/mainEvents';
 import { spawnFile } from '@pkg/utils/childProcess';
 import Logging from '@pkg/utils/logging';
@@ -202,6 +204,10 @@ export class RecipeExtensionImpl implements Extension {
 
       sullaLog({ topic: 'extensions', level: 'info', message: `Recipe assets saved to ${ this.dir }` });
 
+      // ── Phase 2b: Resolve {{variables}} in the compose file and write .env ──
+      await this.processComposeFile();
+      await this.writeEnvFile();
+
       // ── Phase 3: Process the installable file (setup steps) ──
       await this.runSetup(manifest);
 
@@ -385,6 +391,125 @@ export class RecipeExtensionImpl implements Extension {
     }
   }
 
+  // ─── Variable Resolution ───────────────────────────────────────────
+
+  /**
+   * Resolve `{{variable}}` placeholders in a string.
+   *
+   * Two forms are supported:
+   *  - `{{propertyName}}`          → SullaSettingsModel.get(propertyName)
+   *  - `{{INTEGRATION_ID.PROP}}`   → IntegrationService.getIntegrationValue(INTEGRATION_ID, PROP)
+   *
+   * Unresolvable placeholders are left as-is so the file stays debuggable.
+   */
+  protected async resolveVariables(content: string): Promise<string> {
+    const pattern = /\{\{\s*([^}]+?)\s*\}\}/g;
+    const matches = [...content.matchAll(pattern)];
+
+    if (matches.length === 0) {
+      return content;
+    }
+
+    // Build a lookup map: placeholder key → resolved value
+    const resolved = new Map<string, string>();
+
+    for (const match of matches) {
+      const key = match[1];
+
+      if (resolved.has(key)) {
+        continue;
+      }
+
+      const dotIndex = key.indexOf('.');
+
+      if (dotIndex > 0) {
+        // Integration variable: {{INTEGRATION_ID.PROPERTY}}
+        const integrationId = key.substring(0, dotIndex);
+        const property = key.substring(dotIndex + 1);
+
+        try {
+          const svc = getIntegrationService();
+          const iv = await svc.getIntegrationValue(integrationId, property);
+
+          if (iv) {
+            resolved.set(key, iv.value);
+          } else {
+            sullaLog({ topic: 'extensions', level: 'debug', message: `Variable {{${ key }}} not found in integrations, skipping` });
+          }
+        } catch (ex) {
+          sullaLog({ topic: 'extensions', level: 'debug', message: `Could not resolve integration variable {{${ key }}}`, error: ex });
+        }
+      } else {
+        // Sulla settings variable: {{propertyName}}
+        try {
+          const value = await SullaSettingsModel.get(key);
+
+          if (value !== null && value !== undefined) {
+            resolved.set(key, String(value));
+          } else {
+            sullaLog({ topic: 'extensions', level: 'debug', message: `Variable {{${ key }}} not found in settings, skipping` });
+          }
+        } catch (ex) {
+          sullaLog({ topic: 'extensions', level: 'debug', message: `Could not resolve setting variable {{${ key }}}`, error: ex });
+        }
+      }
+    }
+
+    // Replace all resolved placeholders
+    return content.replace(pattern, (original, key) => {
+      const trimmed = key.trim();
+
+      return resolved.has(trimmed) ? resolved.get(trimmed)! : original;
+    });
+  }
+
+  /**
+   * Process the docker-compose file after download: resolve {{variables}} in place.
+   */
+  protected async processComposeFile(): Promise<void> {
+    const composeFile = this._manifest?.compose?.composeFile || 'docker-compose.yml';
+    const composePath = path.join(this.dir, composeFile);
+
+    try {
+      const raw = await fs.promises.readFile(composePath, 'utf-8');
+      const processed = await this.resolveVariables(raw);
+
+      if (processed !== raw) {
+        await fs.promises.writeFile(composePath, processed, 'utf-8');
+        sullaLog({ topic: 'extensions', level: 'info', message: `Resolved variables in ${ composeFile }` });
+      }
+    } catch (ex: any) {
+      if ((ex as NodeJS.ErrnoException).code !== 'ENOENT') {
+        sullaLog({ topic: 'extensions', level: 'warn', message: `Failed to process compose file ${ composePath }`, error: ex });
+      }
+    }
+  }
+
+  /**
+   * Write a `.env` file from the manifest's `env` field with {{variables}} resolved.
+   * Docker Compose automatically reads `.env` from the working directory.
+   */
+  protected async writeEnvFile(): Promise<void> {
+    const manifest = await this.getManifest();
+
+    if (!manifest.env || Object.keys(manifest.env).length === 0) {
+      return;
+    }
+
+    const lines: string[] = [];
+
+    for (const [envKey, envVal] of Object.entries(manifest.env)) {
+      const resolvedVal = await this.resolveVariables(envVal);
+
+      lines.push(`${ envKey }=${ resolvedVal }`);
+    }
+
+    const envPath = path.join(this.dir, '.env');
+
+    await fs.promises.writeFile(envPath, lines.join('\n') + '\n', 'utf-8');
+    sullaLog({ topic: 'extensions', level: 'info', message: `Wrote .env with ${ lines.length } entries for ${ this.id }` });
+  }
+
   // ─── Commands ───────────────────────────────────────────────────────
 
   /**
@@ -413,6 +538,9 @@ export class RecipeExtensionImpl implements Extension {
 
       return;
     }
+
+    // Refresh .env before starting so settings changes take effect
+    await this.writeEnvFile();
 
     const resolved = this.resolveCommand(cmd);
 
@@ -477,12 +605,14 @@ export class RecipeExtensionImpl implements Extension {
 
   // ─── Uninstall ──────────────────────────────────────────────────────
 
-  async uninstall(): Promise<boolean> {
+  async uninstall(options?: { deleteData?: boolean }): Promise<boolean> {
     if (!(await this.isInstalled())) {
       return false;
     }
 
-    console.log(`Uninstalling recipe extension ${ this.id }...`);
+    const deleteData = options?.deleteData ?? false;
+
+    sullaLog({ topic: 'extensions', level: 'info', message: `Uninstalling recipe extension ${ this.id }`, data: { deleteData } });
 
     // Stop containers if running
     try {
@@ -491,9 +621,23 @@ export class RecipeExtensionImpl implements Extension {
       console.error(`Ignoring error stopping ${ this.id } on uninstall: ${ ex }`);
     }
 
-    // Remove the extension directory
+    // Remove extension directory contents, preserving data/ unless deleteData is set
+    const dataDir = path.join(this.dir, 'data');
+
     try {
-      await fs.promises.rm(this.dir, { recursive: true, maxRetries: 3 });
+      const entries = await fs.promises.readdir(this.dir);
+
+      for (const entry of entries) {
+        if (entry === 'data' && !deleteData) {
+          continue;
+        }
+        await fs.promises.rm(path.join(this.dir, entry), { recursive: true, maxRetries: 3 });
+      }
+
+      // If deleteData, remove the now-empty directory too
+      if (deleteData) {
+        await fs.promises.rm(this.dir, { recursive: true, maxRetries: 3 }).catch(() => {});
+      }
     } catch (ex: any) {
       if ((ex as NodeJS.ErrnoException).code !== 'ENOENT') {
         throw ex;
@@ -509,7 +653,7 @@ export class RecipeExtensionImpl implements Extension {
       application: { extensions: { installed: { [this.id]: undefined } } },
     });
 
-    console.log(`Recipe extension ${ this.id } uninstalled.`);
+    sullaLog({ topic: 'extensions', level: 'info', message: `Recipe extension ${ this.id } uninstalled.${ !deleteData ? ' Data directory preserved.' : '' }` });
 
     return true;
   }

@@ -748,6 +748,7 @@ export class HttpCommandServer {
 
   protected async uninstallExtension(request: express.Request, response: express.Response): Promise<void> {
     const id = request.query.id ?? '';
+    const deleteData = request.query.deleteData === 'true';
 
     if (!id) {
       response.status(400).type('txt').send('Extension ID is required in the id= parameter.');
@@ -755,7 +756,7 @@ export class HttpCommandServer {
       response.status(400).type('txt').send(`Invalid extension id ${ JSON.stringify(id) }: not a string.`);
     } else {
       response.writeProcessing();
-      const { status, data: rawData } = await this.commandWorker.installExtension(id, 'uninstall');
+      const { status, data: rawData } = await this.commandWorker.installExtension(id, 'uninstall', { deleteData });
       const data = rawData || `Deleted ${ id }`;
 
       if (data) {
@@ -925,13 +926,13 @@ export interface CommandWorkerInterface {
    * List the installed extensions with their versions.
    * If the extension manager is not ready, returns undefined.
    */
-  listExtensions(): Promise<Record<string, { version: string, metadata: ExtensionMetadata, labels: Record<string, string> }> | undefined>;
+  listExtensions(): Promise<Record<string, { version: string, metadata: ExtensionMetadata, labels: Record<string, string>, extraUrls: Array<{ label: string; url: string }> }> | undefined>;
   /**
    * Install or uninstall the given extension, returning an appropriate HTTP status code.
    * @param state Whether to install or uninstall the extension.
    * @returns The HTTP status code, possibly with arbitrary response body data.
    */
-  installExtension(id: string, state: 'install' | 'uninstall'): Promise<{ status: number, data?: any }>;
+  installExtension(id: string, state: 'install' | 'uninstall', options?: { deleteData?: boolean }): Promise<{ status: number, data?: any }>;
   // #endregion
   listSnapshots:   (context: commandContext) => Promise<Snapshot[]>;
   createSnapshot:  (context: commandContext, snapshot: Snapshot) => Promise<void>;

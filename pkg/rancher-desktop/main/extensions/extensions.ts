@@ -611,7 +611,7 @@ export class ExtensionImpl implements Extension {
     await fs.promises.writeFile(path.join(workDir, this.VERSION_FILE), this.version, 'utf-8');
   }
 
-  async uninstall(): Promise<boolean> {
+  async uninstall(_options?: { deleteData?: boolean }): Promise<boolean> {
     const installedVersion = await this.getInstalledVersion();
 
     if (installedVersion !== undefined && installedVersion !== this.version) {

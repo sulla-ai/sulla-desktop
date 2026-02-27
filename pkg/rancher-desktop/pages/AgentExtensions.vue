@@ -150,6 +150,35 @@
                       >{{ errors[ext.slug] }}</span>
 
                       <div class="flex items-center gap-2 ml-auto">
+                        <!-- Extra URLs dropdown (shown when installed) -->
+                        <div
+                          v-if="isInstalled(ext.slug) && getInstalledExtraUrls(ext.slug).length > 0"
+                          class="relative"
+                        >
+                          <button
+                            class="inline-flex items-center gap-1 rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-emerald-700"
+                            @click.stop="toggleUrlDropdown(ext.slug)"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+                            Open
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                          </button>
+                          <div
+                            v-if="openDropdown === ext.slug"
+                            class="absolute left-0 bottom-full mb-1 z-50 min-w-48 rounded-lg border border-gray-200 bg-white py-1 shadow-lg dark:border-gray-600 dark:bg-slate-700"
+                          >
+                            <a
+                              v-for="(link, idx) in getInstalledExtraUrls(ext.slug)"
+                              :key="idx"
+                              :href="link.url"
+                              class="flex items-center gap-2 px-3 py-2 text-xs text-slate-700 transition-colors hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-600"
+                              @click.prevent="openExternalUrl(link.url)"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 shrink-0 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+                              {{ link.label }}
+                            </a>
+                          </div>
+                        </div>
                         <button
                           v-if="!busy[ext.slug] && !isInstalled(ext.slug)"
                           class="inline-flex items-center rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-blue-700"
@@ -297,6 +326,45 @@
         </div>
       </div>
     </div>
+    <!-- Uninstall confirmation modal -->
+    <div
+      v-if="uninstallDialog.open"
+      class="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm"
+      @click.self="cancelUninstall"
+    >
+      <div class="w-full max-w-md rounded-xl bg-white p-6 shadow-2xl dark:bg-slate-800">
+        <h3 class="text-lg font-semibold text-slate-900 dark:text-white mb-2">
+          Uninstall {{ uninstallDialog.name }}?
+        </h3>
+        <p class="text-sm text-slate-600 dark:text-slate-300 mb-4">
+          This will stop all containers and remove the extension files.
+        </p>
+
+        <label class="flex items-center gap-2 mb-6 cursor-pointer select-none">
+          <input
+            v-model="uninstallDialog.preserveData"
+            type="checkbox"
+            class="h-4 w-4 rounded border-gray-300 text-sky-500 focus:ring-sky-400 dark:border-gray-600 dark:bg-slate-700"
+          >
+          <span class="text-sm text-slate-700 dark:text-slate-200">Do not delete my data</span>
+        </label>
+
+        <div class="flex items-center justify-end gap-3">
+          <button
+            class="rounded-md px-4 py-2 text-sm font-medium text-slate-600 transition-colors hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+            @click="cancelUninstall"
+          >
+            Cancel
+          </button>
+          <button
+            class="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-700"
+            @click="confirmUninstall"
+          >
+            Uninstall
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -322,6 +390,15 @@ const installedExtensions = ref<InstalledExtension[]>([]);
 const busy = reactive<Record<string, string | null>>({});
 const errors = reactive<Record<string, string | null>>({});
 const openDropdown = ref<string | null>(null);
+
+const uninstallDialog = reactive<{
+  open: boolean;
+  id: string;
+  name: string;
+  preserveData: boolean;
+}>({
+  open: false, id: '', name: '', preserveData: true,
+});
 
 function toggleUrlDropdown(id: string) {
   openDropdown.value = openDropdown.value === id ? null : id;
@@ -389,6 +466,12 @@ function canUpgrade(slug: string): boolean {
   return installedExtensions.value.some(ext => ext.id === slug && ext.canUpgrade);
 }
 
+function getInstalledExtraUrls(slug: string): Array<{ label: string; url: string }> {
+  const ext = installedExtensions.value.find(e => e.id === slug);
+
+  return ext?.extraUrls ?? [];
+}
+
 function extensionTitle(ext: InstalledExtension): string {
   return ext.labels?.['org.opencontainers.image.title'] ?? ext.id;
 }
@@ -433,27 +516,43 @@ async function upgrade(ext: MarketplaceEntry) {
   await refreshData();
 }
 
-async function uninstall(ext: MarketplaceEntry) {
-  busy[ext.slug] = 'Uninstalling';
-  errors[ext.slug] = null;
-
-  const result = await extensionService.uninstallExtension(ext.slug);
-
-  if (!result.ok) {
-    errors[ext.slug] = result.error ?? 'Uninstall failed';
-  }
-
-  busy[ext.slug] = null;
-  await refreshData();
+function showUninstallDialog(id: string, name: string) {
+  uninstallDialog.open = true;
+  uninstallDialog.id = id;
+  uninstallDialog.name = name;
+  uninstallDialog.preserveData = true;
 }
 
-async function uninstallById(id: string) {
-  busy[id] = 'Uninstalling';
+function cancelUninstall() {
+  uninstallDialog.open = false;
+}
 
-  await extensionService.uninstallExtension(id);
+async function confirmUninstall() {
+  const { id, preserveData } = uninstallDialog;
+
+  uninstallDialog.open = false;
+  busy[id] = 'Uninstalling';
+  errors[id] = null;
+
+  const result = await extensionService.uninstallExtension(id, { deleteData: !preserveData });
+
+  if (!result.ok) {
+    errors[id] = result.error ?? 'Uninstall failed';
+  }
 
   busy[id] = null;
   await refreshData();
+}
+
+function uninstall(ext: MarketplaceEntry) {
+  showUninstallDialog(ext.slug, ext.title);
+}
+
+function uninstallById(id: string) {
+  const ext = installedExtensions.value.find(e => e.id === id);
+  const name = ext ? extensionTitle(ext) : id;
+
+  showUninstallDialog(id, name);
 }
 
 async function upgradeInstalled(ext: InstalledExtension) {

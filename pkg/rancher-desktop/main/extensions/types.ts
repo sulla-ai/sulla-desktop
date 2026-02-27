@@ -108,10 +108,13 @@ export interface Extension {
   install(allowedImages: readonly string[] | undefined): Promise<boolean>;
   /**
    * Uninstall this extension.
+   * @param options.deleteData If true, also remove the persistent `data/`
+   *        directory. By default, `data/` is preserved so user data survives
+   *        uninstall/reinstall cycles.
    * @note If the extension was not installed, this is a no-op.
    * @returns Whether the extension was uninstalled.
    */
-  uninstall(): Promise<boolean>;
+  uninstall(options?: { deleteData?: boolean }): Promise<boolean>;
 
   /**
    * Check whether this extension is installed (at this version).

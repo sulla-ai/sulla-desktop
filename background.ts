@@ -1731,7 +1731,7 @@ class BackgroundCommandWorker implements CommandWorkerInterface {
     return Object.fromEntries(entries);
   }
 
-  async installExtension(image: string, state: 'install' | 'uninstall'): Promise<{ status: number, data?: any }> {
+  async installExtension(image: string, state: 'install' | 'uninstall', options?: { deleteData?: boolean }): Promise<{ status: number, data?: any }> {
     const em = await getExtensionManager();
 
     if (!em) {
@@ -1767,7 +1767,7 @@ class BackgroundCommandWorker implements CommandWorkerInterface {
     } else {
       console.debug(`Uninstalling extension ${ image }...`);
       try {
-        if (await extension.uninstall()) {
+        if (await extension.uninstall({ deleteData: options?.deleteData })) {
           window.send('ok:extensions/uninstall', image);
 
           return { status: 201 };

@@ -9,6 +9,14 @@
  *  - `${COMPOSE_FILE}` is replaced with the full path to the compose file.
  *  - The recipe author is responsible for putting the right commands in setup
  *    (e.g. git clone, generate config, etc.)
+ *
+ * Variable substitution (`{{...}}`) is supported in docker-compose files and
+ * the `env` field:
+ *  - `{{propertyName}}`        → resolved from SullaSettingsModel (e.g. `{{sullaEmail}}`)
+ *  - `{{INTEGRATION.PROP}}`    → resolved from IntegrationService (e.g. `{{SLACK.BOT_KEY}}`)
+ *
+ * The `env` field is written as a `.env` file in the extension directory.
+ * Docker Compose automatically reads it. The `.env` is refreshed on every start.
  */
 export interface InstallationManifest {
   id:          string;

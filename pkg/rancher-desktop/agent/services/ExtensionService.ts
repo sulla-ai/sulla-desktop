@@ -272,9 +272,14 @@ export class ExtensionService {
     }
   }
 
-  async uninstallExtension(id: string): Promise<{ ok: boolean; error?: string }> {
+  async uninstallExtension(id: string, options?: { deleteData?: boolean }): Promise<{ ok: boolean; error?: string }> {
     try {
-      const response = await fetch(`${this.backendUrl}/v1/extensions/uninstall?id=${encodeURIComponent(id)}`, {
+      const params = new URLSearchParams({ id });
+
+      if (options?.deleteData) {
+        params.set('deleteData', 'true');
+      }
+      const response = await fetch(`${this.backendUrl}/v1/extensions/uninstall?${params.toString()}`, {
         method:  'POST',
         headers: this.getRequestHeaders(),
       });
