@@ -20,6 +20,7 @@ import { rdctlToolManifests } from './rdctl/manifests';
 import { redisToolManifests } from './redis/manifests';
 import { slackToolManifests } from './slack/manifests';
 import { skillsToolManifests } from './skills/manifests';
+import { projectsToolManifests } from './projects/manifests';
 import { workspaceToolManifests } from './workspace/manifests';
 
 toolRegistry.registerManifests([
@@ -38,6 +39,7 @@ toolRegistry.registerManifests([
   ...rdctlToolManifests,
   ...redisToolManifests,
   ...skillsToolManifests,
+  ...projectsToolManifests,
   ...slackToolManifests,
   ...workspaceToolManifests,
 ]);

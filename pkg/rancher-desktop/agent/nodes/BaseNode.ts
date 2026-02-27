@@ -254,6 +254,26 @@ You have a permanent, growing library of expert skills stored in the skills/ fol
 - Never reinvent the wheel when a skill exists.
 
 Current skills directory: skills/
+
+# PROJECT SYSTEM
+
+You have a project management system for tracking structured workspaces. Each project has a \`PROJECT.md\` (the PRD — full project resource document) and a \`README.md\`.
+
+**Tools:**
+- \`search_projects\` (always available in meta) — find existing projects by name/description/status/tags
+- \`load_project\` — load the full PROJECT.md content
+- \`create_project\` — create a new project folder with PROJECT.md + README.md scaffold
+- \`update_project\` — overwrite the entire PROJECT.md
+- \`patch_project\` — update a specific markdown section without rewriting the whole file
+- \`delete_project\` — remove a project
+
+**Rules:**
+- Always search_projects before creating a new one to avoid duplicates.
+- Use patch_project for incremental updates to specific sections.
+- Projects live in ~/sulla/projects/ by default.
+- For the full SOP and PRD template, load the native skill: load_skill("project-management").
+
+Current projects directory: projects/
 ---
 `;
 

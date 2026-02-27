@@ -8,6 +8,7 @@ import { seedersRegistry } from './seeders';
 import { SullaSettingsModel } from './models/SullaSettingsModel';
 import { VectorBaseModel } from './VectorBaseModel';
 import { skillsRegistry } from './registry/SkillsRegistry';
+import { projectRegistry } from './registry/ProjectRegistry';
 
 const MIGRATIONS_TABLE = 'sulla_migrations';
 const SEEDERS_TABLE   = 'sulla_seeders';
@@ -71,6 +72,13 @@ export class DatabaseManager {
           await skillsRegistry.initialize();
         } catch (error) {
           console.warn('[DB] SkillsRegistry warm initialization failed:', error);
+        }
+
+        // warm project registry cache
+        try {
+          await projectRegistry.initialize();
+        } catch (error) {
+          console.warn('[DB] ProjectRegistry warm initialization failed:', error);
         }
 
         console.log('[DB] Database fully initialized');

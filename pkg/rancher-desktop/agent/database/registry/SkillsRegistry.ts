@@ -9,6 +9,7 @@ import {
   type SkillSchema,
   type SkillSummarySchema,
 } from '../../services/SkillService';
+import { grepSearchFilesDetailed } from '../../../utils/grepSearch';
 
 export interface SkillRegistryInitOptions {
   filesystemSkillDirs?: string[];
@@ -410,33 +411,51 @@ export class SkillsRegistry {
   async searchSkills(query: string): Promise<string> {
     await this.ensureInitialized();
 
-    const queryWords = String(query || '').toLowerCase().split(/\s+/).filter(Boolean);
-    if (queryWords.length === 0) return 'Please provide a search query.';
+    const q = String(query || '').trim();
+    if (!q) return 'Please provide a search query.';
 
     const nativeResults: string[] = [];
-    const dynamicResults: string[] = [];
 
     // Search native skills
     try {
-      const { nativeSkillRegistry } = await import('../../skills/native/NativeSkillRegistry');
-      const nativeMatches = nativeSkillRegistry.search(query);
+      const { nativeSkillRegistry } = await import('../../skills/native/index');
+      const nativeMatches = nativeSkillRegistry.search(q);
       for (const m of nativeMatches) {
         nativeResults.push(`${m.name} (native): ${m.description}`);
       }
     } catch { /* native registry not available */ }
 
-    // Search dynamic/filesystem/hardcoded skills
-    for (const skill of this.skillsBySlug.values()) {
-      const haystack = [
-        skill.slug,
-        skill.name,
-        skill.description,
-        ...(skill.manifest.tags || []),
-        ...(skill.triggers || []),
-      ].join(' ').toLowerCase();
+    // Grep filesystem for matching skill files
+    const dirs = this.getDefaultFilesystemDirs(this.lastInitOptions.filesystemSkillDirs || []);
+    const grepResult = await grepSearchFilesDetailed(q, dirs, '*.md');
+    const grepHits = grepResult.matches;
 
-      if (queryWords.some(word => haystack.includes(word))) {
-        dynamicResults.push(`${skill.name}: ${skill.description}`);
+    const dynamicResults: string[] = [];
+    const seenSlugs = new Set<string>();
+
+    for (const hit of grepHits) {
+      const slug = hit.folderName;
+      if (seenSlugs.has(slug)) continue;
+      seenSlugs.add(slug);
+
+      // Try to get parsed skill from registry cache first
+      const cached = this.skillsBySlug.get(slug);
+      if (cached) {
+        dynamicResults.push(`${cached.name}: ${cached.description}`);
+        continue;
+      }
+
+      // Otherwise read and parse the file on the fly
+      try {
+        const raw = await readFile(hit.filePath, 'utf8');
+        const service = SkillService.fromRaw('filesystem', slug, raw);
+        if (service) {
+          dynamicResults.push(`${service.name}: ${service.description}`);
+        } else {
+          dynamicResults.push(`${slug}: (matched file: ${hit.filePath})`);
+        }
+      } catch {
+        dynamicResults.push(`${slug}: (matched file: ${hit.filePath})`);
       }
     }
 
@@ -446,7 +465,7 @@ export class SkillsRegistry {
 
     return parts.length > 0
       ? parts.join('\n\n')
-      : 'No matching skills. You can create one with create_skill.';
+      : `No matching skills after searching terms: ${grepResult.attemptedTerms.map(term => `'${term}'`).join(', ') || '(none)'} (0 skills found). You can create one with create_skill.`;
   }
 
   async loadSkill(skillName: string): Promise<string> {
@@ -456,7 +475,7 @@ export class SkillsRegistry {
 
     // Check native skills first — call func() to return full skill content
     try {
-      const { nativeSkillRegistry } = await import('../../skills/native/NativeSkillRegistry');
+      const { nativeSkillRegistry } = await import('../../skills/native/index');
       const nativeDef = nativeSkillRegistry.get(name);
       if (nativeDef) {
         return await nativeDef.func({});
