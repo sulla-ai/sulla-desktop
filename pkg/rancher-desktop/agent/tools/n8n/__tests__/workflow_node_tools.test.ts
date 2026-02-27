@@ -13,16 +13,12 @@ jest.unstable_mockModule('../../../services/N8nService', () => ({
 async function loadNodeTools() {
   const getModule = await import('../get_workflow_node');
   const listModule = await import('../get_workflow_node_list');
-  const addModule = await import('../add_workflow_node');
-  const updateModule = await import('../update_workflow_node');
-  const removeModule = await import('../remove_workflow_node');
+  const patchModule = await import('../patch_workflow');
 
   return {
     getModule,
     listModule,
-    addModule,
-    updateModule,
-    removeModule,
+    patchModule,
   };
 }
 
@@ -40,8 +36,8 @@ describe('n8n workflow node tools', () => {
   });
 
   it('adds a node with deterministic id and unique name', async () => {
-    const { addModule } = await loadNodeTools();
-    const worker = configureWorker(new addModule.AddWorkflowNodeWorker(), addModule.addWorkflowNodeRegistration);
+    const { patchModule } = await loadNodeTools();
+    const worker = configureWorker(new patchModule.PatchWorkflowWorker(), patchModule.patchWorkflowRegistration);
 
     mockGetWorkflow.mockResolvedValueOnce({
       id: 'wf-1',
@@ -57,12 +53,16 @@ describe('n8n workflow node tools', () => {
 
     const result = await worker.invoke({
       workflowId: '  wf-1  ',
-      node: {
-        name: 'Trigger',
-        type: 'n8n-nodes-base.httpRequest',
-        position: [240, 0],
-        parameters: {},
-      },
+      operations: [{
+        target: 'node',
+        op: 'add',
+        node: {
+          name: 'Trigger',
+          type: 'n8n-nodes-base.httpRequest',
+          position: [240, 0],
+          parameters: {},
+        },
+      }],
     });
 
     expect(result.success).toBe(true);
@@ -110,8 +110,8 @@ describe('n8n workflow node tools', () => {
   });
 
   it('updates a node name and rewrites connections by node name', async () => {
-    const { updateModule } = await loadNodeTools();
-    const worker = configureWorker(new updateModule.UpdateWorkflowNodeWorker(), updateModule.updateWorkflowNodeRegistration);
+    const { patchModule } = await loadNodeTools();
+    const worker = configureWorker(new patchModule.PatchWorkflowWorker(), patchModule.patchWorkflowRegistration);
 
     mockGetWorkflow.mockResolvedValueOnce({
       id: 'wf-2',
@@ -135,8 +135,12 @@ describe('n8n workflow node tools', () => {
 
     const result = await worker.invoke({
       workflowId: 'wf-2',
-      nodeId: 'node-b',
-      nodePatch: { name: 'New Name' },
+      operations: [{
+        target: 'node',
+        op: 'update',
+        nodeId: 'node-b',
+        patch: { name: 'New Name' },
+      }],
     });
 
     expect(result.success).toBe(true);
@@ -148,8 +152,8 @@ describe('n8n workflow node tools', () => {
   });
 
   it('removes a node and strips references from connections', async () => {
-    const { removeModule } = await loadNodeTools();
-    const worker = configureWorker(new removeModule.RemoveWorkflowNodeWorker(), removeModule.removeWorkflowNodeRegistration);
+    const { patchModule } = await loadNodeTools();
+    const worker = configureWorker(new patchModule.PatchWorkflowWorker(), patchModule.patchWorkflowRegistration);
 
     mockGetWorkflow.mockResolvedValueOnce({
       id: 'wf-3',
@@ -173,7 +177,11 @@ describe('n8n workflow node tools', () => {
 
     const result = await worker.invoke({
       workflowId: 'wf-3',
-      nodeName: 'Delete Me',
+      operations: [{
+        target: 'node',
+        op: 'remove',
+        nodeName: 'Delete Me',
+      }],
     });
 
     expect(result.success).toBe(true);

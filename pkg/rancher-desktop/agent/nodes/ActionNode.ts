@@ -135,9 +135,11 @@ export class ActionNode extends BaseNode {
     // ----------------------------------------------------------------
     // 3. EXECUTE — LLM interprets PRD + focus, calls tools
     // ----------------------------------------------------------------
+    const disposeLiveDomStream = await this.startLiveDomStream(state);
     const disposeLiveN8nStream = await this.startLiveN8nActionStream(state);
     const actionResult = await this.executeAction(enrichedPrompt, state, startTime)
       .finally(() => {
+        disposeLiveDomStream();
         disposeLiveN8nStream();
       });
 
@@ -220,6 +222,95 @@ export class ActionNode extends BaseNode {
       return null;
     }
   }
+
+  // ======================================================================
+  // GENERIC LIVE DOM STREAM (all website assets)
+  // ======================================================================
+
+  private async startLiveDomStream(state: BaseThreadState): Promise<() => void> {
+    try {
+      const { hostBridgeRegistry } = await import('../scripts/injected/HostBridgeRegistry');
+
+      if (hostBridgeRegistry.size() === 0) {
+        return () => {};
+      }
+
+      const unsub = hostBridgeRegistry.onDomEvent((event) => {
+        const content = event.message;
+        if (!content) return;
+
+        if (this.shouldAppendLiveDomEvent(state, content)) {
+          this.appendLiveDomMessage(state, content, event);
+        }
+
+        console.log('[ActionNode] DOM event received:', {
+          assetId: event.assetId,
+          type: event.type,
+          message: content.slice(0, 120),
+        });
+      });
+
+      console.log('[ActionNode] Live DOM stream started for all assets');
+      return unsub;
+    } catch (error) {
+      console.warn('[ActionNode] Unable to start live DOM stream:', error);
+      return () => {};
+    }
+  }
+
+  private shouldAppendLiveDomEvent(state: BaseThreadState, content: string): boolean {
+    const metadataAny = state.metadata as any;
+    const liveMeta = metadataAny.__domLiveEvent || {};
+    const now = Date.now();
+
+    // Dedup: same content within 500ms
+    if (liveMeta.lastContent === content && now - Number(liveMeta.lastAt || 0) < 500) {
+      return false;
+    }
+
+    metadataAny.__domLiveEvent = {
+      lastContent: content,
+      lastAt: now,
+    };
+
+    return true;
+  }
+
+  private appendLiveDomMessage(
+    state: BaseThreadState,
+    content: string,
+    event: { assetId: string; type: string; timestamp: number },
+  ): void {
+    const message: ChatMessage = {
+      role: 'assistant',
+      content,
+      metadata: {
+        nodeId: this.id,
+        nodeName: this.name,
+        kind: 'action_live_dom_event',
+        source: 'dom_event_stream',
+        transport: 'ipc',
+        eventType: event.type,
+        assetId: event.assetId,
+        timestamp: event.timestamp,
+      },
+    };
+
+    state.messages.push(message);
+
+    const metadataAny = state.metadata as any;
+    const namespace = '__messages_action';
+    if (!metadataAny[namespace] || !Array.isArray(metadataAny[namespace].messages)) {
+      metadataAny[namespace] = { messages: [], graphSeedInitialized: true };
+    }
+    metadataAny[namespace].messages.push({ ...message });
+
+    this.bumpStateVersion(state);
+  }
+
+  // ======================================================================
+  // LIVE N8N ACTION STREAM (n8n-specific — to be deprecated)
+  // ======================================================================
 
   private async startLiveN8nActionStream(state: BaseThreadState): Promise<() => void> {
     // leave this in place, I've commented it out only for testing atm

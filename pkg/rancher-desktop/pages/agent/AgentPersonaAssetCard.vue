@@ -35,7 +35,7 @@
         :class="isLarge ? 'h-full' : 'h-56'"
       >
         <webview
-          v-if="isN8nAsset && useWebview"
+          v-if="useWebview"
           ref="webviewEl"
           :src="asset.url || ''"
           :title="asset.title"
@@ -88,6 +88,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch, type CSSPropert
 
 import type { PersonaSidebarAsset } from '@pkg/agent';
 import { getN8nVueBridgeService, N8nVueBridgeService, type N8nWebviewLike } from '@pkg/agent/services/N8nVueBridgeService';
+import { WebviewHostBridge, type WebviewLike, type HostBridgeEventMap, setActiveHostBridge, hostBridgeRegistry } from '@pkg/agent/scripts/injected';
 import { getWebSocketClientService } from '@pkg/agent/services/WebSocketClientService';
 
 type AssetSize = 'medium' | 'large';
@@ -109,9 +110,11 @@ const emit = defineEmits<{
 
 const webviewEl = ref<HTMLElement | null>(null);
 let n8nVueBridgeService: N8nVueBridgeService | null = null;
+let hostBridge: WebviewHostBridge | null = null;
 const useWebview = ref(true);
 const wsService = getWebSocketClientService();
 const bridgeUnsubs: Array<() => void> = [];
+const hostBridgeUnsubs: Array<() => void> = [];
 
 const isLarge = computed(() => props.assetSize === 'large');
 const shouldUseSmallModeZoom = computed(() => {
@@ -138,11 +141,12 @@ const frameStyle = computed(() => {
 });
 
 const detachBridge = (): void => {
-  if (!n8nVueBridgeService) {
-    return;
+  if (n8nVueBridgeService) {
+    n8nVueBridgeService.detach();
   }
-
-  n8nVueBridgeService.detach();
+  if (hostBridge) {
+    hostBridge.detach();
+  }
 };
 
 const stopBridgeEventStreaming = (): void => {
@@ -235,17 +239,37 @@ const ensureBridgeEventStreaming = (): void => {
   }));
 };
 
+const stopHostBridgeEventStreaming = (): void => {
+  while (hostBridgeUnsubs.length > 0) {
+    const unsub = hostBridgeUnsubs.pop();
+    try { unsub?.(); } catch { /* no-op */ }
+  }
+};
+
+const ensureHostBridgeEventStreaming = (): void => {
+  if (!hostBridge || hostBridgeUnsubs.length > 0) return;
+
+  hostBridgeUnsubs.push(hostBridge.on('injected', (payload: HostBridgeEventMap['injected']) => {
+    console.log('[SULLA_HOST_BRIDGE] card:injected', { assetId: props.asset.id, payload });
+  }));
+  hostBridgeUnsubs.push(hostBridge.on('routeChanged', (payload: HostBridgeEventMap['routeChanged']) => {
+    console.log('[SULLA_HOST_BRIDGE] card:routeChanged', { assetId: props.asset.id, payload });
+  }));
+  hostBridgeUnsubs.push(hostBridge.on('click', (payload: HostBridgeEventMap['click']) => {
+    console.log('[SULLA_HOST_BRIDGE] card:click', { assetId: props.asset.id, payload });
+  }));
+};
+
 const attachBridgeIfNeeded = async(): Promise<void> => {
-  if (!isN8nAsset.value) {
+  if (props.asset.type !== 'iframe') {
     detachBridge();
-    useWebview.value = true;
     return;
   }
 
   await nextTick();
 
   if (!webviewEl.value) {
-    console.log('[SULLA_N8N_VUE_BRIDGE] card:webview_ref_missing_fallback_iframe', {
+    console.log('[SULLA_HOST_BRIDGE] card:webview_ref_missing_fallback_iframe', {
       assetId: props.asset.id,
       url: props.asset.url || '',
     });
@@ -253,11 +277,11 @@ const attachBridgeIfNeeded = async(): Promise<void> => {
     return;
   }
 
-  const candidate = webviewEl.value as unknown as N8nWebviewLike;
+  const candidate = webviewEl.value as unknown as WebviewLike;
   const hasWebviewApi = typeof candidate.getURL === 'function' || typeof candidate.executeJavaScript === 'function';
   const domSrc = (webviewEl.value as HTMLElement).getAttribute('src') || '';
 
-  console.log('[SULLA_N8N_VUE_BRIDGE] card:webview_runtime_probe', {
+  console.log('[SULLA_HOST_BRIDGE] card:webview_runtime_probe', {
     assetId: props.asset.id,
     tagName: webviewEl.value.tagName,
     domSrc,
@@ -268,7 +292,7 @@ const attachBridgeIfNeeded = async(): Promise<void> => {
   });
 
   if (!hasWebviewApi) {
-    console.log('[SULLA_N8N_VUE_BRIDGE] card:webview_api_missing_fallback_iframe', {
+    console.log('[SULLA_HOST_BRIDGE] card:webview_api_missing_fallback_iframe', {
       assetId: props.asset.id,
       reason: 'Electron webview APIs not present on rendered element',
     });
@@ -279,16 +303,35 @@ const attachBridgeIfNeeded = async(): Promise<void> => {
 
   useWebview.value = true;
 
-  if (!n8nVueBridgeService) {
-    n8nVueBridgeService = getN8nVueBridgeService();
-    ensureBridgeEventStreaming();
+  // Generic host bridge — one per asset card, registered by assetId
+  if (!hostBridge) {
+    hostBridge = new WebviewHostBridge();
+    setActiveHostBridge(hostBridge);
+    ensureHostBridgeEventStreaming();
+  }
+  hostBridge.attach(candidate);
+
+  // Register in the multi-asset registry
+  hostBridgeRegistry.registerBridge(props.asset.id, hostBridge, {
+    title: props.asset.title,
+    url: props.asset.url || '',
+  });
+  if (props.isActive) {
+    hostBridgeRegistry.setActiveBridge(props.asset.id);
   }
 
-  n8nVueBridgeService.markInitialized('AgentPersonaAssetCard:attach_attempt');
-  n8nVueBridgeService.attach(webviewEl.value as unknown as N8nWebviewLike);
+  // N8n-specific bridge — only for n8n assets
+  if (isN8nAsset.value) {
+    if (!n8nVueBridgeService) {
+      n8nVueBridgeService = getN8nVueBridgeService();
+      ensureBridgeEventStreaming();
+    }
+    n8nVueBridgeService.markInitialized('AgentPersonaAssetCard:attach_attempt');
+    n8nVueBridgeService.attach(webviewEl.value as unknown as N8nWebviewLike);
+  }
 };
 
-watch([isN8nAsset, () => props.asset.url], () => {
+watch([() => props.asset.type, () => props.asset.url, isN8nAsset], () => {
   void attachBridgeIfNeeded();
 }, { immediate: true });
 
@@ -296,10 +339,28 @@ onMounted(() => {
   void attachBridgeIfNeeded();
 });
 
+watch(() => props.isActive, (active) => {
+  if (active && hostBridge) {
+    hostBridgeRegistry.setActiveBridge(props.asset.id);
+    setActiveHostBridge(hostBridge);
+  }
+});
+
+watch(() => props.asset.url, (url) => {
+  hostBridgeRegistry.updateMeta(props.asset.id, { url: url || '' });
+});
+
 onUnmounted(() => {
   stopBridgeEventStreaming();
+  stopHostBridgeEventStreaming();
+  hostBridgeRegistry.unregisterBridge(props.asset.id);
   detachBridge();
   n8nVueBridgeService = null;
+  // Update singleton to next available bridge
+  const nextActive = hostBridgeRegistry.getActiveAssetId();
+  const nextEntry = nextActive ? hostBridgeRegistry.resolve(nextActive) : null;
+  setActiveHostBridge(nextEntry);
+  hostBridge = null;
 });
 </script>
 

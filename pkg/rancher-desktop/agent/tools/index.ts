@@ -19,6 +19,7 @@ import { redisToolRegistrations } from './redis';
 import { slackToolRegistrations } from './slack';
 import { workspaceToolRegistrations } from './workspace';
 import { integrationToolRegistrations } from './integrations';
+import { playwrightToolRegistrations } from './playwright';
 
 // Combine all registrations and register them
 const allRegistrationsRaw: ToolRegistration[] = [
@@ -38,6 +39,7 @@ const allRegistrationsRaw: ToolRegistration[] = [
   ...redisToolRegistrations,
   ...slackToolRegistrations,
   ...workspaceToolRegistrations,
+  ...playwrightToolRegistrations,
 ];
 
 // Register all tools with the registry

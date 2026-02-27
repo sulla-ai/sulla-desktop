@@ -20,17 +20,15 @@ export const environment = `
   - settings: object
 
 ## Node-specific workflow editing tools
-- Node-specific workflow editing tools exist.
-- These tools enable changing one node at a time while preserving the rest of the workflow.
+- patch_workflow is the unified mutation tool for node and connection deltas.
+- patch_workflow applies operations sequentially and writes once in a single atomic workflow update.
 - nodeId selectors are available.
 - nodeName selectors are available.
 - get_workflow_node_list returns a lightweight list of all nodes (id/name/type/index/position + inbound/outbound counts) and basic edge map.
 - get_workflow_node returns node details by nodeId or nodeName, node index, and connection summary.
-- add_workflow_node adds one node.
-- add_workflow_node supports insertMode ('append', 'before', 'after') and optional anchor node.
-- update_workflow_node patches fields through nodePatch.
-- When name changes in update_workflow_node, related connections are rewritten automatically.
-- remove_workflow_node removes one node and cleans related connections automatically.
+- patch_workflow supports node operations: add, update, remove.
+- patch_workflow supports connection operations: add, remove.
+- patch_workflow can combine multiple node + connection changes in one call.
 
 ## Active Sidebar Elements (Persona Assets)
 - The right sidebar supports active elements that can show live webpages (iframe) and editable documents.

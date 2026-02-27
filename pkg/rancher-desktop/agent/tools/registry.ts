@@ -29,7 +29,7 @@ export class ToolRegistry {
   private descriptions = new Map<string, string>();
   private categoriesList = [
     'meta', 'memory', 'browser', 'calendar', 'docker', 'fs', 'github',
-    'integrations', 'kubectl', 'n8n', 'slack', 'workspace', 'redis', 'pg', 'rdctl', 'lima'
+    'integrations', 'kubectl', 'n8n', 'playwright', 'slack', 'workspace', 'redis', 'pg', 'rdctl', 'lima'
   ];
 
   private categoryDescriptions: Record<string, string> = {
@@ -48,7 +48,8 @@ export class ToolRegistry {
     pg: "PostgreSQL database queries and transactions.",
     rdctl: "Sulla Desktop / rdctl management commands.",
     integrations: "Tools for checking integration status and retrieving integration credentials.",
-    lima: "Lima VM instance management."
+    lima: "Lima VM instance management.",
+    playwright: "Tools for interacting with website assets — click elements, fill forms, scroll, and read page text. DOM changes, navigation, and dialog alerts are streamed automatically."
   };
 
   static register(registration: ToolRegistration) {

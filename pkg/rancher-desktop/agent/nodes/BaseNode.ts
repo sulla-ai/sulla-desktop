@@ -299,6 +299,18 @@ export abstract class BaseNode<T extends BaseThreadState = BaseThreadState> {
 
         if (options.includeEnvironment !== false) {
             parts.push(AwarenessMessage);
+
+            /////////////////////////////////////////////////////////////////
+            // adds active website assets state to the environment context
+            // Lazy import to avoid pulling injected scripts into the background build
+            /////////////////////////////////////////////////////////////////
+            try {
+                const { hostBridgeRegistry } = await import('../scripts/injected/HostBridgeRegistry');
+                const activePagesContext = await hostBridgeRegistry.getSystemPromptContext();
+                if (activePagesContext) {
+                    parts.push(activePagesContext);
+                }
+            } catch { /* registry not available in this context */ }
         }
 
         /////////////////////////////////////////////////////////////////
