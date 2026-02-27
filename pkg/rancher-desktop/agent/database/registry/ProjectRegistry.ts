@@ -252,7 +252,7 @@ export class ProjectRegistry {
         await this.addToActiveProjects(service);
       }
 
-      return `Project '${name}' created successfully at ${projectDir}. PROJECT.md and README.md are ready.`;
+      return `Project '${name}' created successfully.\nProject directory: ${projectDir}\nPRD file: ${projectFile}\nREADME: ${path.join(projectDir, 'README.md')}`;
     } catch (error: any) {
       return `Failed to create project '${name}': ${error.message}`;
     }
@@ -277,7 +277,8 @@ export class ProjectRegistry {
         await this.addToActiveProjects(service);
       }
 
-      return `Project '${name}' updated successfully.`;
+      const projectDir = path.dirname(projectFile);
+      return `Project '${name}' updated successfully.\nProject directory: ${projectDir}\nPRD file: ${projectFile}`;
     } catch (error: any) {
       return `Failed to update project '${name}': ${error.message}`;
     }
@@ -308,7 +309,7 @@ export class ProjectRegistry {
         await this.addToActiveProjects(service);
       }
 
-      return `Project '${name}' section '${section}' updated successfully.`;
+      return `Project '${name}' section '${section}' updated successfully.\nPRD file: ${projectFile}`;
     } catch (error: any) {
       return `Failed to patch project '${name}': ${error.message}`;
     }
@@ -330,7 +331,7 @@ export class ProjectRegistry {
       this.cachedSummaries = this.buildSummariesFromCurrentMap();
       await this.removeFromActiveProjects(name);
 
-      return `Project '${name}' deleted successfully.`;
+      return `Project '${name}' deleted successfully. Removed: ${projectDir}`;
     } catch (error: any) {
       return `Failed to delete project '${name}': ${error.message}`;
     }

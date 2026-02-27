@@ -13,7 +13,7 @@ import { BaseTool } from '../tools/base';
 import { Article } from '../database/models/Article';
 import { ConversationSummaryService } from '../services/ConversationSummaryService';
 import { ObservationalSummaryService } from '../services/ObservationalSummaryService';
-import { resolveSullaProjectsDir } from '../utils/sullaPaths';
+import { resolveSullaProjectsDir, resolveSullaSkillsDir } from '../utils/sullaPaths';
 
 // ============================================================================
 // DEFAULT SETTINGS
@@ -223,7 +223,7 @@ Remove them when finished. Use these tools for any web task.
 
 # SKILL SYSTEM (mandatory for every non-trivial or repeatable task)
 
-You have a permanent, growing library of expert skills stored in the skills/ folder on disk.
+You have a permanent, growing library of expert skills stored at {{skills_dir}}.
 
 **You MUST follow this exact process:**
 
@@ -255,7 +255,7 @@ You have a permanent, growing library of expert skills stored in the skills/ fol
 - Skills make you dramatically better over time without bloating context.
 - Never reinvent the wheel when a skill exists.
 
-Current skills directory: skills/
+Current skills directory: {{skills_dir}}
 
 # PROJECT SYSTEM
 
@@ -375,12 +375,14 @@ export abstract class BaseNode<T extends BaseThreadState = BaseThreadState> {
             });
             const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'unknown';
             const projectsDir = resolveSullaProjectsDir();
+            const skillsDir = resolveSullaSkillsDir();
             const activeProjectsFile = path.join(projectsDir, 'ACTIVE_PROJECTS.md');
 
-            AwarenessMessage = AwarenessMessage.replace('{{formattedTime}}', formattedTime);
-            AwarenessMessage = AwarenessMessage.replace('{{timeZone}}', timeZone);
-            AwarenessMessage = AwarenessMessage.replace('{{projects_dir}}', projectsDir);
-            AwarenessMessage = AwarenessMessage.replace('{{active_projects_file}}', activeProjectsFile);
+            AwarenessMessage = AwarenessMessage.replaceAll('{{formattedTime}}', formattedTime);
+            AwarenessMessage = AwarenessMessage.replaceAll('{{timeZone}}', timeZone);
+            AwarenessMessage = AwarenessMessage.replaceAll('{{skills_dir}}', skillsDir);
+            AwarenessMessage = AwarenessMessage.replaceAll('{{projects_dir}}', projectsDir);
+            AwarenessMessage = AwarenessMessage.replaceAll('{{active_projects_file}}', activeProjectsFile);
 
         if (options.includeEnvironment !== false) {
             parts.push(AwarenessMessage);
