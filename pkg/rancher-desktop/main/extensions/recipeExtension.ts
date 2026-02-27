@@ -166,6 +166,8 @@ export class RecipeExtensionImpl implements Extension {
       return false;
     }
 
+    sullaLog({ topic: 'extensions', level: 'info', message: `[install:${ this.id }] Phase 1/4: fetch manifest` });
+
     // ── Phase 1: Fetch the installable manifest ──
     const manifest = await this.getManifest();
 
@@ -177,8 +179,10 @@ export class RecipeExtensionImpl implements Extension {
       message: `Installing recipe extension ${ this.id } (${ manifest.name })`,
       data:    { dir: this.dir, manifestId: manifest.id },
     });
+    sullaLog({ topic: 'extensions', level: 'info', message: `[install:${ this.id }] Phase 1/4 complete: manifest loaded`, data: { manifestId: manifest.id, composeFile: manifest.compose?.composeFile || 'docker-compose.yml' } });
 
     // Clean up any leftover directory from a previous failed install
+    sullaLog({ topic: 'extensions', level: 'debug', message: `[install:${ this.id }] cleaning stale directory`, data: { dir: this.dir } });
     try {
       await fs.promises.rm(this.dir, { recursive: true, maxRetries: 3 });
     } catch (ex: any) {
@@ -187,39 +191,65 @@ export class RecipeExtensionImpl implements Extension {
       }
     }
 
+    sullaLog({ topic: 'extensions', level: 'info', message: `[install:${ this.id }] Phase 2/4: create extension dir + pull assets`, data: { dir: this.dir } });
+
     // ── Phase 2: Create the extension folder and pull recipe assets ──
     await fs.promises.mkdir(this.dir, { recursive: true });
 
     try {
       // Save the installation manifest locally
       await this.saveManifest(manifest);
+      sullaLog({ topic: 'extensions', level: 'debug', message: `[install:${ this.id }] wrote installation manifest`, data: { path: path.join(this.dir, this.MANIFEST_FILE) } });
 
       // Pull all recipe assets (icon, manifest.yaml, etc.) from the remote recipe folder
       await this.pullRecipeAssets();
+      sullaLog({ topic: 'extensions', level: 'debug', message: `[install:${ this.id }] pulled recipe assets` });
 
       // Save labels from catalog
       await fs.promises.writeFile(
         path.join(this.dir, 'labels.json'),
         JSON.stringify(await this.labels, undefined, 2),
       );
+      sullaLog({ topic: 'extensions', level: 'debug', message: `[install:${ this.id }] wrote labels`, data: { path: path.join(this.dir, 'labels.json') } });
 
       sullaLog({ topic: 'extensions', level: 'info', message: `Recipe assets saved to ${ this.dir }` });
 
       // ── Phase 2b: Resolve {{variables}} in the compose file and write .env ──
       await this.processComposeFile();
       await this.writeEnvFile();
+      sullaLog({ topic: 'extensions', level: 'info', message: `[install:${ this.id }] Phase 2/4 complete: assets + variable resolution done` });
 
       // ── Phase 3: Process the installable file (setup steps) ──
+      sullaLog({ topic: 'extensions', level: 'info', message: `[install:${ this.id }] Phase 3/4: run setup steps`, data: { setupStepCount: manifest.setup?.length ?? 0 } });
       await this.runSetup(manifest);
+      sullaLog({ topic: 'extensions', level: 'info', message: `[install:${ this.id }] Phase 3/4 complete: setup finished` });
 
       // ── Phase 4: Mark installed ──
+      sullaLog({ topic: 'extensions', level: 'info', message: `[install:${ this.id }] Phase 4/4: mark installed` });
       await fs.promises.writeFile(
         path.join(this.dir, this.VERSION_FILE),
         this.version,
         'utf-8',
       );
+      sullaLog({ topic: 'extensions', level: 'info', message: `[install:${ this.id }] Phase 4/4 complete: version marker written`, data: { path: path.join(this.dir, this.VERSION_FILE), version: this.version } });
     } catch (ex) {
-      sullaLog({ topic: 'extensions', level: 'error', message: `Failed to install recipe extension ${ this.id }, cleaning up`, error: ex });
+      const err = ex as any;
+
+      sullaLog({
+        topic:   'extensions',
+        level:   'error',
+        message: `Failed to install recipe extension ${ this.id }, cleaning up`,
+        error:   ex,
+        data:    {
+          message: err?.message,
+          code:    err?.code,
+          signal:  err?.signal,
+          stdout:  err?.stdout,
+          stderr:  err?.stderr,
+          stack:   err?.stack,
+          dir:     this.dir,
+        },
+      });
       await fs.promises.rm(this.dir, { recursive: true, maxRetries: 3 }).catch((e) => {
         sullaLog({ topic: 'extensions', level: 'error', message: `Failed to cleanup extension directory ${ this.dir }`, error: e });
       });
@@ -237,9 +267,25 @@ export class RecipeExtensionImpl implements Extension {
 
     // Start the extension after install
     try {
+      sullaLog({ topic: 'extensions', level: 'info', message: `[install:${ this.id }] post-install start: invoking start()` });
       await this.start();
     } catch (ex) {
-      sullaLog({ topic: 'extensions', level: 'error', message: `Failed to start ${ this.id } after install`, error: ex });
+      const err = ex as any;
+
+      sullaLog({
+        topic:   'extensions',
+        level:   'error',
+        message: `Failed to start ${ this.id } after install`,
+        error:   ex,
+        data:    {
+          message: err?.message,
+          code:    err?.code,
+          signal:  err?.signal,
+          stdout:  err?.stdout,
+          stderr:  err?.stderr,
+          stack:   err?.stack,
+        },
+      });
     }
 
     return true;
@@ -297,10 +343,14 @@ export class RecipeExtensionImpl implements Extension {
       }
 
       const items: Array<{ name: string; download_url: string | null; type: string }> = await response.json() as any;
+      let downloaded = 0;
+      let skipped = 0;
+      let failed = 0;
 
       for (const item of items) {
         // Skip directories and files without download URLs; skip installation.yaml (already saved)
         if (item.type !== 'file' || !item.download_url || item.name === 'installation.yaml') {
+          skipped += 1;
           continue;
         }
 
@@ -313,11 +363,18 @@ export class RecipeExtensionImpl implements Extension {
             const data = Buffer.from(await fileResp.arrayBuffer());
 
             await fs.promises.writeFile(path.join(this.dir, item.name), data);
+            downloaded += 1;
+          } else {
+            failed += 1;
+            sullaLog({ topic: 'extensions', level: 'warn', message: `Failed to download ${ item.name }: HTTP ${ fileResp.status }` });
           }
         } catch (dlErr) {
+          failed += 1;
           sullaLog({ topic: 'extensions', level: 'warn', message: `Failed to download ${ item.name }`, error: dlErr });
         }
       }
+
+      sullaLog({ topic: 'extensions', level: 'info', message: `Recipe asset pull summary for ${ this.id }`, data: { downloaded, skipped, failed, source: contentsUrl } });
     } catch (ex) {
       sullaLog({ topic: 'extensions', level: 'warn', message: `Failed to pull recipe assets from ${ contentsUrl }`, error: ex });
       await this.downloadIconFallback();
@@ -368,22 +425,45 @@ export class RecipeExtensionImpl implements Extension {
       return;
     }
 
-    for (const step of manifest.setup) {
+    for (const [index, step] of manifest.setup.entries()) {
       const resolvedCommand = this.resolveCommand(step.command);
       const resolvedCwd = step.cwd
         ? step.cwd.replace(/\$\{APP_DIR\}/g, this.dir)
         : this.dir;
       const isOptional = step.optional !== false;
 
-      sullaLog({ topic: 'extensions', level: 'info', message: `Running setup: ${ resolvedCommand }`, data: { cwd: resolvedCwd, optional: isOptional } });
+      sullaLog({ topic: 'extensions', level: 'info', message: `Running setup step ${ index + 1 }/${ manifest.setup.length }`, data: { command: resolvedCommand, cwd: resolvedCwd, optional: isOptional } });
 
       try {
-        await spawnFile('/bin/sh', ['-c', resolvedCommand], {
-          stdio: console,
+        const { stdout, stderr } = await spawnFile('/bin/sh', ['-c', resolvedCommand], {
+          stdio: 'pipe',
           cwd:   resolvedCwd,
         });
+
+        if (stdout?.trim()) {
+          sullaLog({ topic: 'extensions', level: 'debug', message: `[setup ${ this.id } #${ index + 1 } stdout] ${ stdout.trim() }` });
+        }
+        if (stderr?.trim()) {
+          sullaLog({ topic: 'extensions', level: 'debug', message: `[setup ${ this.id } #${ index + 1 } stderr] ${ stderr.trim() }` });
+        }
+        sullaLog({ topic: 'extensions', level: 'info', message: `Setup step ${ index + 1 } succeeded` });
       } catch (err: any) {
-        sullaLog({ topic: 'extensions', level: 'warn', message: `Setup step failed: ${ resolvedCommand }`, error: err, data: { cwd: resolvedCwd, code: err?.code, optional: isOptional } });
+        sullaLog({
+          topic:   'extensions',
+          level:   'warn',
+          message: `Setup step ${ index + 1 } failed`,
+          error:   err,
+          data:    {
+            command: resolvedCommand,
+            cwd:     resolvedCwd,
+            code:    err?.code,
+            signal:  err?.signal,
+            stdout:  err?.stdout,
+            stderr:  err?.stderr,
+            optional: isOptional,
+            stack:   err?.stack,
+          },
+        });
         if (!isOptional) {
           throw err;
         }
@@ -732,22 +812,28 @@ export class RecipeExtensionImpl implements Extension {
       console.error(`Ignoring error stopping ${ this.id } on uninstall: ${ ex }`);
     }
 
-    // Remove extension directory contents, preserving data/ unless deleteData is set
-    const dataDir = path.join(this.dir, 'data');
+    // Remove docker volumes if deleteData is set
+    if (deleteData) {
+      try {
+        const composeFile = this._manifest?.compose?.composeFile || 'docker-compose.yml';
+        const composePath = path.join(this.dir, composeFile);
 
+        await spawnFile('/bin/sh', ['-c', `docker compose -f ${ this.shellQuote(composePath) } down -v`], { stdio: 'pipe' });
+        sullaLog({ topic: 'extensions', level: 'info', message: `Removed docker volumes for ${ this.id }` });
+      } catch (ex) {
+        sullaLog({ topic: 'extensions', level: 'warn', message: `Failed to remove docker volumes for ${ this.id }`, error: ex });
+      }
+    }
+
+    // Remove extension directory contents, always preserving data/
     try {
       const entries = await fs.promises.readdir(this.dir);
 
       for (const entry of entries) {
-        if (entry === 'data' && !deleteData) {
+        if (entry === 'data') {
           continue;
         }
         await fs.promises.rm(path.join(this.dir, entry), { recursive: true, maxRetries: 3 });
-      }
-
-      // If deleteData, remove the now-empty directory too
-      if (deleteData) {
-        await fs.promises.rm(this.dir, { recursive: true, maxRetries: 3 }).catch(() => {});
       }
     } catch (ex: any) {
       if ((ex as NodeJS.ErrnoException).code !== 'ENOENT') {
@@ -764,7 +850,7 @@ export class RecipeExtensionImpl implements Extension {
       application: { extensions: { installed: { [this.id]: undefined } } },
     });
 
-    sullaLog({ topic: 'extensions', level: 'info', message: `Recipe extension ${ this.id } uninstalled.${ !deleteData ? ' Data directory preserved.' : '' }` });
+    sullaLog({ topic: 'extensions', level: 'info', message: `Recipe extension ${ this.id } uninstalled. Local data/ preserved.${ deleteData ? ' Docker volumes removed.' : ' Docker volumes kept.' }` });
 
     return true;
   }

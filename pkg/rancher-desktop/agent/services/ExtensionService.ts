@@ -257,14 +257,37 @@ export class ExtensionService {
 
   async installExtension(id: string): Promise<{ ok: boolean; error?: string }> {
     try {
-      const response = await fetch(`${this.backendUrl}/v1/extensions/install?id=${encodeURIComponent(id)}`, {
+      const url = `${this.backendUrl}/v1/extensions/install?id=${encodeURIComponent(id)}`;
+
+      console.info(`[ExtensionService] Installing extension ${id}`);
+      const response = await fetch(url, {
         method:  'POST',
         headers: this.getRequestHeaders(),
       });
 
       if (!response.ok) {
-        return { ok: false, error: response.statusText };
+        let detail = '';
+
+        try {
+          const contentType = response.headers.get('content-type') || '';
+
+          if (contentType.includes('application/json')) {
+            detail = JSON.stringify(await response.json());
+          } else {
+            detail = (await response.text()).trim();
+          }
+        } catch {
+          // best effort
+        }
+
+        const message = detail || response.statusText || `HTTP ${response.status}`;
+
+        console.error(`[ExtensionService] Install failed for ${id}: HTTP ${response.status} ${message}`);
+
+        return { ok: false, error: message };
       }
+
+      console.info(`[ExtensionService] Installed extension ${id}`);
 
       return { ok: true };
     } catch (error) {
@@ -279,14 +302,37 @@ export class ExtensionService {
       if (options?.deleteData) {
         params.set('deleteData', 'true');
       }
-      const response = await fetch(`${this.backendUrl}/v1/extensions/uninstall?${params.toString()}`, {
+      const url = `${this.backendUrl}/v1/extensions/uninstall?${params.toString()}`;
+
+      console.info(`[ExtensionService] Uninstalling extension ${id}`, { deleteData: !!options?.deleteData });
+      const response = await fetch(url, {
         method:  'POST',
         headers: this.getRequestHeaders(),
       });
 
       if (!response.ok) {
-        return { ok: false, error: response.statusText };
+        let detail = '';
+
+        try {
+          const contentType = response.headers.get('content-type') || '';
+
+          if (contentType.includes('application/json')) {
+            detail = JSON.stringify(await response.json());
+          } else {
+            detail = (await response.text()).trim();
+          }
+        } catch {
+          // best effort
+        }
+
+        const message = detail || response.statusText || `HTTP ${response.status}`;
+
+        console.error(`[ExtensionService] Uninstall failed for ${id}: HTTP ${response.status} ${message}`);
+
+        return { ok: false, error: message };
       }
+
+      console.info(`[ExtensionService] Uninstalled extension ${id}`);
 
       return { ok: true };
     } catch (error) {
