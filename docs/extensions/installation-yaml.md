@@ -103,7 +103,7 @@ An ordered list of shell commands to run during installation. Each step runs via
 
 If a step is critical (e.g. creating a required config file), set `optional: false`.
 
-#### Variable Substitution
+#### Shell Variable Substitution
 
 These variables are replaced in all `command` and `cwd` values:
 
@@ -111,6 +111,8 @@ These variables are replaced in all `command` and `cwd` values:
 |----------|-------------|
 | `${APP_DIR}` | The extension's local directory on disk |
 | `${COMPOSE_FILE}` | Full absolute path to the compose file |
+
+> **Note:** Paths containing spaces are automatically shell-quoted when substituted into commands.
 
 #### Examples
 
@@ -200,18 +202,143 @@ And on the extension card as a green "Open ▾" dropdown button.
 
 ### env
 
-Default environment variables for your extension. These are informational for now — Sulla Desktop will eventually provide a UI for users to edit these values before installation.
+Environment variables for your extension. Sulla writes these as a `.env` file in the extension directory before each start. Docker Compose reads `.env` automatically.
 
-Use environment variables for **all** configuration that might vary between deployments:
+Values support `{{variable}}` substitution (see [Variable Reference](#variable-reference) below).
 
 ```yaml
 env:
   DOMAIN: "localhost"
   DB_HOST: "sulla-mariadb"
   DB_NAME: "myapp"
-  ADMIN_EMAIL: "admin@localhost"
-  SKIP_LETS_ENCRYPT: "y"
+  ADMIN_EMAIL: "{{sullaEmail}}"
+  APP_SECRET: "{{sullaN8nEncryptionKey}}"
+  SLACK_TOKEN: "{{SLACK.BOT_KEY}}"
 ```
+
+The `.env` file is **refreshed on every start**, so if the user changes their settings or integration credentials, the new values take effect on the next restart.
+
+---
+
+## Variable Reference
+
+Sulla Desktop supports `{{variable}}` placeholders in two places:
+
+1. **`docker-compose.yml`** — resolved once at install time, written to disk
+2. **`env` field** — resolved on every start, written as `.env`
+
+Unresolvable placeholders are left as-is (not removed), so you can debug missing values easily.
+
+### Sulla Settings Variables
+
+Access any property from the user's Sulla Settings (stored in PostgreSQL/Redis, bootstrapped from the fallback JSON file).
+
+| Syntax | Description |
+|--------|-------------|
+| `{{sullaEmail}}` | User's email address |
+| `{{sullaPassword}}` | User's Sulla account password |
+| `{{sullaServicePassword}}` | Auto-generated service password (used for internal databases, APIs) |
+| `{{sullaN8nEncryptionKey}}` | Auto-generated encryption key (base64) |
+| `{{sullaModel}}` | Default AI model (e.g. `qwen2:0.5b`) |
+| `{{primaryUserName}}` | User's display name |
+| `{{pathUserData}}` | Path to user data directory |
+
+Any property stored in `SullaSettingsModel` can be referenced by its exact key name.
+
+### Integration Variables
+
+Access credentials and config from connected integrations. Format: `{{INTEGRATION_ID.PROPERTY}}`.
+
+| Syntax | Description |
+|--------|-------------|
+| `{{SLACK.BOT_KEY}}` | Slack bot token |
+| `{{SLACK.WEBHOOK_URL}}` | Slack webhook URL |
+| `{{GITHUB.ACCESS_TOKEN}}` | GitHub personal access token |
+| `{{SMTP.HOST}}` | SMTP server hostname |
+| `{{SMTP.USERNAME}}` | SMTP username |
+| `{{SMTP.PASSWORD}}` | SMTP password |
+
+The `INTEGRATION_ID` and `PROPERTY` match whatever the user configured in Sulla Desktop's Integrations panel. Any `integration_id.property` pair stored in the `IntegrationService` is accessible.
+
+### Built-in Path Variables
+
+Auto-resolved from the user's operating system. Directories are created automatically if they don't exist.
+
+| Variable | macOS Example | Description |
+|----------|---------------|-------------|
+| `{{path.home}}` | `/Users/jonathon` | User's home directory |
+| `{{path.documents}}` | `/Users/jonathon/Documents` | Documents folder |
+| `{{path.downloads}}` | `/Users/jonathon/Downloads` | Downloads folder |
+| `{{path.desktop}}` | `/Users/jonathon/Desktop` | Desktop folder |
+| `{{path.movies}}` | `/Users/jonathon/Movies` | Movies folder |
+| `{{path.music}}` | `/Users/jonathon/Music` | Music folder |
+| `{{path.pictures}}` | `/Users/jonathon/Pictures` | Pictures folder |
+| `{{path.data}}` | `<extension_dir>/data` | Extension's persistent data directory (survives uninstall) |
+| `{{path.appdir}}` | `<extension_dir>` | Extension's install directory (same as `${APP_DIR}`) |
+
+### Modifiers
+
+Pipe a value through a modifier to transform it before substitution. Syntax: `{{variable|modifier}}`.
+
+| Modifier | Effect | Example | Result |
+|----------|--------|---------|--------|
+| `urlencode` | Percent-encode special characters | `{{sullaServicePassword\|urlencode}}` | `f%40ze4C7IPbgWSRHR` |
+| `base64` | Base64-encode | `{{sullaServicePassword\|base64}}` | `ZkB6ZTRDNy4uLg==` |
+| `quote` | Wrap in escaped single quotes | `{{path.movies\|quote}}` | `'/Users/me/Movies'` |
+| `json` | JSON-stringify (with quotes) | `{{sullaEmail\|json}}` | `"user@example.com"` |
+
+**When to use modifiers:**
+
+- **`urlencode`** — Always use when embedding passwords or values with special characters (`@`, `/`, `#`, `?`, `&`, `=`, `+`, spaces) inside URLs or connection strings:
+  ```yaml
+  PG_DATABASE_URL: postgres://user:{{sullaServicePassword|urlencode}}@db:5432/mydb
+  ```
+
+- **`base64`** — Use for secrets that need base64 encoding:
+  ```yaml
+  APP_SECRET: "{{sullaN8nEncryptionKey|base64}}"
+  ```
+
+- **`quote`** — Use when a path might contain spaces and is used in a shell context:
+  ```yaml
+  setup:
+    - command: "ls {{path.documents|quote}}"
+  ```
+
+- **`json`** — Use when embedding a value in a JSON config file:
+  ```yaml
+  setup:
+    - command: "echo '{\"email\": {{sullaEmail|json}}}' > ${APP_DIR}/config.json"
+  ```
+
+### Variable Syntax Quick Reference
+
+| Context | Syntax | Example |
+|---------|--------|---------|
+| Shell commands (`setup`, `commands`) | `${VAR}` | `${APP_DIR}`, `${COMPOSE_FILE}` |
+| Docker Compose files | `{{var}}` | `{{sullaEmail}}`, `{{path.movies}}` |
+| `env` field in installation.yaml | `{{var}}` | `{{sullaServicePassword\|urlencode}}` |
+| With modifier | `{{var\|mod}}` | `{{sullaServicePassword\|urlencode}}` |
+| Integration values | `{{ID.PROP}}` | `{{SLACK.BOT_KEY}}` |
+| Path variables | `{{path.name}}` | `{{path.data}}` |
+
+> **Important:** `${VAR}` and `{{var}}` are two different systems. `${VAR}` is for shell commands only. `{{var}}` is for compose files and env values only. Do not mix them.
+
+---
+
+### Data Persistence
+
+Extensions have a `data/` subdirectory inside their install directory (`{{path.data}}`). This directory is **preserved when the user uninstalls** the extension (unless they explicitly check "Delete my data" in the uninstall confirmation dialog).
+
+Use `{{path.data}}` for bind-mount volumes that should survive uninstall/reinstall:
+
+```yaml
+volumes:
+  - {{path.data}}/config:/config
+  - {{path.data}}/storage:/data
+```
+
+---
 
 ### Browser Integration Fields
 

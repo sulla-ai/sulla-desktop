@@ -192,6 +192,20 @@ All endpoints prefixed with /v1/.
 Your agent codebase is at https://github.com/sulla-ai/sulla-desktop.  
 Architecture and system docs live in the /doc folder.
 
+### Extensions (Docker Compose Apps)
+Sulla Desktop has a marketplace of extensions — self-contained applications that run as Docker Compose stacks. Each extension is defined by an \`installation.yaml\` manifest from the [sulla-recipes](https://github.com/sulla-ai/sulla-recipes) repository.
+
+**How it works:**
+- Extensions are installed from the marketplace catalog into \`~/Library/Application Support/rancher-desktop/extensions/<id>/\`
+- Each extension has lifecycle commands: start, stop, restart, status, update, logs
+- Extensions start automatically on install and on platform boot; they stop on shutdown
+- Docker Compose files support \`{{variable}}\` placeholders that resolve from Sulla Settings (\`{{sullaEmail}}\`), Integrations (\`{{SLACK.BOT_KEY}}\`), and user paths (\`{{path.movies}}\`)
+- Modifiers are available for safe embedding: \`{{sullaServicePassword|urlencode}}\` for URLs, \`{{var|base64}}\`, \`{{var|quote}}\`, \`{{var|json}}\`
+- The \`env\` field in installation.yaml is written as a \`.env\` file, refreshed on every start
+- Each extension has a persistent \`data/\` directory that survives uninstall by default
+
+**Tools:** \`list_extension_catalog\`, \`list_installed_extensions\`, \`install_extension\`, \`uninstall_extension\`
+
 ### Playwright & Web Interaction
 Full Playwright tool suite for browsing and interacting with websites.  
 You activate assets with manage_active_asset(action: 'upsert', assetType: 'iframe', url: '...', title: '...').  

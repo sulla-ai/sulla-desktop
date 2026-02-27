@@ -89,23 +89,48 @@ networks:
     external: true
 ```
 
-### Environment variables are king
+### Variable substitution powers your config
 
-Use environment variables for **all configuration**. Sulla Desktop will eventually auto-populate environment variables for:
+Sulla Desktop resolves `{{variables}}` in your `docker-compose.yml` and `env` field at install time, and refreshes the `.env` file on every start. This means your recipe can reference user-specific settings, integration credentials, and local filesystem paths — all without the user editing config files.
 
-- Database credentials for shared infrastructure
-- Domain names and ports
-- SSL/TLS settings
-- Authentication tokens
-- Integration endpoints
+Three namespaces are available:
 
-Define your expected environment variables in the `env` section of `installation.yaml` with sensible defaults. Sulla's UI will let users configure these before or after installation.
+| Syntax | Source | Example |
+|--------|--------|---------|
+| `{{propertyName}}` | Sulla Settings | `{{sullaEmail}}` → `user@example.com` |
+| `{{INTEGRATION.PROP}}` | Integration Service | `{{SLACK.BOT_KEY}}` → `xoxb-...` |
+| `{{path.name}}` | Built-in user paths | `{{path.movies}}` → `/Users/me/Movies` |
+
+Values can be piped through **modifiers** for safe embedding:
+
+| Modifier | Effect | Use case |
+|----------|--------|----------|
+| `urlencode` | Percent-encode | Passwords in connection strings |
+| `base64` | Base64-encode | Secrets in config files |
+| `quote` | Shell single-quote | Paths with spaces in shell commands |
+| `json` | JSON-stringify | Values in JSON config |
+
+```yaml
+# docker-compose.yml
+environment:
+  ADMIN_EMAIL: "{{sullaEmail}}"
+  PG_URL: "postgres://app:{{sullaServicePassword|urlencode}}@db:5432/myapp"
+volumes:
+  - {{path.movies}}:/data/movies
+  - {{path.music}}:/data/music
+```
+
+See the full [Variable Reference](./installation-yaml.md#variable-reference) for all available variables.
+
+### Environment variables
+
+Define expected environment variables in the `env` section of `installation.yaml`. Sulla writes them as a `.env` file in the extension directory — Docker Compose reads it automatically. The `.env` is refreshed on every start, so setting changes take effect on restart.
 
 ```yaml
 env:
   DOMAIN: "localhost"
   DB_HOST: "sulla-mariadb"
-  ADMIN_EMAIL: "admin@localhost"
+  ADMIN_EMAIL: "{{sullaEmail}}"
   ENABLE_SSL: "false"
 ```
 
@@ -119,6 +144,8 @@ Two variables are substituted before execution:
 |----------|-------------|
 | `${APP_DIR}` | The extension's local directory (e.g. `~/Library/Application Support/rancher-desktop/extensions/stirling-pdf/`) |
 | `${COMPOSE_FILE}` | Full path to your compose file (e.g. `${APP_DIR}/docker-compose.yml`) |
+
+> **Note:** `${VAR}` syntax is for shell command substitution in `setup` and `commands`. `{{var}}` syntax is for docker-compose files and `env` values.
 
 ## Quick Start
 
@@ -137,6 +164,8 @@ See [Submitting Your Extension](./submitting.md) for the full walkthrough.
 ## Documentation
 
 - **[installation.yaml Reference](./installation-yaml.md)** — Every field explained
+- **[Variable Reference](./installation-yaml.md#variable-reference)** — Settings, integrations, paths, and modifiers
+- **[Variables Copy-Paste](./variables.md)** — All variables in one place, ready to copy
 - **[manifest.yaml Reference](./manifest-yaml.md)** — Catalog listing format
 - **[Submitting Your Extension](./submitting.md)** — Step-by-step PR guide
 - **[Examples](./examples.md)** — Real-world examples with annotations

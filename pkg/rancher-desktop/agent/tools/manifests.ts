@@ -22,10 +22,12 @@ import { slackToolManifests } from './slack/manifests';
 import { skillsToolManifests } from './skills/manifests';
 import { projectsToolManifests } from './projects/manifests';
 import { workspaceToolManifests } from './workspace/manifests';
+import { extensionsToolManifests } from './extensions/manifests';
 
 toolRegistry.registerManifests([
   ...calendarToolManifests,
   ...dockerToolManifests,
+  ...extensionsToolManifests,
   ...fsToolManifests,
   ...githubToolManifests,
   ...integrationsToolManifests,

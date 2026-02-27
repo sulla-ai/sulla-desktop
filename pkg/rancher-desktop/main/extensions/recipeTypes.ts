@@ -12,8 +12,26 @@
  *
  * Variable substitution (`{{...}}`) is supported in docker-compose files and
  * the `env` field:
- *  - `{{propertyName}}`        → resolved from SullaSettingsModel (e.g. `{{sullaEmail}}`)
- *  - `{{INTEGRATION.PROP}}`    → resolved from IntegrationService (e.g. `{{SLACK.BOT_KEY}}`)
+ *  - `{{propertyName}}`              → resolved from SullaSettingsModel (e.g. `{{sullaEmail}}`)
+ *  - `{{INTEGRATION.PROP}}`         → resolved from IntegrationService (e.g. `{{SLACK.BOT_KEY}}`)
+ *  - `{{propertyName|modifier}}`    → value piped through a modifier before substitution
+ *
+ * Built-in path variables (auto-resolved from the user's system):
+ *  - `{{path.home}}`       — user home directory
+ *  - `{{path.documents}}`  — ~/Documents
+ *  - `{{path.downloads}}`  — ~/Downloads
+ *  - `{{path.desktop}}`    — ~/Desktop
+ *  - `{{path.movies}}`     — ~/Movies
+ *  - `{{path.music}}`      — ~/Music
+ *  - `{{path.pictures}}`   — ~/Pictures
+ *  - `{{path.data}}`       — extension's persistent data/ directory
+ *  - `{{path.appdir}}`     — extension directory (same as ${APP_DIR})
+ *
+ * Supported modifiers:
+ *  - `urlencode`  — percent-encode (use in connection strings: `{{sullaServicePassword|urlencode}}`)
+ *  - `base64`     — base64-encode
+ *  - `quote`      — shell single-quote with escaping
+ *  - `json`       — JSON-stringify
  *
  * The `env` field is written as a `.env` file in the extension directory.
  * Docker Compose automatically reads it. The `.env` is refreshed on every start.

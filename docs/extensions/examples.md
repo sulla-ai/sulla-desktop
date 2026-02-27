@@ -257,6 +257,209 @@ Replace `30XXX` with your chosen port.
 
 ---
 
+---
+
+## Example 4: Plex (Media Server — User Directory Mounts)
+
+A media server that mounts the user's local Movies, Music, and Pictures folders.
+
+### docker-compose.yml
+
+```yaml
+version: "3.8"
+
+services:
+  plex:
+    image: plexinc/pms-docker:latest
+    container_name: plex
+    ports:
+      - "30210:32400"
+    volumes:
+      - {{path.data}}/config:/config
+      - {{path.movies}}:/data/movies
+      - {{path.music}}:/data/music
+      - {{path.pictures}}:/data/pictures
+    environment:
+      - TZ=America/Los_Angeles
+      - PLEX_CLAIM=
+    restart: unless-stopped
+```
+
+**Key points:**
+- `{{path.movies}}` resolves to the user's Movies folder (e.g. `/Users/jonathon/Movies`)
+- `{{path.music}}` and `{{path.pictures}}` similarly resolve to system directories
+- `{{path.data}}/config` uses the extension's persistent data directory — survives uninstall
+- Sulla auto-creates any path directories that don't already exist
+
+### installation.yaml
+
+```yaml
+id: plex
+name: Plex Media Server
+description: Stream your personal media library
+icon: plex.png
+version: "2026.02"
+category: media
+
+setup: []
+
+commands:
+  start:   "docker compose -f ${COMPOSE_FILE} up -d"
+  stop:    "docker compose -f ${COMPOSE_FILE} down"
+  restart: "docker compose -f ${COMPOSE_FILE} restart"
+  status:  "docker compose -f ${COMPOSE_FILE} ps"
+  update:  "docker compose -f ${COMPOSE_FILE} pull && docker compose -f ${COMPOSE_FILE} up -d"
+  logs:    "docker compose -f ${COMPOSE_FILE} logs --tail=100"
+
+extraUrls:
+  - label: "Plex Web UI"
+    url: "http://localhost:30210/web"
+```
+
+---
+
+## Example 5: Twenty CRM (Database Credentials from Settings)
+
+A CRM with its own Postgres database that uses Sulla's auto-generated service password.
+
+### docker-compose.yml
+
+```yaml
+version: "3.8"
+
+services:
+  server:
+    image: twentycrm/twenty:latest
+    container_name: twenty-server
+    ports:
+      - "30207:3000"
+    volumes:
+      - twenty-server-data:/app/packages/twenty-server/.local-storage
+    environment:
+      SERVER_URL: "http://localhost:30207"
+      PG_DATABASE_URL: postgres://twenty:{{sullaServicePassword|urlencode}}@twenty-postgres:5432/twenty
+      REDIS_URL: redis://host.docker.internal:30117
+      APP_SECRET: "{{sullaN8nEncryptionKey}}"
+    depends_on:
+      twenty-postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  twenty-postgres:
+    image: postgres:16-alpine
+    container_name: twenty-postgres
+    ports:
+      - "30208:5432"
+    environment:
+      POSTGRES_DB: twenty
+      POSTGRES_USER: twenty
+      POSTGRES_PASSWORD: {{sullaServicePassword}}
+    volumes:
+      - twenty-postgres-data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U twenty"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  twenty-server-data:
+  twenty-postgres-data:
+```
+
+**Key points:**
+- `{{sullaServicePassword|urlencode}}` in the `PG_DATABASE_URL` — the password may contain `@`, `/`, or other URL-special characters. The `urlencode` modifier percent-encodes them so the connection string stays valid.
+- `{{sullaServicePassword}}` (without modifier) for `POSTGRES_PASSWORD` — this is a plain env var, not inside a URL, so no encoding needed.
+- `{{sullaN8nEncryptionKey}}` for `APP_SECRET` — reuses an existing auto-generated key from Sulla settings.
+- Every user gets unique, auto-generated credentials. No more `changeme` passwords.
+
+---
+
+## Example 6: Using Integration Credentials
+
+An extension that connects to Slack and sends notifications.
+
+### docker-compose.yml
+
+```yaml
+version: "3.8"
+
+services:
+  notifier:
+    image: my-org/slack-notifier:latest
+    container_name: slack-notifier
+    environment:
+      SLACK_BOT_TOKEN: "{{SLACK.BOT_KEY}}"
+      SLACK_WEBHOOK: "{{SLACK.WEBHOOK_URL}}"
+      ADMIN_EMAIL: "{{sullaEmail}}"
+      ADMIN_NAME: "{{primaryUserName}}"
+    restart: unless-stopped
+```
+
+**Key points:**
+- `{{SLACK.BOT_KEY}}` pulls from the IntegrationService — whatever the user configured in Sulla's Integrations panel
+- If the user hasn't configured Slack yet, the placeholder stays as `{{SLACK.BOT_KEY}}` in the file — making it easy to debug
+- Settings like `{{sullaEmail}}` and integration values like `{{SLACK.BOT_KEY}}` can be mixed freely
+
+---
+
+## Example 7: Using the env Field with Variables
+
+Instead of hardcoding variables in docker-compose.yml, use the `env` field in installation.yaml. Sulla writes a `.env` file that Docker Compose reads automatically.
+
+### docker-compose.yml
+
+```yaml
+version: "3.8"
+
+services:
+  app:
+    image: my-org/my-app:latest
+    container_name: my-app
+    ports:
+      - "30215:8080"
+    environment:
+      - ADMIN_EMAIL=${ADMIN_EMAIL}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - SLACK_TOKEN=${SLACK_TOKEN}
+    restart: unless-stopped
+```
+
+### installation.yaml
+
+```yaml
+id: my-app
+name: My App
+description: Example using env field
+icon: icon.png
+version: "1.0.0"
+category: utility-tools
+
+setup: []
+
+commands:
+  start: "docker compose -f ${COMPOSE_FILE} up -d"
+  stop:  "docker compose -f ${COMPOSE_FILE} down"
+
+env:
+  ADMIN_EMAIL: "{{sullaEmail}}"
+  DB_PASSWORD: "{{sullaServicePassword}}"
+  SLACK_TOKEN: "{{SLACK.BOT_KEY}}"
+
+extraUrls:
+  - label: "Open My App"
+    url: "http://localhost:30215"
+```
+
+**Key points:**
+- The docker-compose.yml uses standard `${VAR}` env var syntax — no Sulla-specific placeholders
+- The `env` field in installation.yaml uses `{{var}}` placeholders that Sulla resolves
+- Sulla writes the resolved values to `.env` before each start
+- **Advantage:** the docker-compose.yml stays portable — you can run it outside Sulla with a manual `.env` file
+
+---
+
 ## Patterns
 
 ### Using Shared Infrastructure
@@ -286,7 +489,42 @@ networks:
 env:
   DB_NAME: "myapp"
   DB_USER: "myapp"
-  DB_PASSWORD: "changeme"
+  DB_PASSWORD: "{{sullaServicePassword}}"
+```
+
+### Mounting User Directories
+
+```yaml
+# docker-compose.yml
+volumes:
+  - {{path.movies}}:/media/movies
+  - {{path.music}}:/media/music
+  - {{path.documents}}:/media/documents
+  - {{path.downloads}}:/imports
+```
+
+### Persistent Data That Survives Uninstall
+
+```yaml
+# docker-compose.yml
+volumes:
+  - {{path.data}}/db:/var/lib/postgresql/data
+  - {{path.data}}/uploads:/app/uploads
+  - {{path.data}}/config:/etc/myapp
+```
+
+The `data/` directory inside the extension folder is preserved on uninstall by default.
+
+### Passwords in Connection Strings
+
+Always use `|urlencode` when embedding credentials inside URLs:
+
+```yaml
+# WRONG — breaks if password contains @ / # ? & = +
+PG_URL: postgres://user:{{sullaServicePassword}}@db:5432/mydb
+
+# RIGHT — special characters are percent-encoded
+PG_URL: postgres://user:{{sullaServicePassword|urlencode}}@db:5432/mydb
 ```
 
 ### Downloading Additional Files During Setup

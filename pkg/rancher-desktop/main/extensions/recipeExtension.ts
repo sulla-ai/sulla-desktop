@@ -1,4 +1,5 @@
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 
 import Electron from 'electron';
@@ -394,11 +395,84 @@ export class RecipeExtensionImpl implements Extension {
   // ─── Variable Resolution ───────────────────────────────────────────
 
   /**
+   * Apply a pipe modifier to a resolved value.
+   *
+   * Supported modifiers:
+   *  - `urlencode`  — percent-encode for safe use in URLs/connection strings
+   *  - `base64`     — base64-encode
+   *  - `quote`      — wrap in single quotes with internal escaping
+   *  - `json`       — JSON-stringify (produces a quoted string)
+   */
+  protected applyModifier(value: string, modifier: string): string {
+    switch (modifier) {
+    case 'urlencode':
+      return encodeURIComponent(value);
+    case 'base64':
+      return Buffer.from(value).toString('base64');
+    case 'quote':
+      return `'${ value.replace(/'/g, "'\\''") }'`;
+    case 'json':
+      return JSON.stringify(value);
+    default:
+      sullaLog({ topic: 'extensions', level: 'warn', message: `Unknown variable modifier: ${ modifier }` });
+
+      return value;
+    }
+  }
+
+  /**
+   * Resolve a built-in `path.*` variable to a user directory.
+   *
+   * Supported keys:
+   *  - `home`        — user home directory
+   *  - `documents`   — ~/Documents
+   *  - `downloads`   — ~/Downloads
+   *  - `desktop`     — ~/Desktop
+   *  - `movies`      — ~/Movies
+   *  - `music`       — ~/Music
+   *  - `pictures`    — ~/Pictures
+   *  - `data`        — extension's own data/ directory (auto-created)
+   *  - `appdir`      — extension directory (same as ${APP_DIR})
+   */
+  protected resolvePathVariable(key: string): string | null {
+    const home = os.homedir();
+
+    const builtins: Record<string, string> = {
+      home,
+      documents: path.join(home, 'Documents'),
+      downloads: path.join(home, 'Downloads'),
+      desktop:   path.join(home, 'Desktop'),
+      movies:    path.join(home, 'Movies'),
+      music:     path.join(home, 'Music'),
+      pictures:  path.join(home, 'Pictures'),
+      data:      path.join(this.dir, 'data'),
+      appdir:    this.dir,
+    };
+
+    const resolved = builtins[key];
+
+    if (!resolved) {
+      sullaLog({ topic: 'extensions', level: 'debug', message: `Unknown path variable: path.${ key }` });
+
+      return null;
+    }
+
+    // Ensure the directory exists (best effort, don't fail if it can't be created)
+    try {
+      fs.mkdirSync(resolved, { recursive: true });
+    } catch { /* best effort */ }
+
+    return resolved;
+  }
+
+  /**
    * Resolve `{{variable}}` placeholders in a string.
    *
-   * Two forms are supported:
-   *  - `{{propertyName}}`          → SullaSettingsModel.get(propertyName)
-   *  - `{{INTEGRATION_ID.PROP}}`   → IntegrationService.getIntegrationValue(INTEGRATION_ID, PROP)
+   * Forms supported:
+   *  - `{{propertyName}}`              → SullaSettingsModel.get(propertyName)
+   *  - `{{INTEGRATION_ID.PROP}}`       → IntegrationService.getIntegrationValue(INTEGRATION_ID, PROP)
+   *  - `{{propertyName|modifier}}`     → value piped through a modifier (urlencode, base64, quote, json)
+   *  - `{{INTEGRATION_ID.PROP|mod}}`   → same, for integration values
    *
    * Unresolvable placeholders are left as-is so the file stays debuggable.
    */
@@ -410,48 +484,61 @@ export class RecipeExtensionImpl implements Extension {
       return content;
     }
 
-    // Build a lookup map: placeholder key → resolved value
+    // Build a lookup map: full expression (including modifier) → final value
     const resolved = new Map<string, string>();
 
     for (const match of matches) {
-      const key = match[1];
+      const expr = match[1];
 
-      if (resolved.has(key)) {
+      if (resolved.has(expr)) {
         continue;
       }
 
-      const dotIndex = key.indexOf('.');
+      // Split off optional pipe modifier: "key|modifier"
+      const pipeIndex = expr.indexOf('|');
+      const rawKey = pipeIndex > 0 ? expr.substring(0, pipeIndex).trim() : expr;
+      const modifier = pipeIndex > 0 ? expr.substring(pipeIndex + 1).trim() : null;
 
-      if (dotIndex > 0) {
+      let rawValue: string | null = null;
+      const dotIndex = rawKey.indexOf('.');
+
+      if (rawKey.startsWith('path.')) {
+        // Built-in path variable: {{path.movies}}, {{path.home}}, etc.
+        rawValue = this.resolvePathVariable(rawKey.substring(5));
+      } else if (dotIndex > 0) {
         // Integration variable: {{INTEGRATION_ID.PROPERTY}}
-        const integrationId = key.substring(0, dotIndex);
-        const property = key.substring(dotIndex + 1);
+        const integrationId = rawKey.substring(0, dotIndex);
+        const property = rawKey.substring(dotIndex + 1);
 
         try {
           const svc = getIntegrationService();
           const iv = await svc.getIntegrationValue(integrationId, property);
 
           if (iv) {
-            resolved.set(key, iv.value);
+            rawValue = iv.value;
           } else {
-            sullaLog({ topic: 'extensions', level: 'debug', message: `Variable {{${ key }}} not found in integrations, skipping` });
+            sullaLog({ topic: 'extensions', level: 'debug', message: `Variable {{${ rawKey }}} not found in integrations, skipping` });
           }
         } catch (ex) {
-          sullaLog({ topic: 'extensions', level: 'debug', message: `Could not resolve integration variable {{${ key }}}`, error: ex });
+          sullaLog({ topic: 'extensions', level: 'debug', message: `Could not resolve integration variable {{${ rawKey }}}`, error: ex });
         }
       } else {
         // Sulla settings variable: {{propertyName}}
         try {
-          const value = await SullaSettingsModel.get(key);
+          const value = await SullaSettingsModel.get(rawKey);
 
           if (value !== null && value !== undefined) {
-            resolved.set(key, String(value));
+            rawValue = String(value);
           } else {
-            sullaLog({ topic: 'extensions', level: 'debug', message: `Variable {{${ key }}} not found in settings, skipping` });
+            sullaLog({ topic: 'extensions', level: 'debug', message: `Variable {{${ rawKey }}} not found in settings, skipping` });
           }
         } catch (ex) {
-          sullaLog({ topic: 'extensions', level: 'debug', message: `Could not resolve setting variable {{${ key }}}`, error: ex });
+          sullaLog({ topic: 'extensions', level: 'debug', message: `Could not resolve setting variable {{${ rawKey }}}`, error: ex });
         }
+      }
+
+      if (rawValue !== null) {
+        resolved.set(expr, modifier ? this.applyModifier(rawValue, modifier) : rawValue);
       }
     }
 
@@ -545,7 +632,14 @@ export class RecipeExtensionImpl implements Extension {
     const resolved = this.resolveCommand(cmd);
 
     sullaLog({ topic: 'extensions', level: 'info', message: `Starting ${ this.id }`, data: { command: resolved, cwd: this.dir } });
-    await spawnFile('/bin/sh', ['-c', resolved], { stdio: console, cwd: this.dir });
+    const { stdout, stderr } = await spawnFile('/bin/sh', ['-c', resolved], { stdio: 'pipe', cwd: this.dir });
+
+    if (stdout) {
+      sullaLog({ topic: 'extensions', level: 'debug', message: `[${ this.id } start stdout] ${ stdout.trim() }` });
+    }
+    if (stderr) {
+      sullaLog({ topic: 'extensions', level: 'debug', message: `[${ this.id } start stderr] ${ stderr.trim() }` });
+    }
     sullaLog({ topic: 'extensions', level: 'info', message: `Started ${ this.id } successfully` });
   }
 
@@ -562,7 +656,14 @@ export class RecipeExtensionImpl implements Extension {
     const resolved = this.resolveCommand(cmd);
 
     sullaLog({ topic: 'extensions', level: 'info', message: `Stopping ${ this.id }`, data: { command: resolved, cwd: this.dir } });
-    await spawnFile('/bin/sh', ['-c', resolved], { stdio: console, cwd: this.dir });
+    const { stdout, stderr } = await spawnFile('/bin/sh', ['-c', resolved], { stdio: 'pipe', cwd: this.dir });
+
+    if (stdout) {
+      sullaLog({ topic: 'extensions', level: 'debug', message: `[${ this.id } stop stdout] ${ stdout.trim() }` });
+    }
+    if (stderr) {
+      sullaLog({ topic: 'extensions', level: 'debug', message: `[${ this.id } stop stderr] ${ stderr.trim() }` });
+    }
     sullaLog({ topic: 'extensions', level: 'info', message: `Stopped ${ this.id } successfully` });
   }
 
@@ -580,7 +681,14 @@ export class RecipeExtensionImpl implements Extension {
     const resolved = this.resolveCommand(cmd);
 
     sullaLog({ topic: 'extensions', level: 'info', message: `Restarting ${ this.id }`, data: { command: resolved, cwd: this.dir } });
-    await spawnFile('/bin/sh', ['-c', resolved], { stdio: console, cwd: this.dir });
+    const { stdout, stderr } = await spawnFile('/bin/sh', ['-c', resolved], { stdio: 'pipe', cwd: this.dir });
+
+    if (stdout) {
+      sullaLog({ topic: 'extensions', level: 'debug', message: `[${ this.id } restart stdout] ${ stdout.trim() }` });
+    }
+    if (stderr) {
+      sullaLog({ topic: 'extensions', level: 'debug', message: `[${ this.id } restart stderr] ${ stderr.trim() }` });
+    }
     sullaLog({ topic: 'extensions', level: 'info', message: `Restarted ${ this.id } successfully` });
   }
 
