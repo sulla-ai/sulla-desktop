@@ -11834,9 +11834,9 @@ qunit@^2.8.0:
     node-watch "0.7.3"
     tiny-glob "0.2.9"
 
-"rancher-icons@https://github.com/rancher/icons#v2.0.21":
+"rancher-icons@https://codeload.github.com/rancher/icons/tar.gz/v2.0.21":
   version "2.0.21"
-  resolved "git+ssh://git@github.com/rancher/icons.git#a5b583d46c268282c2753b955cfafc383241b55f"
+  resolved "https://codeload.github.com/rancher/icons/tar.gz/v2.0.21#cf7b4b6952fff4a1259825b6c3a9d7af0f06f9f9"
 
 randombytes@^2.1.0:
   version "2.1.0"
