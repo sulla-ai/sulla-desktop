@@ -18,7 +18,7 @@ import {
 } from '../../services/IntegrationService';
 import { GraphRegistry, nextMessageId } from '../../services/GraphRegistry';
 import { SullaSettingsModel } from '../../database/models/SullaSettingsModel';
-import type { SkillGraphState } from '../../nodes/Graph';
+import type { AgentGraphState } from '../../nodes/Graph';
 import { withSuppressedConnectionStatus } from '../integrationFlags';
 import { incomingMessage } from './prompts/incoming_message';
 
@@ -180,10 +180,10 @@ export class SlackClient {
     return `slack_${channel}_${threadTs}`.replace(/[^a-zA-Z0-9_-]/g, '_');
   }
 
-  private async executeSkillGraphForSlack(content: string, threadId: string): Promise<string> {
-    const { graph, state } = await GraphRegistry.getOrCreateSkillGraph(SLACK_GRAPH_CHANNEL, threadId) as {
+  private async executeAgentGraphForSlack(content: string, threadId: string): Promise<string> {
+    const { graph, state } = await GraphRegistry.getOrCreateAgentGraph(SLACK_GRAPH_CHANNEL, threadId) as {
       graph: any;
-      state: SkillGraphState;
+      state: AgentGraphState;
     };
 
     const mode = await SullaSettingsModel.get('modelMode', 'local');
@@ -207,13 +207,13 @@ export class SlackClient {
     try {
       await graph.execute(state, 'input_handler');
 
-      const finalSummary = state.metadata.finalSummary?.trim();
-      const outputSummary = (state.metadata as any).output?.summaryMessage?.trim?.();
-      const totalSummary = (state.metadata as any).totalSummary?.trim?.();
+      // Extract response: check agent metadata first, then fall back to latest assistant message
+      const agentMeta = (state.metadata as any).agent;
+      if (agentMeta?.response?.trim()) return agentMeta.response.trim();
+      if (agentMeta?.status_report?.trim()) return agentMeta.status_report.trim();
 
+      const finalSummary = state.metadata.finalSummary?.trim();
       if (finalSummary) return finalSummary;
-      if (outputSummary) return outputSummary;
-      if (totalSummary) return totalSummary;
 
       const latestAssistant = [...state.messages].reverse().find((msg: any) => msg.role === 'assistant');
       if (latestAssistant?.content) {
@@ -241,16 +241,16 @@ SLACK APP MENTION
 
 ${incomingMessage}`.trim();
 
-    console.log('[SlackClient] Running app_mention through SkillGraph directly', {
+    console.log('[SlackClient] Running app_mention through AgentGraph directly', {
       messageId,
       slackChannel: event?.channel,
       slackThreadTs: event?.thread_ts || event?.ts,
       preview: mentionText.slice(0, 80),
     });
 
-    const responseText = await this.executeSkillGraphForSlack(fullMessage, this.buildSlackThreadGraphId(event));
+    const responseText = await this.executeAgentGraphForSlack(fullMessage, this.buildSlackThreadGraphId(event));
     if (!responseText.trim()) {
-      console.warn('[SlackClient] Empty SkillGraph response for app_mention', { messageId });
+      console.warn('[SlackClient] Empty AgentGraph response for app_mention', { messageId });
       return;
     }
 

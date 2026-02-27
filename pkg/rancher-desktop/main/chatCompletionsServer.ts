@@ -253,29 +253,37 @@ export class ChatCompletionsServer {
   private async processUserInputDirect(messages: any): Promise<string> {
     const threadId = nextThreadId();
     
-    // Get or create persistent SkillGraph for this thread
-    const { graph, state } = await GraphRegistry.getOrCreateSkillGraph(WS_CHANNEL, threadId);
+    // Get or create persistent AgentGraph for this thread
+    const { graph, state } = await GraphRegistry.getOrCreateAgentGraph(WS_CHANNEL, threadId);
 
     try {
       state.metadata.wsChannel = WS_CHANNEL;
 
-      // Append new user message
-      state.messages = messages;
+      // Append new user messages
+      for (const msg of messages) {
+        state.messages.push({
+          id: msg.id || nextMessageId(),
+          role: msg.role || 'user',
+          content: msg.content,
+          timestamp: msg.timestamp || Date.now(),
+          metadata: msg.metadata || { source: 'api' },
+        });
+      }
 
       // Reset pause flags when real user input comes in
       state.metadata.cycleComplete = false;
       state.metadata.waitingForUser = false;
 
-      // Execute on the persistent graph
+      // Execute on the persistent AgentGraph starting from input_handler
       await graph.execute(state, 'input_handler');
 
-      const finalSummary = state.metadata.finalSummary?.trim();
-      const outputSummary = (state.metadata as any).output?.summaryMessage?.trim?.();
-      const totalSummary = (state.metadata as any).totalSummary?.trim?.();
+      // Extract response: check agent metadata first, then fall back to latest assistant message
+      const agentMeta = (state.metadata as any).agent;
+      if (agentMeta?.response?.trim()) return agentMeta.response.trim();
+      if (agentMeta?.status_report?.trim()) return agentMeta.status_report.trim();
 
+      const finalSummary = state.metadata.finalSummary?.trim();
       if (finalSummary) return finalSummary;
-      if (outputSummary) return outputSummary;
-      if (totalSummary) return totalSummary;
 
       const latestAssistant = [...state.messages].reverse().find((msg: any) => msg.role === 'assistant');
       if (latestAssistant?.content) {

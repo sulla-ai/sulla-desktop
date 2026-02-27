@@ -11,10 +11,12 @@ export enum FinishReason {
 }
 
 export interface ChatMessage {
+  id?: string;
   role: 'user' | 'assistant' | 'system' | 'tool';
   content: string;
   name?: string;
   tool_call_id?: string;
+  timestamp?: number;
   metadata?: Record<string, any>;
 }
 
