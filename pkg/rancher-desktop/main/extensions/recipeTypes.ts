@@ -10,8 +10,8 @@
  *  - The recipe author is responsible for putting the right commands in setup
  *    (e.g. git clone, generate config, etc.)
  *
- * Variable substitution (`{{...}}`) is supported in docker-compose files and
- * the `env` field:
+ * Variable substitution (`{{...}}`) is supported in all text files pulled from
+ * the recipe (docker-compose, SQL migrations, config files, etc.) and the `env` field:
  *  - `{{propertyName}}`              → resolved from SullaSettingsModel (e.g. `{{sullaEmail}}`)
  *  - `{{INTEGRATION.PROP}}`         → resolved from IntegrationService (e.g. `{{SLACK.BOT_KEY}}`)
  *  - `{{propertyName|modifier}}`    → value piped through a modifier before substitution
@@ -33,6 +33,7 @@
  *  - `quote`      — shell single-quote with escaping
  *  - `json`       — JSON-stringify
  *  - `md5`        — MD5 hex digest (always 32 chars, e.g. `{{sullaN8nEncryptionKey|md5}}`)
+ *  - `argon2`     — Argon2id password hash (e.g. `{{sullaServicePassword|argon2}}`)
  *
  * The `env` field is written as a `.env` file in the extension directory.
  * Docker Compose automatically reads it. The `.env` is refreshed on every start.

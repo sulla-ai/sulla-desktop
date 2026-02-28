@@ -3,6 +3,8 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
+import { argon2id } from 'hash-wasm';
+
 import Electron from 'electron';
 import yaml from 'yaml';
 
@@ -341,51 +343,70 @@ export class RecipeExtensionImpl implements Extension {
     sullaLog({ topic: 'extensions', level: 'info', message: `Fetching recipe assets from ${ contentsUrl }` });
 
     try {
-      const response = await fetch(contentsUrl);
+      const stats = { downloaded: 0, skipped: 0, failed: 0 };
 
-      if (!response.ok) {
-        sullaLog({ topic: 'extensions', level: 'warn', message: `GitHub Contents API returned ${ response.status } for ${ contentsUrl }` });
-        await this.downloadIconFallback();
+      await this.pullDirectoryContents(contentsUrl, this.dir, stats);
 
-        return;
-      }
-
-      const items: Array<{ name: string; download_url: string | null; type: string }> = await response.json() as any;
-      let downloaded = 0;
-      let skipped = 0;
-      let failed = 0;
-
-      for (const item of items) {
-        // Skip directories and files without download URLs; skip installation.yaml (already saved)
-        if (item.type !== 'file' || !item.download_url || item.name === 'installation.yaml') {
-          skipped += 1;
-          continue;
-        }
-
-        sullaLog({ topic: 'extensions', level: 'debug', message: `Downloading recipe asset: ${ item.name }` });
-
-        try {
-          const fileResp = await fetch(item.download_url);
-
-          if (fileResp.ok) {
-            const data = Buffer.from(await fileResp.arrayBuffer());
-
-            await fs.promises.writeFile(path.join(this.dir, item.name), data);
-            downloaded += 1;
-          } else {
-            failed += 1;
-            sullaLog({ topic: 'extensions', level: 'warn', message: `Failed to download ${ item.name }: HTTP ${ fileResp.status }` });
-          }
-        } catch (dlErr) {
-          failed += 1;
-          sullaLog({ topic: 'extensions', level: 'warn', message: `Failed to download ${ item.name }`, error: dlErr });
-        }
-      }
-
-      sullaLog({ topic: 'extensions', level: 'info', message: `Recipe asset pull summary for ${ this.id }`, data: { downloaded, skipped, failed, source: contentsUrl } });
+      sullaLog({ topic: 'extensions', level: 'info', message: `Recipe asset pull summary for ${ this.id }`, data: { ...stats, source: contentsUrl } });
     } catch (ex) {
       sullaLog({ topic: 'extensions', level: 'warn', message: `Failed to pull recipe assets from ${ contentsUrl }`, error: ex });
       await this.downloadIconFallback();
+    }
+  }
+
+  /**
+   * Recursively fetch a GitHub Contents API directory listing and download
+   * all files into `localDir`, descending into subdirectories.
+   */
+  protected async pullDirectoryContents(
+    contentsUrl: string,
+    localDir: string,
+    stats: { downloaded: number; skipped: number; failed: number },
+  ): Promise<void> {
+    const response = await fetch(contentsUrl);
+
+    if (!response.ok) {
+      sullaLog({ topic: 'extensions', level: 'warn', message: `GitHub Contents API returned ${ response.status } for ${ contentsUrl }` });
+
+      return;
+    }
+
+    const items: Array<{ name: string; path: string; download_url: string | null; type: string; url: string }> = await response.json() as any;
+
+    for (const item of items) {
+      if (item.type === 'dir') {
+        // Recurse into subdirectory
+        const subDir = path.join(localDir, item.name);
+
+        await fs.promises.mkdir(subDir, { recursive: true });
+        await this.pullDirectoryContents(item.url, subDir, stats);
+        continue;
+      }
+
+      // Skip non-files, files without download URLs, and installation.yaml (already saved at root)
+      if (item.type !== 'file' || !item.download_url || (localDir === this.dir && item.name === 'installation.yaml')) {
+        stats.skipped += 1;
+        continue;
+      }
+
+      sullaLog({ topic: 'extensions', level: 'debug', message: `Downloading recipe asset: ${ item.name }` });
+
+      try {
+        const fileResp = await fetch(item.download_url);
+
+        if (fileResp.ok) {
+          const data = Buffer.from(await fileResp.arrayBuffer());
+
+          await fs.promises.writeFile(path.join(localDir, item.name), data);
+          stats.downloaded += 1;
+        } else {
+          stats.failed += 1;
+          sullaLog({ topic: 'extensions', level: 'warn', message: `Failed to download ${ item.name }: HTTP ${ fileResp.status }` });
+        }
+      } catch (dlErr) {
+        stats.failed += 1;
+        sullaLog({ topic: 'extensions', level: 'warn', message: `Failed to download ${ item.name }`, error: dlErr });
+      }
     }
   }
 
@@ -491,8 +512,9 @@ export class RecipeExtensionImpl implements Extension {
    *  - `quote`      — wrap in single quotes with internal escaping
    *  - `json`       — JSON-stringify (produces a quoted string)
    *  - `md5`        — MD5 hex digest (always 32 chars)
+   *  - `argon2`     — Argon2id password hash (e.g. `{{sullaServicePassword|argon2}}`)
    */
-  protected applyModifier(value: string, modifier: string): string {
+  protected async applyModifier(value: string, modifier: string): Promise<string> {
     switch (modifier) {
     case 'urlencode':
       return encodeURIComponent(value);
@@ -504,6 +526,19 @@ export class RecipeExtensionImpl implements Extension {
       return JSON.stringify(value);
     case 'md5':
       return crypto.createHash('md5').update(value).digest('hex');
+    case 'argon2': {
+      const salt = crypto.randomBytes(16);
+
+      return await argon2id({
+        password: value,
+        salt,
+        parallelism: 1,
+        iterations:  2,
+        memorySize:  19456,
+        hashLength:  32,
+        outputType:  'encoded',
+      });
+    }
     default:
       sullaLog({ topic: 'extensions', level: 'warn', message: `Unknown variable modifier: ${ modifier }` });
 
@@ -635,7 +670,7 @@ export class RecipeExtensionImpl implements Extension {
       }
 
       if (rawValue !== null) {
-        resolved.set(expr, modifier ? this.applyModifier(rawValue, modifier) : rawValue);
+        resolved.set(expr, modifier ? await this.applyModifier(rawValue, modifier) : rawValue);
       }
     }
 
@@ -647,26 +682,79 @@ export class RecipeExtensionImpl implements Extension {
     });
   }
 
+  /** Binary file extensions that should never be processed for variable substitution. */
+  private static readonly BINARY_EXTENSIONS = new Set([
+    '.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp', '.ico', '.icns',
+    '.svg', '.tiff', '.heic', '.heif',
+    '.zip', '.gz', '.tar', '.tgz', '.bz2', '.xz', '.7z',
+    '.woff', '.woff2', '.ttf', '.otf', '.eot',
+    '.pdf', '.exe', '.dll', '.so', '.dylib',
+    '.mp3', '.mp4', '.wav', '.ogg', '.flac', '.avi', '.mov',
+    '.wasm', '.bin',
+  ]);
+
   /**
-   * Process the docker-compose file after download: resolve {{variables}} in place.
+   * Walk the extension directory recursively and resolve {{variables}} in
+   * every text file.  Binary files (images, archives, fonts, etc.) are skipped.
+   */
+  protected async processAllRecipeFiles(): Promise<void> {
+    const walk = async(dir: string): Promise<void> => {
+      let entries: fs.Dirent[];
+
+      try {
+        entries = await fs.promises.readdir(dir, { withFileTypes: true });
+      } catch {
+        return;
+      }
+
+      for (const entry of entries) {
+        const fullPath = path.join(dir, entry.name);
+
+        if (entry.isDirectory()) {
+          await walk(fullPath);
+          continue;
+        }
+
+        if (!entry.isFile()) {
+          continue;
+        }
+
+        // Skip binary files
+        const ext = path.extname(entry.name).toLowerCase();
+
+        if (RecipeExtensionImpl.BINARY_EXTENSIONS.has(ext)) {
+          continue;
+        }
+
+        try {
+          const raw = await fs.promises.readFile(fullPath, 'utf-8');
+          const processed = await this.resolveVariables(raw);
+
+          if (processed !== raw) {
+            await fs.promises.writeFile(fullPath, processed, 'utf-8');
+            const relPath = path.relative(this.dir, fullPath);
+
+            sullaLog({ topic: 'extensions', level: 'info', message: `Resolved variables in ${ relPath }` });
+          }
+        } catch (ex: any) {
+          if ((ex as NodeJS.ErrnoException).code !== 'ENOENT') {
+            const relPath = path.relative(this.dir, fullPath);
+
+            sullaLog({ topic: 'extensions', level: 'warn', message: `Failed to process recipe file ${ relPath }`, error: ex });
+          }
+        }
+      }
+    };
+
+    await walk(this.dir);
+  }
+
+  /**
+   * @deprecated Use {@link processAllRecipeFiles} instead.
+   * Kept for back-compat — now just delegates to the recursive walker.
    */
   protected async processComposeFile(): Promise<void> {
-    const composeFile = this._manifest?.compose?.composeFile || 'docker-compose.yml';
-    const composePath = path.join(this.dir, composeFile);
-
-    try {
-      const raw = await fs.promises.readFile(composePath, 'utf-8');
-      const processed = await this.resolveVariables(raw);
-
-      if (processed !== raw) {
-        await fs.promises.writeFile(composePath, processed, 'utf-8');
-        sullaLog({ topic: 'extensions', level: 'info', message: `Resolved variables in ${ composeFile }` });
-      }
-    } catch (ex: any) {
-      if ((ex as NodeJS.ErrnoException).code !== 'ENOENT') {
-        sullaLog({ topic: 'extensions', level: 'warn', message: `Failed to process compose file ${ composePath }`, error: ex });
-      }
-    }
+    await this.processAllRecipeFiles();
   }
 
   /**
