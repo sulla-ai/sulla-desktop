@@ -561,7 +561,8 @@ export class RecipeExtensionImpl implements Extension {
    *  - `{{propertyName|modifier}}`     → value piped through a modifier (urlencode, base64, quote, json)
    *  - `{{INTEGRATION_ID.PROP|mod}}`   → same, for integration values
    *
-   * Unresolvable placeholders are left as-is so the file stays debuggable.
+   * Unresolvable integration placeholders default to empty string.
+   * Unresolvable settings placeholders are left as-is so the file stays debuggable.
    */
   protected async resolveVariables(content: string): Promise<string> {
     const pattern = /\{\{\s*([^}]+?)\s*\}\}/g;
@@ -604,10 +605,12 @@ export class RecipeExtensionImpl implements Extension {
           if (iv) {
             rawValue = iv.value;
           } else {
-            sullaLog({ topic: 'extensions', level: 'debug', message: `Variable {{${ rawKey }}} not found in integrations, skipping` });
+            sullaLog({ topic: 'extensions', level: 'debug', message: `Variable {{${ rawKey }}} not found in integrations, defaulting to empty` });
+            rawValue = '';
           }
         } catch (ex) {
-          sullaLog({ topic: 'extensions', level: 'debug', message: `Could not resolve integration variable {{${ rawKey }}}`, error: ex });
+          sullaLog({ topic: 'extensions', level: 'debug', message: `Could not resolve integration variable {{${ rawKey }}}, defaulting to empty`, error: ex });
+          rawValue = '';
         }
       } else {
         // Sulla settings variable: {{propertyName}}
