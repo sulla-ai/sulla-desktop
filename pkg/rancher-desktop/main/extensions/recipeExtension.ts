@@ -812,6 +812,25 @@ export class RecipeExtensionImpl implements Extension {
       console.error(`Ignoring error stopping ${ this.id } on uninstall: ${ ex }`);
     }
 
+    // Remove compose images for a true uninstall
+    try {
+      const composeFile = this._manifest?.compose?.composeFile || 'docker-compose.yml';
+      const composePath = path.join(this.dir, composeFile);
+      const removeImagesCmd = `docker compose -f ${ this.shellQuote(composePath) } down --rmi all --remove-orphans`;
+
+      const { stdout, stderr } = await spawnFile('/bin/sh', ['-c', removeImagesCmd], { stdio: 'pipe', cwd: this.dir });
+
+      if (stdout?.trim()) {
+        sullaLog({ topic: 'extensions', level: 'debug', message: `[${ this.id } uninstall image cleanup stdout] ${ stdout.trim() }` });
+      }
+      if (stderr?.trim()) {
+        sullaLog({ topic: 'extensions', level: 'debug', message: `[${ this.id } uninstall image cleanup stderr] ${ stderr.trim() }` });
+      }
+      sullaLog({ topic: 'extensions', level: 'info', message: `Removed compose images for ${ this.id }` });
+    } catch (ex) {
+      sullaLog({ topic: 'extensions', level: 'warn', message: `Failed to remove compose images for ${ this.id }`, error: ex });
+    }
+
     // Remove docker volumes if deleteData is set
     if (deleteData) {
       try {
@@ -850,7 +869,7 @@ export class RecipeExtensionImpl implements Extension {
       application: { extensions: { installed: { [this.id]: undefined } } },
     });
 
-    sullaLog({ topic: 'extensions', level: 'info', message: `Recipe extension ${ this.id } uninstalled. Local data/ preserved.${ deleteData ? ' Docker volumes removed.' : ' Docker volumes kept.' }` });
+    sullaLog({ topic: 'extensions', level: 'info', message: `Recipe extension ${ this.id } uninstalled. Compose images removed. Local data/ preserved.${ deleteData ? ' Docker volumes removed.' : ' Docker volumes kept.' }` });
 
     return true;
   }

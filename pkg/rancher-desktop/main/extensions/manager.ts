@@ -14,7 +14,7 @@ import {
   Extension, ExtensionErrorCode, ExtensionManager, SpawnOptions, SpawnResult,
 } from './types';
 
-import { fetchMarketplaceData } from './marketplaceData';
+import { fetchMarketplaceData, invalidateMarketplaceCache } from './marketplaceData';
 import type { ContainerEngineClient } from '@pkg/backend/containerClient';
 import { ContainerEngine, Settings } from '@pkg/config/settings';
 import { getIpcMainProxy } from '@pkg/main/ipcMain';
@@ -431,8 +431,15 @@ export class ExtensionManagerImpl implements ExtensionManager {
     }
 
     // Check marketplace catalog
-    const entries = await fetchMarketplaceData();
-    const entry = entries.find(e => e.slug === slug);
+    let entries = await fetchMarketplaceData();
+    let entry = entries.find(e => e.slug === slug);
+
+    // If the slug is missing, refresh once in case we have stale cached marketplace data.
+    if (!entry) {
+      invalidateMarketplaceCache();
+      entries = await fetchMarketplaceData();
+      entry = entries.find(e => e.slug === slug);
+    }
 
     if (!entry?.installable) {
       return undefined;

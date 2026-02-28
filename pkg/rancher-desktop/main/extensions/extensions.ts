@@ -641,6 +641,12 @@ export class ExtensionImpl implements Extension {
     }
 
     try {
+      await this.uninstallImage();
+    } catch (ex) {
+      console.error(`Ignoring error removing ${ this.image } image on uninstall: ${ ex }`);
+    }
+
+    try {
       await fs.promises.rm(this.dir, { recursive: true, maxRetries: 3 });
     } catch (ex: any) {
       if ((ex as NodeJS.ErrnoException).code !== 'ENOENT') {
@@ -659,6 +665,22 @@ export class ExtensionImpl implements Extension {
     mainEvents.emit('settings-write', { application: { extensions: { installed: { [this.id]: undefined } } } });
 
     return true;
+  }
+
+  protected async uninstallImage(): Promise<void> {
+    console.debug(`Removing extension image ${ this.image }`);
+    const { stdout, stderr } = await this.client.runClient(
+      ['image', 'rm', '-f', this.image],
+      'pipe',
+      { namespace: this.extensionNamespace },
+    );
+
+    if (stdout?.trim()) {
+      console.debug(`[${ this.id } uninstall image stdout] ${ stdout.trim() }`);
+    }
+    if (stderr?.trim()) {
+      console.debug(`[${ this.id } uninstall image stderr] ${ stderr.trim() }`);
+    }
   }
 
   protected async uninstallContainers() {
