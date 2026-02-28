@@ -14,7 +14,7 @@
                     Extensions.
                   </p>
                   <p class="mt-3 text-2xl tracking-tight text-slate-400">
-                    Browse and install powerful extensions for Sulla Desktop.
+                    Browse and install powerful extensions for Sulla to be more effective optimizing your life.
                   </p>
                 </div>
               </div>
