@@ -32,6 +32,7 @@
  *  - `base64`     — base64-encode
  *  - `quote`      — shell single-quote with escaping
  *  - `json`       — JSON-stringify
+ *  - `md5`        — MD5 hex digest (always 32 chars, e.g. `{{sullaN8nEncryptionKey|md5}}`)
  *
  * The `env` field is written as a `.env` file in the extension directory.
  * Docker Compose automatically reads it. The `.env` is refreshed on every start.

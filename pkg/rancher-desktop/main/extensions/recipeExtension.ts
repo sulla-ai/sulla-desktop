@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -482,6 +483,7 @@ export class RecipeExtensionImpl implements Extension {
    *  - `base64`     — base64-encode
    *  - `quote`      — wrap in single quotes with internal escaping
    *  - `json`       — JSON-stringify (produces a quoted string)
+   *  - `md5`        — MD5 hex digest (always 32 chars)
    */
   protected applyModifier(value: string, modifier: string): string {
     switch (modifier) {
@@ -493,6 +495,8 @@ export class RecipeExtensionImpl implements Extension {
       return `'${ value.replace(/'/g, "'\\''") }'`;
     case 'json':
       return JSON.stringify(value);
+    case 'md5':
+      return crypto.createHash('md5').update(value).digest('hex');
     default:
       sullaLog({ topic: 'extensions', level: 'warn', message: `Unknown variable modifier: ${ modifier }` });
 
