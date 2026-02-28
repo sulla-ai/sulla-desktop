@@ -119,7 +119,7 @@
     "jsonpath": "1.1.1",
     "jsonrepair": "3.13.0",
     "jsonwebtoken": "^9.0.3",
-    "lodash": "4.17.21",
+    "lodash": "4.17.23",
     "marked": "17.0.1",
     "native-reg": "1.1.1",
     "neo4j-driver": "^6.0.1",
