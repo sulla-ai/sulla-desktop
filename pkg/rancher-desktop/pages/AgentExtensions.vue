@@ -120,10 +120,16 @@
                       <div class="flex items-center gap-2">
                         <span class="text-xs text-slate-500 dark:text-slate-400">v{{ ext.version }}</span>
                         <span
-                          v-if="isInstalled(ext.slug)"
+                          v-if="isInstalled(ext.slug) && getExtensionStatus(ext.slug) === 'running'"
                           class="inline-flex items-center rounded-full bg-green-500/20 text-green-400 text-xs px-2 py-0.5 font-medium"
                         >
-                          Installed
+                          Running
+                        </span>
+                        <span
+                          v-else-if="isInstalled(ext.slug) && getExtensionStatus(ext.slug) === 'stopped'"
+                          class="inline-flex items-center rounded-full bg-yellow-500/20 text-yellow-400 text-xs px-2 py-0.5 font-medium"
+                        >
+                          Stopped
                         </span>
                       </div>
                     </div>
@@ -194,7 +200,21 @@
                           Upgrade
                         </button>
                         <button
-                          v-if="!busy[ext.slug] && isInstalled(ext.slug)"
+                          v-if="!busy[ext.slug] && isInstalled(ext.slug) && getExtensionStatus(ext.slug) === 'stopped'"
+                          class="inline-flex items-center rounded-md bg-green-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-green-700"
+                          @click="startExtension(ext.slug)"
+                        >
+                          Start
+                        </button>
+                        <button
+                          v-if="!busy[ext.slug] && isInstalled(ext.slug) && getExtensionStatus(ext.slug) === 'running'"
+                          class="inline-flex items-center rounded-md bg-amber-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-amber-700"
+                          @click="stopExtension(ext.slug)"
+                        >
+                          Stop
+                        </button>
+                        <button
+                          v-if="!busy[ext.slug] && isInstalled(ext.slug) && getExtensionStatus(ext.slug) === 'stopped'"
                           class="inline-flex items-center rounded-md bg-red-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-red-700"
                           @click="uninstall(ext)"
                         >
@@ -248,7 +268,18 @@
                       </div>
                       <div class="flex items-center gap-2">
                         <span class="text-xs text-slate-500 dark:text-slate-400">v{{ ext.version }}</span>
-                        <div class="h-2 w-2 rounded-full bg-green-500"></div>
+                        <span
+                          v-if="ext.status === 'running'"
+                          class="inline-flex items-center rounded-full bg-green-500/20 text-green-400 text-xs px-2 py-0.5 font-medium"
+                        >
+                          Running
+                        </span>
+                        <span
+                          v-else
+                          class="inline-flex items-center rounded-full bg-yellow-500/20 text-yellow-400 text-xs px-2 py-0.5 font-medium"
+                        >
+                          Stopped
+                        </span>
                       </div>
                     </div>
 
@@ -300,7 +331,21 @@
                           Upgrade to v{{ ext.availableVersion }}
                         </button>
                         <button
-                          v-if="!busy[ext.id]"
+                          v-if="!busy[ext.id] && ext.status === 'stopped'"
+                          class="inline-flex items-center rounded-md bg-green-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-green-700"
+                          @click="startExtension(ext.id)"
+                        >
+                          Start
+                        </button>
+                        <button
+                          v-if="!busy[ext.id] && ext.status === 'running'"
+                          class="inline-flex items-center rounded-md bg-amber-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-amber-700"
+                          @click="stopExtension(ext.id)"
+                        >
+                          Stop
+                        </button>
+                        <button
+                          v-if="!busy[ext.id] && ext.status === 'stopped'"
                           class="inline-flex items-center rounded-md bg-red-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-red-700"
                           @click="uninstallById(ext.id)"
                         >
@@ -466,6 +511,12 @@ function canUpgrade(slug: string): boolean {
   return installedExtensions.value.some(ext => ext.id === slug && ext.canUpgrade);
 }
 
+function getExtensionStatus(slug: string): 'running' | 'stopped' | 'not_installed' {
+  const ext = installedExtensions.value.find(e => e.id === slug);
+
+  return ext?.status ?? 'not_installed';
+}
+
 function getInstalledExtraUrls(slug: string): Array<{ label: string; url: string }> {
   const ext = installedExtensions.value.find(e => e.id === slug);
 
@@ -484,6 +535,34 @@ async function refreshData() {
 
   marketplaceData.value = marketplace;
   installedExtensions.value = installed;
+}
+
+async function startExtension(id: string) {
+  busy[id] = 'Starting';
+  errors[id] = null;
+
+  const result = await extensionService.startExtension(id);
+
+  if (!result.ok) {
+    errors[id] = result.error ?? 'Start failed';
+  }
+
+  busy[id] = null;
+  await refreshData();
+}
+
+async function stopExtension(id: string) {
+  busy[id] = 'Stopping';
+  errors[id] = null;
+
+  const result = await extensionService.stopExtension(id);
+
+  if (!result.ok) {
+    errors[id] = result.error ?? 'Stop failed';
+  }
+
+  busy[id] = null;
+  await refreshData();
 }
 
 async function install(ext: MarketplaceEntry) {

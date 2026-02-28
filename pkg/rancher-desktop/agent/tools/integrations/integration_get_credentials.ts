@@ -5,6 +5,8 @@ import { getExtensionService } from "@pkg/agent/services/ExtensionService";
 
 /**
  * Integration Get Credentials Tool - Worker class for execution
+ * Returns credentials for ALL accounts of a given integration.
+ * The default account is marked with ★ DEFAULT.
  */
 export class IntegrationGetCredentialsWorker extends BaseTool {
   name: string = '';
@@ -13,11 +15,14 @@ export class IntegrationGetCredentialsWorker extends BaseTool {
     const { integration_slug } = input;
 
     try {
+      const service = getIntegrationService();
+      let baseIntegrations = integrations;
+
       const extensionService = getExtensionService();
       await extensionService.initialize();
 
       const extensionIntegrations = extensionService.getExtensionIntegrations();
-      const mergedIntegrations = { ...integrations };
+      const mergedIntegrations = { ...baseIntegrations };
       for (const extInt of extensionIntegrations) {
         mergedIntegrations[extInt.id] = extInt;
       }
@@ -30,38 +35,54 @@ export class IntegrationGetCredentialsWorker extends BaseTool {
         };
       }
 
-      const service = getIntegrationService();
       await service.initialize();
 
-      const status = await service.getConnectionStatus(integration_slug);
-      const formValues = await service.getFormValues(integration_slug);
+      // List all accounts for this integration
+      const accounts = await service.getAccounts(integration_slug);
+      const catalogProperties = catalogEntry.properties ?? [];
 
-      // Build a map of property key -> stored value
-      const storedValues: Record<string, string> = {};
-      for (const fv of formValues) {
-        storedValues[fv.property] = fv.value;
+      let responseString = `Integration: ${integration_slug} (${catalogEntry.name})\n`;
+
+      if (accounts.length === 0) {
+        responseString += `No accounts configured.\n\nExpected credentials:\n`;
+        catalogProperties.forEach(prop => {
+          responseString += `- ${prop.title} (${prop.key}): [NOT SET] (${prop.required ? 'Required' : 'Optional'})\n`;
+        });
+
+        return {
+          successBoolean: true,
+          responseString,
+        };
       }
 
-      // Build credentials list from catalog properties with stored values
-      const credentials = (catalogEntry.properties ?? []).map(prop => ({
-        key: prop.key,
-        title: prop.title,
-        type: prop.type,
-        required: prop.required,
-        value: storedValues[prop.key] ?? null,
-        has_value: prop.key in storedValues,
-      }));
+      responseString += `Accounts: ${accounts.length}\n\n`;
 
-      // Format detailed response
-      let responseString = `Integration: ${integration_slug} (${catalogEntry.name})
-Enabled: ${status.connected ? 'Yes' : 'No'}
-Connected at: ${status.connected_at ? new Date(status.connected_at).toLocaleString() : 'Never'}
-Last sync at: ${status.last_sync_at ? new Date(status.last_sync_at).toLocaleString() : 'Never'}
+      for (const acct of accounts) {
+        const status = await service.getConnectionStatus(integration_slug, acct.account_id);
+        const formValues = await service.getFormValues(integration_slug, acct.account_id);
 
-Credentials:\n`;
-      credentials.forEach(cred => {
-        responseString += `- ${cred.title} (${cred.key}): ${cred.has_value ? String(cred.value) : '[NOT SET]'} (${cred.required ? 'Required' : 'Optional'})\n`;
-      });
+        // Build a map of property key -> stored value
+        const storedValues: Record<string, string> = {};
+        for (const fv of formValues) {
+          storedValues[fv.property] = fv.value;
+        }
+
+        const defaultMarker = acct.active ? ' ★ DEFAULT' : '';
+        responseString += `--- Account: ${acct.label} (${acct.account_id})${defaultMarker} ---\n`;
+        responseString += `Enabled: ${status.connected ? 'Yes' : 'No'}\n`;
+        responseString += `Connected at: ${status.connected_at ? new Date(status.connected_at).toLocaleString() : 'Never'}\n`;
+        responseString += `Last sync at: ${status.last_sync_at ? new Date(status.last_sync_at).toLocaleString() : 'Never'}\n`;
+        responseString += `Credentials:\n`;
+
+        catalogProperties.forEach(prop => {
+          const hasValue = prop.key in storedValues;
+          responseString += `- ${prop.title} (${prop.key}): ${hasValue ? String(storedValues[prop.key]) : '[NOT SET]'} (${prop.required ? 'Required' : 'Optional'})\n`;
+        });
+
+        responseString += `\n`;
+      }
+
+      responseString += `Use set_active_integration_account to change which account is the default.`;
 
       return {
         successBoolean: true,

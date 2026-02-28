@@ -727,19 +727,54 @@ export class ExtensionManagerImpl implements ExtensionManager {
   }
 
   /**
-   * Start all installed extensions. Recipe extensions will run their
-   * `commands.start` from installation.yaml; legacy extensions are a no-op.
+   * Start all installed extensions whose persisted state is 'running'.
+   * Recipe extensions will run their `commands.start` from installation.yaml;
+   * legacy extensions are a no-op.
    */
   protected async startInstalledExtensions(): Promise<void> {
     const installed = await this.getInstalledExtensions();
 
     await Promise.allSettled(installed.map(async(ext) => {
       try {
-        await ext.start();
+        const state = await ext.getRunningState();
+
+        if (state === 'running') {
+          await ext.start();
+        } else {
+          console.debug(`Skipping auto-start for ${ ext.id } (persisted state: ${ state })`);
+        }
       } catch (ex) {
         console.error(`Failed to start extension ${ ext.id } on boot:`, ex);
       }
     }));
+  }
+
+  async startExtension(id: string): Promise<void> {
+    const ext = await this.getExtension(id);
+
+    if (!(await ext.isInstalled())) {
+      throw new Error(`Extension ${ id } is not installed`);
+    }
+    await ext.start();
+  }
+
+  async stopExtension(id: string): Promise<void> {
+    const ext = await this.getExtension(id);
+
+    if (!(await ext.isInstalled())) {
+      throw new Error(`Extension ${ id } is not installed`);
+    }
+    await ext.stop();
+  }
+
+  async getExtensionStatus(id: string): Promise<'running' | 'stopped' | 'not_installed'> {
+    const ext = await this.getExtension(id);
+
+    if (!(await ext.isInstalled())) {
+      return 'not_installed';
+    }
+
+    return await ext.getRunningState();
   }
 
   triggerExtensionShutdown = async() => {

@@ -1,34 +1,49 @@
 // IntegrationService - PostgreSQL-backed integration configuration management
 // Provides CRUD operations for integration connection properties
+// Supports multiple accounts per integration via account_id
 
-import pg from 'pg';
+import { IntegrationValueModel } from '../database/models/IntegrationValueModel';
+import { getSelectBoxProvider, type SelectOption } from '../integrations/select_box';
 
-const POSTGRES_URL = 'postgresql://sulla:sulla_dev_password@127.0.0.1:30116/sulla';
+const DEFAULT_ACCOUNT_ID = 'default';
 
 export interface IntegrationValue {
   value_id: number;
   integration_id: string;
+  account_id: string;
   property: string;
   value: string;
+  is_default: boolean;
   created_at: Date;
   updated_at: Date;
 }
 
 export interface IntegrationValueInput {
   integration_id: string;
+  account_id?: string;
   property: string;
   value: string;
 }
 
 export interface IntegrationConnectionStatus {
   integration_id: string;
+  account_id: string;
   connected: boolean;
   connected_at?: Date;
   last_sync_at?: Date;
 }
 
+export interface IntegrationAccount {
+  integration_id: string;
+  account_id: string;
+  label: string;
+  active: boolean;
+  connected: boolean;
+  connected_at?: Date;
+}
+
 // Special properties that are not shown in forms
-const SYSTEM_PROPERTIES = ['connection_status', 'connected_at', 'last_sync_at'];
+const SYSTEM_PROPERTIES = ['connection_status', 'connected_at', 'last_sync_at', 'account_label'];
 
 type IntegrationValueCallback = (value: IntegrationValue, action: 'created' | 'updated' | 'deleted') => void;
 
@@ -51,7 +66,6 @@ export class IntegrationService {
     }
 
     console.log('[IntegrationService] Initializing...');
-    await this.ensureTables();
     this.initialized = true;
     console.log('[IntegrationService] Initialized');
   }
@@ -70,82 +84,129 @@ export class IntegrationService {
     }
   }
 
-  private async ensureTables(): Promise<void> {
-    const client = new pg.Client({ connectionString: POSTGRES_URL });
-    await client.connect();
-
-    try {
-      await client.query(`
-        CREATE TABLE IF NOT EXISTS integration_values (
-          value_id SERIAL PRIMARY KEY,
-          integration_id VARCHAR(100) NOT NULL,
-          property VARCHAR(100) NOT NULL,
-          value TEXT NOT NULL,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          UNIQUE(integration_id, property)
-        )
-      `);
-
-      await client.query(`
-        CREATE INDEX IF NOT EXISTS idx_integration_values_integration_id ON integration_values(integration_id)
-      `);
-      await client.query(`
-        CREATE INDEX IF NOT EXISTS idx_integration_values_property ON integration_values(property)
-      `);
-
-      console.log('[IntegrationService] Tables ensured');
-    } finally {
-      await client.end();
-    }
+  private modelToValue(model: IntegrationValueModel): IntegrationValue {
+    return {
+      value_id: model.attributes.value_id as number,
+      integration_id: model.attributes.integration_id as string,
+      account_id: (model.attributes.account_id as string) || DEFAULT_ACCOUNT_ID,
+      property: model.attributes.property as string,
+      value: model.attributes.value as string,
+      is_default: !!model.attributes.is_default,
+      created_at: model.attributes.created_at as Date,
+      updated_at: model.attributes.updated_at as Date,
+    };
   }
 
-  async setIntegrationValue(input: IntegrationValueInput): Promise<IntegrationValue> {
-    const client = new pg.Client({ connectionString: POSTGRES_URL });
-    await client.connect();
+  // ─── Account management ───────────────────────────────────────────
 
-    try {
-      // Check if value already exists
-      const existingResult = await client.query(
-        'SELECT value_id FROM integration_values WHERE integration_id = $1 AND property = $2',
-        [input.integration_id, input.property]
-      );
+  /** Get the active/default account_id for an integration */
+  async getActiveAccountId(integrationId: string): Promise<string> {
+    return IntegrationValueModel.getDefaultAccountId(integrationId);
+  }
 
-      let result;
-      
-      if (existingResult.rows.length > 0) {
-        // Update existing value
-        const valueId = existingResult.rows[0].value_id;
-        result = await client.query(
-          `
-          UPDATE integration_values
-          SET value = $1, updated_at = CURRENT_TIMESTAMP
-          WHERE integration_id = $2 AND property = $3
-          RETURNING value_id, integration_id, property, value, created_at, updated_at
-          `,
-          [input.value, input.integration_id, input.property]
-        );
-        console.log(`[IntegrationService] Updated value: ${input.integration_id}.${input.property}`);
-      } else {
-        // Create new value
-        result = await client.query(
-          `
-          INSERT INTO integration_values (integration_id, property, value)
-          VALUES ($1, $2, $3)
-          RETURNING value_id, integration_id, property, value, created_at, updated_at
-          `,
-          [input.integration_id, input.property, input.value]
-        );
-        console.log(`[IntegrationService] Created value: ${input.integration_id}.${input.property}`);
-      }
+  /** Set which account is the default for an integration.
+   *  Clears is_default on all other accounts, sets it on the target. */
+  async setActiveAccount(integrationId: string, accountId: string): Promise<void> {
+    await IntegrationValueModel.setDefaultAccount(integrationId, accountId);
+    console.log(`[IntegrationService] Default account for ${integrationId} set to: ${accountId}`);
+  }
 
-      const row = result.rows[0];
-      const value = this.rowToValue(row);
-      this.notifyValueChange(value, existingResult.rows.length > 0 ? 'updated' : 'created');
-      return value;
-    } finally {
-      await client.end();
+  /** Set a human-readable label for an account */
+  async setAccountLabel(integrationId: string, accountId: string, label: string): Promise<void> {
+    await this.setIntegrationValue({
+      integration_id: integrationId,
+      account_id: accountId,
+      property: 'account_label',
+      value: label,
+    });
+  }
+
+  /** Get the label for an account */
+  async getAccountLabel(integrationId: string, accountId: string): Promise<string> {
+    const model = await IntegrationValueModel.findByKey(integrationId, accountId, 'account_label');
+    return model?.attributes.value || accountId;
+  }
+
+  /** List all accounts for an integration */
+  async getAccounts(integrationId: string): Promise<IntegrationAccount[]> {
+    const accountIds = await IntegrationValueModel.getDistinctAccounts(integrationId);
+    const accounts: IntegrationAccount[] = [];
+
+    for (const accountId of accountIds) {
+      const label = await this.getAccountLabel(integrationId, accountId);
+      const status = await this.getConnectionStatus(integrationId, accountId);
+
+      // Check is_default from any row for this account
+      const accountRows = await IntegrationValueModel.findByAccount(integrationId, accountId);
+      const isDefault = accountRows.some(m => !!m.attributes.is_default);
+
+      accounts.push({
+        integration_id: integrationId,
+        account_id: accountId,
+        label,
+        active: isDefault,
+        connected: status.connected,
+        connected_at: status.connected_at,
+      });
     }
+
+    return accounts;
+  }
+
+  /** Delete an entire account and all its values */
+  async deleteAccount(integrationId: string, accountId: string): Promise<boolean> {
+    const models = await IntegrationValueModel.findByAccount(integrationId, accountId);
+    if (models.length === 0) return false;
+
+    const wasDefault = models.some(m => !!m.attributes.is_default);
+
+    for (const model of models) {
+      const value = this.modelToValue(model);
+      await model.delete();
+      this.notifyValueChange(value, 'deleted');
+    }
+
+    console.log(`[IntegrationService] Deleted account ${accountId} for ${integrationId}`);
+
+    // If the deleted account was the default, assign default to the first remaining account
+    if (wasDefault) {
+      const remainingAccounts = await IntegrationValueModel.getDistinctAccounts(integrationId);
+      if (remainingAccounts.length > 0) {
+        await IntegrationValueModel.setDefaultAccount(integrationId, remainingAccounts[0]);
+        console.log(`[IntegrationService] Reassigned default to ${remainingAccounts[0]} for ${integrationId}`);
+      }
+    }
+
+    return true;
+  }
+
+  // ─── Value CRUD (account-aware) ───────────────────────────────────
+
+  async setIntegrationValue(input: IntegrationValueInput): Promise<IntegrationValue> {
+    const accountId = input.account_id || DEFAULT_ACCOUNT_ID;
+
+    // If this is the first account for this integration, auto-mark as default
+    const existingAccounts = await IntegrationValueModel.getDistinctAccounts(input.integration_id);
+    const isFirstAccount = existingAccounts.length === 0 || (existingAccounts.length === 1 && existingAccounts[0] === accountId);
+
+    const { model, wasUpdate } = await IntegrationValueModel.upsert(
+      input.integration_id,
+      accountId,
+      input.property,
+      input.value,
+    );
+
+    // Auto-set default on first account
+    if (isFirstAccount && !model.attributes.is_default) {
+      await IntegrationValueModel.setDefaultAccount(input.integration_id, accountId);
+    }
+
+    const action = wasUpdate ? 'updated' : 'created';
+    console.log(`[IntegrationService] ${wasUpdate ? 'Updated' : 'Created'} value: ${input.integration_id}/${accountId}.${input.property}`);
+
+    const value = this.modelToValue(model);
+    this.notifyValueChange(value, action);
+    return value;
   }
 
   async setMultipleValues(inputs: IntegrationValueInput[]): Promise<IntegrationValue[]> {
@@ -159,201 +220,148 @@ export class IntegrationService {
     return values;
   }
 
-  // Connection status methods
-  async setConnectionStatus(integrationId: string, connected: boolean): Promise<void> {
+  // ─── Connection status (account-aware) ────────────────────────────
+
+  async setConnectionStatus(integrationId: string, connected: boolean, accountId?: string): Promise<void> {
+    const acctId = accountId || DEFAULT_ACCOUNT_ID;
+
     await this.setIntegrationValue({
       integration_id: integrationId,
+      account_id: acctId,
       property: 'connection_status',
       value: connected.toString()
     });
 
-    // Set connected_at timestamp when connecting
     if (connected) {
       await this.setIntegrationValue({
         integration_id: integrationId,
+        account_id: acctId,
         property: 'connected_at',
         value: new Date().toISOString()
       });
     }
 
-    // Update last_sync_at
     await this.setIntegrationValue({
       integration_id: integrationId,
+      account_id: acctId,
       property: 'last_sync_at',
       value: new Date().toISOString()
     });
   }
 
-  async getConnectionStatus(integrationId: string): Promise<IntegrationConnectionStatus> {
-    const statusValue = await this.getIntegrationValue(integrationId, 'connection_status');
-    const connectedAtValue = await this.getIntegrationValue(integrationId, 'connected_at');
-    const lastSyncValue = await this.getIntegrationValue(integrationId, 'last_sync_at');
+  async getConnectionStatus(integrationId: string, accountId?: string): Promise<IntegrationConnectionStatus> {
+    const acctId = accountId || DEFAULT_ACCOUNT_ID;
+
+    const statusModel = await IntegrationValueModel.findByKey(integrationId, acctId, 'connection_status');
+    const connectedAtModel = await IntegrationValueModel.findByKey(integrationId, acctId, 'connected_at');
+    const lastSyncModel = await IntegrationValueModel.findByKey(integrationId, acctId, 'last_sync_at');
 
     return {
       integration_id: integrationId,
-      connected: statusValue?.value === 'true',
-      connected_at: connectedAtValue ? new Date(connectedAtValue.value) : undefined,
-      last_sync_at: lastSyncValue ? new Date(lastSyncValue.value) : undefined
+      account_id: acctId,
+      connected: statusModel?.attributes.value === 'true',
+      connected_at: connectedAtModel ? new Date(connectedAtModel.attributes.value as string) : undefined,
+      last_sync_at: lastSyncModel ? new Date(lastSyncModel.attributes.value as string) : undefined
     };
   }
 
-  // Form-specific methods (exclude system properties)
-  async getFormValues(integrationId: string): Promise<IntegrationValue[]> {
-    const client = new pg.Client({ connectionString: POSTGRES_URL });
-    await client.connect();
+  /** Check if ANY account for this integration is connected */
+  async isAnyAccountConnected(integrationId: string): Promise<boolean> {
+    return IntegrationValueModel.existsWithPropertyValue(integrationId, 'connection_status', 'true');
+  }
 
-    try {
-      const placeholders = SYSTEM_PROPERTIES.map((_, index) => `$${index + 2}`).join(', ');
-      
-      const result = await client.query(
-        `
-        SELECT value_id, integration_id, property, value, created_at, updated_at
-        FROM integration_values
-        WHERE integration_id = $1 AND property NOT IN (${placeholders})
-        ORDER BY property ASC
-        `,
-        [integrationId, ...SYSTEM_PROPERTIES],
-      );
+  // ─── Form values (account-aware) ─────────────────────────────────
 
-      console.log(`[IntegrationService] Fetched ${result.rows.length} form values for ${integrationId}`);
-      return result.rows.map(row => this.rowToValue(row));
-    } finally {
-      await client.end();
-    }
+  /** Get form values for the active account (or a specific account) */
+  async getFormValues(integrationId: string, accountId?: string): Promise<IntegrationValue[]> {
+    const acctId = accountId || await this.getActiveAccountId(integrationId);
+
+    const models = await IntegrationValueModel.getFormValues(integrationId, acctId, SYSTEM_PROPERTIES);
+
+    console.log(`[IntegrationService] Fetched ${models.length} form values for ${integrationId}/${acctId}`);
+    return models.map(m => this.modelToValue(m));
   }
 
   async setFormValues(inputs: IntegrationValueInput[]): Promise<IntegrationValue[]> {
-    // Filter out system properties
     const filteredInputs = inputs.filter(input => !SYSTEM_PROPERTIES.includes(input.property));
     return this.setMultipleValues(filteredInputs);
   }
 
-  async getIntegrationValue(integrationId: string, property: string): Promise<IntegrationValue | null> {
-    const client = new pg.Client({ connectionString: POSTGRES_URL });
-    await client.connect();
+  // ─── Raw value access (account-aware) ─────────────────────────────
 
-    try {
-      const result = await client.query(
-        `
-        SELECT value_id, integration_id, property, value, created_at, updated_at
-        FROM integration_values
-        WHERE integration_id = $1 AND property = $2
-        `,
-        [integrationId, property],
-      );
-
-      if (result.rows.length === 0) {
-        return null;
-      }
-
-      return this.rowToValue(result.rows[0]);
-    } finally {
-      await client.end();
-    }
+  /** Get a value from the active account (backward-compat) */
+  async getIntegrationValue(integrationId: string, property: string, accountId?: string): Promise<IntegrationValue | null> {
+    const acctId = accountId || await this.getActiveAccountId(integrationId);
+    const model = await IntegrationValueModel.findByKey(integrationId, acctId, property);
+    return model ? this.modelToValue(model) : null;
   }
 
-  async getIntegrationValues(integrationId: string): Promise<IntegrationValue[]> {
-    const client = new pg.Client({ connectionString: POSTGRES_URL });
-    await client.connect();
-
-    try {
-      const result = await client.query(
-        `
-        SELECT value_id, integration_id, property, value, created_at, updated_at
-        FROM integration_values
-        WHERE integration_id = $1
-        ORDER BY property ASC
-        `,
-        [integrationId],
-      );
-
-      console.log(`[IntegrationService] Fetched ${result.rows.length} values for ${integrationId}`);
-      return result.rows.map(row => this.rowToValue(row));
-    } finally {
-      await client.end();
-    }
+  /** Get all values for the active account (backward-compat) */
+  async getIntegrationValues(integrationId: string, accountId?: string): Promise<IntegrationValue[]> {
+    const acctId = accountId || await this.getActiveAccountId(integrationId);
+    const models = await IntegrationValueModel.findByAccount(integrationId, acctId);
+    return models.map(m => this.modelToValue(m));
   }
 
   async getAllIntegrationValues(): Promise<IntegrationValue[]> {
-    const client = new pg.Client({ connectionString: POSTGRES_URL });
-    await client.connect();
-
-    try {
-      const result = await client.query(
-        `
-        SELECT value_id, integration_id, property, value, created_at, updated_at
-        FROM integration_values
-        ORDER BY integration_id ASC, property ASC
-        `
-      );
-
-      console.log(`[IntegrationService] Fetched ${result.rows.length} total values`);
-      return result.rows.map(row => this.rowToValue(row));
-    } finally {
-      await client.end();
-    }
+    const models = await IntegrationValueModel.all();
+    console.log(`[IntegrationService] Fetched ${models.length} total values`);
+    return models.map(m => this.modelToValue(m));
   }
 
-  async deleteIntegrationValue(integrationId: string, property: string): Promise<boolean> {
-    const client = new pg.Client({ connectionString: POSTGRES_URL });
-    await client.connect();
+  // ─── Delete (account-aware) ───────────────────────────────────────
 
-    try {
-      // Get value before deleting for notification
-      const valueToDelete = await this.getIntegrationValue(integrationId, property);
+  async deleteIntegrationValue(integrationId: string, property: string, accountId?: string): Promise<boolean> {
+    const acctId = accountId || await this.getActiveAccountId(integrationId);
 
-      const result = await client.query(
-        'DELETE FROM integration_values WHERE integration_id = $1 AND property = $2',
-        [integrationId, property],
-      );
+    const model = await IntegrationValueModel.findByKey(integrationId, acctId, property);
+    if (!model) return false;
 
-      const deleted = result.rowCount !== null && result.rowCount > 0;
-      if (deleted) {
-        console.log(`[IntegrationService] Deleted value: ${integrationId}.${property}`);
-        if (valueToDelete) {
-          this.notifyValueChange(valueToDelete, 'deleted');
-        }
-      }
-      return deleted;
-    } finally {
-      await client.end();
-    }
+    const value = this.modelToValue(model);
+    await model.delete();
+    console.log(`[IntegrationService] Deleted value: ${integrationId}/${acctId}.${property}`);
+    this.notifyValueChange(value, 'deleted');
+    return true;
   }
 
-  async deleteIntegrationValues(integrationId: string): Promise<boolean> {
-    const client = new pg.Client({ connectionString: POSTGRES_URL });
-    await client.connect();
+  // ─── Select box options ──────────────────────────────────────────
 
-    try {
-      // Get all values before deleting for notifications
-      const valuesToDelete = await this.getIntegrationValues(integrationId);
+  /**
+   * Resolve select box options for a property.
+   * Passes current form values to the provider so it can use credentials to call APIs.
+   */
+  async getSelectOptions(
+    selectBoxId: string,
+    integrationId: string,
+    accountId: string,
+    formValues: Record<string, string>,
+  ): Promise<SelectOption[]> {
+    const provider = getSelectBoxProvider(selectBoxId);
 
-      const result = await client.query(
-        'DELETE FROM integration_values WHERE integration_id = $1',
-        [integrationId],
-      );
+    if (!provider) {
+      console.warn(`[IntegrationService] No SelectBoxProvider found for id: ${ selectBoxId }`);
 
-      const deleted = result.rowCount !== null && result.rowCount > 0;
-      if (deleted) {
-        console.log(`[IntegrationService] Deleted ${valuesToDelete.length} values for ${integrationId}`);
-        for (const value of valuesToDelete) {
-          this.notifyValueChange(value, 'deleted');
-        }
-      }
-      return deleted;
-    } finally {
-      await client.end();
+      return [];
     }
+
+    return provider.getOptions({ integrationId, accountId, formValues });
   }
 
-  private rowToValue(row: Record<string, unknown>): IntegrationValue {
-    return {
-      value_id: row.value_id as number,
-      integration_id: row.integration_id as string,
-      property: row.property as string,
-      value: row.value as string,
-      created_at: row.created_at as Date,
-      updated_at: row.updated_at as Date,
-    };
+  async deleteIntegrationValues(integrationId: string, accountId?: string): Promise<boolean> {
+    if (accountId) {
+      return this.deleteAccount(integrationId, accountId);
+    }
+
+    const models = await IntegrationValueModel.findByIntegration(integrationId);
+    if (models.length === 0) return false;
+
+    for (const model of models) {
+      const value = this.modelToValue(model);
+      await model.delete();
+      this.notifyValueChange(value, 'deleted');
+    }
+
+    console.log(`[IntegrationService] Deleted ${models.length} values for ${integrationId}`);
+    return true;
   }
 }

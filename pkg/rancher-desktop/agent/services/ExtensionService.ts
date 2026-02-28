@@ -28,6 +28,7 @@ export interface InstalledExtension {
   extraUrls:        Array<{ label: string; url: string }>;
   availableVersion?: string;
   canUpgrade:       boolean;
+  status:           'running' | 'stopped';
 }
 
 export interface LocalExtensionMetadata extends ExtensionMetadata {
@@ -225,7 +226,7 @@ export class ExtensionService {
         return [];
       }
 
-      const data: Record<string, { version: string; metadata: ExtensionMetadata; labels: Record<string, string>; extraUrls?: Array<{ label: string; url: string }> }> = await response.json();
+      const data: Record<string, { version: string; metadata: ExtensionMetadata; labels: Record<string, string>; extraUrls?: Array<{ label: string; url: string }>; status?: 'running' | 'stopped' }> = await response.json();
       const marketplace = await this.fetchMarketplaceData();
 
       return Object.entries(data).map(([id, ext]) => {
@@ -247,6 +248,7 @@ export class ExtensionService {
           extraUrls:        ext.extraUrls ?? [],
           availableVersion: marketEntry?.version,
           canUpgrade,
+          status:           ext.status ?? 'running',
         };
       });
     } catch (error) {
@@ -292,6 +294,75 @@ export class ExtensionService {
       return { ok: true };
     } catch (error) {
       return { ok: false, error: String(error) };
+    }
+  }
+
+  async startExtension(id: string): Promise<{ ok: boolean; error?: string }> {
+    try {
+      const url = `${this.backendUrl}/v1/extensions/start?id=${encodeURIComponent(id)}`;
+
+      console.info(`[ExtensionService] Starting extension ${id}`);
+      const response = await fetch(url, {
+        method:  'POST',
+        headers: this.getRequestHeaders(),
+      });
+
+      if (!response.ok) {
+        const message = (await response.text()).trim() || `HTTP ${response.status}`;
+
+        console.error(`[ExtensionService] Start failed for ${id}: ${message}`);
+
+        return { ok: false, error: message };
+      }
+
+      console.info(`[ExtensionService] Started extension ${id}`);
+
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, error: String(error) };
+    }
+  }
+
+  async stopExtension(id: string): Promise<{ ok: boolean; error?: string }> {
+    try {
+      const url = `${this.backendUrl}/v1/extensions/stop?id=${encodeURIComponent(id)}`;
+
+      console.info(`[ExtensionService] Stopping extension ${id}`);
+      const response = await fetch(url, {
+        method:  'POST',
+        headers: this.getRequestHeaders(),
+      });
+
+      if (!response.ok) {
+        const message = (await response.text()).trim() || `HTTP ${response.status}`;
+
+        console.error(`[ExtensionService] Stop failed for ${id}: ${message}`);
+
+        return { ok: false, error: message };
+      }
+
+      console.info(`[ExtensionService] Stopped extension ${id}`);
+
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, error: String(error) };
+    }
+  }
+
+  async getExtensionStatus(id: string): Promise<'running' | 'stopped' | 'not_installed'> {
+    try {
+      const url = `${this.backendUrl}/v1/extensions/status?id=${encodeURIComponent(id)}`;
+      const response = await fetch(url, { headers: this.getRequestHeaders() });
+
+      if (!response.ok) {
+        return 'not_installed';
+      }
+
+      const body = await response.json();
+
+      return body.status ?? 'not_installed';
+    } catch {
+      return 'not_installed';
     }
   }
 

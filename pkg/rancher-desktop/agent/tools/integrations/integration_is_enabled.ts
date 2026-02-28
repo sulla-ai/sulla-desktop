@@ -13,11 +13,14 @@ export class IntegrationIsEnabledWorker extends BaseTool {
     const { integration_slug } = input;
 
     try {
+      const service = getIntegrationService();
+      let baseIntegrations = integrations;
+
       const extensionService = getExtensionService();
       await extensionService.initialize();
 
       const extensionIntegrations = extensionService.getExtensionIntegrations();
-      const mergedIntegrations = { ...integrations };
+      const mergedIntegrations = { ...baseIntegrations };
       for (const extInt of extensionIntegrations) {
         mergedIntegrations[extInt.id] = extInt;
       }
@@ -30,14 +33,26 @@ export class IntegrationIsEnabledWorker extends BaseTool {
         };
       }
 
-      const service = getIntegrationService();
       await service.initialize();
-      const status = await service.getConnectionStatus(integration_slug);
 
-      const responseString = `Integration: ${integration_slug} (${catalogEntry.name})
-Enabled: ${status.connected ? 'Yes' : 'No'}
+      const anyConnected = await service.isAnyAccountConnected(integration_slug);
+      const accounts = await service.getAccounts(integration_slug);
+      const activeAccountId = await service.getActiveAccountId(integration_slug);
+      const status = await service.getConnectionStatus(integration_slug, activeAccountId);
+
+      let responseString = `Integration: ${integration_slug} (${catalogEntry.name})
+Enabled: ${anyConnected ? 'Yes' : 'No'}
+Active account: ${activeAccountId}
 Connected at: ${status.connected_at ? new Date(status.connected_at).toLocaleString() : 'Never'}
 Last sync at: ${status.last_sync_at ? new Date(status.last_sync_at).toLocaleString() : 'Never'}`;
+
+      if (accounts.length > 1) {
+        responseString += `\n\nAccounts (${accounts.length}):`;
+        for (const acct of accounts) {
+          const marker = acct.active ? ' ★ ACTIVE' : '';
+          responseString += `\n- ${acct.label} (${acct.account_id}) | ${acct.connected ? 'Connected' : 'Disconnected'}${marker}`;
+        }
+      }
 
       return {
         successBoolean: true,

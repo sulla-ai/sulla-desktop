@@ -3,9 +3,6 @@ import { IntegrationRegistry } from './IntegrationRegistry';
 import { isConnectionStatusSuppressed } from './integrationFlags';
 import { getIntegrationService } from '../services/IntegrationService';
 import { SlackClient, slackClient } from './slack/SlackClient';
-import { getSchedulerService } from '@pkg/agent/services/SchedulerService';
-import { getHeartbeatService } from '@pkg/agent/services/HeartbeatService';
-import { getBackendGraphWebSocketService } from '@pkg/agent/services/BackendGraphWebSocketService';
 
 export const registry = new IntegrationRegistry();
 // Token properties that should trigger a full hot-reload (invalidate + re-init)

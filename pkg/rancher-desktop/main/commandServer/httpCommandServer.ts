@@ -89,10 +89,15 @@ export class HttpCommandServer {
       },
     } as const,
     {
-      get:  { '/v1/extensions': [1, this.listExtensions] },
+      get:  {
+        '/v1/extensions':        [1, this.listExtensions],
+        '/v1/extensions/status': [1, this.getExtensionStatus],
+      },
       post: {
         '/v1/extensions/install':   [1, this.installExtension],
         '/v1/extensions/uninstall': [1, this.uninstallExtension],
+        '/v1/extensions/start':     [1, this.startExtension],
+        '/v1/extensions/stop':      [1, this.stopExtension],
       },
     } as const,
     {
@@ -746,6 +751,52 @@ export class HttpCommandServer {
     }
   }
 
+  protected async startExtension(request: express.Request, response: express.Response): Promise<void> {
+    const id = request.query.id ?? '';
+
+    if (!id || typeof id !== 'string') {
+      response.status(400).type('txt').send('Extension ID is required in the id= parameter.');
+    } else {
+      try {
+        await this.commandWorker.startExtension(id);
+        response.status(200).type('txt').send(`Started ${ id }`);
+      } catch (ex: any) {
+        response.status(500).type('txt').send(ex.message || String(ex));
+      }
+    }
+  }
+
+  protected async stopExtension(request: express.Request, response: express.Response): Promise<void> {
+    const id = request.query.id ?? '';
+
+    if (!id || typeof id !== 'string') {
+      response.status(400).type('txt').send('Extension ID is required in the id= parameter.');
+    } else {
+      try {
+        await this.commandWorker.stopExtension(id);
+        response.status(200).type('txt').send(`Stopped ${ id }`);
+      } catch (ex: any) {
+        response.status(500).type('txt').send(ex.message || String(ex));
+      }
+    }
+  }
+
+  protected async getExtensionStatus(request: express.Request, response: express.Response): Promise<void> {
+    const id = request.query.id ?? '';
+
+    if (!id || typeof id !== 'string') {
+      response.status(400).type('txt').send('Extension ID is required in the id= parameter.');
+    } else {
+      try {
+        const status = await this.commandWorker.getExtensionStatus(id);
+
+        response.status(200).type('json').send({ id, status });
+      } catch (ex: any) {
+        response.status(500).type('txt').send(ex.message || String(ex));
+      }
+    }
+  }
+
   protected async uninstallExtension(request: express.Request, response: express.Response): Promise<void> {
     const id = request.query.id ?? '';
     const deleteData = request.query.deleteData === 'true';
@@ -926,13 +977,25 @@ export interface CommandWorkerInterface {
    * List the installed extensions with their versions.
    * If the extension manager is not ready, returns undefined.
    */
-  listExtensions(): Promise<Record<string, { version: string, metadata: ExtensionMetadata, labels: Record<string, string>, extraUrls: Array<{ label: string; url: string }> }> | undefined>;
+  listExtensions(): Promise<Record<string, { version: string, metadata: ExtensionMetadata, labels: Record<string, string>, extraUrls: Array<{ label: string; url: string }>, status: 'running' | 'stopped' }> | undefined>;
   /**
    * Install or uninstall the given extension, returning an appropriate HTTP status code.
    * @param state Whether to install or uninstall the extension.
    * @returns The HTTP status code, possibly with arbitrary response body data.
    */
   installExtension(id: string, state: 'install' | 'uninstall', options?: { deleteData?: boolean }): Promise<{ status: number, data?: any }>;
+  /**
+   * Start a specific installed extension.
+   */
+  startExtension(id: string): Promise<void>;
+  /**
+   * Stop a specific installed extension.
+   */
+  stopExtension(id: string): Promise<void>;
+  /**
+   * Get the running status of a specific extension.
+   */
+  getExtensionStatus(id: string): Promise<'running' | 'stopped' | 'not_installed'>;
   // #endregion
   listSnapshots:   (context: commandContext) => Promise<Snapshot[]>;
   createSnapshot:  (context: commandContext, snapshot: Snapshot) => Promise<void>;

@@ -1726,9 +1726,40 @@ class BackgroundCommandWorker implements CommandWorkerInterface {
       metadata:  await x.metadata,
       labels:    await x.labels,
       extraUrls: await x.extraUrls,
+      status:    await x.getRunningState(),
     }] as const));
 
     return Object.fromEntries(entries);
+  }
+
+  async startExtension(id: string): Promise<void> {
+    const em = await getExtensionManager();
+
+    if (!em) {
+      throw new Error('Extension manager is not ready yet.');
+    }
+    await em.startExtension(id);
+    window.send('extensions/changed');
+  }
+
+  async stopExtension(id: string): Promise<void> {
+    const em = await getExtensionManager();
+
+    if (!em) {
+      throw new Error('Extension manager is not ready yet.');
+    }
+    await em.stopExtension(id);
+    window.send('extensions/changed');
+  }
+
+  async getExtensionStatus(id: string): Promise<'running' | 'stopped' | 'not_installed'> {
+    const em = await getExtensionManager();
+
+    if (!em) {
+      throw new Error('Extension manager is not ready yet.');
+    }
+
+    return await em.getExtensionStatus(id);
   }
 
   async installExtension(image: string, state: 'install' | 'uninstall', options?: { deleteData?: boolean }): Promise<{ status: number, data?: any }> {

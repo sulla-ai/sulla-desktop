@@ -37,11 +37,14 @@
                         />
                         <!-- Image -->
                         <img
-                          v-else
-                          :src="integration.media[currentImageIndex].url.startsWith('http') ? integration.media[currentImageIndex].url : require(`@pkg/assets/images/${integration.media[currentImageIndex].url}`)"
+                          v-else-if="resolveMediaSrc(integration.media[currentImageIndex].url)"
+                          :src="resolveMediaSrc(integration.media[currentImageIndex].url)"
                           :alt="integration.media[currentImageIndex].alt"
                           class="h-full w-full object-cover"
                         >
+                        <div v-else class="flex h-full w-full items-center justify-center bg-slate-100 dark:bg-slate-800">
+                          <span class="text-sm text-slate-400">Image unavailable</span>
+                        </div>
                         <div v-if="integration.media[currentImageIndex].caption" class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-4">
                           <p class="text-sm text-white">{{ integration.media[currentImageIndex].caption }}</p>
                         </div>
@@ -79,7 +82,7 @@
                       :class="currentImageIndex === index ? 'border-blue-500' : 'border-gray-200 dark:border-gray-700'"
                     >
                       <img
-                        :src="image.type === 'youtube' ? `https://img.youtube.com/vi/${image.url}/hqdefault.jpg` : (image.url.startsWith('http') ? image.url : require(`@pkg/assets/images/${image.url}`))"
+                        :src="image.type === 'youtube' ? `https://img.youtube.com/vi/${image.url}/hqdefault.jpg` : (resolveMediaSrc(image.url) || '')"
                         :alt="image.alt"
                         class="h-16 w-24 object-cover"
                       >
@@ -92,12 +95,12 @@
               <div class="flex items-start gap-6">
                 <div class="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl bg-slate-100 dark:bg-slate-800">
                   <img
-                    v-if="integration.icon && (integration.icon.endsWith('.svg') || integration.icon.endsWith('.png') || integration.icon.endsWith('.avif') || integration.icon.endsWith('.jpg') || integration.icon.endsWith('.jpeg') || integration.icon.endsWith('.webp'))"
-                    :src="require(`@pkg/assets/images/${integration.icon}`)"
+                    v-if="isImageIcon(integration.icon) && safeIconSrc(integration.icon!)"
+                    :src="safeIconSrc(integration.icon!)"
                     :alt="integration.name"
                     class="h-12 w-12 object-contain"
                   >
-                  <span v-else class="text-3xl">{{ integration.icon }}</span>
+                  <span v-else class="text-3xl">{{ isImageIcon(integration.icon) ? '🔌' : integration.icon }}</span>
                 </div>
                 <div class="flex-1">
                   <h1 class="text-3xl font-bold text-slate-900 dark:text-white mb-2">
@@ -116,7 +119,11 @@
                         :class="integration.connected ? 'bg-green-500' : 'bg-gray-300'"
                       ></div>
                       <span class="text-xs text-slate-500 dark:text-slate-400">
-                        {{ integration.connected ? 'Connected' : 'Disconnected' }}
+                        {{ integration.connected
+                          ? (connectedAccounts.length > 1
+                            ? `${connectedAccounts.length} accounts connected`
+                            : (connectedAccounts.length === 1 ? `Connected to ${connectedAccounts[0].label}` : 'Connected'))
+                          : 'Disconnected' }}
                       </span>
                       <!-- Beta/Coming Soon Badges -->
                       <div class="flex gap-1 ml-2">
@@ -166,27 +173,152 @@
                 </div>
               </div> -->
 
-              <!-- Connect/Disconnect Card -->
-              <div class="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-slate-800">
-                <h3 class="text-lg font-semibold text-slate-900 dark:text-white mb-4">
-                  {{ integration.connected ? 'Manage Connection' : 'Connect Integration' }}
-                </h3>
+              <!-- Connected Accounts List -->
+              <div v-if="connectedAccounts.length > 0" class="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-slate-800">
+                <div class="flex items-center justify-between mb-4">
+                  <h3 class="text-lg font-semibold text-slate-900 dark:text-white">
+                    Connected Accounts
+                  </h3>
+                  <button
+                    @click="startAddAccount"
+                    class="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 transition-colors"
+                  >
+                    <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" /></svg>
+                    Add Another Account
+                  </button>
+                </div>
+
+                <div class="space-y-3">
+                  <div
+                    v-for="acct in connectedAccounts"
+                    :key="acct.account_id"
+                    class="flex items-center justify-between rounded-lg border p-4 transition-colors"
+                    :class="acct.active
+                      ? 'border-blue-200 bg-blue-50/50 dark:border-blue-800 dark:bg-blue-900/20'
+                      : 'border-gray-200 bg-white dark:border-gray-700 dark:bg-slate-800'"
+                  >
+                    <div class="flex items-center gap-3">
+                      <div class="h-2.5 w-2.5 rounded-full bg-green-500"></div>
+                      <div>
+                        <div class="flex items-center gap-2">
+                          <span class="text-sm font-medium text-slate-900 dark:text-white">Connected to {{ acct.label }}</span>
+                          <span v-if="acct.active" class="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">ACTIVE</span>
+                        </div>
+                        <p v-if="acct.connected_at" class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                          Since {{ new Date(acct.connected_at).toLocaleDateString() }}
+                        </p>
+                      </div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                      <button
+                        v-if="!acct.active"
+                        @click="setAccountActive(acct.account_id)"
+                        class="rounded-md px-2.5 py-1 text-xs font-medium text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/20 transition-colors"
+                      >
+                        Set Active
+                      </button>
+                      <button
+                        @click="disconnectAccount(acct.account_id)"
+                        class="rounded-md px-2.5 py-1 text-xs font-medium text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20 transition-colors"
+                      >
+                        Disconnect
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Connect Card (first time or adding new account) -->
+              <div v-if="showConnectionForm" class="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-slate-800">
+                <div class="flex items-center justify-between mb-4">
+                  <h3 class="text-lg font-semibold text-slate-900 dark:text-white">
+                    {{ connectedAccounts.length > 0 ? 'Add Another Account' : 'Connect Integration' }}
+                  </h3>
+                  <button
+                    v-if="isAddingAccount"
+                    @click="cancelAddAccount"
+                    class="text-xs text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 font-medium"
+                  >
+                    Cancel
+                  </button>
+                </div>
                 
                 <!-- Form Guide -->
-                <div v-if="integration.formGuide && !integration.connected" class="mb-6">
+                <div v-if="integration.formGuide" class="mb-6">
                   <p class="text-sm text-slate-600 dark:text-slate-400">
                     <span class="font-medium">Where to find this information:</span> {{ integration.formGuide }}
                   </p>
                 </div>
+
+                <!-- Account Label (always required) -->
+                <div class="space-y-2 mb-4">
+                  <label for="__account_label" class="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                    Account Label
+                    <span class="text-red-500">*</span>
+                  </label>
+                  <input
+                    id="__account_label"
+                    type="text"
+                    v-model="newAccountLabel"
+                    placeholder="e.g. Work Gmail, Personal Gmail, Team Slack"
+                    class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-slate-700 dark:text-white"
+                    :class="{ 'border-red-500': errors['__account_label'] }"
+                  >
+                  <p class="text-xs text-slate-500 dark:text-slate-400">
+                    A friendly name to identify this account (e.g. your email address or team name)
+                  </p>
+                  <p v-if="errors['__account_label']" class="text-xs text-red-500">
+                    {{ errors['__account_label'] }}
+                  </p>
+                </div>
                 
-                <!-- Configuration Form -->
-                <div v-if="!integration.connected && integration.properties && integration.properties.length > 0" class="space-y-4 mb-6">
+                <!-- Configuration Form (credential fields) -->
+                <div v-if="integration.properties && integration.properties.length > 0" class="space-y-4 mb-6">
                   <div v-for="property in integration.properties" :key="property.key" class="space-y-2">
                     <label :for="property.key" class="block text-sm font-medium text-slate-700 dark:text-slate-300">
                       {{ property.title }}
                       <span v-if="property.required" class="text-red-500">*</span>
                     </label>
+
+                    <!-- Select field -->
+                    <div v-if="property.type === 'select'" class="relative">
+                      <select
+                        :id="property.key"
+                        v-model="formData[property.key]"
+                        :required="property.required"
+                        class="w-full appearance-none rounded-lg border border-gray-300 px-3 py-2 pr-8 text-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-slate-700 dark:text-white"
+                        :class="{ 'border-red-500': errors[property.key] }"
+                      >
+                        <option value="" disabled>{{ selectOptionsLoading[property.key] ? 'Loading...' : property.placeholder || 'Select...' }}</option>
+                        <option
+                          v-for="opt in (selectOptions[property.key] || [])"
+                          :key="opt.value"
+                          :value="opt.value"
+                        >
+                          {{ opt.label }}{{ opt.description ? ` — ${opt.description}` : '' }}
+                        </option>
+                      </select>
+                      <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
+                        <svg class="h-4 w-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </div>
+                      <button
+                        v-if="property.selectBoxId && !selectOptionsLoading[property.key]"
+                        type="button"
+                        class="absolute right-7 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                        title="Refresh options"
+                        @click="fetchSelectOptions(property)"
+                      >
+                        <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                      </button>
+                    </div>
+
+                    <!-- Standard input field -->
                     <input
+                      v-else
                       :id="property.key"
                       :type="property.type"
                       v-model="formData[property.key]"
@@ -194,6 +326,7 @@
                       :required="property.required"
                       class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-slate-700 dark:text-white"
                       :class="{ 'border-red-500': errors[property.key] }"
+                      @blur="onDependencyFieldBlur(property.key)"
                     >
                     <p v-if="property.hint" class="text-xs text-slate-500 dark:text-slate-400">
                       {{ property.hint }}
@@ -206,23 +339,18 @@
                 
                 <div class="space-y-4">
                   <button
-                    @click="integration.connected ? disconnectIntegration() : handleConnect()"
+                    @click="handleConnect()"
                     :disabled="isLoading"
-                    class="w-full rounded-lg px-4 py-2 text-sm font-medium transition-colors flex items-center justify-center"
-                    :class="integration.connected 
-                      ? 'bg-red-600 text-white hover:bg-red-700' 
-                      : 'bg-blue-600 text-white hover:bg-blue-700'"
+                    class="w-full rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 flex items-center justify-center"
                   >
                     <svg v-if="isLoading" class="animate-spin h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24">
                       <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                       <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a8 8 0 01-16 0v4a8 8 0 0016 0z"></path>
                     </svg>
-                    {{ isLoading ? 'Processing...' : (integration.connected ? 'Disconnect' : 'Connect Now') }}
+                    {{ isLoading ? 'Connecting...' : 'Connect Now' }}
                   </button>
                   <p class="text-xs text-slate-500 dark:text-slate-400">
-                    {{ integration.connected 
-                      ? 'Disconnecting will remove access to your account' 
-                      : 'Connect your account to start using this integration' }}
+                    Connect your account to start using this integration
                   </p>
                 </div>
               </div>
@@ -406,6 +534,7 @@ import { getIntegrationService } from '@pkg/agent/services/IntegrationService';
 import { getExtensionService } from '@pkg/agent/services/ExtensionService';
 import { formatFuzzyTime } from '@pkg/utils/dateFormat';
 
+import type { IntegrationAccount } from '@pkg/agent/services/IntegrationService';
 import { onMounted, ref, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
@@ -415,12 +544,48 @@ const route = useRoute();
 const router = useRouter();
 const integrationService = getIntegrationService();
 
+/** Safely resolve an integration icon/media path — returns null if the asset doesn't exist */
+function safeIconSrc(path: string): string | null {
+  try {
+    return require(`@pkg/assets/images/${path}`);
+  } catch {
+    return null;
+  }
+}
+
+function isImageIcon(icon?: string): boolean {
+  if (!icon) return false;
+  return /\.(svg|png|avif|jpg|jpeg|webp)$/i.test(icon);
+}
+
+function resolveMediaSrc(url: string): string | null {
+  if (url.startsWith('http')) return url;
+  return safeIconSrc(url);
+}
+
 const integration = ref<Integration | null>(null);
 const mergedIntegrations = ref<Record<string, Integration>>({});
 const currentImageIndex = ref(0);
 const formData = ref<Record<string, string>>({});
 const errors = ref<Record<string, string>>({});
 const isLoading = ref(false);
+
+// Select box state
+const selectOptions = ref<Record<string, Array<{ value: string; label: string; description?: string }>>>({});
+const selectOptionsLoading = ref<Record<string, boolean>>({});
+
+// Multi-account state
+const accounts = ref<IntegrationAccount[]>([]);
+const selectedAccountId = ref('default');
+const activeAccountId = ref('default');
+const isAddingAccount = ref(false);
+const newAccountLabel = ref('');
+
+/** Only accounts that are connected */
+const connectedAccounts = computed(() => accounts.value.filter(a => a.connected));
+
+/** Show the connection form when: no accounts connected yet, OR user clicked "Add Another Account" */
+const showConnectionForm = computed(() => connectedAccounts.value.length === 0 || isAddingAccount.value);
 
 // Carousel functions
 const nextImage = () => {
@@ -442,32 +607,97 @@ const toggleTheme = () => {
   localStorage.setItem(THEME_STORAGE_KEY, isDark.value ? 'dark' : 'light');
 };
 
-const connectIntegration = async () => {
-  if (integration.value) {
-    isLoading.value = true;
-    try {
-      await integrationService.setConnectionStatus(integration.value.id, true);
-      integration.value.connected = true;
-      mergedIntegrations.value[integration.value.id].connected = true;
-    } catch (error) {
-      console.error('Failed to connect integration:', error);
-    } finally {
-      isLoading.value = false;
+const refreshAccounts = async () => {
+  if (!integration.value) return;
+  accounts.value = await integrationService.getAccounts(integration.value.id);
+  activeAccountId.value = await integrationService.getActiveAccountId(integration.value.id);
+};
+
+const startAddAccount = () => {
+  isAddingAccount.value = true;
+  newAccountLabel.value = '';
+  formData.value = {};
+  errors.value = {};
+};
+
+const cancelAddAccount = () => {
+  isAddingAccount.value = false;
+  newAccountLabel.value = '';
+  formData.value = {};
+  errors.value = {};
+};
+
+/** Set a specific account as the active one */
+const setAccountActive = async (accountId: string) => {
+  if (!integration.value) return;
+  await integrationService.setActiveAccount(integration.value.id, accountId);
+  await refreshAccounts();
+};
+
+/** Disconnect (and delete) a specific account */
+const disconnectAccount = async (accountId: string) => {
+  if (!integration.value) return;
+  isLoading.value = true;
+  try {
+    await integrationService.deleteAccount(integration.value.id, accountId);
+    await refreshAccounts();
+    integration.value.connected = await integrationService.isAnyAccountConnected(integration.value.id);
+    mergedIntegrations.value[integration.value.id].connected = integration.value.connected;
+  } catch (error) {
+    console.error('Failed to disconnect account:', error);
+  } finally {
+    isLoading.value = false;
+  }
+};
+
+// ─── Select box helpers ─────────────────────────────────────────
+
+/** Fetch options for a single select property from IntegrationService */
+const fetchSelectOptions = async (property: { key: string; selectBoxId?: string; selectDependsOn?: string[] }) => {
+  if (!integration.value || !property.selectBoxId) return;
+
+  selectOptionsLoading.value[property.key] = true;
+  try {
+    const depValues: Record<string, string> = {};
+    for (const depKey of (property.selectDependsOn ?? [])) {
+      if (formData.value[depKey]) {
+        depValues[depKey] = formData.value[depKey];
+      }
+    }
+
+    const options = await integrationService.getSelectOptions(
+      property.selectBoxId,
+      integration.value.id,
+      selectedAccountId.value,
+      depValues,
+    );
+    selectOptions.value[property.key] = options;
+  } catch (err) {
+    console.error(`Failed to fetch select options for ${ property.key }:`, err);
+    selectOptions.value[property.key] = [];
+  } finally {
+    selectOptionsLoading.value[property.key] = false;
+  }
+};
+
+/** When a dependency field loses focus, refresh any select properties that depend on it */
+const onDependencyFieldBlur = (changedKey: string) => {
+  if (!integration.value?.properties) return;
+
+  for (const prop of integration.value.properties) {
+    if (prop.type === 'select' && prop.selectDependsOn?.includes(changedKey)) {
+      fetchSelectOptions(prop);
     }
   }
 };
 
-const disconnectIntegration = async () => {
-  if (integration.value) {
-    isLoading.value = true;
-    try {
-      await integrationService.setConnectionStatus(integration.value.id, false);
-      integration.value.connected = false;
-      mergedIntegrations.value[integration.value.id].connected = false;
-    } catch (error) {
-      console.error('Failed to disconnect integration:', error);
-    } finally {
-      isLoading.value = false;
+/** Auto-fetch options for all select properties on mount */
+const fetchAllSelectOptions = () => {
+  if (!integration.value?.properties) return;
+
+  for (const prop of integration.value.properties) {
+    if (prop.type === 'select' && prop.selectBoxId) {
+      fetchSelectOptions(prop);
     }
   }
 };
@@ -527,33 +757,56 @@ const validateForm = (): boolean => {
 };
 
 const handleConnect = async () => {
-  if (!integration.value?.properties || integration.value.properties.length === 0) {
-    await connectIntegration();
+  if (!integration.value) return;
+
+  // Validate label
+  errors.value = {};
+  const label = newAccountLabel.value.trim();
+  if (!label) {
+    errors.value['__account_label'] = 'Account label is required';
     return;
   }
-  
-  if (validateForm()) {
-    isLoading.value = true;
-    try {
-      // Save form data to database
-      const formInputs = Object.entries(formData.value).map(([key, value]) => ({
-        integration_id: integration.value!.id,
-        property: key,
-        value: value
-      }));
-      
-      await integrationService.setFormValues(formInputs);
-      console.log('Integration configuration saved:', formData.value);
-      
-      // Update connection status
-      await integrationService.setConnectionStatus(integration.value.id, true);
-      integration.value.connected = true;
-      mergedIntegrations.value[integration.value.id].connected = true;
-    } catch (error) {
-      console.error('Failed to save integration configuration:', error);
-    } finally {
-      isLoading.value = false;
+
+  // Validate credential fields
+  if (!validateForm()) return;
+
+  isLoading.value = true;
+  try {
+    // Derive account_id from label
+    const accountId = label.toLowerCase().replace(/[^a-z0-9]+/g, '_');
+
+    // Save label
+    await integrationService.setAccountLabel(integration.value.id, accountId, label);
+
+    // Save credential fields for this account
+    const formInputs = Object.entries(formData.value).map(([key, value]) => ({
+      integration_id: integration.value!.id,
+      account_id: accountId,
+      property: key,
+      value: value
+    }));
+    await integrationService.setFormValues(formInputs);
+
+    // Mark connected
+    await integrationService.setConnectionStatus(integration.value.id, true, accountId);
+
+    // If this is the first account, set it as active
+    if (connectedAccounts.value.length === 0) {
+      await integrationService.setActiveAccount(integration.value.id, accountId);
     }
+
+    // Reset form state
+    isAddingAccount.value = false;
+    newAccountLabel.value = '';
+    formData.value = {};
+
+    await refreshAccounts();
+    integration.value.connected = true;
+    mergedIntegrations.value[integration.value.id].connected = true;
+  } catch (error) {
+    console.error('Failed to save integration configuration:', error);
+  } finally {
+    isLoading.value = false;
   }
 };
 
@@ -587,19 +840,24 @@ onMounted(async () => {
     return;
   }
 
-  // Load form data from database
+  // Load accounts and form data
   try {
-    const formValues = await integrationService.getFormValues(integrationId);
+    await refreshAccounts();
+    selectedAccountId.value = activeAccountId.value;
+
+    const formValues = await integrationService.getFormValues(integrationId, selectedAccountId.value);
     const formDataObj: Record<string, string> = {};
     formValues.forEach(value => {
       formDataObj[value.property] = value.value;
     });
     formData.value = formDataObj;
     
-    // Load connection status
-    const connectionStatus = await integrationService.getConnectionStatus(integrationId);
-    integration.value.connected = connectionStatus.connected;
-    mergedIntegrations.value[integrationId].connected = connectionStatus.connected;
+    // Load connection status (check any account)
+    integration.value.connected = await integrationService.isAnyAccountConnected(integrationId);
+    mergedIntegrations.value[integrationId].connected = integration.value.connected;
+
+    // Fetch select box options after form data is loaded
+    fetchAllSelectOptions();
   } catch (error) {
     console.error('Failed to load integration data:', error);
   }

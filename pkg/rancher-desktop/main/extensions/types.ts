@@ -139,6 +139,18 @@ export interface Extension {
   start(): Promise<void>;
 
   /**
+   * Stop this extension (e.g. docker compose stop).
+   */
+  stop(): Promise<void>;
+
+  /**
+   * Get the persisted running state of this extension.
+   * Returns 'running' if the extension was last started, 'stopped' if
+   * it was explicitly stopped, or 'running' by default after first install.
+   */
+  getRunningState(): Promise<'running' | 'stopped'>;
+
+  /**
    * Perform any shutdown tasks for this extension (e.g. stop containers).
    * Called when the application is quitting.
    */
@@ -168,6 +180,22 @@ export interface ExtensionManager {
    * Get a collection of all installed extensions.
    */
   getInstalledExtensions(): Promise<Extension[]>;
+
+  /**
+   * Start a specific installed extension by ID.
+   */
+  startExtension(id: string): Promise<void>;
+
+  /**
+   * Stop a specific installed extension by ID.
+   */
+  stopExtension(id: string): Promise<void>;
+
+  /**
+   * Get the running status of a specific extension by ID.
+   * Returns 'running' | 'stopped' | 'not_installed'.
+   */
+  getExtensionStatus(id: string): Promise<'running' | 'stopped' | 'not_installed'>;
 
   /**
    * Shut down the extension manager, doing any clean up necessary.

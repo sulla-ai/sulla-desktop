@@ -67,7 +67,9 @@ export default {
       'puppeteer-extra-plugin': 'commonjs puppeteer-extra-plugin',
       'puppeteer-extra':        'commonjs puppeteer-extra',
       'puppeteer':              'commonjs puppeteer',
-      'clone-deep':             'commonjs clone-deep'
+      'clone-deep':             'commonjs clone-deep',
+      '@composio/core':         'commonjs @composio/core',
+      '@composio/client':       'commonjs @composio/client',
     }
   },
   

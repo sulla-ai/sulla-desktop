@@ -1,0 +1,220 @@
+import { BaseModel } from '../BaseModel';
+
+interface IntegrationValueAttributes {
+  value_id: number;
+  integration_id: string;
+  account_id: string;
+  property: string;
+  value: string;
+  is_default: boolean;
+  created_at: Date;
+  updated_at: Date;
+}
+
+export class IntegrationValueModel extends BaseModel<IntegrationValueAttributes> {
+  protected readonly tableName = 'integration_values';
+  protected readonly primaryKey = 'value_id';
+  protected readonly timestamps = true;
+
+  protected readonly fillable = [
+    'integration_id',
+    'account_id',
+    'property',
+    'value',
+    'is_default',
+  ];
+
+  protected readonly casts: Record<string, string> = {
+    value_id: 'integer',
+    is_default: 'boolean',
+    created_at: 'timestamp',
+    updated_at: 'timestamp',
+  };
+
+  constructor(attributes: Partial<IntegrationValueAttributes> = {}) {
+    super();
+    this.attributes = { ...attributes };
+    this.original = { ...attributes };
+  }
+
+  // ─── Static finders ────────────────────────────────────────────────
+
+  /** Find a single value by composite key */
+  static async findByKey(
+    integrationId: string,
+    accountId: string,
+    property: string,
+  ): Promise<IntegrationValueModel | null> {
+    const rows = await this.where({
+      integration_id: integrationId,
+      account_id: accountId,
+      property,
+    });
+    return rows[0] || null;
+  }
+
+  /** Find all values for an integration + account */
+  static async findByAccount(
+    integrationId: string,
+    accountId: string,
+  ): Promise<IntegrationValueModel[]> {
+    return this.where({
+      integration_id: integrationId,
+      account_id: accountId,
+    });
+  }
+
+  /** Find all values for an integration across all accounts */
+  static async findByIntegration(
+    integrationId: string,
+  ): Promise<IntegrationValueModel[]> {
+    return this.where({ integration_id: integrationId });
+  }
+
+  /** Get distinct account_ids for an integration */
+  static async getDistinctAccounts(integrationId: string): Promise<string[]> {
+    const rows = await this.query(
+      `SELECT DISTINCT "account_id" FROM "integration_values" WHERE "integration_id" = $1 ORDER BY "account_id"`,
+      [integrationId],
+    );
+    return rows.map(r => r.account_id as string);
+  }
+
+  /** Check if any row matches integration + property value */
+  static async existsWithPropertyValue(
+    integrationId: string,
+    property: string,
+    value: string,
+  ): Promise<boolean> {
+    const rows = await this.query(
+      `SELECT 1 FROM "integration_values" WHERE "integration_id" = $1 AND "property" = $2 AND "value" = $3 LIMIT 1`,
+      [integrationId, property, value],
+    );
+    return rows.length > 0;
+  }
+
+  /** Upsert a value: update if exists, insert if not. Returns the model + whether it was an update. */
+  static async upsert(
+    integrationId: string,
+    accountId: string,
+    property: string,
+    value: string,
+  ): Promise<{ model: IntegrationValueModel; wasUpdate: boolean }> {
+    const existing = await this.findByKey(integrationId, accountId, property);
+
+    if (existing) {
+      existing.attributes.value = value;
+      await existing.save();
+      return { model: existing, wasUpdate: true };
+    }
+
+    const model = await this.create({
+      integration_id: integrationId,
+      account_id: accountId,
+      property,
+      value,
+    });
+    return { model, wasUpdate: false };
+  }
+
+  /** Delete all values for an integration + account */
+  static async deleteByAccount(integrationId: string, accountId: string): Promise<number> {
+    const rows = await this.findByAccount(integrationId, accountId);
+    let count = 0;
+    for (const row of rows) {
+      if (await row.delete()) count++;
+    }
+    return count;
+  }
+
+  /** Delete all values for an integration across all accounts */
+  static async deleteByIntegration(integrationId: string): Promise<number> {
+    const rows = await this.findByIntegration(integrationId);
+    let count = 0;
+    for (const row of rows) {
+      if (await row.delete()) count++;
+    }
+    return count;
+  }
+
+  /** Get form values (exclude system properties) for an account */
+  static async getFormValues(
+    integrationId: string,
+    accountId: string,
+    systemProperties: string[],
+  ): Promise<IntegrationValueModel[]> {
+    const all = await this.findByAccount(integrationId, accountId);
+    return all.filter(m => !systemProperties.includes(m.attributes.property as string));
+  }
+
+  /** Get the default account_id for an integration. Returns 'default' if none marked. */
+  static async getDefaultAccountId(integrationId: string): Promise<string> {
+    try {
+      const rows = await this.query(
+        `SELECT DISTINCT "account_id" FROM "integration_values"
+         WHERE "integration_id" = $1 AND "is_default" = TRUE
+         LIMIT 1`,
+        [integrationId],
+      );
+      if (rows[0]?.account_id) {
+        return rows[0].account_id as string;
+      }
+    } catch (error: any) {
+      // Backward-compat for databases that haven't applied 0014 yet.
+      if (error?.code !== '42703') {
+        throw error;
+      }
+
+      const legacyRows = await this.query(
+        `SELECT "value" FROM "integration_values"
+         WHERE "integration_id" = $1 AND "account_id" = 'default' AND "property" = 'active_account'
+         LIMIT 1`,
+        [integrationId],
+      );
+      if (legacyRows[0]?.value) {
+        return legacyRows[0].value as string;
+      }
+    }
+
+    const fallbackRows = await this.query(
+      `SELECT DISTINCT "account_id" FROM "integration_values"
+       WHERE "integration_id" = $1
+       ORDER BY "account_id" ASC
+       LIMIT 1`,
+      [integrationId],
+    );
+    return (fallbackRows[0]?.account_id as string) || 'default';
+  }
+
+  /**
+   * Set an account as the default for an integration.
+   * Clears is_default on all other accounts for that integration,
+   * then sets is_default=TRUE on all rows for the target account.
+   */
+  static async setDefaultAccount(integrationId: string, accountId: string): Promise<void> {
+    try {
+      // Clear default from all accounts for this integration
+      await this.query(
+        `UPDATE "integration_values" SET "is_default" = FALSE, "updated_at" = CURRENT_TIMESTAMP
+         WHERE "integration_id" = $1 AND "is_default" = TRUE`,
+        [integrationId],
+      );
+      // Set default on the target account
+      await this.query(
+        `UPDATE "integration_values" SET "is_default" = TRUE, "updated_at" = CURRENT_TIMESTAMP
+         WHERE "integration_id" = $1 AND "account_id" = $2`,
+        [integrationId, accountId],
+      );
+      return;
+    } catch (error: any) {
+      // Backward-compat for databases that haven't applied 0014 yet.
+      if (error?.code !== '42703') {
+        throw error;
+      }
+    }
+
+    // Legacy fallback: keep old active_account marker so behavior remains functional
+    // until migrations run.
+    await this.upsert(integrationId, 'default', 'active_account', accountId);
+  }
+}

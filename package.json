@@ -71,6 +71,7 @@
   },
   "main": "dist/app/background.js",
   "dependencies": {
+    "@composio/core": "^0.6.3",
     "@docker/extension-api-client-types": "0.4.2",
     "@hbilal_9/vue3-chat-scroll": "^0.0.4",
     "@kubernetes/client-node": "1.4.0",

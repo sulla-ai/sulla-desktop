@@ -71,8 +71,10 @@ export class RecipeExtensionImpl implements Extension {
   protected _labels:    Promise<Record<string, string>> | undefined;
   protected _manifest:  InstallationManifest | undefined;
 
-  protected readonly MANIFEST_FILE = 'installation.yaml';
-  protected readonly VERSION_FILE  = 'version.txt';
+  protected readonly MANIFEST_FILE   = 'installation.yaml';
+  protected readonly VERSION_FILE    = 'version.txt';
+  protected readonly INSTALLED_LOCK  = 'installed.lock';
+  protected readonly RUNNING_STATE   = 'running.state';
 
   get image(): string {
     return `${ this.id }:${ this.version }`;
@@ -232,7 +234,12 @@ export class RecipeExtensionImpl implements Extension {
         this.version,
         'utf-8',
       );
-      sullaLog({ topic: 'extensions', level: 'info', message: `[install:${ this.id }] Phase 4/4 complete: version marker written`, data: { path: path.join(this.dir, this.VERSION_FILE), version: this.version } });
+      await fs.promises.writeFile(
+        path.join(this.dir, this.INSTALLED_LOCK),
+        JSON.stringify({ installedAt: new Date().toISOString(), version: this.version }),
+        'utf-8',
+      );
+      sullaLog({ topic: 'extensions', level: 'info', message: `[install:${ this.id }] Phase 4/4 complete: version marker + lock written`, data: { path: path.join(this.dir, this.VERSION_FILE), version: this.version } });
     } catch (ex) {
       const err = ex as any;
 
@@ -706,6 +713,37 @@ export class RecipeExtensionImpl implements Extension {
       .replace(/\$\{APP_DIR\}/g, this.shellQuote(this.dir));
   }
 
+  /**
+   * Collapse repetitive command output into a compact, readable summary.
+   */
+  protected summarizeCommandOutput(output: string, maxLines = 30): string {
+    const lines = output
+      .split(/\r?\n|\r/g)
+      .map(line => line.trim())
+      .filter(Boolean);
+
+    if (lines.length === 0) {
+      return '';
+    }
+
+    const counts = new Map<string, number>();
+
+    for (const line of lines) {
+      counts.set(line, (counts.get(line) ?? 0) + 1);
+    }
+
+    const batched = Array.from(counts.entries()).map(([line, count]) => {
+      return count > 1 ? `${ line } (x${ count })` : line;
+    });
+    const visible = batched.slice(0, maxLines);
+
+    if (batched.length > maxLines) {
+      visible.push(`... (${ batched.length - maxLines } more lines batched)`);
+    }
+
+    return visible.join('\n');
+  }
+
   async start(): Promise<void> {
     const manifest = await this.getManifest();
     const cmd = manifest.commands?.start;
@@ -725,12 +763,23 @@ export class RecipeExtensionImpl implements Extension {
     const { stdout, stderr } = await spawnFile('/bin/sh', ['-c', resolved], { stdio: 'pipe', cwd: this.dir });
 
     if (stdout) {
-      sullaLog({ topic: 'extensions', level: 'debug', message: `[${ this.id } start stdout] ${ stdout.trim() }` });
+      const summarizedStdout = this.summarizeCommandOutput(stdout);
+
+      if (summarizedStdout) {
+        sullaLog({ topic: 'extensions', level: 'debug', message: `[${ this.id } start stdout]\n${ summarizedStdout }` });
+      }
     }
     if (stderr) {
-      sullaLog({ topic: 'extensions', level: 'debug', message: `[${ this.id } start stderr] ${ stderr.trim() }` });
+      const summarizedStderr = this.summarizeCommandOutput(stderr);
+
+      if (summarizedStderr) {
+        sullaLog({ topic: 'extensions', level: 'debug', message: `[${ this.id } start stderr]\n${ summarizedStderr }` });
+      }
     }
     sullaLog({ topic: 'extensions', level: 'info', message: `Started ${ this.id } successfully` });
+
+    // Persist running state so we can restore on app restart
+    await this.saveRunningState('running');
   }
 
   async stop(): Promise<void> {
@@ -755,6 +804,9 @@ export class RecipeExtensionImpl implements Extension {
       sullaLog({ topic: 'extensions', level: 'debug', message: `[${ this.id } stop stderr] ${ stderr.trim() }` });
     }
     sullaLog({ topic: 'extensions', level: 'info', message: `Stopped ${ this.id } successfully` });
+
+    // Persist stopped state so we don't auto-start on app restart
+    await this.saveRunningState('stopped');
   }
 
   async restart(): Promise<void> {
@@ -885,10 +937,9 @@ export class RecipeExtensionImpl implements Extension {
 
   async isInstalled(): Promise<boolean> {
     try {
-      const filePath = path.join(this.dir, this.VERSION_FILE);
-      const installed = (await fs.promises.readFile(filePath, 'utf-8')).trim();
+      await fs.promises.access(path.join(this.dir, this.INSTALLED_LOCK), fs.constants.F_OK);
 
-      return installed === this.version;
+      return true;
     } catch {
       return false;
     }
@@ -907,10 +958,44 @@ export class RecipeExtensionImpl implements Extension {
       return;
     }
 
+    // On app shutdown, preserve the current running state so containers
+    // return to the same state on next launch.  We do NOT stop containers
+    // here — Docker will handle their lifecycle independently.
+    sullaLog({ topic: 'extensions', level: 'info', message: `Shutdown: preserving state for ${ this.id } (containers left as-is)` });
+  }
+
+  // ─── Running State Persistence ──────────────────────────────────────
+
+  /**
+   * Save the desired running state ('running' | 'stopped') to disk.
+   * This is read on next app launch to decide whether to auto-start.
+   */
+  protected async saveRunningState(state: 'running' | 'stopped'): Promise<void> {
     try {
-      await this.stop();
+      await fs.promises.writeFile(
+        path.join(this.dir, this.RUNNING_STATE),
+        state,
+        'utf-8',
+      );
     } catch (ex) {
-      console.error(`Ignoring error stopping ${ this.id } on shutdown: ${ ex }`);
+      sullaLog({ topic: 'extensions', level: 'warn', message: `Failed to save running state for ${ this.id }`, error: ex });
+    }
+  }
+
+  /**
+   * Read the persisted running state.  Returns 'running' if no state file
+   * exists (default: auto-start after first install).
+   */
+  async getRunningState(): Promise<'running' | 'stopped'> {
+    try {
+      const state = (await fs.promises.readFile(
+        path.join(this.dir, this.RUNNING_STATE),
+        'utf-8',
+      )).trim();
+
+      return state === 'stopped' ? 'stopped' : 'running';
+    } catch {
+      return 'running';
     }
   }
 }

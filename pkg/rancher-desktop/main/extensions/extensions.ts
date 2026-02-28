@@ -787,6 +787,15 @@ export class ExtensionImpl implements Extension {
     // Their containers are managed by the container engine directly.
   }
 
+  async stop() {
+    // Legacy Docker-image-based extensions don't have a stop command.
+  }
+
+  async getRunningState(): Promise<'running' | 'stopped'> {
+    // Legacy extensions are always considered running if installed.
+    return 'running';
+  }
+
   async shutdown() {
     // Don't trigger downloading the extension if it hasn't been installed.
     const metadata = await this._metadata;

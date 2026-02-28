@@ -36,27 +36,6 @@
                       <kbd class="font-sans">⌘</kbd><kbd class="font-sans">K</kbd>
                     </kbd>
                   </div>
-
-                  <div class="flex flex-wrap items-center gap-2">
-                    <button
-                      type="button"
-                      class="flex h-6 rounded-full p-px text-xs font-medium"
-                      :class="activeCategory === null ? 'bg-linear-to-r from-sky-400/30 via-sky-400 to-sky-400/30 text-sky-300' : 'text-slate-500 bg-slate-800/60 ring-1 ring-white/5'"
-                      @click="activeCategory = null"
-                    >
-                      <span class="flex items-center rounded-full px-2.5" :class="activeCategory === null ? 'bg-slate-800' : ''">All</span>
-                    </button>
-                    <button
-                      v-for="category in categories"
-                      :key="category"
-                      type="button"
-                      class="flex h-6 rounded-full p-px text-xs font-medium"
-                      :class="activeCategory === category ? 'bg-linear-to-r from-sky-400/30 via-sky-400 to-sky-400/30 text-sky-300' : 'text-slate-500 bg-slate-800/60 ring-1 ring-white/5'"
-                      @click="activeCategory = category"
-                    >
-                      <span class="flex items-center rounded-full px-2.5" :class="activeCategory === category ? 'bg-slate-800' : ''">{{ category }}</span>
-                    </button>
-                  </div>
                 </div>
               </div>
             </div>
@@ -64,10 +43,69 @@
         </div>
 
         <div class="flex-1 overflow-auto">
-          <div class="mx-auto max-w-6xl px-4 py-6">
-            <div class="overflow-auto">
+          <div class="mx-auto max-w-7xl px-4 py-6">
+            <div class="flex gap-6">
+              <!-- Category Sidebar -->
+              <nav class="hidden md:block w-48 shrink-0">
+                <div class="sticky top-6">
+                  <h3 class="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">Categories</h3>
+                  <ul class="space-y-0.5">
+                    <li>
+                      <button
+                        type="button"
+                        class="flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-left text-sm transition-colors"
+                        :class="activeCategory === null
+                          ? 'bg-sky-500/10 text-sky-600 font-medium dark:bg-sky-400/10 dark:text-sky-400'
+                          : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200'"
+                        @click="activeCategory = null"
+                      >
+                        <span>Popular</span>
+                        <span class="text-xs tabular-nums" :class="activeCategory === null ? 'text-sky-500 dark:text-sky-400' : 'text-slate-400 dark:text-slate-500'">{{ integrationsList.length }}</span>
+                      </button>
+                    </li>
+                    <li v-for="cat in categoriesWithCounts" :key="cat.name">
+                      <button
+                        type="button"
+                        class="flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-left text-sm transition-colors"
+                        :class="activeCategory === cat.name
+                          ? 'bg-sky-500/10 text-sky-600 font-medium dark:bg-sky-400/10 dark:text-sky-400'
+                          : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200'"
+                        @click="activeCategory = cat.name"
+                      >
+                        <span>{{ cat.name }}</span>
+                        <span class="text-xs tabular-nums" :class="activeCategory === cat.name ? 'text-sky-500 dark:text-sky-400' : 'text-slate-400 dark:text-slate-500'">{{ cat.count }}</span>
+                      </button>
+                    </li>
+                  </ul>
+                </div>
+              </nav>
+
+              <!-- Mobile category select -->
+              <div class="md:hidden mb-4 w-full">
+                <select
+                  class="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                  :value="activeCategory ?? ''"
+                  @change="activeCategory = ($event.target as HTMLSelectElement).value || null"
+                >
+                  <option value="">Popular ({{ integrationsList.length }})</option>
+                  <option v-for="cat in categoriesWithCounts" :key="cat.name" :value="cat.name">{{ cat.name }} ({{ cat.count }})</option>
+                </select>
+              </div>
+
+              <!-- Integration Grid -->
+              <div class="flex-1 min-w-0">
               <div
-                v-if="filteredIntegrations.length === 0"
+                v-if="categoryLoading"
+                class="flex h-40 items-center justify-center text-sm text-slate-400 dark:text-slate-500"
+              >
+                <svg class="animate-spin -ml-1 mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                </svg>
+                Loading integrations…
+              </div>
+              <div
+                v-else-if="filteredIntegrations.length === 0"
                 class="flex h-40 items-center justify-center text-sm text-[#0d0d0d]/60 dark:text-white/60"
               >
                 No integrations found.
@@ -75,7 +113,7 @@
 
               <div
                 v-else
-                class="grid md:grid-cols-2 lg:grid-cols-3 gap-6"
+                class="grid md:grid-cols-2 xl:grid-cols-3 gap-6"
               >
                 <div
                   v-for="integration in filteredIntegrations"
@@ -86,12 +124,12 @@
                     <div class="flex items-start justify-between mb-4">
                       <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-700">
                         <img
-                          v-if="integration.icon && (integration.icon.endsWith('.svg') || integration.icon.endsWith('.png') || integration.icon.endsWith('.avif') || integration.icon.endsWith('.jpg') || integration.icon.endsWith('.jpeg') || integration.icon.endsWith('.webp'))"
-                          :src="require(`@pkg/assets/images/${integration.icon}`)"
+                          v-if="isImageIcon(integration.icon) && safeIconSrc(integration.icon!)"
+                          :src="safeIconSrc(integration.icon!)"
                           :alt="integration.name"
                           class="h-8 w-8 object-contain"
                         >
-                        <span v-else class="text-2xl">{{ integration.icon }}</span>
+                        <span v-else class="text-2xl">{{ isImageIcon(integration.icon) ? '🔌' : integration.icon }}</span>
                       </div>
                       <div class="flex items-center gap-2">
                         <!-- Only show connection status for integrations that are not coming soon -->
@@ -156,6 +194,7 @@
                   </div>
                 </div>
               </div>
+              </div>
             </div>
           </div>
         </div>
@@ -167,33 +206,81 @@
 <script setup lang="ts">
 import AgentHeader from './agent/AgentHeader.vue';
 import PostHogTracker from '@pkg/components/PostHogTracker.vue';
-import { integrations, type Integration } from '@pkg/agent/integrations/catalog';
+import type { Integration } from '@pkg/agent/integrations/types';
+import { popularIntegrations } from '@pkg/agent/integrations/popular';
 import { getIntegrationService } from '@pkg/agent/services/IntegrationService';
 import { getExtensionService } from '@pkg/agent/services/ExtensionService';
 import { formatFuzzyTime } from '@pkg/utils/dateFormat';
 
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 
 const THEME_STORAGE_KEY = 'agentTheme';
 const isDark = ref(false);
 const integrationService = getIntegrationService();
 
+/** Safely resolve an integration icon path — returns null if the asset doesn't exist */
+function safeIconSrc(icon: string): string | null {
+  try {
+    return require(`@pkg/assets/images/${icon}`);
+  } catch {
+    return null;
+  }
+}
+
+function isImageIcon(icon?: string): boolean {
+  if (!icon) return false;
+  return /\.(svg|png|avif|jpg|jpeg|webp)$/i.test(icon);
+}
+
 const search = ref('');
 const activeCategory = ref<string | null>(null);
+const categoryLoading = ref(false);
 
 const integrationsList = ref<Integration[]>([]);
 const mergedIntegrations = ref<Record<string, Integration>>({});
 
-const categories = computed(() => {
+// Cache of already-loaded category data so we don't re-import
+const categoryCache = new Map<string, Record<string, Integration>>();
+
+// Whether the composio integration gate is connected
+const composioEnabled = ref(false);
+
+// Whether the activepieces integration gate is connected
+const activepiecesEnabled = ref(false);
+
+// All known categories (static list so sidebar renders immediately)
+const allCategories = [
+  'Communication',
+  'Productivity',
+  'Project Management',
+  'Developer Tools',
+  'CRM & Sales',
+  'Customer Support',
+  'Marketing',
+  'Finance',
+  'File Storage',
+  'Social Media',
+  'E-Commerce',
+  'HR & Recruiting',
+  'Analytics',
+  'Automation',
+  'Design',
+  'AI & ML',
+  'Database',
+  'AI Infrastructure',
+];
+
+const categoriesWithCounts = computed(() => {
+  // When showing popular (no category selected), count from the popular set
+  // When a category is loaded, count from integrationsList
   const counts = new Map<string, number>();
   for (const integration of integrationsList.value) {
     counts.set(integration.category, (counts.get(integration.category) || 0) + 1);
   }
 
-  return [...counts.entries()]
-    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-    .slice(0, 6)
-    .map(([category]) => category);
+  return allCategories
+    .map(name => ({ name, count: counts.get(name) || 0 }))
+    .filter(c => activeCategory.value === null ? true : true); // always show all categories in sidebar
 });
 
 const filteredIntegrations = computed(() => {
@@ -220,6 +307,127 @@ const filteredIntegrations = computed(() => {
       }
       return a.name.localeCompare(b.name);
     });
+});
+
+// Map category display name → file slug for dynamic imports
+const categoryFileMap: Record<string, string> = {
+  'Communication': 'communication',
+  'Productivity': 'productivity',
+  'Project Management': 'project_management',
+  'Developer Tools': 'developer_tools',
+  'CRM & Sales': 'crm_sales',
+  'Customer Support': 'customer_support',
+  'Marketing': 'marketing',
+  'Finance': 'finance',
+  'File Storage': 'file_storage',
+  'Social Media': 'social_media',
+  'E-Commerce': 'ecommerce',
+  'HR & Recruiting': 'hr_recruiting',
+  'Analytics': 'analytics',
+  'Automation': 'automation',
+  'Design': 'design',
+  'AI & ML': 'ai_ml',
+  'Database': 'database',
+  'AI Infrastructure': 'ai_infrastructure',
+};
+
+/** Lazy-load a category's integrations (activepieces + composio if enabled) */
+async function loadCategory(categoryName: string): Promise<Record<string, Integration>> {
+  const cacheKey = `${categoryName}:ap=${activepiecesEnabled.value}:co=${composioEnabled.value}`;
+  if (categoryCache.has(cacheKey)) {
+    return categoryCache.get(cacheKey)!;
+  }
+
+  const slug = categoryFileMap[categoryName];
+  if (!slug) return {};
+
+  const result: Record<string, Integration> = {};
+
+  // Load native category file (always available — only has slack, github, composio, activepieces)
+  try {
+    const nativeMod = await import(`@pkg/agent/integrations/native/${slug}.ts`);
+    const nativeEntries: Record<string, Integration> = Object.values(nativeMod)[0] as any || {};
+    Object.assign(result, nativeEntries);
+  } catch { /* no native file for this category */ }
+
+  // Load activepieces-backed integrations only if AP extension is connected
+  if (activepiecesEnabled.value) {
+    try {
+      const apMod = await import(`@pkg/agent/integrations/activepieces/${slug}.ts`);
+      const apEntries: Record<string, Integration> = Object.values(apMod)[0] as any || {};
+      Object.assign(result, apEntries);
+    } catch { /* no activepieces file for this category */ }
+  }
+
+  // Load composio category file if gate is open
+  if (composioEnabled.value) {
+    try {
+      const composioMod = await import(`@pkg/agent/integrations/composio/${slug}.ts`);
+      const composioEntries: Record<string, Integration> = Object.values(composioMod)[0] as any || {};
+      Object.assign(result, composioEntries);
+    } catch { /* no composio file for this category */ }
+  }
+
+  categoryCache.set(cacheKey, result);
+  return result;
+}
+
+/** Load popular view (default) and hydrate connection status */
+async function loadPopularView() {
+  const merged: Record<string, Integration> = { ...popularIntegrations };
+
+  // Also merge extension integrations
+  try {
+    const extensionService = getExtensionService();
+    await extensionService.initialize();
+    for (const extInt of extensionService.getExtensionIntegrations()) {
+      merged[extInt.id] = extInt;
+    }
+  } catch { /* ignore */ }
+
+  await hydrateConnectionStatus(merged);
+  mergedIntegrations.value = merged;
+  integrationsList.value = Object.values(merged);
+}
+
+/** Load a specific category view and hydrate connection status */
+async function loadCategoryView(categoryName: string) {
+  categoryLoading.value = true;
+  try {
+    const categoryData = await loadCategory(categoryName);
+    const merged: Record<string, Integration> = { ...categoryData };
+    await hydrateConnectionStatus(merged);
+    mergedIntegrations.value = merged;
+    integrationsList.value = Object.values(merged);
+  } finally {
+    categoryLoading.value = false;
+  }
+}
+
+/** Hydrate connection status from IntegrationService for all entries */
+async function hydrateConnectionStatus(entries: Record<string, Integration>) {
+  const ids = Object.keys(entries);
+  const results = await Promise.all(ids.map(async (id) => {
+    try {
+      const connected = await integrationService.isAnyAccountConnected(id);
+      return { id, connected };
+    } catch {
+      return { id, connected: false };
+    }
+  }));
+  for (const { id, connected } of results) {
+    if (entries[id]) entries[id].connected = connected;
+  }
+}
+
+// Watch category changes → lazy-load or return to popular
+watch(activeCategory, async (newCategory) => {
+  // Invalidate composio cache entries when gate changes
+  if (newCategory === null) {
+    await loadPopularView();
+  } else {
+    await loadCategoryView(newCategory);
+  }
 });
 
 const toggleTheme = () => {
@@ -267,42 +475,29 @@ onMounted(async () => {
     isDark.value = false;
   }
 
-  // Initialize integration service and load connection status
   try {
     await integrationService.initialize();
 
-    const extensionService = getExtensionService();
-    await extensionService.initialize();
-
-    const extensionIntegrations = extensionService.getExtensionIntegrations();
-    mergedIntegrations.value = { ...integrations };
-    for (const extInt of extensionIntegrations) {
-      mergedIntegrations.value[extInt.id] = extInt;
+    // Check if activepieces gate is enabled
+    try {
+      const apStatus = await integrationService.getConnectionStatus('activepieces');
+      activepiecesEnabled.value = apStatus.connected;
+    } catch {
+      activepiecesEnabled.value = false;
     }
-    
-    // Load connection status for all integrations
-    const integrationIds = Object.keys(mergedIntegrations.value);
-    const connectionPromises = integrationIds.map(async (id) => {
-      try {
-        const connectionStatus = await integrationService.getConnectionStatus(id);
-        return { id, connected: connectionStatus.connected };
-      } catch (error) {
-        console.warn(`Failed to load connection status for ${id}:`, error);
-        return { id, connected: false };
-      }
-    });
 
-    const connectionResults = await Promise.all(connectionPromises);
-    
-    // Update integrations with their connection status
-    connectionResults.forEach(({ id, connected }) => {
-      mergedIntegrations.value[id].connected = connected;
-    });
+    // Check if composio gate is enabled
+    try {
+      const composioStatus = await integrationService.getConnectionStatus('composio');
+      composioEnabled.value = composioStatus.connected;
+    } catch {
+      composioEnabled.value = false;
+    }
 
-    // Update the list to trigger reactivity
-    integrationsList.value = Object.values(mergedIntegrations.value);
+    // Load the popular/default view
+    await loadPopularView();
   } catch (error) {
-    console.error('Failed to load integration connection statuses:', error);
+    console.error('Failed to load integrations:', error);
   }
 });
 </script>
