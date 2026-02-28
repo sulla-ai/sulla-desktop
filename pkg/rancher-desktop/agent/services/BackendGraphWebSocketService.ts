@@ -5,7 +5,7 @@ import { getSchedulerService } from './SchedulerService';
 import type { CalendarEventData } from './CalendarClient';
 import { AbortService } from './AbortService';
 import { GraphRegistry, nextThreadId, nextMessageId } from './GraphRegistry';
-import { OverlordThreadState } from '../nodes/Graph'
+import type { HeartbeatThreadState } from '../nodes/HeartbeatNode';
 
 const BACKEND_CHANNEL_ID = 'dreaming-protocol';
 const CALENDAR_CHANNEL_ID = 'calendar_event';
@@ -151,7 +151,7 @@ export class BackendGraphWebSocketService {
 
     const { graph, state } = await GraphRegistry.getOrCreateOverlordGraph(
       BACKEND_CHANNEL_ID
-    ) as { graph: any; state: OverlordThreadState };
+    ) as { graph: any; state: HeartbeatThreadState };
 
     // Create a fresh AbortService for this run and wire it into state
     const abort = new AbortService();

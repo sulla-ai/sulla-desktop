@@ -1,4 +1,7 @@
-import { Graph, createOverlordGraph, createAgentGraph, OverlordThreadState, BaseThreadState, AgentGraphState, GeneralGraphState } from '../nodes/Graph';
+import { Graph, createHeartbeatGraph, createAgentGraph, BaseThreadState, AgentGraphState, GeneralGraphState } from '../nodes/Graph';
+import type { HeartbeatThreadState } from '../nodes/HeartbeatNode';
+// Back-compat re-export
+export type { HeartbeatThreadState as OverlordThreadState } from '../nodes/HeartbeatNode';
 import { SullaSettingsModel } from '../database/models/SullaSettingsModel';
 import { getCurrentModel, getCurrentMode } from '../languagemodels';
 
@@ -39,18 +42,18 @@ export const GraphRegistry = {
   },
 
   /**
-   * Get or create Overlord graph.
+   * Get or create Heartbeat graph (formerly Overlord).
    */
   getOrCreateOverlordGraph: async function(wsChannel: string, prompt?: string): Promise<{
-    graph: Graph<OverlordThreadState>;
-    state: BaseThreadState;
+    graph: Graph<HeartbeatThreadState>;
+    state: HeartbeatThreadState;
   }> {
     if (registry.has(wsChannel)) {
-      return Promise.resolve(registry.get(wsChannel)!);
+      return Promise.resolve(registry.get(wsChannel) as any);
     }
 
-    const graph = createOverlordGraph();
-    const state = await buildOverlordState(wsChannel, prompt ?? '');
+    const graph = createHeartbeatGraph();
+    const state = await buildHeartbeatState(wsChannel, prompt ?? '');
 
     registry.set(wsChannel, { graph, state });
     return { graph, state };
@@ -139,28 +142,28 @@ export function nextMessageId(): string {
   return `msg_${Date.now()}_${++messageCounter}`;
 }
 
-async function buildOverlordState(wsChannel: string, prompt: string): Promise<OverlordThreadState> {
-  let heartbeartModeheal = await SullaSettingsModel.get('heartbeatModel', 'default');
+async function buildHeartbeatState(wsChannel: string, prompt: string): Promise<HeartbeatThreadState> {
+  const heartbeatModelSetting = await SullaSettingsModel.get('heartbeatModel', 'default');
 
   const now = Date.now();
-  const threadId = `overlord_${ now }`;
+  const threadId = `heartbeat_${ now }`;
 
-  const state: OverlordThreadState = {
+  const state: HeartbeatThreadState = {
     messages: [{
       role: 'user',
       content: prompt,
-      metadata: { source: 'system' },
+      metadata: { source: 'heartbeat' },
     }],
     metadata: {
-      action: 'direct_answer',
+      action: 'use_tools',
       threadId,
-      wsChannel: wsChannel,
+      wsChannel,
       cycleComplete: false,
       waitingForUser: false,
-      llmModel: await resolveModel(heartbeartModeheal),
-      llmLocal: await resolveIsLocal(heartbeartModeheal),
+      llmModel: await resolveModel(heartbeatModelSetting),
+      llmLocal: await resolveIsLocal(heartbeatModelSetting),
       options: {},
-      currentNodeId: '',
+      currentNodeId: 'input_handler',
       consecutiveSameNode: 0,
       iterations: 0,
       revisionCount: 0,
@@ -179,10 +182,16 @@ async function buildOverlordState(wsChannel: string, prompt: string): Promise<Ov
       finalState: 'running',
       n8nLiveEventsEnabled: false,
       returnTo: null,
-      primaryProject: '',
-      projectDescription: '',
-      projectGoals: [],
-      projectState: 'continue',
+
+      // Heartbeat-specific fields
+      activeProjects: '',
+      availableSkills: '',
+      heartbeatCycleCount: 0,
+      heartbeatMaxCycles: 10,
+      heartbeatStatus: 'idle',
+      heartbeatLastCycleSummary: '',
+      currentFocus: '',
+      focusReason: '',
     },
   };
 

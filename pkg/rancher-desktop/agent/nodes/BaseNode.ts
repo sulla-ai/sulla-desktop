@@ -192,19 +192,15 @@ All endpoints prefixed with /v1/.
 Your agent codebase is at https://github.com/sulla-ai/sulla-desktop.  
 Architecture and system docs live in the /doc folder.
 
-### Extensions (Docker Compose Apps)
-Sulla Desktop has a marketplace of extensions — self-contained applications that run as Docker Compose stacks. Each extension is defined by an \`installation.yaml\` manifest from the [sulla-recipes](https://github.com/sulla-ai/sulla-recipes) repository.
+### Extensions — Software Marketplace (IMPORTANT)
+You have access to a **rich marketplace of pre-built, pre-configured open-source software** that can be installed with a single tool call. The catalog includes production-grade applications across many categories — project management, CRM, ERP, notifications, social media, cloud storage, email servers, media servers, document tools, smart home, voice AI, and more. New extensions are added regularly.
 
-**How it works:**
-- Extensions are installed from the marketplace catalog into \`~/Library/Application Support/rancher-desktop/extensions/<id>/\`
-- Each extension has lifecycle commands: start, stop, restart, status, update, logs
-- Extensions start automatically on install and on platform boot; they stop on shutdown
-- Docker Compose files support \`{{variable}}\` placeholders that resolve from Sulla Settings (\`{{sullaEmail}}\`), Integrations (\`{{SLACK.BOT_KEY}}\`), and user paths (\`{{path.movies}}\`)
-- Modifiers are available for safe embedding: \`{{sullaServicePassword|urlencode}}\` for URLs, \`{{var|base64}}\`, \`{{var|quote}}\`, \`{{var|json}}\`
-- The \`env\` field in installation.yaml is written as a \`.env\` file, refreshed on every start
-- Each extension has a persistent \`data/\` directory that survives uninstall by default
+**Before building something from scratch or suggesting the human install software manually**, call \`list_extension_catalog\` to check if a ready-made extension already exists. Prefer installing an extension over DIY — these are fully configured and launch automatically.
+
+You can install extensions autonomously with \`install_extension\`. Once installed, you can interact with them via their web UIs (Playwright tools), APIs, and Docker tools. Each extension supports lifecycle commands: start, stop, restart, status, update, logs.
 
 **Tools:** \`list_extension_catalog\`, \`list_installed_extensions\`, \`install_extension\`, \`uninstall_extension\`
+{{installed_extensions}}
 
 ### Playwright & Web Interaction
 Full Playwright tool suite for browsing and interacting with websites.  
@@ -357,6 +353,28 @@ export abstract class BaseNode<T extends BaseThreadState = BaseThreadState> {
             AwarenessMessage = AwarenessMessage.replaceAll('{{skills_dir}}', skillsDir);
             AwarenessMessage = AwarenessMessage.replaceAll('{{projects_dir}}', projectsDir);
             AwarenessMessage = AwarenessMessage.replaceAll('{{active_projects_file}}', activeProjectsFile);
+
+            /////////////////////////////////////////////////////////////////
+            // resolve installed extensions into environment awareness
+            /////////////////////////////////////////////////////////////////
+            let installedExtensionsBlock = '';
+            try {
+                const { getExtensionService } = await import('../services/ExtensionService');
+                const svc = getExtensionService();
+                await svc.initialize();
+                const installed = await svc.fetchInstalledExtensions();
+
+                if (installed.length > 0) {
+                    const lines = installed.map(ext => {
+                        const title = ext.labels?.['org.opencontainers.image.title'] ?? ext.id;
+                        const desc = ext.labels?.['org.opencontainers.image.description'] ?? '';
+                        const urls = ext.extraUrls.map((u: any) => `${u.label}: ${u.url}`).join(', ');
+                        return `- **${title}** (${ext.id}) v${ext.version}${urls ? ` — ${urls}` : ''}${desc ? ` — ${desc}` : ''}`;
+                    });
+                    installedExtensionsBlock = `\n#### Currently Installed Extensions (active products you can use)\nThese are running locally and our preferred system for you to interact with via their web UIs, APIs, database, and Docker tools:\n${lines.join('\n')}`;
+                }
+            } catch { /* extension service not available */ }
+            AwarenessMessage = AwarenessMessage.replaceAll('{{installed_extensions}}', installedExtensionsBlock);
 
         if (options.includeEnvironment !== false) {
             parts.push(AwarenessMessage);

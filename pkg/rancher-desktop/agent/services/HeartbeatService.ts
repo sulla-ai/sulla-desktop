@@ -1,6 +1,6 @@
 // HeartbeatService.ts
 
-import type { OverlordThreadState } from '../nodes/Graph';
+import type { HeartbeatThreadState } from '../nodes/HeartbeatNode';
 import { GraphRegistry } from './GraphRegistry';
 import { SullaSettingsModel } from '../database/models/SullaSettingsModel';
 
@@ -77,7 +77,7 @@ export class HeartbeatService {
       const { graph, state } = await GraphRegistry.getOrCreateOverlordGraph(
         'dreaming-protocol',
         fullPrompt
-      ) as { graph: any; state: OverlordThreadState };
+      ) as { graph: any; state: HeartbeatThreadState };
 
       console.log(`[HeartbeatService] 🧠 Executing heartbeat (threadId=${state.metadata.threadId})`);
 

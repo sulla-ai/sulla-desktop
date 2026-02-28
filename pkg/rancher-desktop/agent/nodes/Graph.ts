@@ -8,6 +8,7 @@ import type { ChatMessage } from '../languagemodels/BaseLanguageModel';
 import { SullaSettingsModel } from '../database/models/SullaSettingsModel';
 import { InputHandlerNode } from './InputHandlerNode';
 import { AgentNode } from './AgentNode';
+import { HeartbeatNode, type HeartbeatThreadState } from './HeartbeatNode';
 
 // ============================================================================
 // CONFIGURATION CONSTANTS
@@ -158,19 +159,9 @@ export interface AgentGraphState extends BaseThreadState {
 // Back-compat alias while callers migrate to AgentGraph naming.
 export type GeneralGraphState = AgentGraphState;
 
-export interface OverlordThreadState extends BaseThreadState {
-  messages: ChatMessage[];
-  metadata: BaseThreadState['metadata'] & {
-
-    // This is what the Overlord is going to be working on as it calls
-    // other subgraphs
-    primaryProject: string;
-    projectDescription: string;
-    projectGoals: string[];
-    projectState: 'continue' | 'end';
-
-  };
-}
+// Back-compat: OverlordThreadState is now HeartbeatThreadState
+export type OverlordThreadState = HeartbeatThreadState;
+export type { HeartbeatThreadState };
 
 // ============================================================================
 //
@@ -537,55 +528,71 @@ export function nextThreadId(): string {
   return `thread_${Date.now()}_${++threadCounter}`;
 }
 
-class OverlordAgentRunnerNode implements GraphNode<OverlordThreadState> {
-  id = 'agent_runner';
-  name = 'Agent Runner';
-
-  async execute(state: OverlordThreadState): Promise<NodeResult<OverlordThreadState>> {
-    state.metadata.cycleComplete = false;
-    state.metadata.waitingForUser = false;
-
-    const agentGraph = createAgentGraph();
-    await agentGraph.execute(state as unknown as AgentGraphState, 'input_handler');
-    await agentGraph.destroy();
-
-    return { state, decision: { type: 'next' } };
-  }
-}
-
 // ============================================================================
 //
 // Graph Decision Trees
 //
 // ============================================================================
 
+const MAX_HEARTBEAT_CYCLES = 10;
+
 /**
- * Create a specialized graph for heartbeat-triggered OverLord execution.
- * Delegates to AgentGraph for actual work.
+ * Create the Heartbeat Graph for autonomous execution.
+ *
+ * Flow: InputHandler → HeartbeatNode (loops up to MAX_HEARTBEAT_CYCLES)
+ *
+ * Each HeartbeatNode cycle:
+ *   1. Loads active projects & available skills
+ *   2. Builds a rich autonomous prompt with context
+ *   3. Spawns a fresh AgentGraph (with full tool access) as a sub-graph
+ *   4. Captures outcome and decides whether to loop or stop
+ *
+ * The heartbeat graph is triggered by HeartbeatService on a timer
+ * and by BackendGraphWebSocketService for the dreaming-protocol channel.
  */
-export function createOverlordGraph(): Graph<OverlordThreadState> {
-  const graph = new Graph<OverlordThreadState>();
+export function createHeartbeatGraph(): Graph<HeartbeatThreadState> {
+  const graph = new Graph<HeartbeatThreadState>();
 
-  graph.addNode(new InputHandlerNode<OverlordThreadState>());
-  graph.addNode(new OverlordAgentRunnerNode());
+  graph.addNode(new InputHandlerNode<HeartbeatThreadState>());
+  graph.addNode(new HeartbeatNode());
 
-  graph.addEdge('input_handler', 'agent_runner');
+  // InputHandler cleans up the initial prompt message, then → heartbeat
+  graph.addEdge('input_handler', 'heartbeat');
 
-  graph.addConditionalEdge('agent_runner', state => {
-    const v = state.metadata;
-    const overlordLoopCount = (((v as any).overlordLoopCount ?? 0) + 1);
-    (v as any).overlordLoopCount = overlordLoopCount;
+  // Heartbeat conditional edge: done/blocked → end, otherwise loop
+  graph.addConditionalEdge('heartbeat', state => {
+    const hbStatus = state.metadata.heartbeatStatus || 'running';
+    const cycleCount = state.metadata.heartbeatCycleCount || 0;
+    const maxCycles = state.metadata.heartbeatMaxCycles || MAX_HEARTBEAT_CYCLES;
 
-    if (v?.projectState === 'end') return 'end';
-    if (overlordLoopCount >= 20) return 'end';
+    if (hbStatus === 'done') {
+      console.log('[HeartbeatGraph] Agent reported DONE — ending heartbeat');
+      return 'end';
+    }
 
-    return 'agent_runner';
+    if (hbStatus === 'blocked') {
+      console.log('[HeartbeatGraph] Agent reported BLOCKED — ending heartbeat');
+      return 'end';
+    }
+
+    if (cycleCount >= maxCycles) {
+      console.log(`[HeartbeatGraph] Max heartbeat cycles (${maxCycles}) reached — ending`);
+      return 'end';
+    }
+
+    console.log(`[HeartbeatGraph] Cycle ${cycleCount}/${maxCycles} — continuing`);
+    return 'heartbeat';
   });
 
   graph.setEntryPoint('input_handler');
-  graph.setEndPoints('agent_runner');
+  graph.setEndPoints('heartbeat');
 
   return graph;
+}
+
+// Back-compat alias
+export function createOverlordGraph(): Graph<HeartbeatThreadState> {
+  return createHeartbeatGraph();
 }
 
 // Back-compat alias while callers migrate to AgentGraph naming.
