@@ -2786,12 +2786,18 @@
     unbzip2-stream "1.4.3"
     yargs "17.7.2"
 
-"@rancher/components@0.3.0-alpha.1":
-  version "0.3.0-alpha.1"
-  resolved "https://registry.yarnpkg.com/@rancher/components/-/components-0.3.0-alpha.1.tgz#86f570be89f84ab271bd3ca392b7bc57827e33c1"
-  integrity sha512-wqplnnHD4RUY1KO1zl9IZ8pZvVfY2MhgRWHsNaqAd17Y0Chylk9egsFveRJb0VBPOCwa3iu0ttFvl9mLIjvpHw==
+"@rancher/components@0.3.0-alpha.4":
+  version "0.3.0-alpha.4"
+  resolved "https://registry.yarnpkg.com/@rancher/components/-/components-0.3.0-alpha.4.tgz#36e9d40ae0d3a66af502173a287c2b79a5f92686"
+  integrity sha512-MaeZod0qd7+v92TADEF/p6BJ+GPF5SmjU7Yj2pyJMq8s6RnsEVQj9ta5apHnywVwQ3mrTvQUxdYKX0KAagg9sQ==
   dependencies:
+    "@rancher/icons" "^2.0.54"
     lodash.debounce "4.0.8"
+
+"@rancher/icons@^2.0.54":
+  version "2.0.55"
+  resolved "https://registry.yarnpkg.com/@rancher/icons/-/icons-2.0.55.tgz#394159bddbf786c17a12bc38e59b88346b30dcf4"
+  integrity sha512-hPcmsvfYNO36dJ7/lb3JbJC5BOnHbwBylic7HRqhSCSIcFlFaKnRt9aB/hvv3ip0Wo6J5yVEv2o7oXGErXkWFw==
 
 "@schedule-x/calendar@^4.1.0":
   version "4.2.0"
