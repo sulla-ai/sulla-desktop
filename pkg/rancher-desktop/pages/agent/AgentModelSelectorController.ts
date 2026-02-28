@@ -3,26 +3,44 @@ import type { ComputedRef, Ref } from 'vue';
 
 import { ipcRenderer } from '@pkg/utils/ipcRenderer';
 import { SullaSettingsModel } from '@pkg/agent/database/models/SullaSettingsModel';
+import { getIntegrationService } from '@pkg/agent/services/IntegrationService';
+import { integrations } from '@pkg/agent/integrations/catalog';
 
-type ModelOption =
-  | { type: 'local'; value: string; label: string; isActive: boolean }
-  | { type: 'remote'; provider: string; value: string; label: string; isActive: boolean };
+export interface ModelOption {
+  providerId: string;
+  providerName: string;
+  modelId: string;
+  modelLabel: string;
+  isActiveProvider: boolean;
+  isActiveModel: boolean;
+}
+
+export interface ProviderGroup {
+  providerId: string;
+  providerName: string;
+  isActiveProvider: boolean;
+  loading: boolean;
+  models: ModelOption[];
+}
+
+const EXCLUDED_INTEGRATION_IDS = ['activepieces', 'composio'];
 
 export class AgentModelSelectorController {
   readonly showModelMenu = ref(false);
   readonly modelMenuEl = ref<HTMLElement | null>(null);
   readonly buttonRef = ref<HTMLElement | null>(null);
-  readonly loadingLocalModels = ref(false);
 
-  private readonly installedLocalModels = ref<string[]>([]);
+  /** Currently active primary provider id */
+  readonly activePrimaryProvider = ref<string>('ollama');
+  /** Currently active model id for the active provider */
+  readonly activeModelId = ref<string>('');
 
-  private readonly remoteProvider = ref<string>('');
-  private readonly remoteModel = ref<string>('');
-  private readonly remoteApiKey = ref<string>('');
+  /** Grouped providers with their models */
+  readonly providerGroups = ref<ProviderGroup[]>([]);
+
+  readonly loadingProviders = ref(false);
 
   readonly activeModelLabel: ComputedRef<string>;
-  readonly localModelOptions: ComputedRef<ModelOption[]>;
-  readonly remoteOption: ComputedRef<ModelOption | null>;
   readonly isRunningValue: ComputedRef<boolean>;
 
   constructor(private readonly deps: {
@@ -34,34 +52,16 @@ export class AgentModelSelectorController {
     modelMode: Ref<'local' | 'remote'>;
   }) {
     this.activeModelLabel = computed(() => {
-      if (this.deps.modelMode.value === 'remote') {
-        return this.remoteModel.value || this.deps.modelName.value || 'Remote';
+      const provider = this.activePrimaryProvider.value;
+      const model = this.activeModelId.value;
+
+      if (model) {
+        return model;
       }
 
-      return this.deps.modelName.value || 'Local';
-    });
+      const integration = integrations[provider];
 
-    this.localModelOptions = computed(() => {
-      return this.installedLocalModels.value.map((name) => ({
-        type: 'local',
-        value: name,
-        label: name,
-        isActive: this.deps.modelMode.value === 'local' && this.deps.modelName.value === name,
-      }));
-    });
-
-    this.remoteOption = computed(() => {
-      if (!this.remoteProvider.value || !this.remoteModel.value || !this.remoteApiKey.value) {
-        return null;
-      }
-
-      return {
-        type: 'remote',
-        provider: this.remoteProvider.value,
-        value: this.remoteModel.value,
-        label: `${ this.remoteProvider.value } / ${ this.remoteModel.value }`,
-        isActive: this.deps.modelMode.value === 'remote',
-      };
+      return integration?.name || provider || 'Select model';
     });
 
     this.isRunningValue = computed(() => this.deps.isRunning.value);
@@ -69,9 +69,7 @@ export class AgentModelSelectorController {
 
   async start(): Promise<void> {
     document.addEventListener('mousedown', this.handleDocumentClick);
-
-    await this.loadRemoteSettings();
-    await this.refreshInstalledLocalModels();
+    await this.loadActiveSettings();
   }
 
   dispose(): void {
@@ -82,29 +80,23 @@ export class AgentModelSelectorController {
     return this.showModelMenu.value;
   }
 
-  get loadingLocalModelsValue(): boolean {
-    return this.loadingLocalModels.value;
-  }
-
   get activeModelLabelValue(): string {
     return this.activeModelLabel.value;
   }
 
-  get localModelOptionsValue(): ModelOption[] {
-    return this.localModelOptions.value;
+  get providerGroupsValue(): ProviderGroup[] {
+    return this.providerGroups.value;
   }
 
-  get remoteOptionValue(): ModelOption | null {
-    return this.remoteOption.value;
+  get loadingProvidersValue(): boolean {
+    return this.loadingProviders.value;
   }
 
   async toggleModelMenu(): Promise<void> {
-    console.log('[ModelSelector] toggleModelMenu called');
-
     this.showModelMenu.value = !this.showModelMenu.value;
-    console.log('[ModelSelector] Menu toggled to:', this.showModelMenu.value);
+
     if (this.showModelMenu.value) {
-      await this.refreshInstalledLocalModels();
+      await this.refreshProviderGroups();
     }
   }
 
@@ -112,150 +104,217 @@ export class AgentModelSelectorController {
     this.showModelMenu.value = false;
   }
 
+  /**
+   * Select a model. This:
+   * 1. Sets primaryProvider in SullaSettingsModel
+   * 2. Writes the model choice into the provider's integration settings
+   * 3. Emits model-changed IPC for other windows
+   */
   async selectModel(option: ModelOption): Promise<void> {
     try {
-      if (option.type === 'local') {
-          SullaSettingsModel.set('modelMode', 'local', 'string');
-          SullaSettingsModel.set('sullaModel', option.value, 'string');
+      const integrationService = getIntegrationService();
+
+      // 1. Update primary provider
+      await SullaSettingsModel.set('primaryProvider', option.providerId, 'string');
+      this.activePrimaryProvider.value = option.providerId;
+
+      // 2. Write the model into the integration's form values
+      const accountId = await integrationService.getActiveAccountId(option.providerId);
+
+      await integrationService.setIntegrationValue({
+        integration_id: option.providerId,
+        account_id:     accountId,
+        property:        'model',
+        value:           option.modelId,
+      });
+
+      this.activeModelId.value = option.modelId;
+
+      // Keep legacy settings in sync
+      if (option.providerId === 'ollama') {
+        await SullaSettingsModel.set('modelMode', 'local', 'string');
+        await SullaSettingsModel.set('sullaModel', option.modelId, 'string');
+        this.deps.modelMode.value = 'local';
       } else {
-
-        // Save model mode, remote provider, remote model, and remote API key to new settings
-        SullaSettingsModel.set('modelMode', 'remote', 'string');
-        SullaSettingsModel.set('remoteProvider', option.provider, 'string');
-        SullaSettingsModel.set('remoteModel', option.value, 'string');
-        SullaSettingsModel.set('remoteApiKey', this.remoteApiKey.value, 'string');
-
+        await SullaSettingsModel.set('modelMode', 'remote', 'string');
+        await SullaSettingsModel.set('remoteProvider', option.providerId, 'string');
+        await SullaSettingsModel.set('remoteModel', option.modelId, 'string');
+        this.deps.modelMode.value = 'remote';
       }
 
-      // Emit event for other windows to update
-      ipcRenderer.send('model-changed', option.type === 'local' ? { model: option.value, type: 'local' } : { model: option.value, type: 'remote', provider: option.provider });
+      this.deps.modelName.value = option.modelId;
+
+      // 3. Notify other windows
+      ipcRenderer.send('model-changed',
+        option.providerId === 'ollama'
+          ? { model: option.modelId, type: 'local' as const }
+          : { model: option.modelId, type: 'remote' as const, provider: option.providerId },
+      );
+
+      // Update active flags in providerGroups
+      this.providerGroups.value = this.providerGroups.value.map((group) => ({
+        ...group,
+        isActiveProvider: group.providerId === option.providerId,
+        models: group.models.map((m) => ({
+          ...m,
+          isActiveProvider: m.providerId === option.providerId,
+          isActiveModel: m.providerId === option.providerId && m.modelId === option.modelId,
+        })),
+      }));
     } finally {
       this.showModelMenu.value = false;
     }
   }
 
-  private async loadRemoteSettings(): Promise<void> {
-    this.remoteProvider.value = await SullaSettingsModel.get('remoteProvider', '');
-    this.remoteModel.value = await SullaSettingsModel.get('remoteModel', '');
-    this.remoteApiKey.value = await SullaSettingsModel.get('remoteApiKey', '');
+  // ─── Internal ──────────────────────────────────────────────────
+
+  private async loadActiveSettings(): Promise<void> {
+    this.activePrimaryProvider.value = await SullaSettingsModel.get('primaryProvider', 'ollama');
+
+    // Read the active model from the provider's integration
+    try {
+      const integrationService = getIntegrationService();
+      const formValues = await integrationService.getFormValues(this.activePrimaryProvider.value);
+      const modelVal = formValues.find((v) => v.property === 'model');
+
+      this.activeModelId.value = modelVal?.value || '';
+    } catch {
+      // Fallback to legacy
+      if (this.activePrimaryProvider.value === 'ollama') {
+        this.activeModelId.value = await SullaSettingsModel.get('sullaModel', '');
+      } else {
+        this.activeModelId.value = await SullaSettingsModel.get('remoteModel', '');
+      }
+    }
+
+    this.deps.modelName.value = this.activeModelId.value;
+  }
+
+  /**
+   * Build provider groups from all connected AI Infrastructure integrations.
+   * Each group lazily fetches its model list via IntegrationService.getSelectOptions().
+   */
+  private async refreshProviderGroups(): Promise<void> {
+    this.loadingProviders.value = true;
+
+    try {
+      const integrationService = getIntegrationService();
+      const groups: ProviderGroup[] = [];
+
+      for (const integration of Object.values(integrations)) {
+        if (integration.category !== 'AI Infrastructure') continue;
+        if (EXCLUDED_INTEGRATION_IDS.includes(integration.id)) continue;
+
+        const connected = await integrationService.isAnyAccountConnected(integration.id);
+
+        if (!connected && integration.id !== 'ollama') continue;
+
+        const isActive = this.activePrimaryProvider.value === integration.id;
+
+        // Read the currently saved model for this provider
+        let currentModel = '';
+
+        try {
+          const vals = await integrationService.getFormValues(integration.id);
+          currentModel = vals.find((v) => v.property === 'model')?.value || '';
+        } catch { /* ignore */ }
+
+        const group: ProviderGroup = {
+          providerId:       integration.id,
+          providerName:     integration.name,
+          isActiveProvider: isActive,
+          loading:          true,
+          models:           [],
+        };
+
+        groups.push(group);
+
+        // Kick off async model fetch (don't block the menu from showing)
+        this.fetchModelsForGroup(group, integration, currentModel);
+      }
+
+      this.providerGroups.value = groups;
+    } catch (err) {
+      console.warn('[ModelSelector] Failed to refresh provider groups:', err);
+    } finally {
+      this.loadingProviders.value = false;
+    }
+  }
+
+  private async fetchModelsForGroup(
+    group: ProviderGroup,
+    integration: (typeof integrations)[string],
+    currentModel: string,
+  ): Promise<void> {
+    try {
+      const integrationService = getIntegrationService();
+      const accountId = await integrationService.getActiveAccountId(integration.id);
+
+      // Build form values map for the select box provider
+      const formVals = await integrationService.getFormValues(integration.id, accountId);
+      const formMap: Record<string, string> = {};
+
+      for (const v of formVals) {
+        formMap[v.property] = v.value;
+      }
+
+      // Find the selectBoxId for the 'model' property
+      const modelProp = integration.properties?.find((p) => p.key === 'model');
+
+      if (!modelProp?.selectBoxId) {
+        group.loading = false;
+        this.providerGroups.value = [...this.providerGroups.value];
+
+        return;
+      }
+
+      const options = await integrationService.getSelectOptions(
+        modelProp.selectBoxId,
+        integration.id,
+        accountId,
+        formMap,
+      );
+
+      const isActive = this.activePrimaryProvider.value === integration.id;
+
+      group.models = options.map((opt) => ({
+        providerId:       integration.id,
+        providerName:     integration.name,
+        modelId:          opt.value,
+        modelLabel:       opt.label,
+        isActiveProvider: isActive,
+        isActiveModel:    isActive && opt.value === currentModel,
+      }));
+      group.loading = false;
+
+      // Trigger reactivity
+      this.providerGroups.value = [...this.providerGroups.value];
+    } catch (err) {
+      console.warn(`[ModelSelector] Failed to fetch models for ${integration.id}:`, err);
+      group.loading = false;
+      this.providerGroups.value = [...this.providerGroups.value];
+    }
   }
 
   private readonly handleDocumentClick = (ev: MouseEvent) => {
     if (!this.showModelMenu.value) {
       return;
     }
+
     const container = this.modelMenuEl.value;
 
     if (!container) {
       return;
     }
-    // Don't hide if clicking on the toggle button
+
     if (ev.target === this.buttonRef.value || this.buttonRef.value?.contains(ev.target as Node)) {
       return;
     }
+
     if (ev.target instanceof Node && container.contains(ev.target)) {
       return;
     }
 
     this.showModelMenu.value = false;
   };
-
-  // Silent fetch that doesn't log network errors to console
-  private silentFetch(url: string, options: RequestInit = {}): Promise<Response | null> {
-    return new Promise((resolve) => {
-      const xhr = new XMLHttpRequest();
-      xhr.open(options.method || 'GET', url);
-
-      // Set headers
-      if (options.headers) {
-        for (const [key, value] of Object.entries(options.headers)) {
-          xhr.setRequestHeader(key, value as string);
-        }
-      }
-
-      // Set timeout
-      if (options.signal) {
-        // For AbortSignal, we can't directly set timeout, but we can use a timer
-        const timeoutId = setTimeout(() => {
-          xhr.abort();
-          resolve(null);
-        }, 3000); // Default 3s timeout
-
-        xhr.onload = () => {
-          clearTimeout(timeoutId);
-          // Convert XMLHttpRequest to Response-like object
-          const response = {
-            ok: xhr.status >= 200 && xhr.status < 300,
-            status: xhr.status,
-            statusText: xhr.statusText,
-            text: () => Promise.resolve(xhr.responseText),
-            json: () => Promise.resolve(JSON.parse(xhr.responseText || '{}')),
-            body: null, // Not supported
-          };
-          resolve(response as any);
-        };
-
-        xhr.onerror = () => {
-          clearTimeout(timeoutId);
-          resolve(null);
-        };
-
-        xhr.ontimeout = () => {
-          clearTimeout(timeoutId);
-          resolve(null);
-        };
-      } else {
-        xhr.timeout = 3000; // Default timeout
-        xhr.onload = () => {
-          const response = {
-            ok: xhr.status >= 200 && xhr.status < 300,
-            status: xhr.status,
-            statusText: xhr.statusText,
-            text: () => Promise.resolve(xhr.responseText),
-            json: () => Promise.resolve(JSON.parse(xhr.responseText || '{}')),
-            body: null,
-          };
-          resolve(response as any);
-        };
-
-        xhr.onerror = () => resolve(null);
-        xhr.ontimeout = () => resolve(null);
-      }
-
-      // Send request
-      if (options.body) {
-        xhr.send(options.body as string);
-      } else {
-        xhr.send();
-      }
-    });
-  }
-
-  private async refreshInstalledLocalModels(): Promise<void> {
-    this.loadingLocalModels.value = true;
-    try {
-      const res = await this.silentFetch('http://127.0.0.1:30114/api/tags', {
-        signal: AbortSignal.timeout(3000),
-      });
-
-      if (!res || !res.ok) {
-        this.installedLocalModels.value = [];
-        return;
-      }
-
-      const data = await res.json();
-      const models = (data.models || []).map((m: { name: string }) => m.name);
-      
-      // Ensure Qwen3-ASR-0.6B is always available as an option
-      if (!models.includes('Qwen3-ASR-0.6B')) {
-        models.push('Qwen3-ASR-0.6B');
-      }
-      
-      this.installedLocalModels.value = models;
-    } catch {
-      this.installedLocalModels.value = [];
-    } finally {
-      this.loadingLocalModels.value = false;
-    }
-  }
 }
