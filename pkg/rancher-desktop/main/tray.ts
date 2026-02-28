@@ -60,15 +60,6 @@ export class Tray {
         void Electron.shell.openExternal('http://127.0.0.1:30119');
       },
     },
-    {
-      id:    'ai-voice',
-      label: 'Open AI Voice',
-      icon:  path.join(paths.resources, 'icons', 'voice-ai.png'),
-      type:  'normal',
-      click() {
-        void Electron.shell.openExternal('http://127.0.0.1:3010');
-      },
-    },
     { type: 'separator' },
     {
       id:      'extensions',
