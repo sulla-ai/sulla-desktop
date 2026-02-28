@@ -7,5 +7,3 @@
 # - `containerd_compatible`: defaults to true.
 # - `logo`: Overrides the logo URL.
 # - `github_repo`: GitHub repository, used for version updates.
-
-docker.io/alancarvalho/voice-ai:2.1.0: {}
