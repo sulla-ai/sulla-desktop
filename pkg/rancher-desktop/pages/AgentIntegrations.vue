@@ -260,6 +260,7 @@ const activepiecesEnabled = ref(false);
 
 // All known categories (static list so sidebar renders immediately)
 const allCategories = [
+  'AI Infrastructure',
   'Communication',
   'Productivity',
   'Project Management',
@@ -277,13 +278,29 @@ const allCategories = [
   'Design',
   'AI & ML',
   'Database',
-  'AI Infrastructure',
 ];
 
 const categoriesWithCounts = computed(() => {
+  const popularityCounts = new Map<string, number>();
+  for (const integration of Object.values(popularIntegrations)) {
+    popularityCounts.set(integration.category, (popularityCounts.get(integration.category) || 0) + 1);
+  }
+
   const counts = allCategoryCounts.value;
   return allCategories
-    .map(name => ({ name, count: counts.get(name) || 0 }));
+    .map(name => ({
+      name,
+      count: counts.get(name) || 0,
+      popularity: popularityCounts.get(name) || 0,
+    }))
+    .sort((a, b) => {
+      if (a.name === 'AI Infrastructure' && b.name !== 'AI Infrastructure') return -1;
+      if (b.name === 'AI Infrastructure' && a.name !== 'AI Infrastructure') return 1;
+      if (b.popularity !== a.popularity) return b.popularity - a.popularity;
+      if (b.count !== a.count) return b.count - a.count;
+      return a.name.localeCompare(b.name);
+    })
+    .map(({ name, count }) => ({ name, count }));
 });
 
 const filteredIntegrations = computed(() => {

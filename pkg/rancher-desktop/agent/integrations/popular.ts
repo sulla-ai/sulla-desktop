@@ -11,84 +11,124 @@ export const popularIntegrations: Record<string, Integration> = {
     name: 'Slack', description: 'Send notifications, share updates, and interact with team members through channels and direct messages.',
     category: 'Communication', icon: 'slack.svg', version: '1.0.0', lastUpdated: '2026-02-06 21:00:00', developer: 'Sulla',
   },
+  gmail: {
+    id: 'gmail', sort: 2, paid: false, beta: false, comingSoon: false, connected: false,
+    name: 'Gmail', description: 'Send, receive, and manage emails with automated workflows.',
+    category: 'Communication', icon: 'gmail.svg', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Google',
+  },
+  microsoft_teams: {
+    id: 'microsoft_teams', sort: 3, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'Microsoft Teams', description: 'Send messages, manage channels, and coordinate team communication.',
+    category: 'Communication', icon: 'microsoft_teams.svg', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Microsoft',
+  },
+  zoom: {
+    id: 'zoom', sort: 4, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'Zoom', description: 'Schedule meetings, manage webinars, and automate meeting workflows.',
+    category: 'Communication', icon: 'zoom.svg', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Zoom',
+  },
   github: {
-    id: 'github', sort: 2, paid: false, beta: false, comingSoon: false, connected: false,
-    name: 'GitHub', description: 'Manage repositories, issues, pull requests, and automate your development workflow.',
+    id: 'github', sort: 5, paid: false, beta: false, comingSoon: false, connected: false,
+    name: 'GitHub', description: 'Manage repositories, pull requests, issues, and automations.',
     category: 'Developer Tools', icon: 'github.svg', version: '1.0.0', lastUpdated: '2026-02-14 00:00:00', developer: 'Sulla',
   },
-  grok: {
-    id: 'grok', sort: 3, paid: true, beta: false, comingSoon: false, connected: false,
-    name: 'Grok', description: 'Connect xAI Grok models for agent prompts and completions.',
-    category: 'AI Infrastructure', icon: '🚀', version: '1.0.0', lastUpdated: '2026-02-28 11:42:00', developer: 'xAI',
-  },
-  anthropic: {
-    id: 'anthropic', sort: 5, paid: true, beta: false, comingSoon: false, connected: false,
-    name: 'Anthropic', description: 'Connect Anthropic Claude models for reasoning and assistant tasks.',
-    category: 'AI Infrastructure', icon: '🧠', version: '1.0.0', lastUpdated: '2026-02-28 11:42:00', developer: 'Anthropic',
-  },
-  openai: {
-    id: 'openai', sort: 6, paid: true, beta: false, comingSoon: false, connected: false,
-    name: 'OpenAI', description: 'Connect OpenAI models for chat, reasoning, and multimodal generation.',
-    category: 'AI Infrastructure', icon: '🤖', version: '1.0.0', lastUpdated: '2026-02-28 11:42:00', developer: 'OpenAI',
-  },
-  kimi: {
-    id: 'kimi', sort: 7, paid: true, beta: false, comingSoon: false, connected: false,
-    name: 'Kimi', description: 'Connect Kimi models (Moonshot AI) for long-context generation tasks.',
-    category: 'AI Infrastructure', icon: '🌙', version: '1.0.0', lastUpdated: '2026-02-28 11:42:00', developer: 'Moonshot AI',
-  },
-  nvidia: {
-    id: 'nvidia', sort: 8, paid: true, beta: false, comingSoon: false, connected: false,
-    name: 'NVIDIA', description: 'Connect NVIDIA NIM and hosted inference endpoints for AI workloads.',
-    category: 'AI Infrastructure', icon: '🟢', version: '1.0.0', lastUpdated: '2026-02-28 11:42:00', developer: 'NVIDIA',
-  },
-  ollama: {
-    id: 'ollama', sort: 9, paid: false, beta: false, comingSoon: false, connected: false,
-    name: 'Ollama', description: 'Connect to a local or remote Ollama server for chat and embedding models.',
-    category: 'AI Infrastructure', icon: '🦙', version: '1.0.0', lastUpdated: '2026-02-28 12:45:00', developer: 'Ollama',
-  },
-  custom: {
-    id: 'custom', sort: 10, paid: false, beta: false, comingSoon: false, connected: false,
-    name: 'Custom', description: 'Connect a custom AI provider endpoint using your own base URL.',
-    category: 'AI Infrastructure', icon: '🛠️', version: '1.0.0', lastUpdated: '2026-02-28 11:46:00', developer: 'Custom',
+  jira: {
+    id: 'jira', sort: 6, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'Jira', description: 'Create and manage issues, sprints, and boards.',
+    category: 'Project Management', icon: 'jira.svg', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Atlassian',
   },
   notion: {
-    id: 'notion', sort: 11, paid: false, beta: false, comingSoon: false, connected: false,
-    name: 'Notion', description: 'Create and manage pages, databases, and wikis.',
-    category: 'Productivity', icon: '📝', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Notion',
-  },
-  jira: {
-    id: 'jira', sort: 12, paid: true, beta: false, comingSoon: false, connected: false,
-    name: 'Jira', description: 'Create and manage issues, sprints, and boards.',
-    category: 'Project Management', icon: '🔵', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Atlassian',
-  },
-  hubspot: {
-    id: 'hubspot', sort: 13, paid: true, beta: false, comingSoon: false, connected: false,
-    name: 'HubSpot', description: 'Manage contacts, deals, and pipelines.',
-    category: 'CRM & Sales', icon: '🟠', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'HubSpot',
-  },
-  stripe: {
-    id: 'stripe', sort: 14, paid: true, beta: false, comingSoon: false, connected: false,
-    name: 'Stripe', description: 'Manage payments, subscriptions, and invoices.',
-    category: 'Finance', icon: '💳', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Stripe',
-  },
-  shopify: {
-    id: 'shopify', sort: 15, paid: true, beta: false, comingSoon: false, connected: false,
-    name: 'Shopify', description: 'Manage products, orders, customers, and inventory.',
-    category: 'E-Commerce', icon: '🛒', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Shopify',
-  },
-  zendesk: {
-    id: 'zendesk', sort: 16, paid: true, beta: false, comingSoon: false, connected: false,
-    name: 'Zendesk', description: 'Manage tickets, users, and helpdesk workflows.',
-    category: 'Customer Support', icon: '🎫', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Zendesk',
-  },
-  figma: {
-    id: 'figma', sort: 17, paid: true, beta: false, comingSoon: false, connected: false,
-    name: 'Figma', description: 'Access design files, components, and tokens.',
-    category: 'Design', icon: '🎨', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Figma',
+    id: 'notion', sort: 7, paid: false, beta: false, comingSoon: false, connected: false,
+    name: 'Notion', description: 'Create and manage pages, databases, and team knowledge.',
+    category: 'Productivity', icon: 'notion.svg', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Notion',
   },
   google_drive: {
-    id: 'google_drive', sort: 18, paid: false, beta: false, comingSoon: false, connected: false,
+    id: 'google_drive', sort: 8, paid: false, beta: false, comingSoon: false, connected: false,
     name: 'Google Drive', description: 'Upload, download, and manage files and folders.',
-    category: 'File Storage', icon: '📁', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Google',
+    category: 'File Storage', icon: 'google_drive.svg', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Google',
+  },
+  dropbox: {
+    id: 'dropbox', sort: 9, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'Dropbox', description: 'Store, sync, and share files and folders across teams.',
+    category: 'File Storage', icon: 'dropbox.svg', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Dropbox',
+  },
+  salesforce: {
+    id: 'salesforce', sort: 10, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'Salesforce', description: 'Manage leads, accounts, opportunities, and customer records.',
+    category: 'CRM & Sales', icon: 'salesforce.svg', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Salesforce',
+  },
+  hubspot: {
+    id: 'hubspot', sort: 11, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'HubSpot', description: 'Manage contacts, deals, and pipelines.',
+    category: 'CRM & Sales', icon: 'hubspot.svg', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'HubSpot',
+  },
+  stripe: {
+    id: 'stripe', sort: 12, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'Stripe', description: 'Manage payments, subscriptions, and invoices.',
+    category: 'Finance', icon: 'stripe.svg', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Stripe',
+  },
+  quickbooks: {
+    id: 'quickbooks', sort: 13, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'QuickBooks', description: 'Track invoices, expenses, customers, and accounting data.',
+    category: 'Finance', icon: 'quickbooks.svg', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Intuit',
+  },
+  shopify: {
+    id: 'shopify', sort: 14, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'Shopify', description: 'Manage products, orders, customers, and inventory.',
+    category: 'E-Commerce', icon: 'shopify.svg', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Shopify',
+  },
+  zendesk: {
+    id: 'zendesk', sort: 15, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'Zendesk', description: 'Manage tickets, users, and support workflows.',
+    category: 'Customer Support', icon: 'zendesk.svg', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Zendesk',
+  },
+  mailchimp: {
+    id: 'mailchimp', sort: 16, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'Mailchimp', description: 'Manage email campaigns, audiences, and lifecycle marketing.',
+    category: 'Marketing', icon: 'mailchimp.svg', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Intuit',
+  },
+  google_ads: {
+    id: 'google_ads', sort: 17, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'Google Ads', description: 'Manage ad campaigns, budgets, and performance reporting.',
+    category: 'Marketing', icon: 'google_ads.svg', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Google',
+  },
+  figma: {
+    id: 'figma', sort: 18, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'Figma', description: 'Access design files, components, and collaboration data.',
+    category: 'Design', icon: 'figma.svg', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Figma',
+  },
+  asana: {
+    id: 'asana', sort: 19, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'Asana', description: 'Coordinate team tasks, projects, and status tracking.',
+    category: 'Project Management', icon: 'asana.svg', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Asana',
+  },
+  trello: {
+    id: 'trello', sort: 20, paid: false, beta: false, comingSoon: false, connected: false,
+    name: 'Trello', description: 'Manage Kanban boards, cards, and team workflows.',
+    category: 'Project Management', icon: 'trello.svg', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Atlassian',
+  },
+  openai: {
+    id: 'openai', sort: 21, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'OpenAI', description: 'Connect OpenAI models for chat, reasoning, and multimodal tasks.',
+    category: 'AI Infrastructure', icon: 'openai.svg', version: '1.0.0', lastUpdated: '2026-02-28 11:42:00', developer: 'OpenAI',
+  },
+  anthropic: {
+    id: 'anthropic', sort: 22, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'Anthropic', description: 'Connect Claude models for agent reasoning and automation.',
+    category: 'AI Infrastructure', icon: 'anthropic.svg', version: '1.0.0', lastUpdated: '2026-02-28 11:42:00', developer: 'Anthropic',
+  },
+  ollama: {
+    id: 'ollama', sort: 23, paid: false, beta: false, comingSoon: false, connected: false,
+    name: 'Ollama', description: 'Run local or remote open-weight LLM models.',
+    category: 'AI Infrastructure', icon: 'ollama.svg', version: '1.0.0', lastUpdated: '2026-02-28 12:45:00', developer: 'Ollama',
+  },
+  nvidia: {
+    id: 'nvidia', sort: 24, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'NVIDIA', description: 'Connect NVIDIA-hosted models and inference endpoints.',
+    category: 'AI Infrastructure', icon: 'nvidia.svg', version: '1.0.0', lastUpdated: '2026-02-28 11:42:00', developer: 'NVIDIA',
+  },
+  grok: {
+    id: 'grok', sort: 25, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'Grok', description: 'Connect xAI Grok models for prompts and completions.',
+    category: 'AI Infrastructure', icon: 'grok.svg', version: '1.0.0', lastUpdated: '2026-02-28 11:42:00', developer: 'xAI',
   },
 };
