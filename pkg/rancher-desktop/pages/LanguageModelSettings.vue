@@ -167,6 +167,9 @@ export default defineComponent({
       activating:           false,
       activationError:      '' as string,
       savingSettings:       false,
+
+      // Guard flag to prevent feedback loop between primaryProvider watcher and IPC handler
+      _suppressProviderWatch: false,
     };
   },
 
@@ -348,6 +351,61 @@ export default defineComponent({
       if (newProvider && newProvider !== oldProvider && this.apiKey.trim()) {
         await this.loadRemoteModels();
       }
+    },
+
+    // Watch for primary provider changes — persist immediately and notify other windows
+    async primaryProvider(newProvider: string, oldProvider: string) {
+      if (!newProvider || newProvider === oldProvider) return;
+      if (this._suppressProviderWatch) {
+        this._suppressProviderWatch = false;
+        return;
+      }
+
+      // Persist the new primary provider
+      await SullaSettingsModel.set('primaryProvider', newProvider, 'string');
+
+      // Read the preferred model for this provider from its integration settings
+      let preferredModel = '';
+      try {
+        const integrationService = getIntegrationService();
+        const formValues = await integrationService.getFormValues(newProvider);
+        const modelVal = formValues.find((v: { property: string; value: string }) => v.property === 'model');
+        preferredModel = modelVal?.value || '';
+      } catch {
+        // Fallback to legacy settings
+        if (newProvider === 'ollama') {
+          preferredModel = await SullaSettingsModel.get('sullaModel', '');
+        } else {
+          preferredModel = await SullaSettingsModel.get('remoteModel', '');
+        }
+      }
+
+      // Keep legacy settings in sync
+      if (newProvider === 'ollama') {
+        await SullaSettingsModel.set('modelMode', 'local', 'string');
+        if (preferredModel) {
+          await SullaSettingsModel.set('sullaModel', preferredModel, 'string');
+        }
+        this.activeMode = 'local';
+        this.viewingTab = 'local';
+      } else {
+        await SullaSettingsModel.set('modelMode', 'remote', 'string');
+        await SullaSettingsModel.set('remoteProvider', newProvider, 'string');
+        if (preferredModel) {
+          await SullaSettingsModel.set('remoteModel', preferredModel, 'string');
+        }
+        this.activeMode = 'remote';
+        this.viewingTab = 'remote';
+        this.selectedProvider = newProvider;
+        this.selectedRemoteModel = preferredModel;
+      }
+
+      // Notify other windows (Agent page model selector)
+      ipcRenderer.send('model-changed',
+        newProvider === 'ollama'
+          ? { model: preferredModel, type: 'local' }
+          : { model: preferredModel, type: 'remote', provider: newProvider },
+      );
     }
   },
 
@@ -956,7 +1014,7 @@ export default defineComponent({
     },
 
     // Handle model changes from other windows
-    handleModelChanged(event: IpcRendererEvent, data: { model: string; type: 'local' } | { model: string; type: 'remote'; provider: string }) {
+    async handleModelChanged(event: IpcRendererEvent, data: { model: string; type: 'local' } | { model: string; type: 'remote'; provider: string }) {
       this.activeModel = data.model;
       this.activeMode = data.type;
       if (data.type === 'remote' && data.provider) {
@@ -964,6 +1022,13 @@ export default defineComponent({
         this.selectedRemoteModel = data.model;
       }
       this.pendingModel = this.activeModel;
+
+      // Sync primary provider from the model selector (suppress watcher to avoid IPC loop)
+      const newPrimary = data.type === 'local' ? 'ollama' : (data as any).provider || 'ollama';
+      if (this.primaryProvider !== newPrimary) {
+        this._suppressProviderWatch = true;
+        this.primaryProvider = newPrimary;
+      }
     },
 
     // Database test methods

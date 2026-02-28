@@ -397,12 +397,18 @@ export class AgentNode extends BaseNode {
       return '';
     }
 
+    const proseWithoutWrappers = rawResultText
+      .replace(AGENT_DONE_XML_REGEX, '')
+      .replace(AGENT_BLOCKED_XML_REGEX, '')
+      .replace(AGENT_CONTINUE_XML_REGEX, '')
+      .trim();
+
     if (outcome.status === 'done') {
-      return outcome.summary || 'Done.';
+      return proseWithoutWrappers || outcome.summary || 'Done.';
     }
 
     if (outcome.status === 'continue') {
-      return outcome.statusReport || outcome.summary || 'Continuing.';
+      return proseWithoutWrappers || outcome.statusReport || outcome.summary || 'Continuing.';
     }
 
     if (outcome.status === 'blocked') {
@@ -415,10 +421,6 @@ export class AgentNode extends BaseNode {
       return 'Blocked.';
     }
 
-    return rawResultText
-      .replace(AGENT_DONE_XML_REGEX, '')
-      .replace(AGENT_BLOCKED_XML_REGEX, '')
-      .replace(AGENT_CONTINUE_XML_REGEX, '')
-      .trim();
+    return proseWithoutWrappers;
   }
 }

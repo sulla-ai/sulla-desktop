@@ -68,7 +68,7 @@ export class AgentPersonaRegistry {
       {
         isRunning: true,
         agentId: 'dreaming-protocol',
-        agentName: 'Subconscious',
+        agentName: 'Radius',
         templateId: 'terminal',
         emotion: 'focus',
         status: 'idle',
