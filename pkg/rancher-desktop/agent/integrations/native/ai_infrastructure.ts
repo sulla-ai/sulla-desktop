@@ -1,89 +1,10 @@
 import type { Integration } from '../types';
 
 export const nativeAiInfrastructureIntegrations: Record<string, Integration> = {
-  composio: {
-    id: 'composio',
-    sort: 1,
-    beta: true,
-    comingSoon: false,
-    name: 'Composio',
-    description: 'Enable Composio-backed integrations and 10,000 more integrations will appear for your agent. This acts as a master switch for Composio tool visibility.',
-    category: 'AI Infrastructure',
-    icon: '🧩',
-    connected: false,
-    version: '1.0.0',
-    lastUpdated: '2026-02-27 23:00:00',
-    developer: 'Sulla',
-    formGuide: 'Enable this integration and provide your Composio API credentials below to expose Composio-powered tools.',
-    installationGuide: {
-      title: 'Composio Enablement Guide',
-      description: 'Turn on Composio tooling for your workspace (2-5 minutes)',
-      steps: [
-        {
-          title: 'Set Composio Credentials',
-          content: `1. Generate an API key in your Composio dashboard
-2. Paste it into the Composio API Key field below
-3. (Optional) Set Composio Base URL if using a non-default Composio environment`
-        },
-        {
-          title: 'Enable Composio Integration',
-          content: `1. Open Integrations and select Composio
-2. Toggle connection to enabled
-3. Open Skills/Tool search and confirm Composio tools are visible`
-        }
-      ],
-      importantNotes: [
-        'Composio-backed tools remain hidden unless this integration is connected',
-        'This integration does not replace per-integration credentials for external services',
-        'You still need to connect each individual service (e.g. Slack, Gmail, Notion) to execute its tools'
-      ]
-    },
-    media: [],
-    features: [
-      {
-        title: 'Master Visibility Switch',
-        description: 'Controls whether Composio-provided tools are exposed to the agent'
-      },
-      {
-        title: 'Centralized Tooling Layer',
-        description: 'Enables access to the Composio-backed integration tool ecosystem'
-      }
-    ],
-    guideLinks: [
-      {
-        title: 'Composio Dashboard',
-        description: 'Create and manage your Composio API keys and projects',
-        url: 'https://app.composio.dev/'
-      },
-      {
-        title: 'Composio Docs',
-        description: 'Official Composio documentation and auth setup guides',
-        url: 'https://docs.composio.dev/'
-      }
-    ],
-    properties: [
-      {
-        key: 'api_key',
-        title: 'Composio API Key',
-        hint: 'Create this in your Composio dashboard (Settings → API Keys).',
-        type: 'password',
-        required: true,
-        placeholder: 'cmp_...'
-      },
-      {
-        key: 'base_url',
-        title: 'Composio Base URL',
-        hint: 'Optional. Leave blank to use Composio default (production).',
-        type: 'url',
-        required: false,
-        placeholder: 'https://backend.composio.dev'
-      }
-    ]
-  },
-
   grok: {
     id: 'grok',
     sort: 2,
+    paid: true,
     beta: false,
     comingSoon: false,
     name: 'Grok',
@@ -120,6 +41,7 @@ export const nativeAiInfrastructureIntegrations: Record<string, Integration> = {
   anthropic: {
     id: 'anthropic',
     sort: 3,
+    paid: true,
     beta: false,
     comingSoon: false,
     name: 'Anthropic',
@@ -156,6 +78,7 @@ export const nativeAiInfrastructureIntegrations: Record<string, Integration> = {
   openai: {
     id: 'openai',
     sort: 4,
+    paid: true,
     beta: false,
     comingSoon: false,
     name: 'OpenAI',
@@ -192,6 +115,7 @@ export const nativeAiInfrastructureIntegrations: Record<string, Integration> = {
   kimi: {
     id: 'kimi',
     sort: 5,
+    paid: true,
     beta: false,
     comingSoon: false,
     name: 'Kimi',
@@ -228,6 +152,7 @@ export const nativeAiInfrastructureIntegrations: Record<string, Integration> = {
   nvidia: {
     id: 'nvidia',
     sort: 6,
+    paid: true,
     beta: false,
     comingSoon: false,
     name: 'NVIDIA',
@@ -264,6 +189,7 @@ export const nativeAiInfrastructureIntegrations: Record<string, Integration> = {
   ollama: {
     id: 'ollama',
     sort: 7,
+    paid: false,
     beta: false,
     comingSoon: false,
     name: 'Ollama',
@@ -310,6 +236,7 @@ export const nativeAiInfrastructureIntegrations: Record<string, Integration> = {
   custom: {
     id: 'custom',
     sort: 8,
+    paid: false,
     beta: false,
     comingSoon: false,
     name: 'Custom',

@@ -8,6 +8,7 @@ export const integrationsToolManifests: ToolManifest[] = [
     schemaDef: {
     integration_slug: { type: 'string', description: "The slug identifier of the integration (e.g. 'slack', 'github', 'n8n')" },
     account_id: { type: 'string', optional: true, description: "Optional account ID to get credentials for a specific account. Defaults to the active account." },
+    include_secrets: { type: 'boolean', optional: true, description: "When true, returns the full decrypted values for password/secret fields. Defaults to false, which masks sensitive values." },
   },
     operationTypes: ['read'],
     loader: () => import('./integration_get_credentials'),

@@ -1,0 +1,84 @@
+import type { Integration } from '../types';
+
+export const nativeHrRecruitingIntegrations: Record<string, Integration> = {
+  bamboohr: {
+    id: 'bamboohr', sort: 1, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'BambooHR', description: 'Manage employee records, time-off requests, and HR workflows.',
+    category: 'HR & Recruiting', icon: '🎋', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'BambooHR',
+  },
+  greenhouse: {
+    id: 'greenhouse', sort: 2, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'Greenhouse', description: 'Manage job postings, candidates, and interview pipelines.',
+    category: 'HR & Recruiting', icon: '🌿', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Greenhouse',
+  },
+  lever: {
+    id: 'lever', sort: 3, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'Lever', description: 'Manage candidates, job postings, and recruiting pipelines.',
+    category: 'HR & Recruiting', icon: '🔄', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Lever',
+  },
+  gusto: {
+    id: 'gusto', sort: 4, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'Gusto', description: 'Manage payroll, benefits, and HR administration for small businesses.',
+    category: 'HR & Recruiting', icon: '💵', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Gusto',
+  },
+  deel: {
+    id: 'deel', sort: 5, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'Deel', description: 'Manage international payroll, contractors, and compliance for global teams.',
+    category: 'HR & Recruiting', icon: '🌍', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Deel',
+  },
+  rippling: {
+    id: 'rippling', sort: 6, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'Rippling', description: 'Manage HR, payroll, IT, and spend from a unified workforce platform.',
+    category: 'HR & Recruiting', icon: '🌊', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Rippling',
+  },
+  workable: {
+    id: 'workable', sort: 7, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'Workable', description: 'Post jobs, manage candidates, and automate hiring workflows.',
+    category: 'HR & Recruiting', icon: '💼', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Workable',
+  },
+  ashby: {
+    id: 'ashby', sort: 8, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'Ashby', description: 'Manage recruiting pipelines, scheduling, and hiring analytics.',
+    category: 'HR & Recruiting', icon: '📊', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Ashby',
+  },
+  personio: {
+    id: 'personio', sort: 9, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'Personio', description: 'Manage employee data, absences, recruiting, and payroll for SMBs.',
+    category: 'HR & Recruiting', icon: '👥', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Personio',
+  },
+  namely: {
+    id: 'namely', sort: 10, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'Namely', description: 'Manage HR, payroll, benefits, and talent management for mid-size companies.',
+    category: 'HR & Recruiting', icon: '🏢', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Namely',
+  },
+  breezy_hr: {
+    id: 'breezy_hr', sort: 11, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'Breezy HR', description: 'Manage job postings, candidate pipelines, and interview scheduling.',
+    category: 'HR & Recruiting', icon: '🌬️', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Breezy HR',
+  },
+  paylocity: {
+    id: 'paylocity', sort: 12, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'Paylocity', description: 'Manage payroll, benefits, time tracking, and HR workflows.',
+    category: 'HR & Recruiting', icon: '💰', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Paylocity',
+  },
+  remote: {
+    id: 'remote', sort: 13, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'Remote', description: 'Manage global employment, payroll, and compliance for distributed teams.',
+    category: 'HR & Recruiting', icon: '🌐', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Remote',
+  },
+  oyster: {
+    id: 'oyster', sort: 14, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'Oyster', description: 'Hire, pay, and manage global employees and contractors compliantly.',
+    category: 'HR & Recruiting', icon: '🦪', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Oyster',
+  },
+  hibob: {
+    id: 'hibob', sort: 15, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'HiBob', description: 'Manage people data, time off, onboarding, and workforce planning.',
+    category: 'HR & Recruiting', icon: '👋', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'HiBob',
+  },
+  justworks: {
+    id: 'justworks', sort: 16, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'Justworks', description: 'Manage payroll, benefits, compliance, and HR for small businesses.',
+    category: 'HR & Recruiting', icon: '✅', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Justworks',
+  },
+};

@@ -1,8 +1,6 @@
 // ILLMService - Common interface for all LLM services (local and remote)
 // This allows the agent to use either Ollama or remote APIs interchangeably
 
-import { tools } from "@langchain/openai";
-
 export enum FinishReason {
   Stop = 'stop',
   ToolCalls = 'tool_calls',
@@ -40,7 +38,18 @@ export interface NormalizedResponse {
 }
 
 /**
- * Remote provider configuration
+ * Minimal config every LLM service needs.
+ * Provider-specific services extend this with their own fields.
+ */
+export interface LLMServiceConfig {
+  id: string;
+  model: string;
+  baseUrl: string;
+  apiKey?: string;
+}
+
+/**
+ * Remote provider configuration (back-compat alias)
  */
 export interface RemoteProviderConfig {
   id: string;
@@ -51,7 +60,7 @@ export interface RemoteProviderConfig {
 }
 
 /**
- * Overall LLM configuration
+ * Overall LLM configuration (legacy — used by OllamaService)
  */
 export interface LLMConfig {
   mode: 'local' | 'remote';
@@ -112,23 +121,23 @@ export interface LLMConfig {
  * @see {@link LLMConfig} - Constructor config shapes
  */
 export abstract class BaseLanguageModel {
-  protected config: LLMConfig | RemoteProviderConfig;
+  protected config: LLMServiceConfig | LLMConfig | RemoteProviderConfig;
   protected model: string;
   protected baseUrl: string;
   protected apiKey?: string;
   protected isInitialized = false;
   protected isHealthy = false;
 
-  constructor(config: LLMConfig | RemoteProviderConfig) {
+  constructor(config: LLMServiceConfig | LLMConfig | RemoteProviderConfig) {
     this.config = config;
     if ('mode' in config) {
-      // Local config (Ollama)
+      // Legacy local config (Ollama)
       this.model = config.localModel;
       this.baseUrl = config.ollamaBase.endsWith('/') 
         ? config.ollamaBase.slice(0, -1) 
         : config.ollamaBase;
     } else {
-      // Remote provider config
+      // LLMServiceConfig or RemoteProviderConfig
       this.model = config.model;
       this.baseUrl = config.baseUrl.endsWith('/') 
         ? config.baseUrl.slice(0, -1) 
@@ -283,70 +292,27 @@ export abstract class BaseLanguageModel {
   }
 
   /**
-   * Normalize response across providers.
-   * @override
+   * Normalize response — default implementation handles OpenAI-compatible shape.
+   * Provider-specific services (Anthropic, Google, etc.) override this entirely.
    */
   protected normalizeResponse(raw: any): NormalizedResponse {
-    let content = '';
-    let reasoning = '';
+    const usage = raw.usage ?? {};
+    const finishReason = raw.choices?.[0]?.finish_reason;
+
+    // OpenAI / Grok / most compatible providers
+    let content = raw.choices?.[0]?.message?.content?.message ?? raw.choices?.[0]?.message?.content ?? '';
+    let reasoning = raw.choices?.[0]?.message?.content?.reasoning 
+            || raw.choices?.[0]?.message?.reasoning 
+            || raw.reasoning 
+            || '';
     let toolCalls: Array<{ id?: string; name: string; args: any }> = [];
-    let finishReason: string | undefined;
-    let usage = raw.usage ?? {};
 
-    // ─────────────────────────────────────────────────────────────
-    // 1. Extract finish_reason (varies by provider)
-    // ─────────────────────────────────────────────────────────────
-    if ('id' in this.config && this.config.id === 'anthropic') {
-      finishReason = raw.stop_reason;
-    } else if ('id' in this.config && this.config.id === 'google') {
-      finishReason = raw.candidates?.[0]?.finishReason;
-    } else {
-      // OpenAI / Grok / most compatible
-      finishReason = raw.choices?.[0]?.finish_reason;
-    }
-
-    // ─────────────────────────────────────────────────────────────
-    // 2. Extract content + reasoning (many models bury this)
-    // ─────────────────────────────────────────────────────────────
-    if ('id' in this.config && this.config.id === 'anthropic') {
-      // Claude can return array of content blocks
-      const blocks = raw.content || [];
-      content = blocks
-        .filter((b: any) => b.type === 'text')
-        .map((b: any) => b.text)
-        .join('\n');
-
-      reasoning = blocks
-        .filter((b: any) => b.type === 'thinking' || b.type === 'reasoning')
-        .map((b: any) => b.text)
-        .join('\n');
-
-    } else if ('id' in this.config && this.config.id === 'google') {
-      content = raw.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
-    } else {
-      // Grok / OpenAI style
-      content = raw.choices?.[0]?.message?.content?.message ?? raw.choices?.[0]?.message?.content ?? '';
-
-      // Some models (o1, Grok thinking, Claude) put reasoning in a separate field
-      reasoning = raw.choices?.[0]?.message?.content?.reasoning 
-              || raw.choices?.[0]?.message?.reasoning 
-              || raw.reasoning 
-              || '';
-    }
-
-    // ─────────────────────────────────────────────────────────────
-    // 2.5. Attempt to parse content as JSON for structured data
-    // ─────────────────────────────────────────────────────────────
+    // ── Attempt to parse content as JSON for structured data ──
     const parsedContent = this.parseJson(content);
-    
-    // If content was JSON with structured fields, extract them
     if (parsedContent && typeof parsedContent === 'object') {
-      // Extract reasoning if present and not already set
       if (parsedContent.reasoning && typeof parsedContent.reasoning === 'string' && !reasoning) {
         reasoning = parsedContent.reasoning;
       }
-      
-      // Extract tool_calls if present (merge with existing)
       if (parsedContent.tool_calls && Array.isArray(parsedContent.tool_calls)) {
         const extractedToolCalls = parsedContent.tool_calls.map((tc: any) => ({
           id: tc.id,
@@ -363,8 +329,6 @@ export abstract class BaseLanguageModel {
         }));
         toolCalls.push(...extractedToolCalls);
       }
-      
-      // Set content to the main message/response field or stringify remaining object
       const { reasoning: _, tool_calls: __, content: mainContent, message, answer, response, ...remaining } = parsedContent;
       if (mainContent && typeof mainContent === 'string') {
         content = mainContent;
@@ -375,49 +339,29 @@ export abstract class BaseLanguageModel {
       } else if (response && typeof response === 'string') {
         content = response;
       } else if (Object.keys(remaining).length > 0) {
-        // If there are other fields, stringify them as content
         content = JSON.stringify(remaining);
       } else {
-        // Fallback to original content if nothing else
         content = JSON.stringify(parsedContent);
       }
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // 3. Extract tool_calls (most fragile part)
-    // ─────────────────────────────────────────────────────────────
-    if ('id' in this.config && this.config.id === 'anthropic') {
-      if (raw.content?.some((b: any) => b.type === 'tool_use')) {
-        toolCalls = raw.content
-          .filter((b: any) => b.type === 'tool_use')
-          .map((b: any) => ({
-            id: b.id,
-            name: b.name,
-            args: b.input || {},
-          }));
-      }
-    } else {
-      // OpenAI / Grok / most providers
-      const message = raw.choices?.[0]?.message;
-      const toolCallsArray = message?.tool_calls || message?.content?.tool_calls;
-      if (toolCallsArray) {
-        toolCalls = toolCallsArray.map((tc: any) => ({
-          id: tc.id,
-          name: tc.function?.name,
-          args: (() => {
-            try {
-              return JSON.parse(tc.function?.arguments || '{}');
-            } catch {
-              return tc.function?.arguments || {};
-            }
-          })()
-        }));
-      }
+    // ── Extract tool_calls from OpenAI-compatible response ──
+    const message = raw.choices?.[0]?.message;
+    const toolCallsArray = message?.tool_calls || message?.content?.tool_calls;
+    if (toolCallsArray) {
+      toolCalls = toolCallsArray.map((tc: any) => ({
+        id: tc.id,
+        name: tc.function?.name,
+        args: (() => {
+          try {
+            return JSON.parse(tc.function?.arguments || '{}');
+          } catch {
+            return tc.function?.arguments || {};
+          }
+        })()
+      }));
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // 4. Final normalized shape
-    // ─────────────────────────────────────────────────────────────
     return {
       content: content.trim(),
       metadata: {
@@ -429,11 +373,8 @@ export abstract class BaseLanguageModel {
         model: this.model,
         tool_calls: toolCalls.length > 0 ? toolCalls : undefined,
         finish_reason: this.normalizeFinishReason(finishReason),
-        reasoning: reasoning.trim() || undefined,   // ← extra safety net
+        reasoning: reasoning.trim() || undefined,
         parsed_content: parsedContent,
-        rawProviderContent: ('id' in this.config && this.config.id === 'anthropic' && Array.isArray(raw.content) && raw.content.length > 0)
-          ? raw.content
-          : undefined,
       },
     };
   }
@@ -459,56 +400,20 @@ export abstract class BaseLanguageModel {
 
 
 
-
 /**
  * ILLMService - Common interface for LLM services
  * Implemented by OllamaService (local) and RemoteModelService (API)
  */
 export interface ILLMService {
-  /**
-   * Initialize the service and check availability
-   */
   initialize(): Promise<boolean>;
-
-  /**
-   * Check if the service is available
-   */
   isAvailable(): boolean;
-
-  /**
-   * Get the current model name
-   */
   getModel(): string;
-
-  /**
-   * Chat completion with message history
-   */
   chat(messages: ChatMessage[], options?: { 
     model?: string;
     maxTokens?: number;
     format?: 'json' | undefined;
     signal?: AbortSignal;
   }): Promise<string | null>;
-
-  /**
-   * Health check
-   */
   healthCheck(): Promise<boolean>;
-
-  /**
-   * Pull a model from the service (only available for local services)
-   */
   pullModel?(modelName: string, onProgress?: (status: string) => void): Promise<boolean>;
 }
-
-/**
- * Provider configuration for remote APIs
- */
-export interface RemoteProviderConfig {
-  id: string;
-  name: string;
-  baseUrl: string;
-  apiKey: string;
-  model: string;
-}
-

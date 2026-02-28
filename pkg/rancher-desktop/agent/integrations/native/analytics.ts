@@ -1,0 +1,84 @@
+import type { Integration } from '../types';
+
+export const nativeAnalyticsIntegrations: Record<string, Integration> = {
+  google_analytics: {
+    id: 'google_analytics', sort: 1, paid: false, beta: false, comingSoon: false, connected: false,
+    name: 'Google Analytics', description: 'Query website traffic, user behavior, and conversion data from Google Analytics.',
+    category: 'Analytics', icon: '📈', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Google',
+  },
+  mixpanel: {
+    id: 'mixpanel', sort: 2, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'Mixpanel', description: 'Track events, analyze funnels, and query product analytics data.',
+    category: 'Analytics', icon: '🔬', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Mixpanel',
+  },
+  amplitude: {
+    id: 'amplitude', sort: 3, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'Amplitude', description: 'Analyze user behavior, track retention, and build product analytics dashboards.',
+    category: 'Analytics', icon: '📉', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Amplitude',
+  },
+  segment: {
+    id: 'segment', sort: 4, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'Segment', description: 'Manage customer data pipelines, track events, and route data to downstream tools.',
+    category: 'Analytics', icon: '🟩', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Twilio',
+  },
+  posthog: {
+    id: 'posthog', sort: 5, paid: false, beta: false, comingSoon: false, connected: false,
+    name: 'PostHog', description: 'Track events, analyze funnels, manage feature flags, and run A/B experiments.',
+    category: 'Analytics', icon: '🦔', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'PostHog',
+  },
+  plausible: {
+    id: 'plausible', sort: 6, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'Plausible', description: 'Query lightweight, privacy-friendly website analytics data.',
+    category: 'Analytics', icon: '🌱', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Plausible',
+  },
+  hotjar: {
+    id: 'hotjar', sort: 7, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'Hotjar', description: 'Track heatmaps, session recordings, and user feedback surveys.',
+    category: 'Analytics', icon: '🔥', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Hotjar',
+  },
+  heap: {
+    id: 'heap', sort: 8, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'Heap', description: 'Auto-capture user interactions and analyze product usage data.',
+    category: 'Analytics', icon: '📚', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Contentsquare',
+  },
+  fullstory: {
+    id: 'fullstory', sort: 9, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'FullStory', description: 'Track session replays, rage clicks, and digital experience analytics.',
+    category: 'Analytics', icon: '📽️', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'FullStory',
+  },
+  looker: {
+    id: 'looker', sort: 10, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'Looker', description: 'Query data models, manage dashboards, and retrieve BI insights.',
+    category: 'Analytics', icon: '👀', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Google',
+  },
+  matomo: {
+    id: 'matomo', sort: 11, paid: false, beta: false, comingSoon: false, connected: false,
+    name: 'Matomo', description: 'Self-hosted web analytics with privacy compliance and full data ownership.',
+    category: 'Analytics', icon: '📊', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Matomo',
+  },
+  umami: {
+    id: 'umami', sort: 12, paid: false, beta: false, comingSoon: false, connected: false,
+    name: 'Umami', description: 'Simple, open-source, privacy-focused web analytics.',
+    category: 'Analytics', icon: '🍣', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Umami',
+  },
+  databox: {
+    id: 'databox', sort: 13, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'Databox', description: 'Build custom dashboards pulling metrics from multiple data sources.',
+    category: 'Analytics', icon: '📦', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Databox',
+  },
+  chartmogul: {
+    id: 'chartmogul', sort: 14, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'ChartMogul', description: 'Analyze subscription revenue, MRR, churn, and cohort metrics.',
+    category: 'Analytics', icon: '📈', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'ChartMogul',
+  },
+  baremetrics: {
+    id: 'baremetrics', sort: 15, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'Baremetrics', description: 'Track SaaS metrics, revenue, and subscription analytics from payment providers.',
+    category: 'Analytics', icon: '📉', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Baremetrics',
+  },
+  snowflake: {
+    id: 'snowflake', sort: 16, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'Snowflake', description: 'Query data warehouse tables, manage warehouses, and run analytics workloads.',
+    category: 'Analytics', icon: '❄️', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Snowflake',
+  },
+};

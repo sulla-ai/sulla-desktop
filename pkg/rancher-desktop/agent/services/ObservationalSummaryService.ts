@@ -11,7 +11,7 @@
 
 import type { BaseThreadState } from '../nodes/Graph';
 import type { ChatMessage } from '../languagemodels/BaseLanguageModel';
-import { getService } from '../languagemodels';
+import { getPrimaryService } from '../languagemodels';
 import { parseJson } from './JsonParseService';
 
 // ============================================================================
@@ -246,8 +246,7 @@ export class ObservationalSummaryService {
    */
   private async prioritizeObservations(state: BaseThreadState, observations: ObservationEntry[]): Promise<ObservationEntry[]> {
     // Get LLM service using same logic as conversation system
-    const context = state.metadata.llmLocal ? 'local' : 'remote';
-    const llmService = await getService(context, state.metadata.llmModel);
+    const llmService = await getPrimaryService();
     
     // Build observation list for LLM
     const observationText = observations

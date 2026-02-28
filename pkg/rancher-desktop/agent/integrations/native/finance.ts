@@ -1,0 +1,84 @@
+import type { Integration } from '../types';
+
+export const nativeFinanceIntegrations: Record<string, Integration> = {
+  stripe: {
+    id: 'stripe', sort: 1, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'Stripe', description: 'Manage payments, subscriptions, customers, and invoices. Query transaction data and automate billing.',
+    category: 'Finance', icon: '💳', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Stripe',
+  },
+  quickbooks: {
+    id: 'quickbooks', sort: 2, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'QuickBooks', description: 'Manage invoices, expenses, customers, and reports. Automate accounting workflows.',
+    category: 'Finance', icon: '📗', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Intuit',
+  },
+  xero: {
+    id: 'xero', sort: 3, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'Xero', description: 'Manage invoices, bank transactions, contacts, and financial reports.',
+    category: 'Finance', icon: '🔵', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Xero',
+  },
+  paypal: {
+    id: 'paypal', sort: 4, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'PayPal', description: 'Process payments, manage transactions, and handle refunds via the PayPal API.',
+    category: 'Finance', icon: '💰', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'PayPal',
+  },
+  square: {
+    id: 'square', sort: 5, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'Square', description: 'Process payments, manage inventory, and track sales data via Square.',
+    category: 'Finance', icon: '⬛', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Block',
+  },
+  chargebee: {
+    id: 'chargebee', sort: 6, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'Chargebee', description: 'Manage subscriptions, billing, invoices, and revenue operations.',
+    category: 'Finance', icon: '🐝', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Chargebee',
+  },
+  brex: {
+    id: 'brex', sort: 7, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'Brex', description: 'Manage corporate cards, expenses, reimbursements, and budgets.',
+    category: 'Finance', icon: '🟧', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Brex',
+  },
+  plaid: {
+    id: 'plaid', sort: 8, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'Plaid', description: 'Connect bank accounts, retrieve transactions, and verify account balances.',
+    category: 'Finance', icon: '🏦', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Plaid',
+  },
+  recurly: {
+    id: 'recurly', sort: 9, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'Recurly', description: 'Manage subscription billing, plans, invoices, and revenue recovery.',
+    category: 'Finance', icon: '🔄', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Recurly',
+  },
+  freshbooks: {
+    id: 'freshbooks', sort: 10, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'FreshBooks', description: 'Manage invoices, expenses, time tracking, and client billing.',
+    category: 'Finance', icon: '📘', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'FreshBooks',
+  },
+  wave: {
+    id: 'wave', sort: 11, paid: false, beta: false, comingSoon: false, connected: false,
+    name: 'Wave', description: 'Manage invoicing, accounting, and receipt scanning for small businesses.',
+    category: 'Finance', icon: '🌊', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Wave',
+  },
+  wise: {
+    id: 'wise', sort: 12, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'Wise', description: 'Send international transfers, manage multi-currency accounts, and track exchange rates.',
+    category: 'Finance', icon: '💱', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Wise',
+  },
+  mercury: {
+    id: 'mercury', sort: 13, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'Mercury', description: 'Manage startup banking, transactions, and treasury operations via API.',
+    category: 'Finance', icon: '🪙', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Mercury',
+  },
+  ramp: {
+    id: 'ramp', sort: 14, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'Ramp', description: 'Manage corporate cards, expenses, and spend management automation.',
+    category: 'Finance', icon: '💳', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Ramp',
+  },
+  zoho_books: {
+    id: 'zoho_books', sort: 15, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'Zoho Books', description: 'Manage invoices, bills, banking, and accounting workflows.',
+    category: 'Finance', icon: '🔴', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Zoho',
+  },
+  invoice_ninja: {
+    id: 'invoice_ninja', sort: 16, paid: false, beta: false, comingSoon: false, connected: false,
+    name: 'Invoice Ninja', description: 'Create invoices, track payments, and manage clients with open-source billing.',
+    category: 'Finance', icon: '🥷', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Invoice Ninja',
+  },
+};

@@ -2,6 +2,21 @@ import { BaseModel } from '../BaseModel';
 import { SullaSettingsModel } from './SullaSettingsModel';
 import * as crypto from 'crypto';
 
+/**
+ * Maps integration slugs to their corresponding n8n credential type identifiers.
+ * Falls back to `${slug}Api` for unmapped integrations.
+ */
+const N8N_CREDENTIAL_TYPE_MAP: Record<string, string> = {
+  slack:     'slackApi',
+  github:    'githubApi',
+  gmail:     'gmailOAuth2Api',
+  discord:   'discordApi',
+  telegram:  'telegramApi',
+  openai:    'openAiApi',
+  anthropic: 'anthropicApi',
+  grok:      'grokApi',
+};
+
 export class N8nCredentialsEntityModel extends BaseModel {
   protected readonly tableName = 'credentials_entity';
 
@@ -26,6 +41,87 @@ export class N8nCredentialsEntityModel extends BaseModel {
       this.attributes.id = SullaSettingsModel.generateId();
     }
     return super.save();
+  }
+
+  /**
+   * Encrypt a credential data object using n8n's AES-256-GCM encryption
+   * and set it on the `data` attribute.
+   * @param credential - Plain object of credential key/value pairs
+   */
+  async encryptData(credential: Record<string, any>): Promise<void> {
+    const encryptionKey = await SullaSettingsModel.get('sullaN8nEncryptionKey');
+    if (!encryptionKey) {
+      throw new Error('No encryption key found in settings');
+    }
+
+    const iv = crypto.randomBytes(12);
+    const cipher = crypto.createCipheriv('aes-256-gcm', encryptionKey, iv);
+
+    const plaintext = JSON.stringify(credential);
+    let encrypted = cipher.update(plaintext, 'utf8');
+    encrypted = Buffer.concat([encrypted, cipher.final()]);
+    const tag = cipher.getAuthTag();
+
+    this.attributes.data = JSON.stringify({
+      encryptedData: encrypted.toString('base64'),
+      iv:            iv.toString('base64'),
+      tag:           tag.toString('base64'),
+    });
+  }
+
+  /**
+   * Transfer credentials from IntegrationService into n8n's credentials_entity table.
+   * Looks up the integration by slug, reads form values from the active account,
+   * encrypts them, and upserts the corresponding credentials_entity row.
+   *
+   * @param integrationSlug - The integration id (e.g. 'slack', 'github')
+   * @returns The saved N8nCredentialsEntityModel instance
+   */
+  static async transferCredentials(integrationSlug: string): Promise<N8nCredentialsEntityModel> {
+    const { getIntegrationService } = await import('../../services/IntegrationService');
+    const { integrations } = await import('../../integrations/catalog');
+
+    const service = getIntegrationService();
+    await service.initialize();
+
+    const catalogEntry = integrations[integrationSlug];
+    if (!catalogEntry) {
+      throw new Error(`Integration "${integrationSlug}" not found in catalog`);
+    }
+
+    // Build credential data from integration form values
+    const formValues = await service.getFormValues(integrationSlug);
+    const credentialData: Record<string, string> = {};
+    for (const fv of formValues) {
+      credentialData[fv.property] = fv.value;
+    }
+
+    if (Object.keys(credentialData).length === 0) {
+      throw new Error(`No credentials found for integration "${integrationSlug}"`);
+    }
+
+    // n8n credential type mapping
+    const n8nType = N8N_CREDENTIAL_TYPE_MAP[integrationSlug] || `${integrationSlug}Api`;
+
+    // Find existing credential by type or create new
+    const existing = await N8nCredentialsEntityModel.where<N8nCredentialsEntityModel>('type', n8nType);
+    let model: N8nCredentialsEntityModel;
+
+    if (existing.length > 0) {
+      model = existing[0];
+    } else {
+      model = new N8nCredentialsEntityModel();
+      model.fill({
+        name: catalogEntry.name,
+        type: n8nType,
+      });
+    }
+
+    await model.encryptData(credentialData);
+    await model.save();
+
+    console.log(`[N8nCredentialsEntityModel] Transferred credentials for ${integrationSlug} → ${n8nType} (id: ${model.attributes.id})`);
+    return model;
   }
 
   /**

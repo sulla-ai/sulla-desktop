@@ -4,7 +4,8 @@ export const nativeGitHubIntegration: Record<string, Integration> = {
   github: {
     id: 'github',
     sort: 1,
-    beta: true,
+    paid: false,
+    beta: false,
     comingSoon: false,
     name: 'GitHub',
     description: 'Version control and collaboration platform for software development. Manage repositories, issues, pull requests, and automate your development workflow with powerful integrations.',
@@ -95,5 +96,90 @@ export const nativeGitHubIntegration: Record<string, Integration> = {
         }
       }
     ],
+  },
+  gitlab: {
+    id: 'gitlab', sort: 2, paid: false, beta: false, comingSoon: false, connected: false,
+    name: 'GitLab', description: 'Manage repositories, CI/CD pipelines, merge requests, and issues on GitLab.',
+    category: 'Developer Tools', icon: '🦊', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'GitLab',
+  },
+  vercel: {
+    id: 'vercel', sort: 3, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'Vercel', description: 'Deploy web applications, manage projects, and monitor deployments on Vercel.',
+    category: 'Developer Tools', icon: '▲', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Vercel',
+  },
+  sentry: {
+    id: 'sentry', sort: 4, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'Sentry', description: 'Monitor application errors, track performance issues, and manage release health.',
+    category: 'Developer Tools', icon: '🐛', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Sentry',
+  },
+  datadog: {
+    id: 'datadog', sort: 5, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'Datadog', description: 'Monitor infrastructure, applications, and logs. Query metrics and manage alerts.',
+    category: 'Developer Tools', icon: '🐕', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Datadog',
+  },
+  jenkins: {
+    id: 'jenkins', sort: 6, paid: false, beta: false, comingSoon: false, connected: false,
+    name: 'Jenkins', description: 'Trigger builds, manage pipelines, and automate CI/CD workflows in Jenkins.',
+    category: 'Developer Tools', icon: '🔧', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Jenkins',
+  },
+  bitbucket: {
+    id: 'bitbucket', sort: 7, paid: false, beta: false, comingSoon: false, connected: false,
+    name: 'Bitbucket', description: 'Manage Git repositories, pull requests, and CI/CD pipelines on Bitbucket.',
+    category: 'Developer Tools', icon: '🪣', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Atlassian',
+  },
+  netlify: {
+    id: 'netlify', sort: 8, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'Netlify', description: 'Deploy sites, manage builds, and configure serverless functions on Netlify.',
+    category: 'Developer Tools', icon: '🌐', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Netlify',
+  },
+  cloudflare: {
+    id: 'cloudflare', sort: 9, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'Cloudflare', description: 'Manage DNS, Workers, Pages, and CDN settings via the Cloudflare API.',
+    category: 'Developer Tools', icon: '☁️', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Cloudflare',
+  },
+  pagerduty: {
+    id: 'pagerduty', sort: 10, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'PagerDuty', description: 'Manage incidents, on-call schedules, and alerting workflows.',
+    category: 'Developer Tools', icon: '🚨', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'PagerDuty',
+  },
+  circleci: {
+    id: 'circleci', sort: 11, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'CircleCI', description: 'Trigger pipelines, manage builds, and monitor CI/CD workflows.',
+    category: 'Developer Tools', icon: '⭕', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'CircleCI',
+  },
+  github_actions: {
+    id: 'github_actions', sort: 12, paid: false, beta: false, comingSoon: false, connected: false,
+    name: 'GitHub Actions', description: 'Trigger workflows, manage runs, and automate CI/CD directly in GitHub.',
+    category: 'Developer Tools', icon: '▶️', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'GitHub',
+  },
+  terraform_cloud: {
+    id: 'terraform_cloud', sort: 13, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'Terraform Cloud', description: 'Manage workspaces, trigger runs, and automate infrastructure provisioning.',
+    category: 'Developer Tools', icon: '🏗️', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'HashiCorp',
+  },
+  docker_hub: {
+    id: 'docker_hub', sort: 14, paid: false, beta: false, comingSoon: false, connected: false,
+    name: 'Docker Hub', description: 'Manage repositories, images, and automated builds on Docker Hub.',
+    category: 'Developer Tools', icon: '🐳', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Docker',
+  },
+  new_relic: {
+    id: 'new_relic', sort: 15, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'New Relic', description: 'Query APM data, manage alerts, and monitor application performance.',
+    category: 'Developer Tools', icon: '📊', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'New Relic',
+  },
+  grafana: {
+    id: 'grafana', sort: 16, paid: false, beta: false, comingSoon: false, connected: false,
+    name: 'Grafana', description: 'Manage dashboards, query data sources, and configure alerting rules.',
+    category: 'Developer Tools', icon: '📈', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Grafana Labs',
+  },
+  render: {
+    id: 'render', sort: 17, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'Render', description: 'Deploy web services, databases, and static sites on Render cloud.',
+    category: 'Developer Tools', icon: '🟢', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Render',
+  },
+  fly_io: {
+    id: 'fly_io', sort: 18, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'Fly.io', description: 'Deploy and manage applications on Fly.io edge infrastructure.',
+    category: 'Developer Tools', icon: '✈️', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Fly.io',
   },
 };

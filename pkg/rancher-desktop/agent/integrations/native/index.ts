@@ -2,9 +2,39 @@ import type { Integration } from '../types';
 import { nativeSlackIntegration } from './communication';
 import { nativeGitHubIntegration } from './developer_tools';
 import { nativeAiInfrastructureIntegrations } from './ai_infrastructure';
+import { nativeProductivityIntegrations } from './productivity';
+import { nativeProjectManagementIntegrations } from './project_management';
+import { nativeCrmSalesIntegrations } from './crm_sales';
+import { nativeCustomerSupportIntegrations } from './customer_support';
+import { nativeMarketingIntegrations } from './marketing';
+import { nativeFinanceIntegrations } from './finance';
+import { nativeFileStorageIntegrations } from './file_storage';
+import { nativeSocialMediaIntegrations } from './social_media';
+import { nativeEcommerceIntegrations } from './ecommerce';
+import { nativeHrRecruitingIntegrations } from './hr_recruiting';
+import { nativeAnalyticsIntegrations } from './analytics';
+import { nativeAutomationIntegrations } from './automation';
+import { nativeDesignIntegrations } from './design';
+import { nativeAiMlIntegrations } from './ai_ml';
+import { nativeDatabaseIntegrations } from './database';
 
 export const nativeIntegrations: Record<string, Integration> = {
   ...nativeSlackIntegration,
   ...nativeGitHubIntegration,
   ...nativeAiInfrastructureIntegrations,
+  ...nativeProductivityIntegrations,
+  ...nativeProjectManagementIntegrations,
+  ...nativeCrmSalesIntegrations,
+  ...nativeCustomerSupportIntegrations,
+  ...nativeMarketingIntegrations,
+  ...nativeFinanceIntegrations,
+  ...nativeFileStorageIntegrations,
+  ...nativeSocialMediaIntegrations,
+  ...nativeEcommerceIntegrations,
+  ...nativeHrRecruitingIntegrations,
+  ...nativeAnalyticsIntegrations,
+  ...nativeAutomationIntegrations,
+  ...nativeDesignIntegrations,
+  ...nativeAiMlIntegrations,
+  ...nativeDatabaseIntegrations,
 };

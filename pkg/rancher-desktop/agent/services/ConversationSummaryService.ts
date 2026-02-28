@@ -11,7 +11,7 @@
 
 import type { BaseThreadState } from '../nodes/Graph';
 import type { ChatMessage } from '../languagemodels/BaseLanguageModel';
-import { getService } from '../languagemodels';
+import { getPrimaryService } from '../languagemodels';
 import { parseJson } from './JsonParseService';
 
 // ============================================================================
@@ -475,9 +475,8 @@ export class ConversationSummaryService {
       .join('\n')
       .slice(0, 12_000); // Cap input size
 
-    // Get LLM service using same logic as heartbeat (BaseNode)
-    const context = state.metadata.llmLocal ? 'local' : 'remote';
-    const llmService = await getService(context, state.metadata.llmModel);
+    // Get primary LLM service
+    const llmService = await getPrimaryService();
     
     // Prepare messages for LLM
     const llmMessages: ChatMessage[] = [

@@ -1,0 +1,84 @@
+import type { Integration } from '../types';
+
+export const nativeEcommerceIntegrations: Record<string, Integration> = {
+  shopify: {
+    id: 'shopify', sort: 1, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'Shopify', description: 'Manage products, orders, customers, and inventory. Automate e-commerce operations.',
+    category: 'E-Commerce', icon: '🛒', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Shopify',
+  },
+  woocommerce: {
+    id: 'woocommerce', sort: 2, paid: false, beta: false, comingSoon: false, connected: false,
+    name: 'WooCommerce', description: 'Manage products, orders, and customers on WordPress-based WooCommerce stores.',
+    category: 'E-Commerce', icon: '🟣', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Automattic',
+  },
+  bigcommerce: {
+    id: 'bigcommerce', sort: 3, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'BigCommerce', description: 'Manage catalog, orders, and customers on the BigCommerce platform.',
+    category: 'E-Commerce', icon: '🏪', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'BigCommerce',
+  },
+  lemonsqueezy: {
+    id: 'lemonsqueezy', sort: 4, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'Lemon Squeezy', description: 'Manage digital products, subscriptions, and checkout flows for software sales.',
+    category: 'E-Commerce', icon: '🍋', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Lemon Squeezy',
+  },
+  gumroad: {
+    id: 'gumroad', sort: 5, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'Gumroad', description: 'Manage digital products, sales, and customer data for creators.',
+    category: 'E-Commerce', icon: '🎨', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Gumroad',
+  },
+  paddle: {
+    id: 'paddle', sort: 6, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'Paddle', description: 'Manage subscriptions, payments, and invoicing for SaaS and digital products.',
+    category: 'E-Commerce', icon: '🏓', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Paddle',
+  },
+  amazon_seller: {
+    id: 'amazon_seller', sort: 7, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'Amazon Seller', description: 'Manage product listings, orders, and inventory on Amazon Marketplace.',
+    category: 'E-Commerce', icon: '📦', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Amazon',
+  },
+  etsy: {
+    id: 'etsy', sort: 8, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'Etsy', description: 'Manage listings, orders, and shop data on the Etsy marketplace.',
+    category: 'E-Commerce', icon: '🧶', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Etsy',
+  },
+  ebay: {
+    id: 'ebay', sort: 9, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'eBay', description: 'Manage listings, orders, and inventory on the eBay marketplace.',
+    category: 'E-Commerce', icon: '🏷️', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'eBay',
+  },
+  snipcart: {
+    id: 'snipcart', sort: 10, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'Snipcart', description: 'Manage shopping cart, orders, and products for any website.',
+    category: 'E-Commerce', icon: '🛍️', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Snipcart',
+  },
+  squarespace: {
+    id: 'squarespace', sort: 11, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'Squarespace Commerce', description: 'Manage products, orders, and inventory on Squarespace stores.',
+    category: 'E-Commerce', icon: '⬛', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Squarespace',
+  },
+  printful: {
+    id: 'printful', sort: 12, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'Printful', description: 'Manage print-on-demand products, orders, and fulfillment.',
+    category: 'E-Commerce', icon: '👕', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Printful',
+  },
+  shipstation: {
+    id: 'shipstation', sort: 13, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'ShipStation', description: 'Manage shipping labels, orders, and carrier integrations.',
+    category: 'E-Commerce', icon: '🚢', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Auctane',
+  },
+  medusa: {
+    id: 'medusa', sort: 14, paid: false, beta: false, comingSoon: false, connected: false,
+    name: 'Medusa', description: 'Manage products, orders, and customers in the open-source headless commerce platform.',
+    category: 'E-Commerce', icon: '🟣', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Medusa',
+  },
+  swell: {
+    id: 'swell', sort: 15, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'Swell', description: 'Manage headless e-commerce with products, subscriptions, and storefronts.',
+    category: 'E-Commerce', icon: '🌊', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Swell',
+  },
+  stripe_checkout: {
+    id: 'stripe_checkout', sort: 16, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'Stripe Checkout', description: 'Create checkout sessions, manage payment links, and handle product catalog.',
+    category: 'E-Commerce', icon: '💳', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Stripe',
+  },
+};

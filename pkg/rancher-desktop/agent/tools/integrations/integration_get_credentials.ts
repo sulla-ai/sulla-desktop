@@ -12,7 +12,7 @@ export class IntegrationGetCredentialsWorker extends BaseTool {
   name: string = '';
   description: string = '';
   protected async _validatedCall(input: any): Promise<ToolResponse> {
-    const { integration_slug } = input;
+    const { integration_slug, include_secrets } = input;
 
     try {
       const service = getIntegrationService();
@@ -40,6 +40,7 @@ export class IntegrationGetCredentialsWorker extends BaseTool {
       // List all accounts for this integration
       const accounts = await service.getAccounts(integration_slug);
       const catalogProperties = catalogEntry.properties ?? [];
+      const secretKeys = new Set(catalogProperties.filter(p => p.type === 'password').map(p => p.key));
 
       let responseString = `Integration: ${integration_slug} (${catalogEntry.name})\n`;
 
@@ -76,7 +77,16 @@ export class IntegrationGetCredentialsWorker extends BaseTool {
 
         catalogProperties.forEach(prop => {
           const hasValue = prop.key in storedValues;
-          responseString += `- ${prop.title} (${prop.key}): ${hasValue ? String(storedValues[prop.key]) : '[NOT SET]'} (${prop.required ? 'Required' : 'Optional'})\n`;
+          let displayValue = '[NOT SET]';
+          if (hasValue) {
+            const raw = String(storedValues[prop.key]);
+            if (secretKeys.has(prop.key) && !include_secrets) {
+              displayValue = raw.length > 4 ? '****' + raw.slice(-4) : '****';
+            } else {
+              displayValue = raw;
+            }
+          }
+          responseString += `- ${prop.title} (${prop.key}): ${displayValue} (${prop.required ? 'Required' : 'Optional'})\n`;
         });
 
         responseString += `\n`;

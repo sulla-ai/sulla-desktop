@@ -1,0 +1,84 @@
+import type { Integration } from '../types';
+
+export const nativeProjectManagementIntegrations: Record<string, Integration> = {
+  jira: {
+    id: 'jira', sort: 1, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'Jira', description: 'Create and manage issues, sprints, and boards. Automate Agile project tracking workflows.',
+    category: 'Project Management', icon: '🔵', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Atlassian',
+  },
+  linear: {
+    id: 'linear', sort: 2, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'Linear', description: 'Manage issues, projects, and cycles. Streamline software development tracking.',
+    category: 'Project Management', icon: '⚡', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Linear',
+  },
+  asana: {
+    id: 'asana', sort: 3, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'Asana', description: 'Create tasks, manage projects, and coordinate team work with automated workflows.',
+    category: 'Project Management', icon: '🎯', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Asana',
+  },
+  trello: {
+    id: 'trello', sort: 4, paid: false, beta: false, comingSoon: false, connected: false,
+    name: 'Trello', description: 'Manage boards, lists, and cards. Automate Kanban-style project workflows.',
+    category: 'Project Management', icon: '📌', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Atlassian',
+  },
+  clickup: {
+    id: 'clickup', sort: 5, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'ClickUp', description: 'Manage tasks, docs, goals, and sprints. All-in-one project management automation.',
+    category: 'Project Management', icon: '🟣', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'ClickUp',
+  },
+  monday: {
+    id: 'monday', sort: 6, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'Monday.com', description: 'Manage work items, boards, and automations on the Monday.com platform.',
+    category: 'Project Management', icon: '🟡', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Monday.com',
+  },
+  notion_projects: {
+    id: 'notion_projects', sort: 7, paid: false, beta: false, comingSoon: false, connected: false,
+    name: 'Notion Projects', description: 'Manage project databases, timelines, and sprint views in Notion.',
+    category: 'Project Management', icon: '📝', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Notion',
+  },
+  wrike: {
+    id: 'wrike', sort: 8, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'Wrike', description: 'Manage projects, tasks, folders, and Gantt charts for enterprise teams.',
+    category: 'Project Management', icon: '📐', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Wrike',
+  },
+  shortcut: {
+    id: 'shortcut', sort: 9, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'Shortcut', description: 'Manage stories, epics, and iterations for software development teams.',
+    category: 'Project Management', icon: '🔶', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Shortcut',
+  },
+  height: {
+    id: 'height', sort: 10, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'Height', description: 'Manage tasks, lists, and workflows with autonomous project management.',
+    category: 'Project Management', icon: '📏', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Height',
+  },
+  teamwork: {
+    id: 'teamwork', sort: 11, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'Teamwork', description: 'Manage projects, tasks, milestones, and time tracking for client work.',
+    category: 'Project Management', icon: '🤝', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Teamwork',
+  },
+  pivotal_tracker: {
+    id: 'pivotal_tracker', sort: 12, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'Pivotal Tracker', description: 'Manage stories, epics, and velocity tracking for agile development.',
+    category: 'Project Management', icon: '🔄', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'VMware',
+  },
+  microsoft_planner: {
+    id: 'microsoft_planner', sort: 13, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'Microsoft Planner', description: 'Create plans, assign tasks, and track progress in Microsoft 365.',
+    category: 'Project Management', icon: '📋', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Microsoft',
+  },
+  youtrack: {
+    id: 'youtrack', sort: 14, paid: true, beta: false, comingSoon: false, connected: false,
+    name: 'YouTrack', description: 'Manage issues, agile boards, and workflows in JetBrains YouTrack.',
+    category: 'Project Management', icon: '🎯', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'JetBrains',
+  },
+  plane: {
+    id: 'plane', sort: 15, paid: false, beta: false, comingSoon: false, connected: false,
+    name: 'Plane', description: 'Open-source project management with issues, cycles, and modules.',
+    category: 'Project Management', icon: '✈️', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Plane',
+  },
+  taiga: {
+    id: 'taiga', sort: 16, paid: false, beta: false, comingSoon: false, connected: false,
+    name: 'Taiga', description: 'Manage agile projects with user stories, tasks, and sprints.',
+    category: 'Project Management', icon: '🌲', version: '1.0.0', lastUpdated: '2026-02-28', developer: 'Taiga',
+  },
+};

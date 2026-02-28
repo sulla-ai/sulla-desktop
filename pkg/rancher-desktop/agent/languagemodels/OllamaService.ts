@@ -1,6 +1,7 @@
 import { SullaSettingsModel } from '../database/models/SullaSettingsModel';
 import { BaseLanguageModel, type ChatMessage, type NormalizedResponse } from './BaseLanguageModel';
 import { writeLLMConversationEvent } from './LLMConversationFileLogger';
+import { getIntegrationService } from '../services/IntegrationService';
 
 /**
  * Ollama local LLM provider.
@@ -16,8 +17,22 @@ export class OllamaService extends BaseLanguageModel {
   protected localTimeoutSeconds: number;
 
   static async create() {
-    const base = 'http://127.0.0.1:30114';
-    const model = await SullaSettingsModel.get('sullaModel', 'tinyllama:latest');
+    // Try IntegrationService first, fall back to SullaSettingsModel
+    let base = 'http://127.0.0.1:30114';
+    let model = 'tinyllama:latest';
+    try {
+      const integrationService = getIntegrationService();
+      const values = await integrationService.getFormValues('ollama');
+      const valMap: Record<string, string> = {};
+      for (const v of values) {
+        valMap[v.property] = v.value;
+      }
+      if (valMap.base_url) base = valMap.base_url;
+      if (valMap.model) model = valMap.model;
+    } catch {
+      // IntegrationService not ready yet — use legacy settings
+      model = await SullaSettingsModel.get('sullaModel', 'tinyllama:latest');
+    }
     const timeout = await SullaSettingsModel.get('localTimeoutSeconds', 120);
 
     return new OllamaService(model, base, timeout);

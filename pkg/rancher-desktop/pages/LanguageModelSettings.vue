@@ -12,6 +12,8 @@ import { SullaSettingsModel } from '../agent/database/models/SullaSettingsModel'
 import { randomUUID } from 'crypto';
 import { REMOTE_PROVIDERS } from '../shared/remoteProviders';
 import { getSupportedProviders, fetchModelsForProvider, clearModelCache } from '../agent/languagemodels';
+import { getIntegrationService } from '../agent/services/IntegrationService';
+import { integrations } from '../agent/integrations/catalog';
 import PostHogTracker from '@pkg/components/PostHogTracker.vue';
 
 // Nav items for the Language Model Settings sidebar
@@ -156,6 +158,11 @@ export default defineComponent({
       soulPromptDefault: soulPrompt,
       heartbeatPromptDefault: heartbeatPrompt,
 
+      // Primary / Secondary provider selection
+      primaryProvider:      'ollama' as string,
+      secondaryProvider:    'ollama' as string,
+      availableProviders:   [{ id: 'ollama', name: 'Ollama (Local)' }] as Array<{ id: string; name: string }>,
+
       // Activation state
       activating:           false,
       activationError:      '' as string,
@@ -287,6 +294,36 @@ export default defineComponent({
       remoteRetryCount: this.remoteRetryCount,
       localRetryCount: this.localRetryCount
     });
+
+    // Load primary/secondary provider settings
+    this.primaryProvider = await SullaSettingsModel.get('primaryProvider', 'ollama');
+    this.secondaryProvider = await SullaSettingsModel.get('secondaryProvider', 'ollama');
+
+    // Build available providers list from connected integrations
+    try {
+      const integrationService = getIntegrationService();
+      await integrationService.initialize();
+
+      const EXCLUDED_IDS = ['activepieces'];
+      const providers: Array<{ id: string; name: string }> = [
+        { id: 'ollama', name: 'Ollama (Local)' },
+      ];
+
+      for (const integration of Object.values(integrations)) {
+        if (integration.category !== 'AI Infrastructure') continue;
+        if (EXCLUDED_IDS.includes(integration.id)) continue;
+        if (integration.id === 'ollama') continue;
+
+        const connected = await integrationService.isAnyAccountConnected(integration.id);
+        if (connected) {
+          providers.push({ id: integration.id, name: integration.name });
+        }
+      }
+
+      this.availableProviders = providers;
+    } catch (err) {
+      console.warn('[LM Settings] Failed to load available providers:', err);
+    }
 
     await this.loadModels();
     
@@ -878,6 +915,8 @@ export default defineComponent({
         const settingsToSave = {
           botName: String(this.botName || ''),
           primaryUserName: String(this.primaryUserName || ''),
+          primaryProvider: String(this.primaryProvider || 'ollama'),
+          secondaryProvider: String(this.secondaryProvider || 'ollama'),
           remoteProvider: String(this.selectedProvider || ''),
           remoteModel: String(this.selectedRemoteModel || ''),
           remoteApiKey: String(this.apiKey || ''),
@@ -1523,387 +1562,55 @@ export default defineComponent({
           v-if="currentNav === 'models'"
           class="tab-content"
         >
-          <!-- Active Mode Indicator -->
-          <div class="active-mode-banner">
-            <span class="active-label">Active:</span>
-            <span class="active-value">
-              {{ activeMode === 'local' ? `Local (${activeModel})` : `Remote (${selectedProvider}/${selectedRemoteModel})` }}
-            </span>
+          <!-- Primary Provider -->
+          <div class="setting-group">
+            <label class="setting-label">Primary Provider</label>
+            <select
+              v-model="primaryProvider"
+              class="model-select"
+            >
+              <option
+                v-for="provider in availableProviders"
+                :key="provider.id"
+                :value="provider.id"
+              >
+                {{ provider.name }}
+              </option>
+            </select>
+            <p class="setting-description">
+              The main language model provider used for all agent tasks.
+            </p>
           </div>
 
-          <!-- Model Source Tabs -->
-          <div class="model-tabs">
-            <button
-              class="model-tab"
-              :class="{ active: viewingTab === 'local' }"
-              @click="viewingTab = 'local'; activationError = ''"
+          <!-- Secondary (Fallback) Provider -->
+          <div class="setting-group">
+            <label class="setting-label">Secondary Provider (Fallback)</label>
+            <select
+              v-model="secondaryProvider"
+              class="model-select"
             >
-              Local Model (Ollama)
-            </button>
-            <button
-              class="model-tab"
-              :class="{ active: viewingTab === 'remote' }"
-              @click="viewingTab = 'remote'; activationError = ''"
-            >
-              Remote Model (API)
-            </button>
+              <option
+                v-for="provider in availableProviders"
+                :key="provider.id"
+                :value="provider.id"
+              >
+                {{ provider.name }}
+              </option>
+            </select>
+            <p class="setting-description">
+              If for some reason the primary provider is inaccessible, we will fall back to the secondary provider.
+            </p>
           </div>
 
-          <!-- Activation Error -->
           <div
-            v-if="activationError"
-            class="activation-error"
+            v-if="availableProviders.length <= 1"
+            style="margin-top: 1rem; padding: 1rem; border-radius: 8px; border: 1px solid var(--border, #e2e8f0); background: var(--surface-alt, #f8fafc);"
           >
-            {{ activationError }}
+            <p style="font-size: 0.9rem; color: var(--muted);">
+              Only Ollama (local) is available. To add remote providers, go to
+              <strong>Integrations</strong> and configure an AI provider (e.g. Grok, OpenAI, Anthropic).
+            </p>
           </div>
-
-          <!-- Local Model Settings (Ollama) -->
-          <template v-if="viewingTab === 'local'">
-            <!-- Activate Button -->
-            <div class="activate-section">
-              <button
-                class="btn role-primary activate-btn"
-                :class="{ 'is-active': activeMode === 'local' }"
-                :disabled="activating || activeMode === 'local'"
-                @click="activateLocalModel"
-              >
-                {{ activating ? 'Activating...' : (activeMode === 'local' ? '✓ Active' : 'Activate Local Model') }}
-              </button>
-            </div>
-
-            <!-- Model Selection -->
-            <div class="setting-group">
-              <label class="setting-label">Select Model</label>
-              <select
-                v-model="pendingModel"
-                class="model-select"
-                :disabled="!!downloadingModel"
-              >
-                <option
-                  v-for="model in availableModels"
-                  :key="model.name"
-                  :value="model.name"
-                >
-                  {{ model.displayName }} ({{ model.size }})
-                </option>
-              </select>
-              <p class="setting-description">
-                {{ pendingModelDescription }}
-              </p>
-
-              <!-- Download button if model not installed -->
-              <div
-                v-if="!isPendingModelInstalled && !downloadingModel"
-                class="model-action"
-              >
-                <p class="model-status not-installed">
-                  This model is not installed.
-                </p>
-                <button
-                  class="btn role-primary"
-                  @click="downloadPendingModel"
-                >
-                  Download Model
-                </button>
-              </div>
-
-              <!-- Download progress -->
-              <div
-                v-if="downloadingModel"
-                class="download-progress"
-              >
-                <p class="model-status downloading">
-                  Downloading {{ downloadingModel }}...
-                </p>
-                <div class="progress-bar">
-                  <div
-                    class="progress-fill"
-                    :style="{ width: downloadProgress + '%' }"
-                  />
-                </div>
-                <p class="progress-text">
-                  {{ downloadProgress }}% complete
-                </p>
-              </div>
-
-              <!-- Installed indicator -->
-              <div
-                v-if="isPendingModelInstalled && !downloadingModel"
-                class="model-action"
-              >
-                <p class="model-status installed">
-                  ✓ Model is installed and ready to use.
-                </p>
-              </div>
-            </div>
-
-            <!-- Timeout Limit (seconds) -->
-            <div class="setting-group">
-              <label class="setting-label">Timeout Limit (seconds)</label>
-              <div class="timeout-input">
-                <input
-                  v-model.number="localTimeoutSeconds"
-                  type="number"
-                  class="text-input"
-                  min="10"
-                  max="600"
-                  style="width: 120px;"
-                >
-              </div>
-              <p class="setting-description">
-                Timeout limit for local Ollama API calls (in seconds). Default is 120 seconds.
-              </p>
-            </div>
-
-            <!-- Retry Count -->
-            <div class="setting-group">
-              <label class="setting-label">Retry Count</label>
-              <div class="retry-input">
-                <input
-                  v-model.number="localRetryCount"
-                  type="number"
-                  class="text-input"
-                  min="0"
-                  max="10"
-                  style="width: 80px;"
-                >
-              </div>
-              <p class="setting-description">
-                Number of retries for failed local Ollama requests. Set to 0 to disable retries.
-              </p>
-            </div>
-
-            <!-- Downloaded Models Section -->
-            <div class="setting-group">
-              <label class="setting-label">Downloaded Models</label>
-              <div class="model-status-section">
-                <button
-                  @click="checkModelStatuses"
-                  :disabled="checkingModelStatuses"
-                  class="btn role-secondary"
-                  style="margin-bottom: 1rem;"
-                >
-                  {{ checkingModelStatuses ? 'Checking...' : 'Check Model Status' }}
-                </button>
-
-                <!-- Downloaded Models List -->
-                <div v-if="hasDownloadedModels" class="downloaded-models-list">
-                  <h4 style="margin-bottom: 0.5rem; font-size: 0.9rem;">Installed Models:</h4>
-                  <div class="model-list">
-                    <div
-                      v-for="model in formattedInstalledModels"
-                      :key="model.name"
-                      class="model-item"
-                    >
-                      <span class="model-name">{{ model.name }}</span>
-                      <span class="model-size">{{ model.formattedSize }}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <!-- Key Model Status -->
-                <div class="key-models-status">
-                  <h4 style="margin-bottom: 0.5rem; font-size: 0.9rem;">Key Model Status:</h4>
-                  
-                  <!-- Embedding Model Status -->
-                  <div class="model-status-item">
-                    <span class="status-label">Embedding Model (nomic-embed-text):</span>
-                    <span 
-                      class="status-badge"
-                      :class="{
-                        'status-installed': embeddingModelStatus === 'installed',
-                        'status-missing': embeddingModelStatus === 'missing',
-                        'status-failed': embeddingModelStatus === 'failed'
-                      }"
-                    >
-                      {{ embeddingModelStatus }}
-                    </span>
-                    <button
-                      v-if="embeddingModelStatus === 'failed' || embeddingModelStatus === 'missing'"
-                      @click="redownloadEmbeddingModel"
-                      :disabled="downloadingModel === 'nomic-embed-text'"
-                      class="btn btn-sm role-primary"
-                      style="margin-left: 0.5rem;"
-                    >
-                      {{ downloadingModel === 'nomic-embed-text' ? 'Downloading...' : 'Redownload' }}
-                    </button>
-                  </div>
-
-                  <!-- Default Model Status -->
-                  <div class="model-status-item">
-                    <span class="status-label">Active Model ({{ activeModel }}):</span>
-                    <span 
-                      class="status-badge"
-                      :class="{
-                        'status-installed': defaultModelStatus === 'installed',
-                        'status-missing': defaultModelStatus === 'missing',
-                        'status-failed': defaultModelStatus === 'failed'
-                      }"
-                    >
-                      {{ defaultModelStatus }}
-                    </span>
-                    <button
-                      v-if="defaultModelStatus === 'failed' || defaultModelStatus === 'missing'"
-                      @click="redownloadDefaultModel"
-                      :disabled="downloadingModel === activeModel"
-                      class="btn btn-sm role-primary"
-                      style="margin-left: 0.5rem;"
-                    >
-                      {{ downloadingModel === activeModel ? 'Downloading...' : 'Redownload' }}
-                    </button>
-                  </div>
-                </div>
-
-                <!-- No models message -->
-                <div v-if="!hasDownloadedModels && !checkingModelStatuses" class="no-models-message">
-                  <p style="color: var(--muted); font-size: 0.9rem;">No models downloaded yet. Select a model above and click "Download Model" to get started.</p>
-                </div>
-              </div>
-            </div>
-
-          </template>
-
-          <!-- Remote Model Settings -->
-          <template v-if="viewingTab === 'remote'">
-            <!-- Activate Button -->
-            <div class="activate-section">
-              <button
-                class="btn role-primary activate-btn"
-                :class="{ 'is-active': activeMode === 'remote' }"
-                :disabled="activating || activeMode === 'remote'"
-                @click="activateRemoteModel"
-              >
-                {{ activating ? 'Activating...' : (activeMode === 'remote' ? '✓ Active' : 'Activate Remote Model') }}
-              </button>
-            </div>
-
-            <!-- Provider Selection -->
-            <div class="setting-group">
-              <label class="setting-label">API Provider</label>
-              <select
-                v-model="selectedProvider"
-                class="model-select"
-                @change="onProviderChange"
-              >
-                <option
-                  v-for="provider in remoteProviders"
-                  :key="provider.id"
-                  :value="provider.id"
-                >
-                  {{ provider.name }}
-                </option>
-              </select>
-              <p class="setting-description">
-                {{ currentProvider?.description }}
-              </p>
-            </div>
-
-            <!-- Model Selection -->
-            <div class="setting-group">
-              <label class="setting-label">Model</label>
-              <div style="display: flex; gap: 8px; align-items: flex-start;">
-                <select
-                  v-model="selectedRemoteModel"
-                  :disabled="loadingRemoteModels"
-                  class="model-select"
-                  style="flex: 1;"
-                >
-                  <option v-if="loadingRemoteModels" value="">Loading models...</option>
-                  <option v-else-if="!apiKey.trim()" value="">Enter API key to load models</option>
-                  <option v-else-if="currentProviderModels.length === 0" value="">No models available</option>
-                  <option
-                    v-else
-                    v-for="model in currentProviderModels"
-                    :key="model.id"
-                    :value="model.id"
-                  >
-                    {{ model.name }}{{ model.pricing ? ` - ${model.pricing}` : '' }}
-                  </option>
-                </select>
-                <button 
-                  type="button" 
-                  @click="refreshRemoteModels" 
-                  :disabled="loadingRemoteModels || !apiKey.trim()" 
-                  class="refresh-button"
-                  title="Refresh models from API"
-                  style="padding: 8px 12px; background: #007acc; color: white; border: none; border-radius: 4px; cursor: pointer; min-width: 80px;"
-                  :style="{ opacity: (loadingRemoteModels || !apiKey.trim()) ? 0.5 : 1, cursor: (loadingRemoteModels || !apiKey.trim()) ? 'not-allowed' : 'pointer' }"
-                >
-                  {{ loadingRemoteModels ? '🔄' : 'Refresh' }}
-                </button>
-              </div>
-              <p v-if="modelLoadError" class="setting-description" style="color: #ff6b6b;">{{ modelLoadError }}</p>
-              <p v-else class="setting-description">
-                {{ selectedRemoteModelDescription }}
-              </p>
-            </div>
-
-            <!-- API Key -->
-            <div class="setting-group">
-              <label class="setting-label">API Key</label>
-              <div class="api-key-input">
-                <input
-                  v-model="apiKey"
-                  :type="apiKeyVisible ? 'text' : 'password'"
-                  class="text-input"
-                  placeholder="Enter your API key"
-                >
-                <button
-                  class="btn btn-sm role-secondary"
-                  type="button"
-                  @click="apiKeyVisible = !apiKeyVisible"
-                >
-                  {{ apiKeyVisible ? 'Hide' : 'Show' }}
-                </button>
-              </div>
-              <p class="setting-description">
-                <a
-                  :href="currentProvider?.signupUrl"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  class="provider-signup-link"
-                >
-                  {{ currentProvider?.signupText || `Get API key from ${currentProvider?.name}` }}
-                </a>
-              </p>
-            </div>
-
-            <!-- Retry Count -->
-            <div class="setting-group">
-              <label class="setting-label">Retry Count</label>
-              <div class="retry-input">
-                <input
-                  v-model.number="remoteRetryCount"
-                  type="number"
-                  class="text-input"
-                  min="0"
-                  max="10"
-                  style="width: 80px;"
-                >
-              </div>
-              <p class="setting-description">
-                Number of retries before falling back to local Ollama model. Set to 0 to disable fallback.
-              </p>
-            </div>
-
-            <!-- Timeout Limit (seconds) -->
-            <div class="setting-group">
-              <label class="setting-label">Timeout Limit (seconds)</label>
-              <div class="timeout-input">
-                <input
-                  v-model.number="remoteTimeoutSeconds"
-                  type="number"
-                  class="text-input"
-                  min="1"
-                  max="300"
-                  style="width: 120px;"
-                >
-              </div>
-              <p class="setting-description">
-                Timeout limit for remote API calls (in seconds).
-              </p>
-            </div>
-          </template>
         </div>
 
         <!-- Soul Tab -->

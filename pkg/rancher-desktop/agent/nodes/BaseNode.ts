@@ -2,7 +2,7 @@ import type { BaseThreadState, NodeResult } from './Graph';
 import type { ToolResult, ThreadState } from '../types';
 import path from 'node:path'; // used by enrichPrompt for active_projects_file
 import type { WebSocketMessageHandler } from '../services/WebSocketClientService';
-import { getCurrentMode, getLocalService, getService } from '../languagemodels';
+import { getCurrentMode, getLocalService, getService, getPrimaryService, getSecondaryService } from '../languagemodels';
 import { parseJson } from '../services/JsonParseService';
 import { getWebSocketClientService } from '../services/WebSocketClientService';
 import { SullaSettingsModel } from '../database/models/SullaSettingsModel';
@@ -626,8 +626,7 @@ export abstract class BaseNode<T extends BaseThreadState = BaseThreadState> {
         options: LLMCallOptions = {}
     ): Promise<NormalizedResponse | null> {
         
-        const context = state.metadata.llmLocal ? 'local' : 'remote';
-        this.llm = await getService(context, state.metadata.llmModel);
+        this.llm = await getPrimaryService();
 
         const nodeRunContext = this.createNodeRunContext(state, {
             systemPrompt,
@@ -706,33 +705,30 @@ export abstract class BaseNode<T extends BaseThreadState = BaseThreadState> {
 
             console.warn(`[${this.name}:BaseNode] Primary LLM failed:`, err instanceof Error ? err.message : String(err));
 
-            // Fallback only if primary was remote
-            const mode = await getCurrentMode();
-            if (mode !== 'local') {
-                try {
-                    const ollama = await getLocalService();
-                    if (ollama.isAvailable()) {
-                        // Filter messages to only include ChatMessage-compatible roles
-                        const chatMessages = messages.filter(msg =>
-                            ['system', 'user', 'assistant'].includes(msg.role)
-                        ) as ChatMessage[];
-                        const reply = await ollama.chat(chatMessages, { 
-                            signal: options.signal,
-                            temperature: options.temperature,
-                            maxTokens: options.maxTokens,
-                            format: options.format,
-                            conversationId,
-                            nodeName,
-                        });
-                        if (reply) {
-                            this.appendResponse(state, reply.content, reply.metadata.rawProviderContent);
-                            this.triggerBackgroundStateMaintenance(state);
-                            return reply;
-                        }
+            // Fallback to secondary provider
+            try {
+                const secondary = await getSecondaryService();
+                await secondary.initialize();
+                if (secondary.isAvailable()) {
+                    const chatMessages = messages.filter(msg =>
+                        ['system', 'user', 'assistant'].includes(msg.role)
+                    ) as ChatMessage[];
+                    const reply = await secondary.chat(chatMessages, {
+                        signal: options.signal,
+                        temperature: options.temperature,
+                        maxTokens: options.maxTokens,
+                        format: options.format,
+                        conversationId,
+                        nodeName,
+                    });
+                    if (reply) {
+                        this.appendResponse(state, reply.content, reply.metadata.rawProviderContent);
+                        this.triggerBackgroundStateMaintenance(state);
+                        return reply;
                     }
-                } catch (fallbackErr) {
-                    console.error(`[${this.name}:BaseNode] Ollama fallback failed:`, fallbackErr);
                 }
+            } catch (fallbackErr) {
+                console.error(`[${this.name}:BaseNode] Secondary provider fallback failed:`, fallbackErr);
             }
 
             return null;

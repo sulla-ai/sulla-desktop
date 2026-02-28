@@ -7,15 +7,28 @@
  * - getLocalModel() / getRemoteModel()
  * - getHeartbeatLLM() — respects heartbeatModel → modelMode fallback
  *
- * Pulls configuration from SullaSettingsModel on demand.
+ * Resolves provider-specific service classes from IntegrationService credentials.
+ * Falls back to SullaSettingsModel for legacy settings.
  * All services lazy-init / reconfigure on demand.
  */
 
-import { BaseLanguageModel, type RemoteProviderConfig } from './BaseLanguageModel';
+import { BaseLanguageModel } from './BaseLanguageModel';
 import { getOllamaService } from './OllamaService';
-import { createRemoteModelService } from './RemoteService';
 import { SullaSettingsModel } from '../database/models/SullaSettingsModel';
 import { modelDiscoveryService, type ModelInfo } from './ModelDiscoveryService';
+import { getIntegrationService } from '../services/IntegrationService';
+
+// Provider factory map — lazy-loaded to avoid circular imports
+const PROVIDER_FACTORIES: Record<string, () => Promise<BaseLanguageModel>> = {
+  ollama:    async () => { return getOllamaService(); },
+  grok:      async () => { const { getGrokService } = await import('./GrokService'); return getGrokService(); },
+  openai:    async () => { const { getOpenAIService } = await import('./OpenAIService'); return getOpenAIService(); },
+  anthropic: async () => { const { getAnthropicService } = await import('./AnthropicService'); return getAnthropicService(); },
+  google:    async () => { const { getGoogleService } = await import('./GoogleService'); return getGoogleService(); },
+  kimi:      async () => { const { getKimiService } = await import('./KimiService'); return getKimiService(); },
+  nvidia:    async () => { const { getNvidiaService } = await import('./NvidiaService'); return getNvidiaService(); },
+  custom:    async () => { const { getCustomService } = await import('./CustomService'); return getCustomService(); },
+};
 
 class LLMRegistryImpl {
   private services = new Map<string, BaseLanguageModel>();
@@ -38,12 +51,9 @@ class LLMRegistryImpl {
     const key = 'local';
     let svc = this.services.get(key);
 
-    const desiredModel = overrideModel || await SullaSettingsModel.get('sullaModel', 'tinyllama:latest');
-
-    if (!svc || svc.getModel() !== desiredModel) {
+    if (!svc) {
       svc = await getOllamaService();
       if (overrideModel) {
-        // Ollama singleton — can't change model easily, but we expose it
         console.warn('[LLMRegistry] Local model override requested — using global Ollama instance');
       }
       this.services.set(key, svc);
@@ -53,33 +63,27 @@ class LLMRegistryImpl {
     return svc;
   }
 
+  /**
+   * Resolve the active remote provider from IntegrationService and create
+   * the appropriate provider-specific service class.
+   *
+   * Falls back to SullaSettingsModel.remoteProvider for legacy compat.
+   */
   async getRemoteService(overrideModel?: string): Promise<BaseLanguageModel> {
-    const key = 'remote';
+    // Determine which remote provider is active
+    const remoteProvider = await this.getActiveRemoteProviderId();
+    const key = `remote:${remoteProvider}`;
     let svc = this.services.get(key);
 
-    // Load settings directly
-    const remoteProvider = await SullaSettingsModel.get('remoteProvider', 'grok');
-    const remoteModel = overrideModel || await SullaSettingsModel.get('remoteModel', 'grok-4-1-fast-reasoning');
-    const remoteApiKey = await SullaSettingsModel.get('remoteApiKey', '');
-    const remoteTimeoutSeconds = await SullaSettingsModel.get('remoteTimeoutSeconds', 60);
-    const remoteRetryCount = await SullaSettingsModel.get('remoteRetryCount', 3);
-
-    if (!svc || svc.getModel() !== remoteModel) {
-      const remoteCfg: RemoteProviderConfig = {
-        id: remoteProvider,
-        name: remoteProvider,
-        baseUrl: this.getProviderBaseUrl(remoteProvider),
-        apiKey: remoteApiKey,
-        model: remoteModel,
-      };
-
-      svc = createRemoteModelService(remoteCfg);
-
-      if (remoteRetryCount !== undefined) {
-        (svc as any).setRetryCount?.(remoteRetryCount);
-      }
-      if (remoteTimeoutSeconds !== undefined) {
-        (svc as any).setDefaultTimeoutMs?.(remoteTimeoutSeconds * 1000);
+    if (!svc) {
+      const factory = PROVIDER_FACTORIES[remoteProvider];
+      if (factory) {
+        svc = await factory();
+      } else {
+        // Unknown provider — try custom OpenAI-compatible
+        console.warn(`[LLMRegistry] Unknown provider '${remoteProvider}', falling back to custom`);
+        const { getCustomService } = await import('./CustomService');
+        svc = await getCustomService();
       }
 
       this.services.set(key, svc);
@@ -90,24 +94,68 @@ class LLMRegistryImpl {
   }
 
   /**
+   * Get service by specific provider ID (e.g., 'anthropic', 'grok')
+   */
+  async getServiceByProvider(providerId: string): Promise<BaseLanguageModel> {
+    const key = `provider:${providerId}`;
+    let svc = this.services.get(key);
+
+    if (!svc) {
+      const factory = PROVIDER_FACTORIES[providerId];
+      if (!factory) {
+        throw new Error(`Unknown LLM provider: ${providerId}`);
+      }
+      svc = await factory();
+      this.services.set(key, svc);
+      svc.initialize().catch(console.error);
+    }
+
+    return svc;
+  }
+
+  // ============================================================================
+  // PRIMARY / SECONDARY PROVIDER (new canonical API)
+  // ============================================================================
+
+  /**
+   * Get the primary LLM service. Reads `primaryProvider` from settings,
+   * defaults to 'ollama'. Returns a fully instantiated, ready-to-call service.
+   */
+  async getPrimaryService(): Promise<BaseLanguageModel> {
+    const providerId = await SullaSettingsModel.get('primaryProvider', 'ollama');
+    return this.getServiceByProvider(providerId);
+  }
+
+  /**
+   * Get the secondary (fallback) LLM service. Reads `secondaryProvider` from
+   * settings, defaults to 'ollama'. Used when the primary provider is
+   * inaccessible.
+   */
+  async getSecondaryService(): Promise<BaseLanguageModel> {
+    const providerId = await SullaSettingsModel.get('secondaryProvider', 'ollama');
+    return this.getServiceByProvider(providerId);
+  }
+
+  /**
    * Backend/heartbeat-aware service
-   * Uses heartbeatModel → falls back to modelMode
+   * Uses heartbeatModel → falls back to primary provider
    */
   async getHeartbeatLLM(): Promise<BaseLanguageModel> {
     const heartbeatModel = await SullaSettingsModel.get('heartbeatModel', 'default');
-    const mode = await SullaSettingsModel.get('modelMode', 'local');
 
     if (heartbeatModel === 'local')    return this.getLocalService();
     if (heartbeatModel === 'remote')   return this.getRemoteService();
-    return this.getService(mode); // default → modelMode
+    return this.getPrimaryService(); // default → primary provider
   }
 
-  getLocalModel(): Promise<string> {
-    return SullaSettingsModel.get('sullaModel', 'tinyllama:latest');
+  async getLocalModel(): Promise<string> {
+    const svc = await this.getLocalService();
+    return svc.getModel();
   }
 
-  getRemoteModel(): Promise<string> {
-    return SullaSettingsModel.get('remoteModel', 'grok-4-1-fast-reasoning');
+  async getRemoteModel(): Promise<string> {
+    const svc = await this.getRemoteService();
+    return svc.getModel();
   }
 
   private isLikelyLocalModel(name: string): boolean {
@@ -118,16 +166,26 @@ class LLMRegistryImpl {
     );
   }
 
-  private getProviderBaseUrl(id: string = 'grok'): string {
-    const map: Record<string, string> = {
-      grok:      'https://api.x.ai/v1',
-      openai:    'https://api.openai.com/v1',
-      anthropic: 'https://api.anthropic.com/v1',
-      google:    'https://generativelanguage.googleapis.com/v1beta',
-      kimi:      'https://api.moonshot.cn/v1',
-      nvidia:    'https://integrate.api.nvidia.com/v1',
-    };
-    return map[id] || map.grok;
+  /**
+   * Determine which remote provider is active.
+   * Checks connected integrations first, falls back to legacy settings.
+   */
+  private async getActiveRemoteProviderId(): Promise<string> {
+    try {
+      const integrationService = getIntegrationService();
+      // Check each AI provider in priority order for a connected integration
+      for (const providerId of ['grok', 'anthropic', 'openai', 'google', 'kimi', 'nvidia', 'custom']) {
+        const connected = await integrationService.isAnyAccountConnected(providerId);
+        if (connected) {
+          return providerId;
+        }
+      }
+    } catch {
+      // IntegrationService not ready
+    }
+
+    // Fallback to legacy setting
+    return SullaSettingsModel.get('remoteProvider', 'grok');
   }
 
   async getCurrentModel(): Promise<string> {
@@ -143,21 +201,35 @@ class LLMRegistryImpl {
   }
 
   async getCurrentConfig(): Promise<any> {
+    const mode = await SullaSettingsModel.get('modelMode', 'local');
+    const localModel = await this.getLocalModel();
+    const remoteProviderId = await this.getActiveRemoteProviderId();
+
+    let remoteModel = '';
+    let remoteApiKey = '';
+    try {
+      const integrationService = getIntegrationService();
+      const values = await integrationService.getFormValues(remoteProviderId);
+      const valMap: Record<string, string> = {};
+      for (const v of values) valMap[v.property] = v.value;
+      remoteModel = valMap.model || '';
+      remoteApiKey = valMap.api_key || '';
+    } catch {
+      remoteModel = await SullaSettingsModel.get('remoteModel', '');
+      remoteApiKey = await SullaSettingsModel.get('remoteApiKey', '');
+    }
+
     return {
-      mode: await SullaSettingsModel.get('modelMode', 'local'),
-      localModel: await SullaSettingsModel.get('sullaModel', 'tinyllama:latest'),
-      remoteModel: await SullaSettingsModel.get('remoteModel', 'grok-4-1-fast-reasoning'),
-      remoteProvider: await SullaSettingsModel.get('remoteProvider', 'grok'),
-      remoteApiKey: await SullaSettingsModel.get('remoteApiKey', ''),
+      mode,
+      localModel,
+      remoteModel,
+      remoteProvider: remoteProviderId,
+      remoteApiKey,
     };
   }
 
   /**
-   * Add this method to LLMRegistryImpl for explicit control
-   * 
-   * @param context 'local' | 'remote'
-   * @param model Specific model name (optional override)
-   * @returns Service instance
+   * Explicit context-based service access
    */
   async getServiceForContext(context: 'local' | 'remote', model?: string): Promise<BaseLanguageModel> {
     if (context === 'local') {
@@ -166,18 +238,45 @@ class LLMRegistryImpl {
     return this.getRemoteService(model);
   }
 
+  /**
+   * Invalidate cached service instances (e.g., when credentials change)
+   */
+  invalidate(providerId?: string): void {
+    if (providerId) {
+      for (const key of this.services.keys()) {
+        if (key.includes(providerId)) {
+          this.services.delete(key);
+        }
+      }
+    } else {
+      this.services.clear();
+    }
+  }
+
   // ============================================================================
   // DYNAMIC MODEL DISCOVERY
   // ============================================================================
 
   /**
-   * Fetch available models for a specific provider
-   * @param providerId Provider identifier (e.g., 'openai', 'anthropic')
-   * @param apiKey API key for the provider
-   * @returns Available models from the provider
+   * Fetch available models for a specific provider.
+   * Pulls API key from IntegrationService, falls back to provided apiKey param.
    */
   async fetchModelsForProvider(providerId: string, apiKey?: string): Promise<ModelInfo[]> {
-    const key = apiKey || await SullaSettingsModel.get('remoteApiKey', '');
+    let key = apiKey || '';
+
+    if (!key) {
+      try {
+        const integrationService = getIntegrationService();
+        const values = await integrationService.getFormValues(providerId);
+        const valMap: Record<string, string> = {};
+        for (const v of values) valMap[v.property] = v.value;
+        key = valMap.api_key || '';
+      } catch {
+        // Fallback
+        key = await SullaSettingsModel.get('remoteApiKey', '');
+      }
+    }
+
     if (!key) {
       throw new Error(`No API key configured for provider: ${providerId}`);
     }
@@ -186,41 +285,21 @@ class LLMRegistryImpl {
   }
 
   /**
-   * Fetch available models from all configured providers
-   * @returns All available models from configured providers
+   * Fetch available models from all configured providers.
+   * Pulls API keys from IntegrationService.
    */
   async fetchAllAvailableModels(): Promise<ModelInfo[]> {
     const providers: Record<string, string> = {};
-    
-    // Get API keys for all supported providers
     const supportedProviders = modelDiscoveryService.getSupportedProviders();
     
     for (const providerId of supportedProviders) {
-      // Try to get API key for each provider
       try {
-        let apiKey = '';
-        
-        if (providerId === 'openai') {
-          apiKey = await SullaSettingsModel.get('openaiApiKey', '');
-        } else if (providerId === 'anthropic') {
-          apiKey = await SullaSettingsModel.get('anthropicApiKey', '');
-        } else if (providerId === 'google') {
-          apiKey = await SullaSettingsModel.get('googleApiKey', '');
-        } else if (providerId === 'grok') {
-          apiKey = await SullaSettingsModel.get('grokApiKey', '');
-        } else if (providerId === 'kimi') {
-          apiKey = await SullaSettingsModel.get('kimiApiKey', '');
-        } else if (providerId === 'nvidia') {
-          apiKey = await SullaSettingsModel.get('nvidiaApiKey', '');
-        } else {
-          // Fallback to generic remoteApiKey for unknown providers
-          const currentProvider = await SullaSettingsModel.get('remoteProvider', 'grok');
-          if (currentProvider === providerId) {
-            apiKey = await SullaSettingsModel.get('remoteApiKey', '');
-          }
-        }
-        
-        if (apiKey && apiKey.trim() !== '') {
+        const integrationService = getIntegrationService();
+        const values = await integrationService.getFormValues(providerId);
+        const valMap: Record<string, string> = {};
+        for (const v of values) valMap[v.property] = v.value;
+        const apiKey = valMap.api_key || '';
+        if (apiKey.trim()) {
           providers[providerId] = apiKey;
         }
       } catch (error) {
@@ -233,37 +312,26 @@ class LLMRegistryImpl {
 
   /**
    * Get currently configured remote models (for backwards compatibility)
-   * @returns Array containing the current remote model
    */
   async getCurrentRemoteModels(): Promise<ModelInfo[]> {
-    const remoteProvider = await SullaSettingsModel.get('remoteProvider', 'grok');
-    const remoteModel = await SullaSettingsModel.get('remoteModel', 'grok-4-1-fast-reasoning');
+    const remoteProvider = await this.getActiveRemoteProviderId();
+    const svc = await this.getRemoteService();
     
     return [{
-      id: remoteModel,
-      name: remoteModel,
+      id: svc.getModel(),
+      name: svc.getModel(),
       provider: remoteProvider
     }];
   }
 
-  /**
-   * Clear model cache for dynamic discovery
-   * @param providerId Optional provider to clear cache for (clears all if not provided)
-   */
   clearModelCache(providerId?: string): void {
     modelDiscoveryService.clearCache(providerId);
   }
 
-  /**
-   * Get model cache statistics
-   */
   getModelCacheStats(): { size: number; providers: string[] } {
     return modelDiscoveryService.getCacheStats();
   }
 
-  /**
-   * Get supported providers for dynamic model fetching
-   */
   getSupportedProviders(): string[] {
     return modelDiscoveryService.getSupportedProviders();
   }
@@ -281,6 +349,10 @@ export const getService = async (context: 'local' | 'remote', model?: string) =>
   await LLMRegistry.getServiceForContext(context, model);
 export const getCurrentModel = async () => await LLMRegistry.getCurrentModel();
 export const getCurrentMode = async () => await LLMRegistry.getCurrentMode();
+
+// Primary / Secondary provider exports
+export const getPrimaryService   = async () => await LLMRegistry.getPrimaryService();
+export const getSecondaryService = async () => await LLMRegistry.getSecondaryService();
 
 // Dynamic model discovery exports
 export const fetchModelsForProvider = async (providerId: string, apiKey?: string) => 

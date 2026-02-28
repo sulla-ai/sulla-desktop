@@ -60,7 +60,7 @@
                         @click="activeCategory = null"
                       >
                         <span>Popular</span>
-                        <span class="text-xs tabular-nums" :class="activeCategory === null ? 'text-sky-500 dark:text-sky-400' : 'text-slate-400 dark:text-slate-500'">{{ integrationsList.length }}</span>
+                        <span class="text-xs tabular-nums" :class="activeCategory === null ? 'text-sky-500 dark:text-sky-400' : 'text-slate-400 dark:text-slate-500'">{{ popularCount }}</span>
                       </button>
                     </li>
                     <li v-for="cat in categoriesWithCounts" :key="cat.name">
@@ -87,7 +87,7 @@
                   :value="activeCategory ?? ''"
                   @change="activeCategory = ($event.target as HTMLSelectElement).value || null"
                 >
-                  <option value="">Popular ({{ integrationsList.length }})</option>
+                  <option value="">Popular ({{ popularCount }})</option>
                   <option v-for="cat in categoriesWithCounts" :key="cat.name" :value="cat.name">{{ cat.name }} ({{ cat.count }})</option>
                 </select>
               </div>
@@ -208,6 +208,7 @@ import AgentHeader from './agent/AgentHeader.vue';
 import PostHogTracker from '@pkg/components/PostHogTracker.vue';
 import type { Integration } from '@pkg/agent/integrations/types';
 import { popularIntegrations } from '@pkg/agent/integrations/popular';
+import { integrations as fullCatalog } from '@pkg/agent/integrations/catalog';
 import { getIntegrationService } from '@pkg/agent/services/IntegrationService';
 import { getExtensionService } from '@pkg/agent/services/ExtensionService';
 import { formatFuzzyTime } from '@pkg/utils/dateFormat';
@@ -238,12 +239,21 @@ const categoryLoading = ref(false);
 
 const integrationsList = ref<Integration[]>([]);
 const mergedIntegrations = ref<Record<string, Integration>>({});
+const popularCount = computed(() => Object.keys(popularIntegrations).length);
+
+// Stable category counts built from the full catalog (not view-dependent)
+const allCategoryCounts = ref<Map<string, number>>(new Map());
+
+function buildCategoryCounts() {
+  const counts = new Map<string, number>();
+  for (const integration of Object.values(fullCatalog)) {
+    counts.set(integration.category, (counts.get(integration.category) || 0) + 1);
+  }
+  allCategoryCounts.value = counts;
+}
 
 // Cache of already-loaded category data so we don't re-import
 const categoryCache = new Map<string, Record<string, Integration>>();
-
-// Whether the composio integration gate is connected
-const composioEnabled = ref(false);
 
 // Whether the activepieces integration gate is connected
 const activepiecesEnabled = ref(false);
@@ -271,16 +281,9 @@ const allCategories = [
 ];
 
 const categoriesWithCounts = computed(() => {
-  // When showing popular (no category selected), count from the popular set
-  // When a category is loaded, count from integrationsList
-  const counts = new Map<string, number>();
-  for (const integration of integrationsList.value) {
-    counts.set(integration.category, (counts.get(integration.category) || 0) + 1);
-  }
-
+  const counts = allCategoryCounts.value;
   return allCategories
-    .map(name => ({ name, count: counts.get(name) || 0 }))
-    .filter(c => activeCategory.value === null ? true : true); // always show all categories in sidebar
+    .map(name => ({ name, count: counts.get(name) || 0 }));
 });
 
 const filteredIntegrations = computed(() => {
@@ -331,9 +334,9 @@ const categoryFileMap: Record<string, string> = {
   'AI Infrastructure': 'ai_infrastructure',
 };
 
-/** Lazy-load a category's integrations (activepieces + composio if enabled) */
+/** Lazy-load a category's integrations (activepieces if enabled) */
 async function loadCategory(categoryName: string): Promise<Record<string, Integration>> {
-  const cacheKey = `${categoryName}:ap=${activepiecesEnabled.value}:co=${composioEnabled.value}`;
+  const cacheKey = `${categoryName}:ap=${activepiecesEnabled.value}`;
   if (categoryCache.has(cacheKey)) {
     return categoryCache.get(cacheKey)!;
   }
@@ -343,7 +346,7 @@ async function loadCategory(categoryName: string): Promise<Record<string, Integr
 
   const result: Record<string, Integration> = {};
 
-  // Load native category file (always available — only has slack, github, composio, activepieces)
+  // Load native category file (always available — slack, github, AI providers, etc.)
   try {
     const nativeMod = await import(`@pkg/agent/integrations/native/${slug}.ts`);
     const nativeEntries: Record<string, Integration> = Object.values(nativeMod)[0] as any || {};
@@ -357,15 +360,6 @@ async function loadCategory(categoryName: string): Promise<Record<string, Integr
       const apEntries: Record<string, Integration> = Object.values(apMod)[0] as any || {};
       Object.assign(result, apEntries);
     } catch { /* no activepieces file for this category */ }
-  }
-
-  // Load composio category file if gate is open
-  if (composioEnabled.value) {
-    try {
-      const composioMod = await import(`@pkg/agent/integrations/composio/${slug}.ts`);
-      const composioEntries: Record<string, Integration> = Object.values(composioMod)[0] as any || {};
-      Object.assign(result, composioEntries);
-    } catch { /* no composio file for this category */ }
   }
 
   categoryCache.set(cacheKey, result);
@@ -422,7 +416,6 @@ async function hydrateConnectionStatus(entries: Record<string, Integration>) {
 
 // Watch category changes → lazy-load or return to popular
 watch(activeCategory, async (newCategory) => {
-  // Invalidate composio cache entries when gate changes
   if (newCategory === null) {
     await loadPopularView();
   } else {
@@ -475,6 +468,9 @@ onMounted(async () => {
     isDark.value = false;
   }
 
+  // Build stable sidebar counts from the full catalog
+  buildCategoryCounts();
+
   try {
     await integrationService.initialize();
 
@@ -484,14 +480,6 @@ onMounted(async () => {
       activepiecesEnabled.value = apStatus.connected;
     } catch {
       activepiecesEnabled.value = false;
-    }
-
-    // Check if composio gate is enabled
-    try {
-      const composioStatus = await integrationService.getConnectionStatus('composio');
-      composioEnabled.value = composioStatus.connected;
-    } catch {
-      composioEnabled.value = false;
     }
 
     // Load the popular/default view

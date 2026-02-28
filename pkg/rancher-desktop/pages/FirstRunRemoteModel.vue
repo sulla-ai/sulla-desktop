@@ -11,54 +11,78 @@
         <div v-if="error" class="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-md">
           {{ error }}
         </div>
-        
+
+        <!-- Provider selector -->
         <div class="mb-4">
           <label for="provider" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Provider:</label>
-          <select 
-            id="provider" 
-            v-model="selectedProvider" 
-            @change="onProviderChange" 
-            :disabled="loadingProviders"
-            class="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 disabled:opacity-50"
+          <select
+            id="provider"
+            v-model="selectedProviderId"
+            @change="onProviderChange"
+            class="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
           >
-            <option v-if="loadingProviders" value="">Loading providers...</option>
-            <option v-else-if="providers.length === 0" value="">No providers available</option>
-            <option v-else v-for="provider in providers" :key="provider.id" :value="provider.id">{{ provider.name }}</option>
+            <option value="">Select a provider...</option>
+            <option v-for="p in aiProviders" :key="p.id" :value="p.id">{{ p.name }}</option>
           </select>
         </div>
-        
-        <div class="mb-4">
-          <label for="model" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Model:</label>
-          <div class="flex gap-2">
-            <select 
-              id="model" 
-              v-model="selectedModel" 
-              :disabled="loadingModels || currentModels.length === 0"
-              class="flex-1 p-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 disabled:opacity-50"
+
+        <!-- Dynamic property fields for selected provider -->
+        <template v-if="selectedIntegration && selectedIntegration.properties">
+          <div v-for="property in selectedIntegration.properties" :key="property.key" class="mb-4">
+            <label :for="property.key" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              {{ property.title }}
+              <span v-if="property.required" class="text-red-500">*</span>
+            </label>
+
+            <!-- Select field (e.g. model select boxes) -->
+            <div v-if="property.type === 'select'" class="flex gap-2">
+              <select
+                :id="property.key"
+                v-model="formData[property.key]"
+                :disabled="selectOptionsLoading[property.key]"
+                class="flex-1 p-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 disabled:opacity-50"
+              >
+                <option value="" disabled>
+                  {{ selectOptionsLoading[property.key] ? 'Loading...' : (property.placeholder || 'Select...') }}
+                </option>
+                <option
+                  v-for="opt in (selectOptions[property.key] || [])"
+                  :key="opt.value"
+                  :value="opt.value"
+                >
+                  {{ opt.label }}{{ opt.description ? ` — ${opt.description}` : '' }}
+                </option>
+              </select>
+              <button
+                type="button"
+                @click="fetchSelectOptionsForProperty(property)"
+                :disabled="selectOptionsLoading[property.key]"
+                class="px-3 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Refresh options"
+              >
+                🔄
+              </button>
+            </div>
+
+            <!-- Standard input (password, text, url) -->
+            <input
+              v-else
+              :id="property.key"
+              :type="property.type"
+              v-model="formData[property.key]"
+              :placeholder="property.placeholder"
+              :required="property.required"
+              class="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+              @blur="onFieldBlur(property.key)"
             >
-              <option v-if="loadingModels" value="">Loading models...</option>
-              <option v-else-if="!apiKey.trim()" value="">Enter API key to load models</option>
-              <option v-else-if="currentModels.length === 0" value="">No models available</option>
-              <option v-else v-for="model in currentModels" :key="model.id" :value="model.id">
-                {{ model.name }} - {{ model.description }}{{ model.pricing ? ` (${model.pricing})` : '' }}
-              </option>
-            </select>
-            <button 
-              type="button" 
-              @click="refreshModels" 
-              :disabled="loadingModels || !apiKey.trim()" 
-              class="px-3 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
-              title="Refresh models"
-            >
-              🔄
-            </button>
+
+            <p v-if="property.hint" class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ property.hint }}</p>
+            <p v-if="errors[property.key]" class="mt-1 text-xs text-red-600">{{ errors[property.key] }}</p>
           </div>
-        </div>
-        <div class="mb-4">
-          <label for="apiKey" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">API Key:</label>
-          <input id="apiKey" type="password" v-model="apiKey" placeholder="Enter your API key" class="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100">
-        </div>
-        <div class="flex gap-2">
+        </template>
+
+        <!-- Test credentials -->
+        <div v-if="selectedProviderId" class="flex gap-2 items-center">
           <button type="button" @click="testCredentials" :disabled="testing" class="px-4 py-2 bg-gray-500 text-white rounded-md hover:bg-gray-600 disabled:opacity-50">
             {{ testing ? 'Testing...' : 'Test Credentials' }}
           </button>
@@ -75,25 +99,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, inject, onMounted, computed, watch } from 'vue';
-import { Ref } from 'vue';
-import { RecursivePartial } from '@pkg/utils/typeUtils';
-import { Settings } from '@pkg/config/settings';
+import { ref, inject, onMounted, computed } from 'vue';
+import type { Ref } from 'vue';
+import type { RecursivePartial } from '@pkg/utils/typeUtils';
+import type { Settings } from '@pkg/config/settings';
 import RdFieldset from '@pkg/components/form/RdFieldset.vue';
-import { ipcRenderer } from 'electron';
-import { getSupportedProviders, fetchModelsForProvider, clearModelCache } from '../agent/languagemodels';
-
-interface Model {
-  id: string;
-  name: string;
-  description: string;
-  pricing?: string;
-}
-
-interface Provider {
-  id: string;
-  name: string;
-}
+import { integrations, type Integration } from '@pkg/agent/integrations/catalog';
+import { SullaSettingsModel } from '@pkg/agent/database/models/SullaSettingsModel';
+import { getSelectBoxProvider } from '@pkg/agent/integrations/select_box/registry';
 
 const settings = inject<Ref<Settings>>('settings')!;
 const commitChanges = inject<(settings: RecursivePartial<Settings>) => Promise<void>>('commitChanges')!;
@@ -102,196 +115,230 @@ const emit = defineEmits<{
   back: [];
 }>();
 
-const selectedProvider = ref('openai');
-const selectedModel = ref('');
-const apiKey = ref('');
+// IDs that are AI providers but not remote LLM providers
+const EXCLUDED_IDS = ['activepieces', 'ollama'];
+
+// Filter the catalog to only AI Infrastructure integrations suitable for remote LLM
+const aiProviders = computed<Integration[]>(() => {
+  return Object.values(integrations)
+    .filter(i => i.category === 'AI Infrastructure' && !EXCLUDED_IDS.includes(i.id))
+    .sort((a, b) => a.sort - b.sort);
+});
+
+const selectedProviderId = ref('');
+const formData = ref<Record<string, string>>({});
+const errors = ref<Record<string, string>>({});
+const error = ref<string | null>(null);
 const testing = ref(false);
 const testResult = ref<{ success: boolean; message: string } | null>(null);
 
-// Dynamic provider and model data
-const providers = ref<Provider[]>([]);
-const models = ref<Record<string, Model[]>>({});
-const loadingProviders = ref(false);
-const loadingModels = ref(false);
-const error = ref<string | null>(null);
+// Select box state
+const selectOptions = ref<Record<string, Array<{ value: string; label: string; description?: string }>>>({});
+const selectOptionsLoading = ref<Record<string, boolean>>({});
 
-const currentModels = computed(() => models.value[selectedProvider.value] || []);
-
-// Load supported providers dynamically
-const loadProviders = async () => {
-  try {
-    loadingProviders.value = true;
-    error.value = null;
-    
-    const supportedProviders = getSupportedProviders();
-    providers.value = supportedProviders.map(id => ({
-      id,
-      name: id.charAt(0).toUpperCase() + id.slice(1) // Capitalize provider name
-    }));
-    
-    // Set default provider if available
-    if (providers.value.length > 0 && !selectedProvider.value) {
-      selectedProvider.value = providers.value[0].id;
-    }
-  } catch (err) {
-    error.value = `Failed to load providers: ${err instanceof Error ? err.message : String(err)}`;
-    console.error('[FirstRun] Error loading providers:', err);
-  } finally {
-    loadingProviders.value = false;
-  }
-};
-
-// Load models for a specific provider
-const loadModelsForProvider = async (providerId: string, apiKey: string) => {
-  try {
-    loadingModels.value = true;
-    error.value = null;
-    
-    const modelList = await fetchModelsForProvider(providerId, apiKey);
-    
-    // Transform ModelInfo to our Model interface
-    const transformedModels: Model[] = modelList.map(modelInfo => ({
-      id: modelInfo.id,
-      name: modelInfo.name,
-      description: modelInfo.description || `${modelInfo.name} model`,
-      pricing: modelInfo.pricing ? 
-        `Input: $${modelInfo.pricing.input || 0}/1M tokens, Output: $${modelInfo.pricing.output || 0}/1M tokens` : 
-        undefined
-    }));
-    
-    models.value[providerId] = transformedModels;
-    
-    // Auto-select first model if none selected
-    if (transformedModels.length > 0 && (!selectedModel.value || !transformedModels.find(m => m.id === selectedModel.value))) {
-      selectedModel.value = transformedModels[0].id;
-    }
-  } catch (err) {
-    error.value = `Failed to load models for ${providerId}: ${err instanceof Error ? err.message : String(err)}`;
-    console.error('[FirstRun] Error loading models:', err);
-    models.value[providerId] = [];
-  } finally {
-    loadingModels.value = false;
-  }
-};
-
-const onProviderChange = async () => {
-  // Clear current model selection
-  selectedModel.value = '';
-  
-  // If we have an API key, try to load models immediately
-  if (apiKey.value.trim()) {
-    await loadModelsForProvider(selectedProvider.value, apiKey.value);
-  } else {
-    // Clear models for this provider if no API key
-    models.value[selectedProvider.value] = [];
-  }
-};
-
-// Watch API key changes to reload models
-watch([apiKey, selectedProvider], async ([newApiKey, newProvider]) => {
-  if (newApiKey && newApiKey.trim() && newProvider) {
-    await loadModelsForProvider(newProvider, newApiKey);
-  }
+const selectedIntegration = computed<Integration | null>(() => {
+  if (!selectedProviderId.value) return null;
+  return integrations[selectedProviderId.value] || null;
 });
 
-const testCredentials = async () => {
-  if (!apiKey.value.trim()) {
-    testResult.value = { success: false, message: 'Please enter an API key.' };
-    return;
+// When provider changes, reset form and load any previously saved first-run values
+const onProviderChange = async () => {
+  formData.value = {};
+  errors.value = {};
+  testResult.value = null;
+  selectOptions.value = {};
+
+  if (!selectedProviderId.value) return;
+
+  // Load any previously saved first-run form values from SullaSettingsModel
+  const props = selectedIntegration.value?.properties;
+  if (props) {
+    for (const prop of props) {
+      const saved = await SullaSettingsModel.get(`firstrun_${selectedProviderId.value}_${prop.key}`, '');
+      if (saved) {
+        formData.value[prop.key] = saved;
+      }
+    }
   }
 
-  if (!selectedModel.value) {
-    testResult.value = { success: false, message: 'Please select a model first.' };
-    return;
+  // Fetch select box options for properties that have deps already satisfied
+  fetchAllSelectOptions();
+};
+
+// When a non-select field loses focus, refresh any select fields that depend on it
+const onFieldBlur = (changedKey: string) => {
+  const props = selectedIntegration.value?.properties;
+  if (!props) return;
+
+  for (const prop of props) {
+    if (prop.type === 'select' && prop.selectDependsOn?.includes(changedKey)) {
+      fetchSelectOptionsForProperty(prop);
+    }
   }
+};
+
+// Fetch options for a single select property using the SelectBoxProvider directly (no DB needed)
+const fetchSelectOptionsForProperty = async (property: { key: string; selectBoxId?: string; selectDependsOn?: string[] }) => {
+  if (!selectedProviderId.value || !property.selectBoxId) return;
+
+  selectOptionsLoading.value[property.key] = true;
+  try {
+    const depValues: Record<string, string> = {};
+    for (const depKey of (property.selectDependsOn ?? [])) {
+      if (formData.value[depKey]) {
+        depValues[depKey] = formData.value[depKey];
+      }
+    }
+
+    // Call the select box provider directly — no IntegrationService/DB required
+    const provider = getSelectBoxProvider(property.selectBoxId);
+    if (provider) {
+      const options = await provider.getOptions({
+        integrationId: selectedProviderId.value,
+        accountId: 'default',
+        formValues: depValues,
+      });
+      selectOptions.value[property.key] = options;
+    } else {
+      selectOptions.value[property.key] = [];
+    }
+  } catch (err) {
+    console.error(`[FirstRun] Failed to fetch select options for ${property.key}:`, err);
+    selectOptions.value[property.key] = [];
+  } finally {
+    selectOptionsLoading.value[property.key] = false;
+  }
+};
+
+// Fetch select options for all select properties
+const fetchAllSelectOptions = () => {
+  const props = selectedIntegration.value?.properties;
+  if (!props) return;
+
+  for (const prop of props) {
+    if (prop.type === 'select' && prop.selectBoxId) {
+      fetchSelectOptionsForProperty(prop);
+    }
+  }
+};
+
+// Validate that required fields are filled
+const validateForm = (): boolean => {
+  const props = selectedIntegration.value?.properties;
+  if (!props) return true;
+
+  errors.value = {};
+  let valid = true;
+
+  for (const prop of props) {
+    if (prop.required && (!formData.value[prop.key] || !formData.value[prop.key].trim())) {
+      errors.value[prop.key] = `${prop.title} is required`;
+      valid = false;
+    }
+  }
+
+  return valid;
+};
+
+const testCredentials = async () => {
+  if (!selectedProviderId.value) return;
+  if (!validateForm()) return;
 
   testing.value = true;
   testResult.value = null;
 
   try {
-    // Test credentials by trying to fetch models (this validates API key)
-    await loadModelsForProvider(selectedProvider.value, apiKey.value);
-    
-    // If model fetching succeeded and we have models, credentials are valid
-    const providerModels = models.value[selectedProvider.value];
-    if (providerModels && providerModels.length > 0) {
-      testResult.value = { success: true, message: `Credentials are valid! Found ${providerModels.length} models.` };
+    // Find the model select property and try to fetch its options as a credential test
+    const modelProp = selectedIntegration.value?.properties?.find(p => p.key === 'model' && p.type === 'select');
+    if (modelProp) {
+      await fetchSelectOptionsForProperty(modelProp);
+      const opts = selectOptions.value[modelProp.key] || [];
+      if (opts.length > 0) {
+        testResult.value = { success: true, message: `Credentials valid! Found ${opts.length} models.` };
+      } else {
+        testResult.value = { success: false, message: 'Connected but no models returned.' };
+      }
     } else {
-      testResult.value = { success: false, message: 'Valid credentials but no models available.' };
+      // No model select — just report form is valid
+      testResult.value = { success: true, message: 'Configuration looks good.' };
     }
-  } catch (error) {
-    testResult.value = { success: false, message: 'Test failed. Check your API key and connection.' };
-    console.error('[FirstRun] Credential test failed:', error);
+  } catch {
+    testResult.value = { success: false, message: 'Test failed. Check your credentials and try again.' };
   } finally {
     testing.value = false;
   }
 };
 
-const refreshModels = async () => {
-  if (!selectedProvider.value || !apiKey.value.trim()) {
-    return;
-  }
-
-  try {
-    // Clear the cache for this provider
-    clearModelCache(selectedProvider.value);
-    
-    // Clear current models and reload
-    models.value[selectedProvider.value] = [];
-    selectedModel.value = '';
-    
-    // Force reload models from API
-    await loadModelsForProvider(selectedProvider.value, apiKey.value);
-  } catch (error) {
-    error.value = `Failed to refresh models: ${error instanceof Error ? error.message : String(error)}`;
-    console.error('[FirstRun] Model refresh failed:', error);
-  }
-};
-
 const handleNext = async () => {
-  // Save settings if API key is provided
-  if (apiKey.value.trim()) {
-    await commitChanges({
-      experimental: {
-        remoteProvider: selectedProvider.value,
-        remoteModel: selectedModel.value,
-        remoteApiKey: apiKey.value,
-        modelMode: 'remote',
-      },
-    });
+  // If a provider is selected and has values filled, save to SullaSettingsModel
+  // (no database/IntegrationService available during first run)
+  if (selectedProviderId.value && selectedIntegration.value?.properties) {
+    const hasValues = Object.values(formData.value).some(v => v && v.trim());
+
+    if (hasValues) {
+      if (!validateForm()) return;
+
+      try {
+        const providerId = selectedProviderId.value;
+
+        // Save each form field to SullaSettingsModel with a prefixed key
+        // The seeder will pick these up and migrate them into IntegrationService
+        for (const [key, value] of Object.entries(formData.value)) {
+          if (value && value.trim()) {
+            await SullaSettingsModel.set(`firstrun_${providerId}_${key}`, value, 'string');
+          }
+        }
+
+        // Save which provider was configured during first run
+        await SullaSettingsModel.set('firstrun_remoteProvider', providerId, 'string');
+
+        // Set this as the primary provider
+        await SullaSettingsModel.set('primaryProvider', providerId, 'string');
+
+        // Also save legacy settings for backward compatibility
+        await SullaSettingsModel.set('remoteProvider', providerId, 'string');
+        if (formData.value.api_key) {
+          await SullaSettingsModel.set('remoteApiKey', formData.value.api_key, 'string');
+        }
+        if (formData.value.model) {
+          await SullaSettingsModel.set('remoteModel', formData.value.model, 'string');
+        }
+
+        // Save modelMode so the system knows to use remote
+        await commitChanges({
+          experimental: {
+            remoteProvider: providerId,
+            modelMode: 'remote',
+          },
+        });
+      } catch (err) {
+        console.error('[FirstRun] Failed to save credentials:', err);
+        error.value = `Failed to save: ${err instanceof Error ? err.message : String(err)}`;
+        return;
+      }
+    }
   }
 
   emit('next');
 };
 
-// Load existing settings and initialize dynamic data
 onMounted(async () => {
+  // Ensure the select box providers are registered
   try {
-    // Load supported providers first
-    await loadProviders();
-    
-    // Load existing settings
-    const loadedSettings: Settings = await ipcRenderer.invoke('settings-read' as any);
-    settings.value = loadedSettings;
-    
-    // Apply existing settings if they exist
-    if (settings.value.experimental.remoteProvider) {
-      selectedProvider.value = settings.value.experimental.remoteProvider;
+    await import('@pkg/agent/integrations/select_box');
+  } catch {
+    // Non-fatal — select boxes just won't work
+  }
+
+  // Check if a provider was previously configured during this first-run session
+  try {
+    const savedProvider = await SullaSettingsModel.get('firstrun_remoteProvider', '');
+    if (savedProvider && integrations[savedProvider]) {
+      selectedProviderId.value = savedProvider;
+      await onProviderChange();
     }
-    if (settings.value.experimental.remoteModel) {
-      selectedModel.value = settings.value.experimental.remoteModel;
-    }
-    if (settings.value.experimental.remoteApiKey) {
-      apiKey.value = settings.value.experimental.remoteApiKey;
-    }
-    
-    // Load models for the selected provider if we have an API key
-    if (selectedProvider.value && apiKey.value.trim()) {
-      await loadModelsForProvider(selectedProvider.value, apiKey.value);
-    }
-  } catch (err) {
-    error.value = `Failed to initialize: ${err instanceof Error ? err.message : String(err)}`;
-    console.error('[FirstRun] Initialization error:', err);
+  } catch {
+    // No saved state — fine
   }
 });
 </script>
