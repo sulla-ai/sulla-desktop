@@ -5,7 +5,6 @@ import DenyRoot from '../pages/DenyRoot.vue';
 import Diagnostics from '../pages/Diagnostics.vue';
 import Dialog from '../pages/Dialog.vue';
 import FirstRun from '../pages/FirstRun.vue';
-import General from '../pages/General.vue';
 import Images from '../pages/Images.vue';
 import KubernetesError from '../pages/KubernetesError.vue';
 import PortForwarding from '../pages/PortForwarding.vue';
@@ -26,10 +25,7 @@ import VolumeFiles from '../pages/volumes/files/_name.vue';
 export default createRouter({
   history: createWebHashHistory(),
   routes:  [
-    { path: '/', redirect: '/General' },
-    {
-      path: '/General', component: General, name: 'General',
-    },
+    { path: '/', redirect: '/Containers' },
     {
       path: '/Containers', component: Containers, name: 'Containers',
     },
