@@ -36,11 +36,38 @@ You’ll Be Able To:
 - Runs on consumer hardware (8–16 GB RAM recommended)  
 - Fully open-source (Apache 2.0) — fork, extend, own it
 
-## When You Install Sulla Desktop
+## Install
 
-Step 1 — One-click installer on Mac, Linux, or Windows
-Step 2 — Connect any LLM (local Ollama or remote API)  
-Step 3 — Start delegating
+One command. Works on **macOS**, **Linux**, and **Windows** (Git Bash or WSL).
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/sulla-ai/sulla-desktop/main/install.sh | bash
+```
+
+**What it does:**
+1. Installs dependencies if missing (git, nvm, Node.js 22, yarn, build tools)
+2. Clones the repository (or updates it if already cloned)
+3. Runs `yarn install` and `yarn build`
+4. Launches Sulla Desktop
+
+The script is idempotent — safe to run multiple times. It skips anything already installed.
+
+> **Tip:** In the project root you'll find **Sulla Desktop.app** — drag it to your Dock (macOS) or taskbar to launch the app without the terminal.
+
+### Manual install
+
+```bash
+git clone https://github.com/sulla-ai/sulla-desktop.git
+cd sulla-desktop
+yarn install
+NODE_OPTIONS="--max-old-space-size=12288" yarn build
+npx electron .
+```
+
+### After install
+
+Step 1 — Connect any LLM (local Ollama or remote API)  
+Step 2 — Start delegating
 
 ## Your No-Hassle Ownership Promise
 
