@@ -120,6 +120,15 @@
                   <div class="relative">Thinking...</div>
                 </div>
               </div>
+              <div v-if="showContinueButton" class="flex justify-end mb-3">
+                <button
+                  type="button"
+                  class="rounded-lg bg-black px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-neutral-800 active:bg-neutral-700 transition-colors"
+                  @click="continueRun"
+                >
+                  Continue
+                </button>
+              </div>
             </div>
           </div>
 
@@ -325,6 +334,19 @@ const loading = computed<boolean>(() => {
   if (!agent) return false;
   return agent.loading;
 });
+
+const showContinueButton = computed<boolean>(() => {
+  const persona = registry.getActivePersonaService();
+  if (!persona) return false;
+  return persona.stopReason.value === 'max_loops' && !persona.graphRunning.value;
+});
+
+const continueRun = () => {
+  const persona = registry.getActivePersonaService();
+  if (persona) {
+    persona.emitContinueRun();
+  }
+};
 
 const handleModelChanged = async (event: Electron.IpcRendererEvent, data: { model: string; type: 'local' } | { model: string; type: 'remote'; provider: string }) => {
   modelName.value = data.model;

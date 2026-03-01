@@ -43,6 +43,12 @@ export class FrontendGraphWebSocketService {
       return;
     }
 
+    if (msg.type === 'continue_run') {
+      console.log('[FrontendGraphWS] continue_run received — resuming graph');
+      await this.continueGraphExecution();
+      return;
+    }
+
     if (msg.type !== 'user_message') return;
 
     const data = typeof msg.data === 'string' ? { content: msg.data } : (msg.data as any);
@@ -140,6 +146,52 @@ export class FrontendGraphWebSocketService {
       }
     } finally {
       // Reset here — after graph run completes this is fine
+      state.metadata.consecutiveSameNode = 0;
+      state.metadata.iterations = 0;
+      (state.metadata as any).agentLoopCount = 0;
+      this.activeAbort = null;
+    }
+  }
+
+  private async continueGraphExecution(): Promise<void> {
+    const threadId = this.deps.currentThreadId.value;
+    if (!threadId) {
+      console.warn('[FrontendGraphWS] No thread to continue');
+      return;
+    }
+
+    const existing = GraphRegistry.get(threadId);
+    if (!existing) {
+      console.warn('[FrontendGraphWS] No existing graph to continue');
+      return;
+    }
+
+    const { graph, state } = existing as { graph: any; state: AgentGraphState };
+
+    // Create a fresh AbortService for this run
+    const abort = new AbortService();
+    this.activeAbort = abort;
+    state.metadata.options.abort = abort;
+
+    try {
+      // Reset loop counters so the graph can run another full set of cycles
+      state.metadata.consecutiveSameNode = 0;
+      state.metadata.iterations = 0;
+      (state.metadata as any).agentLoopCount = 0;
+      state.metadata.cycleComplete = false;
+      state.metadata.waitingForUser = false;
+
+      // Resume from the agent node directly
+      await graph.execute(state, 'agent');
+    } catch (err: any) {
+      if (err.name === 'AbortError') {
+        console.log('[FrontendGraphWS] Continue execution aborted');
+        this.emitSystemMessage('Execution stopped.');
+      } else {
+        console.error('[FrontendGraphWS] Continue error:', err);
+        this.emitSystemMessage(`Error: ${err.message || String(err)}`);
+      }
+    } finally {
       state.metadata.consecutiveSameNode = 0;
       state.metadata.iterations = 0;
       (state.metadata as any).agentLoopCount = 0;

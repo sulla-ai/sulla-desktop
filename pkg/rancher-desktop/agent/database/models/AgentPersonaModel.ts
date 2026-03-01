@@ -80,6 +80,7 @@ export class AgentPersonaService {
   readonly activeAssets: PersonaSidebarAsset[] = reactive([]);
 
   graphRunning = ref(false);
+  stopReason = ref<string | null>(null);
 
 
   readonly state = reactive<AgentPersonaState>({
@@ -426,6 +427,7 @@ export class AgentPersonaService {
     if (!content.trim()) return false;
 
     const id = this.state.agentId;
+    this.stopReason.value = null;
 
     this.messages.push({
       id: `user_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
@@ -457,6 +459,18 @@ export class AgentPersonaService {
   clearThreadId(): void {
     this.state.threadId = undefined;
     this.lastSentN8nLiveEventsEnabled = null;
+  }
+
+  async emitContinueRun(): Promise<boolean> {
+    const id = this.state.agentId;
+    this.stopReason.value = null;
+    this.graphRunning.value = true;
+    this.registry.setLoading(id, true);
+
+    return this.wsService.send(id, {
+      type: 'continue_run',
+      timestamp: Date.now(),
+    });
   }
 
   async emitStopSignal(agentId: string): Promise<boolean> {
@@ -668,8 +682,10 @@ export class AgentPersonaService {
       case 'transfer_data': {
         const data = (msg.data && typeof msg.data === 'object') ? (msg.data as any) : null;
         if (data === 'graph_execution_complete' || data?.content === 'graph_execution_complete') {
-          console.log('[AgentPersonaModel] Graph execution complete, setting graphRunning = false and loading = false');
+          const reason = data?.stopReason || null;
+          console.log('[AgentPersonaModel] Graph execution complete, stopReason:', reason);
           this.graphRunning.value = false;
+          this.stopReason.value = reason;
           this.registry.setLoading(agentId, false);
         }
         return;

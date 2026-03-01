@@ -347,6 +347,7 @@ export class Graph<TState = BaseThreadState> {
               nextId = 'skill_critic';
             } else {
               console.warn(`Max consecutive loop — forcing end`);
+              (state as any).metadata.stopReason = 'max_loops';
               break;
             }
           }
@@ -375,16 +376,20 @@ export class Graph<TState = BaseThreadState> {
     if ((state as any).metadata.iterations >= maxIterations) {
       console.warn('Max iterations hit');
       (state as any).metadata.maxIterationsReached = true;
+      (state as any).metadata.stopReason = 'max_loops';
     }
 
     // Always send completion signal, whether completed naturally or aborted
-    console.log('[Graph] Sending graph_execution_complete signal');
+    const stopReason = (state as any).metadata.stopReason || null;
+    console.log('[Graph] Sending graph_execution_complete signal, stopReason:', stopReason);
     const ws = getWebSocketClientService();
     const connId = (state as any).metadata.wsChannel || 'dreaming-protocol';
     ws.send(connId, {
       type: 'transfer_data',
-      data: { role: 'system', content: 'graph_execution_complete' },
+      data: { role: 'system', content: 'graph_execution_complete', stopReason },
     });
+    // Clear stopReason after sending
+    (state as any).metadata.stopReason = null;
 
     return state;
   }
@@ -638,6 +643,7 @@ export function createAgentGraph(): Graph<AgentGraphState> {
 
     if (newLoopCount >= MAX_AGENT_LOOPS) {
       console.log(`[AgentGraph] Agent hit max loops (${MAX_AGENT_LOOPS}) - ending`);
+      (state.metadata as any).stopReason = 'max_loops';
       return 'end';
     }
 
