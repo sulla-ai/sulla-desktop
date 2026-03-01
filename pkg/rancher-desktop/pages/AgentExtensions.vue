@@ -264,7 +264,13 @@
                   <div class="p-6">
                     <div class="flex items-start justify-between mb-4">
                       <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-700">
-                        <span class="text-2xl">📦</span>
+                        <img
+                          v-if="extensionLogo(ext)"
+                          :src="extensionLogo(ext)"
+                          :alt="extensionTitle(ext)"
+                          class="h-8 w-8 object-contain"
+                        >
+                        <span v-else class="text-2xl">📦</span>
                       </div>
                       <div class="flex items-center gap-2">
                         <span class="text-xs text-slate-500 dark:text-slate-400">v{{ ext.version }}</span>
@@ -288,7 +294,7 @@
                     </h3>
 
                     <p class="text-sm text-slate-600 dark:text-slate-300 mb-4">
-                      {{ ext.id }}
+                      {{ extensionDescription(ext) }}
                     </p>
 
                     <div class="flex items-center justify-between mt-3">
@@ -523,8 +529,16 @@ function getInstalledExtraUrls(slug: string): Array<{ label: string; url: string
   return ext?.extraUrls ?? [];
 }
 
+function extensionLogo(ext: InstalledExtension): string {
+  return ext.metadata?.icon ?? '';
+}
+
 function extensionTitle(ext: InstalledExtension): string {
   return ext.labels?.['org.opencontainers.image.title'] ?? ext.id;
+}
+
+function extensionDescription(ext: InstalledExtension): string {
+  return ext.labels?.['org.opencontainers.image.description'] ?? ext.id;
 }
 
 async function refreshData() {
