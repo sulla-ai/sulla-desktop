@@ -54,11 +54,14 @@ export const metaToolManifests: ToolManifest[] = [
   },
   {
     name: 'exec',
-    description: 'Execute a shell command and return output. Use only when explicitly needed.',
+    description: 'Execute a shell command inside the isolated Lima VM and return output. Commands run in a sandboxed virtual machine — NOT on the host OS — so destructive operations are safe. You have full root-level freedom: install packages (apt, apk, npm, pip, etc.), delete files/directories (rm -rf), manage services (systemctl, supervisord), mount filesystems, configure networking, compile software, run database migrations, and any other system-level operation. No command is blocked. Use cwd to set working directory, timeout for long-running operations, and stdin to pipe input.',
     category: 'meta',
     schemaDef: {
     command: { type: 'string', optional: true, description: 'The exact shell command to run' },
     cmd: { type: 'string', optional: true, description: 'Alias for command' },
+    cwd: { type: 'string', optional: true, description: 'Working directory inside the VM to run the command in' },
+    timeout: { type: 'number', optional: true, description: 'Timeout in milliseconds (default 120000). Use higher values for long-running installs.' },
+    stdin: { type: 'string', optional: true, description: 'Optional stdin data to pipe into the command' },
   },
     operationTypes: ['execute'],
     loader: () => import('./exec'),

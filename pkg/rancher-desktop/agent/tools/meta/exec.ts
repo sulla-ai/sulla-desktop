@@ -3,33 +3,22 @@ import { runCommand } from "../util/CommandRunner";
 
 /**
  * Exec Tool - Worker class for execution
+ *
+ * Commands run inside an isolated Lima VM, so destructive operations
+ * (rm -rf, package installs, service management, etc.) are safe —
+ * they cannot affect the host machine.
  */
 export class ExecWorker extends BaseTool {
   name: string = '';
   description: string = '';
 
-  private getForbiddenPattern(command: string): RegExp | null {
-    // Guardrails: block dangerous commands only (avoid broad substring matches)
-    // like --format flags or "Content-Type: application/json".
-    const forbiddenPatterns = [
-      /rm\s+-rf/i,
-      /sudo/i,
-      /dd\s+/i,
-      /\bmkfs(?:\.[a-z0-9_+-]+)?\b/i,
-      /\bformat(?:\.com)?\s+[a-z]:/i,
-      /:(){.*:|\|:}/, // fork bomb
-      /shutdown/i,
-      /halt/i,
-      /reboot/i,
-      /poweroff/i,
-    ];
-
-    for (const pattern of forbiddenPatterns) {
-      if (pattern.test(command)) return pattern;
-    }
-
-    return null;
-  }
+  schemaDef = {
+    command: { type: 'string' as const, optional: true, description: 'The exact shell command to run' },
+    cmd:     { type: 'string' as const, optional: true, description: 'Alias for command' },
+    cwd:     { type: 'string' as const, optional: true, description: 'Working directory inside the VM to run the command in' },
+    timeout: { type: 'number' as const, optional: true, description: 'Timeout in milliseconds (default 120000). Use higher values for long-running installs.' },
+    stdin:   { type: 'string' as const, optional: true, description: 'Optional stdin data to pipe into the command' },
+  };
 
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     const command = String(input.command ?? input.cmd ?? '').trim();
@@ -41,19 +30,19 @@ export class ExecWorker extends BaseTool {
       };
     }
 
-    const blockedPattern = this.getForbiddenPattern(command);
-    if (blockedPattern) {
-      return {
-        successBoolean: false,
-        responseString: `ERROR: Command blocked for security reasons. Pattern: ${blockedPattern.source}`
-      };
-    }
+    const cwd = input.cwd ? String(input.cwd).trim() : undefined;
+    const timeoutMs = input.timeout ? Number(input.timeout) : 120_000;
+    const stdin = input.stdin ? String(input.stdin) : undefined;
+
+    // Prepend cd if a working directory was requested
+    const finalCommand = cwd ? `cd ${cwd} && ${command}` : command;
 
     try {
-      const res = await runCommand(command, [], {
-        timeoutMs: 30000,
+      const res = await runCommand(finalCommand, [], {
+        timeoutMs,
         maxOutputChars: 160_000,
         runInLimaShell: true,
+        stdin,
       });
 
       if (res.exitCode !== 0) {
@@ -65,7 +54,7 @@ export class ExecWorker extends BaseTool {
 
       return {
         successBoolean: true,
-        responseString: res.stdout
+        responseString: res.stdout || '(no output)'
       };
     } catch (error) {
       return {
