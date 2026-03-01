@@ -82,6 +82,12 @@ export class N8nService {
     }
   }
 
+  private isArchiveSchemaMismatchError(error: unknown): boolean {
+    const message = (error instanceof Error ? error.message : String(error)).toLowerCase();
+    return message.includes('n8n api error 400')
+      && message.includes('must not have additional properties');
+  }
+
   // ========== WORKFLOWS ==========
 
   /**
@@ -518,7 +524,7 @@ export class N8nService {
         body: JSON.stringify({ archived: archiveState })
       });
     } catch (patchError) {
-      if (!isNotFoundOrMethodError(patchError)) {
+      if (!isNotFoundOrMethodError(patchError) && !this.isArchiveSchemaMismatchError(patchError)) {
         throw patchError;
       }
 

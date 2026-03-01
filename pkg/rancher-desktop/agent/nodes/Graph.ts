@@ -19,7 +19,7 @@ import { HeartbeatNode, type HeartbeatThreadState } from './HeartbeatNode';
 // ============================================================================
 
 const DEFAULT_WS_CHANNEL = 'dreaming-protocol';
-const MAX_CONSECTUIVE_LOOP = 15;
+const MAX_CONSECTUIVE_LOOP = 40;
 const MAX_MESSAGES_IN_THREAD = 120;
 
 // ============================================================================

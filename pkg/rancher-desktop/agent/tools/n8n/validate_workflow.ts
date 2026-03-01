@@ -1,5 +1,6 @@
 import { BaseTool, ToolResponse } from '../base';
 import { createN8nService } from '../../services/N8nService';
+import { postgresClient } from '../../database/PostgresClient';
 
 type JsonRecord = Record<string, any>;
 
@@ -11,6 +12,60 @@ type ConnectionEdge = {
   targetInputIndex: number;
   targetType: string;
 };
+
+type WebhookIssue = {
+  nodeId: string;
+  nodeName: string;
+  issue: 'webhook_path_naming' | 'webhook_not_registered' | 'webhook_path_collision';
+  severity: 'critical' | 'high' | 'medium';
+  expectedPath: string;
+  actualRegisteredPath: string | null;
+  problem: string;
+  recommendation: string;
+};
+
+type WebhookEntityRow = {
+  webhookPath: string;
+  method: string;
+  node: string | null;
+  workflowId: string;
+};
+
+function toKebabCase(value: string): string {
+  const trimmed = String(value || '').trim();
+  if (!trimmed) {
+    return '';
+  }
+
+  return trimmed
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .toLowerCase();
+}
+
+function normalizeWebhookPath(pathValue: unknown): string {
+  return String(pathValue || '').trim().replace(/^\/+/, '').replace(/\/+$/g, '');
+}
+
+function normalizeMethod(methodValue: unknown): string {
+  return String(methodValue || 'POST').trim().toUpperCase() || 'POST';
+}
+
+function hasWebhookNamingRisk(nodeName: string): boolean {
+  const trimmed = nodeName.trim();
+  if (!trimmed) {
+    return false;
+  }
+
+  const hasSpaces = /\s/.test(trimmed);
+  const hasUppercase = /[A-Z]/.test(trimmed);
+  const hasSpecialChars = /[^a-zA-Z0-9\s-]/.test(trimmed);
+  return hasSpaces || hasUppercase || hasSpecialChars;
+}
 
 function asRecord(value: unknown): JsonRecord {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -194,6 +249,89 @@ export class ValidateWorkflowWorker extends BaseTool {
         })
         .filter(Boolean);
 
+      const webhookIssues: WebhookIssue[] = [];
+      const webhookNodes = nodes.filter((node: any) => String(node?.type || '').trim() === 'n8n-nodes-base.webhook');
+      const workflowActive = Boolean((workflow as any)?.active);
+
+      let webhookRowsByWorkflow: WebhookEntityRow[] = [];
+      if (webhookNodes.length > 0) {
+        await postgresClient.initialize();
+        webhookRowsByWorkflow = await postgresClient.query<WebhookEntityRow>(
+          `SELECT "webhookPath", "method", "node", "workflowId"
+           FROM webhook_entity
+           WHERE "workflowId" = $1`,
+          [workflowId],
+        );
+      }
+
+      for (const webhookNode of webhookNodes) {
+        const nodeId = String(webhookNode?.id || '').trim();
+        const nodeName = String(webhookNode?.name || '').trim();
+        const kebabNodeName = toKebabCase(nodeName);
+        const customPath = normalizeWebhookPath(webhookNode?.parameters?.path);
+        const expectedPath = `${workflowId}/${kebabNodeName}/${customPath}`;
+        const method = normalizeMethod(webhookNode?.parameters?.httpMethod);
+
+        const matchingRegistration = webhookRowsByWorkflow.find((row) => {
+          const rowNode = String(row.node || '').trim();
+          if (rowNode && nodeName && rowNode === nodeName) {
+            return true;
+          }
+
+          return normalizeMethod(row.method) === method && normalizeWebhookPath(row.webhookPath) === expectedPath;
+        }) || null;
+
+        const actualRegisteredPath = matchingRegistration ? normalizeWebhookPath(matchingRegistration.webhookPath) : null;
+
+        if (hasWebhookNamingRisk(nodeName) || kebabNodeName !== nodeName) {
+          webhookIssues.push({
+            nodeId,
+            nodeName,
+            issue: 'webhook_path_naming',
+            severity: 'high',
+            expectedPath,
+            actualRegisteredPath,
+            problem: `Node name '${nodeName}' may produce unexpected webhook registration path segments after normalization.`,
+            recommendation: `Rename node to kebab-case '${kebabNodeName || 'webhook-trigger'}' to avoid casing/special character path mismatches.`,
+          });
+        }
+
+        if (workflowActive && !matchingRegistration) {
+          webhookIssues.push({
+            nodeId,
+            nodeName,
+            issue: 'webhook_not_registered',
+            severity: 'critical',
+            expectedPath,
+            actualRegisteredPath,
+            problem: 'Workflow is active but no webhook_entity registration was found for this webhook node/path.',
+            recommendation: 'Restart n8n container; webhook registrations are applied at startup and may not refresh on API activation alone.',
+          });
+        }
+
+        const collisions = await postgresClient.query<{ workflowId: string; webhookPath: string; method: string }>(
+          `SELECT "workflowId", "webhookPath", "method"
+           FROM webhook_entity
+           WHERE "webhookPath" = $1
+             AND UPPER(COALESCE("method", 'POST')) = $2`,
+          [expectedPath, method],
+        );
+
+        const uniqueWorkflowIds = Array.from(new Set(collisions.map((row) => String(row.workflowId || '').trim()).filter(Boolean)));
+        if (uniqueWorkflowIds.length > 1) {
+          webhookIssues.push({
+            nodeId,
+            nodeName,
+            issue: 'webhook_path_collision',
+            severity: 'critical',
+            expectedPath,
+            actualRegisteredPath,
+            problem: `Multiple workflows share webhookPath + method (${expectedPath} ${method}), which prevents reliable webhook registration/routing.`,
+            recommendation: 'Use a unique webhook path per workflow/node (for example include workflow purpose or node slug in path).',
+          });
+        }
+      }
+
       const report = {
         workflowId: String(workflow?.id || workflowId),
         workflowName: String(workflow?.name || ''),
@@ -204,16 +342,19 @@ export class ValidateWorkflowWorker extends BaseTool {
           missingCredentialNodeCount: missingCredentials.length,
           brokenConnectionCount: brokenConnections.length,
           nodesWithNoTypeCount: nodesWithNoTypeConfigured.length,
+          webhookIssueCount: webhookIssues.length,
         },
         floatingNodes,
         missingCredentials,
         brokenConnections,
         nodesWithNoTypeConfigured,
+        webhookIssues,
         valid:
           floatingNodes.length === 0
           && missingCredentials.length === 0
           && brokenConnections.length === 0
-          && nodesWithNoTypeConfigured.length === 0,
+          && nodesWithNoTypeConfigured.length === 0
+          && webhookIssues.length === 0,
       };
 
       return {

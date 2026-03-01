@@ -131,6 +131,18 @@ export const n8nToolManifests: ToolManifest[] = [
     loader: () => import('./delete_workflow'),
   },
   {
+    name: 'diagnose_webhook',
+    description: 'Diagnose webhook readiness for a workflow by checking DB registration, workflow active state, endpoint response, and relevant n8n logs.',
+    category: 'n8n',
+    schemaDef: {
+    workflowId: { type: 'string', description: 'Workflow ID to diagnose.' },
+    container: { type: 'string', optional: true, default: 'sulla_n8n', description: 'Docker container name for n8n logs.' },
+    endpointTimeoutMs: { type: 'number', optional: true, default: 15000, description: 'Timeout for endpoint probe request.' },
+  },
+    operationTypes: ['read', 'execute'],
+    loader: () => import('./diagnose_webhook'),
+  },
+  {
     name: 'execute_n8n_workflow',
     description: 'Execute a workflow through a dedicated universal gateway workflow webhook, creating/activating the gateway if needed.',
     category: 'n8n',
@@ -293,6 +305,17 @@ export const n8nToolManifests: ToolManifest[] = [
     loader: () => import('./get_workflow_node_list'),
   },
   {
+    name: 'get_workflow_webhook_url',
+    description: 'Get webhook trigger URLs for a workflow, including DB registration status and ready-to-use test commands.',
+    category: 'n8n',
+    schemaDef: {
+    workflowId: { type: 'string', optional: true, description: 'Workflow ID (preferred).' },
+    id: { type: 'string', optional: true, description: 'Workflow ID alias.' },
+  },
+    operationTypes: ['read', 'execute'],
+    loader: () => import('./get_workflow_webhook_url'),
+  },
+  {
     name: 'get_workflows',
     description: 'Get all workflows from n8n with optional filtering.',
     category: 'n8n',
@@ -355,6 +378,19 @@ export const n8nToolManifests: ToolManifest[] = [
   },
     operationTypes: ['update'],
     loader: () => import('./patch_workflow'),
+  },
+  {
+    name: 'restart_n8n_container',
+    description: 'Restart the n8n Docker container, wait until healthy, and return webhook registration status.',
+    category: 'n8n',
+    schemaDef: {
+    container: { type: 'string', optional: true, default: 'sulla_n8n', description: 'Docker container name or ID for n8n.' },
+    timeoutMs: { type: 'number', optional: true, default: 120000, description: 'Max time to wait for readiness after restart.' },
+    pollIntervalMs: { type: 'number', optional: true, default: 2000, description: 'Polling interval for readiness checks.' },
+    includeLogs: { type: 'boolean', optional: true, default: true, description: 'Include recent webhook-related startup log lines in the response.' },
+  },
+    operationTypes: ['execute', 'update'],
+    loader: () => import('./restart_n8n_container'),
   },
   {
     name: 'search_templates',

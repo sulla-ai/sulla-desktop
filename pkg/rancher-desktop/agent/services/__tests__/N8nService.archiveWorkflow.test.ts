@@ -114,6 +114,78 @@ describe('N8nService.setWorkflowArchived', () => {
     });
   });
 
+  it('falls back to PUT when PATCH returns 400 additional-properties schema mismatch', async () => {
+    const service = new N8nServiceClass() as any;
+
+    let callCount = 0;
+    const existingWorkflow = {
+      id: 'wf_put_2',
+      name: 'Workflow B',
+      nodes: [],
+      connections: {},
+      settings: {},
+      archived: false,
+    };
+
+    const requestMock = jest.fn(async (url: string, init?: { method?: string; body?: string }) => {
+      callCount += 1;
+
+      if (callCount === 1) {
+        throw new Error('N8n API error 405: Method Not Allowed');
+      }
+
+      if (callCount === 2) {
+        throw new Error('N8n API error 400: Bad Request - {"message":"request/body must NOT have additional properties"}');
+      }
+
+      if (callCount === 3) {
+        expect(url).toBe('/api/v1/workflows/wf_put_2');
+        expect(init).toBeUndefined();
+        return existingWorkflow;
+      }
+
+      if (callCount === 4) {
+        expect(url).toBe('/api/v1/workflows/wf_put_2');
+        expect(init?.method).toBe('PUT');
+        expect(JSON.parse(init?.body || '{}')).toEqual({
+          name: existingWorkflow.name,
+          nodes: existingWorkflow.nodes,
+          connections: existingWorkflow.connections,
+          settings: existingWorkflow.settings,
+          archived: true,
+        });
+        return { id: 'wf_put_2', archived: true };
+      }
+
+      return { id: 'wf_put_2', archived: true };
+    });
+
+    service.request = requestMock;
+
+    const result = await service.archiveWorkflow('wf_put_2');
+
+    expect(result).toEqual({ id: 'wf_put_2', archived: true });
+    expect(requestMock).toHaveBeenCalledTimes(4);
+    const calls = (requestMock as any).mock.calls as any[];
+    expect(calls[0][0]).toBe('/api/v1/workflows/wf_put_2/archive');
+    expect(calls[0][1]).toEqual({ method: 'POST' });
+    expect(calls[1][0]).toBe('/api/v1/workflows/wf_put_2');
+    expect(calls[1][1]).toEqual({ method: 'PATCH', body: JSON.stringify({ archived: true }) });
+    expect(calls[2][0]).toBe('/api/v1/workflows/wf_put_2');
+    expect(calls[2][1]).toBeUndefined();
+    expect(calls[3][0]).toBe('/api/v1/workflows/wf_put_2');
+    expect(calls[3][1]).toEqual({
+      method: 'PUT',
+      body: JSON.stringify({
+        name: existingWorkflow.name,
+        nodes: existingWorkflow.nodes,
+        connections: existingWorkflow.connections,
+        settings: existingWorkflow.settings,
+        archived: true,
+      }),
+    });
+  });
+
   it('throws for blank workflow IDs', async () => {
     const service = new N8nServiceClass();
     await expect(service.setWorkflowArchived('  ', true)).rejects.toThrow('Workflow ID is required for archive state change');
