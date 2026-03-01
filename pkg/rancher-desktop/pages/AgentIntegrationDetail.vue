@@ -211,6 +211,12 @@
                     </div>
                     <div class="flex items-center gap-2">
                       <button
+                        @click="startEditAccount(acct.account_id)"
+                        class="rounded-md px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-700 transition-colors"
+                      >
+                        Edit Credentials
+                      </button>
+                      <button
                         v-if="!acct.active"
                         @click="setAccountActive(acct.account_id)"
                         class="rounded-md px-2.5 py-1 text-xs font-medium text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/20 transition-colors"
@@ -232,10 +238,12 @@
               <div v-if="showConnectionForm" class="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-slate-800">
                 <div class="flex items-center justify-between mb-4">
                   <h3 class="text-lg font-semibold text-slate-900 dark:text-white">
-                    {{ connectedAccounts.length > 0 ? 'Add Another Account' : 'Connect Integration' }}
+                    {{ isEditingAccount
+                      ? `Edit Credentials${editingAccountLabel ? ` (${editingAccountLabel})` : ''}`
+                      : (connectedAccounts.length > 0 ? 'Add Another Account' : 'Connect Integration') }}
                   </h3>
                   <button
-                    v-if="isAddingAccount"
+                    v-if="isAddingAccount || isEditingAccount"
                     @click="cancelAddAccount"
                     class="text-xs text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 font-medium"
                   >
@@ -250,8 +258,8 @@
                   </p>
                 </div>
 
-                <!-- Account Label (always required) -->
-                <div class="space-y-2 mb-4">
+                <!-- Account Label (required only for new accounts) -->
+                <div v-if="connectedAccounts.length === 0 || isAddingAccount" class="space-y-2 mb-4">
                   <label for="__account_label" class="block text-sm font-medium text-slate-700 dark:text-slate-300">
                     Account Label
                     <span class="text-red-500">*</span>
@@ -347,10 +355,14 @@
                       <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                       <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a8 8 0 01-16 0v4a8 8 0 0016 0z"></path>
                     </svg>
-                    {{ isLoading ? 'Connecting...' : 'Connect Now' }}
+                    {{ isLoading
+                      ? (isEditingAccount ? 'Saving...' : 'Connecting...')
+                      : (isEditingAccount ? 'Save Changes' : 'Connect Now') }}
                   </button>
                   <p class="text-xs text-slate-500 dark:text-slate-400">
-                    Connect your account to start using this integration
+                    {{ isEditingAccount
+                      ? 'Update and save credentials for this connected account'
+                      : 'Connect your account to start using this integration' }}
                   </p>
                 </div>
               </div>
@@ -579,13 +591,22 @@ const accounts = ref<IntegrationAccount[]>([]);
 const selectedAccountId = ref('default');
 const activeAccountId = ref('default');
 const isAddingAccount = ref(false);
+const isEditingAccount = ref(false);
+const editingAccountId = ref<string | null>(null);
 const newAccountLabel = ref('');
 
 /** Only accounts that are connected */
 const connectedAccounts = computed(() => accounts.value.filter(a => a.connected));
 
+/** Label for the account currently being edited */
+const editingAccountLabel = computed(() => {
+  if (!editingAccountId.value) return '';
+
+  return accounts.value.find(a => a.account_id === editingAccountId.value)?.label ?? editingAccountId.value;
+});
+
 /** Show the connection form when: no accounts connected yet, OR user clicked "Add Another Account" */
-const showConnectionForm = computed(() => connectedAccounts.value.length === 0 || isAddingAccount.value);
+const showConnectionForm = computed(() => connectedAccounts.value.length === 0 || isAddingAccount.value || isEditingAccount.value);
 
 // Carousel functions
 const nextImage = () => {
@@ -615,6 +636,8 @@ const refreshAccounts = async () => {
 
 const startAddAccount = () => {
   isAddingAccount.value = true;
+  isEditingAccount.value = false;
+  editingAccountId.value = null;
   newAccountLabel.value = '';
   formData.value = {};
   errors.value = {};
@@ -622,9 +645,43 @@ const startAddAccount = () => {
 
 const cancelAddAccount = () => {
   isAddingAccount.value = false;
+  isEditingAccount.value = false;
+  editingAccountId.value = null;
   newAccountLabel.value = '';
   formData.value = {};
   errors.value = {};
+};
+
+const loadFormDataForAccount = async (integrationId: string, accountId: string) => {
+  const formValues = await integrationService.getFormValues(integrationId, accountId);
+  const formDataObj: Record<string, string> = {};
+
+  formValues.forEach(value => {
+    formDataObj[value.property] = value.value;
+  });
+
+  selectedAccountId.value = accountId;
+  formData.value = formDataObj;
+  fetchAllSelectOptions();
+};
+
+const startEditAccount = async (accountId: string) => {
+  if (!integration.value) return;
+
+  isLoading.value = true;
+  try {
+    isAddingAccount.value = false;
+    isEditingAccount.value = true;
+    editingAccountId.value = accountId;
+    newAccountLabel.value = '';
+    errors.value = {};
+
+    await loadFormDataForAccount(integration.value.id, accountId);
+  } catch (error) {
+    console.error('Failed to load account credentials for editing:', error);
+  } finally {
+    isLoading.value = false;
+  }
 };
 
 /** Set a specific account as the active one */
@@ -759,50 +816,60 @@ const validateForm = (): boolean => {
 const handleConnect = async () => {
   if (!integration.value) return;
 
-  // Validate label
   errors.value = {};
+
+  const isCreatingAccount = connectedAccounts.value.length === 0 || isAddingAccount.value;
   const label = newAccountLabel.value.trim();
-  if (!label) {
+
+  if (isCreatingAccount && !label) {
     errors.value['__account_label'] = 'Account label is required';
+
     return;
   }
+
+  const targetAccountId = isCreatingAccount
+    ? label.toLowerCase().replace(/[^a-z0-9]+/g, '_')
+    : (editingAccountId.value || selectedAccountId.value || activeAccountId.value);
 
   // Validate credential fields
   if (!validateForm()) return;
 
   isLoading.value = true;
   try {
-    // Derive account_id from label
-    const accountId = label.toLowerCase().replace(/[^a-z0-9]+/g, '_');
+    if (isCreatingAccount) {
+      // Save label for new account
+      await integrationService.setAccountLabel(integration.value.id, targetAccountId, label);
+    }
 
-    // Save label
-    await integrationService.setAccountLabel(integration.value.id, accountId, label);
-
-    // Save credential fields for this account
+    // Save credential fields for this account (new or existing)
     const formInputs = Object.entries(formData.value).map(([key, value]) => ({
       integration_id: integration.value!.id,
-      account_id: accountId,
+      account_id: targetAccountId,
       property: key,
       value: value
     }));
     await integrationService.setFormValues(formInputs);
 
-    // Mark connected
-    await integrationService.setConnectionStatus(integration.value.id, true, accountId);
+    if (isCreatingAccount) {
+      // Mark newly created account connected
+      await integrationService.setConnectionStatus(integration.value.id, true, targetAccountId);
+    }
 
     // If this is the first account, set it as active
-    if (connectedAccounts.value.length === 0) {
-      await integrationService.setActiveAccount(integration.value.id, accountId);
+    if (isCreatingAccount && connectedAccounts.value.length === 0) {
+      await integrationService.setActiveAccount(integration.value.id, targetAccountId);
     }
 
     // Reset form state
     isAddingAccount.value = false;
+    isEditingAccount.value = false;
+    editingAccountId.value = null;
     newAccountLabel.value = '';
     formData.value = {};
 
     await refreshAccounts();
-    integration.value.connected = true;
-    mergedIntegrations.value[integration.value.id].connected = true;
+    integration.value.connected = await integrationService.isAnyAccountConnected(integration.value.id);
+    mergedIntegrations.value[integration.value.id].connected = integration.value.connected;
   } catch (error) {
     console.error('Failed to save integration configuration:', error);
   } finally {
@@ -845,19 +912,12 @@ onMounted(async () => {
     await refreshAccounts();
     selectedAccountId.value = activeAccountId.value;
 
-    const formValues = await integrationService.getFormValues(integrationId, selectedAccountId.value);
-    const formDataObj: Record<string, string> = {};
-    formValues.forEach(value => {
-      formDataObj[value.property] = value.value;
-    });
-    formData.value = formDataObj;
+    await loadFormDataForAccount(integrationId, selectedAccountId.value);
     
     // Load connection status (check any account)
     integration.value.connected = await integrationService.isAnyAccountConnected(integrationId);
     mergedIntegrations.value[integrationId].connected = integration.value.connected;
 
-    // Fetch select box options after form data is loaded
-    fetchAllSelectOptions();
   } catch (error) {
     console.error('Failed to load integration data:', error);
   }
