@@ -466,6 +466,10 @@ k3s-status:
     limactl shell 0 -- sudo systemctl status k3s
 
 
+# Build the macOS .app launcher (double-clickable icon, no packaging needed)
+app:
+    ./launcher/build-app.sh
+
 # Watch pod events in real time (shows scheduling, image pulls, crashes)
 show-compose-yaml:
     LIMA_HOME=~/Library/Application\ Support/rancher-desktop/lima \

@@ -1,0 +1,16 @@
+#!/bin/zsh
+
+# Resolve the project directory (3 levels up from Contents/MacOS/launcher)
+PROJECT_DIR="$(cd "$(dirname "$0")/../../.." && pwd)"
+
+# Source nvm so we get the right node
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && source "$NVM_DIR/nvm.sh"
+
+# Homebrew paths (Apple Silicon)
+export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+
+export NODE_NO_WARNINGS=1
+
+cd "$PROJECT_DIR"
+exec npx electron .
