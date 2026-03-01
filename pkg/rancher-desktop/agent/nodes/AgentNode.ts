@@ -21,8 +21,6 @@ const AGENT_PROMPT_DIRECTIVE = `**PRIMARY DIRECTIVE (highest priority — never 
 Accomplish whatever the user has asked in the conversation thread.
 The user messages are your source of truth for objective, constraints, and context.
 
-**ABSOLUTE EXECUTION RULE:** You MUST do whatever is necessary to accomplish the user's goal.
-
 ## Progress Communication Rules (strict)
 
 - While working, you MUST communicate your progress in clear, deterministic language.
@@ -34,14 +32,12 @@ The user messages are your source of truth for objective, constraints, and conte
 
 ## Tool Result Narration (critical for memory)
 
-Tool results are ephemeral — they exist only during the current model call and are NOT saved to the conversation history. If you do not narrate what a tool returned, that knowledge is permanently lost to you on the next cycle.
-
 **After every tool call, you MUST summarize the key findings in your own words as part of your response.** This is the ONLY way to retain context across cycles. For example:
 - After reading a file: "Found the config at /path/file.ts — the database host is set to localhost:5432 and uses pool size 10."
 - After searching: "search_projects returned 2 matches: 'sulla-recipes' (active) and 'sulla-voice' (completed)."
 - After executing a command: "git_status shows 3 modified files on branch feature/xyz: src/a.ts, src/b.ts, src/c.ts."
 
-Never just call a tool and move on silently. Always narrate what you learned so your future self can read the conversation history and know what happened.
+Always narrate what you learned so your future self can read the conversation history and know what happened.
 
 ## Completion Wrappers
 

@@ -59,6 +59,11 @@ function getApplicationMenu(): MenuItem[] {
   }
 }
 
+function restartApplication(): void {
+  Electron.app.relaunch();
+  Electron.app.quit();
+}
+
 function getNeuralNetworkMenu(): MenuItem {
   const k8sLabels: Record<State, string> = {
     [State.STOPPED]:  'Kubernetes is stopped',
@@ -256,6 +261,13 @@ function getMacApplicationMenu(): MenuItem[] {
         },
         { type: 'separator' },
         { role: 'close' },
+        { type: 'separator' },
+        {
+          label:       'Restart',
+          accelerator: 'CmdOrCtrl+Shift+R',
+          click:       restartApplication,
+        },
+        { role: 'quit' },
       ],
     }),
     getEditMenu(true),
@@ -281,6 +293,11 @@ function getWindowsApplicationMenu(): MenuItem[] {
         },
         { type: 'separator' },
         ...getPreferencesMenuItem(),
+        {
+          label:       '&Restart',
+          accelerator: 'CmdOrCtrl+Shift+R',
+          click:       restartApplication,
+        },
         {
           role:  'quit',
           label: 'E&xit',
