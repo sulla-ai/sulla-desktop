@@ -21,10 +21,7 @@ const AGENT_PROMPT_DIRECTIVE = `**PRIMARY DIRECTIVE (highest priority — never 
 Accomplish whatever the user has asked in the conversation thread.
 The user messages are your source of truth for objective, constraints, and context.
 
-**ABSOLUTE EXECUTION RULES:**
-- You MUST do whatever is necessary to accomplish the user's goal.
-- Begin execution immediately. Do not plan a separate project or gather unnecessary new information.
-- Use available tools to accomplish the task.
+**ABSOLUTE EXECUTION RULE:** You MUST do whatever is necessary to accomplish the user's goal.
 
 ## Progress Communication Rules (strict)
 

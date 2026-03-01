@@ -683,6 +683,9 @@ export abstract class BaseNode<T extends BaseThreadState = BaseThreadState> {
 
             if (!reply) throw new Error('No response from primary LLM');
 
+            // Extract and dispatch thinking content before appending the response
+            this.extractAndDispatchThinking(state, reply);
+
             // Append to state — stores native tool_use content arrays when present
             this.appendResponse(state, reply.content, reply.metadata.rawProviderContent);
 
@@ -926,6 +929,45 @@ export abstract class BaseNode<T extends BaseThreadState = BaseThreadState> {
             metadata: messageMeta,
         });
         this.bumpStateVersion(state);
+    }
+
+    /**
+     * Extract thinking/reasoning content from an LLM reply and dispatch it
+     * to the AgentPersona chat as a 'thinking' kind message.
+     * Sources:
+     *   1. reply.metadata.reasoning (Anthropic thinking/reasoning blocks)
+     *   2. <thinking>...</thinking> tags in reply.content (other providers)
+     * Mutates reply.content in-place to strip thinking tags.
+     */
+    protected extractAndDispatchThinking(state: BaseThreadState, reply: NormalizedResponse): void {
+        let thinkingText = '';
+
+        // Source 1: Anthropic reasoning metadata
+        if (reply.metadata.reasoning) {
+            thinkingText = reply.metadata.reasoning.trim();
+        }
+
+        // Source 2: <thinking> tags in content
+        const thinkingTagRegex = /<thinking>([\s\S]*?)<\/thinking>/gi;
+        const tagMatches = reply.content.match(thinkingTagRegex);
+        if (tagMatches) {
+            const extracted = tagMatches
+                .map(m => m.replace(/<\/?thinking>/gi, '').trim())
+                .filter(Boolean)
+                .join('\n');
+            if (extracted) {
+                thinkingText = thinkingText ? `${thinkingText}\n${extracted}` : extracted;
+            }
+            // Strip thinking tags from the content
+            reply.content = reply.content.replace(thinkingTagRegex, '').trim();
+        }
+
+        if (!thinkingText) {
+            return;
+        }
+
+        // Dispatch as a 'thinking' kind message to the frontend
+        this.wsChatMessage(state, thinkingText, 'assistant', 'thinking');
     }
 
     /**

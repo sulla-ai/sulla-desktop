@@ -91,6 +91,12 @@
  </code></pre>
                 </div>
 
+                <div v-else-if="m.kind === 'thinking'" class="thinking-bubble max-w-[min(760px,92%)]">
+                  <div class="thinking-bubble-inner">
+                    <div class="thinking-bubble-content text-xs text-slate-400 dark:text-slate-500 italic" v-html="renderMarkdown(m.content)" />
+                  </div>
+                </div>
+
                 <div v-else class="max-w-[min(760px,92%)]">
                   <div v-if="m.image" class="space-y-2">
                     <img
@@ -625,5 +631,55 @@ watch(isDark, () => {
 .dark #chat-scroll-container::-webkit-scrollbar-corner,
 .dark #chat-scroll-container *::-webkit-scrollbar-corner {
   background: #1e293b;
+}
+
+/* Thinking bubble — no padding, no bg, no borders, gradient fade top/bottom, max 100px */
+.thinking-bubble {
+  position: relative;
+  max-height: 100px;
+  overflow: hidden;
+}
+
+.thinking-bubble-inner {
+  max-height: 100px;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.thinking-bubble-inner::-webkit-scrollbar {
+  display: none;
+}
+
+.thinking-bubble::before,
+.thinking-bubble::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 16px;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.thinking-bubble::before {
+  top: 0;
+  background: linear-gradient(to bottom, rgb(255 255 255 / 0.9), transparent);
+}
+
+.thinking-bubble::after {
+  bottom: 0;
+  background: linear-gradient(to top, rgb(255 255 255 / 0.9), transparent);
+}
+
+.dark .thinking-bubble::before {
+  background: linear-gradient(to bottom, rgb(15 23 42 / 0.9), transparent);
+}
+
+.dark .thinking-bubble::after {
+  background: linear-gradient(to top, rgb(15 23 42 / 0.9), transparent);
+}
+
+.thinking-bubble-content :deep(p) {
+  margin: 0;
 }
 </style>
