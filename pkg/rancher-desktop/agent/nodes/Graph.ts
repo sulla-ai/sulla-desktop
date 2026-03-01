@@ -14,8 +14,6 @@ import { HeartbeatNode, type HeartbeatThreadState } from './HeartbeatNode';
 // CONFIGURATION CONSTANTS
 // ============================================================================
 
-const MAX_AGENT_LOOPS = 20;
-
 // ============================================================================
 // DEFAULT SETTINGS
 // ============================================================================
@@ -621,7 +619,7 @@ export function createAgentGraph(): Graph<AgentGraphState> {
   // Input → Agent
   graph.addEdge('input_handler', 'agent');
 
-  // Agent routing: done/blocked → end, otherwise loop up to MAX_AGENT_LOOPS
+  // Agent routing: done/blocked → end, otherwise continue looping
   graph.addConditionalEdge('agent', state => {
     const agentMeta = (state.metadata as any).agent || {};
     const agentStatus = String(agentMeta.status || '').trim().toLowerCase();
@@ -636,18 +634,12 @@ export function createAgentGraph(): Graph<AgentGraphState> {
       return 'end';
     }
 
-    // Loop counter safety
+    // Track loop count for diagnostics
     const currentLoopCount = (state.metadata as any).agentLoopCount || 0;
     const newLoopCount = currentLoopCount + 1;
     (state.metadata as any).agentLoopCount = newLoopCount;
 
-    if (newLoopCount >= MAX_AGENT_LOOPS) {
-      console.log(`[AgentGraph] Agent hit max loops (${MAX_AGENT_LOOPS}) - ending`);
-      (state.metadata as any).stopReason = 'max_loops';
-      return 'end';
-    }
-
-    console.log(`[AgentGraph] Agent cycle ${newLoopCount}/${MAX_AGENT_LOOPS} - continuing`);
+    console.log(`[AgentGraph] Agent cycle ${newLoopCount} - continuing`);
     return 'agent';
   });
 
