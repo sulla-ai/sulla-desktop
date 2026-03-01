@@ -289,12 +289,13 @@ export class ProjectRegistry {
     const name = String(projectName || '').trim();
     if (!name) return 'Project name is required.';
 
-    const existing = this.projectsBySlug.get(name);
+    const existing = this.resolveProjectService(name);
     if (!existing) {
       return `Project '${name}' not found. Use create_project to create it first.`;
     }
 
-    const projectFile = this.resolveProjectFile(name);
+    const canonicalSlug = existing.slug;
+    const projectFile = this.resolveProjectFile(canonicalSlug);
     if (!projectFile) {
       return `Project '${name}' file not found on disk.`;
     }
@@ -303,7 +304,7 @@ export class ProjectRegistry {
       const updatedRaw = existing.patchSection(section, content);
       await writeFile(projectFile, updatedRaw, 'utf8');
 
-      const service = ProjectService.fromRaw('filesystem', name, updatedRaw);
+      const service = ProjectService.fromRaw('filesystem', canonicalSlug, updatedRaw);
       if (service) {
         this.projectsBySlug.set(service.slug, service);
         this.cachedSummaries = this.buildSummariesFromCurrentMap();
@@ -356,6 +357,28 @@ export class ProjectRegistry {
 
     if (normalizedQuery === 'active projects' || normalizedQuery === 'active project') {
       return 'active';
+    }
+
+    return null;
+  }
+
+  private resolveProjectService(name: string): ProjectService | null {
+    const normalized = String(name || '').trim();
+    if (!normalized) {
+      return null;
+    }
+
+    // Exact slug match
+    const bySlug = this.projectsBySlug.get(normalized);
+    if (bySlug) {
+      return bySlug;
+    }
+
+    // Exact title match (case-insensitive), same behavior as loadProject
+    for (const project of this.projectsBySlug.values()) {
+      if (project.name.toLowerCase() === normalized.toLowerCase()) {
+        return project;
+      }
     }
 
     return null;
