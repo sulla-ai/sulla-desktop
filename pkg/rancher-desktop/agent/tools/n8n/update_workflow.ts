@@ -131,6 +131,13 @@ export class UpdateWorkflowWorker extends BaseTool {
         parameters.responseMode = 'responseNode';
         warnings.push(`Auto-fixed webhook responseMode from 'lastNode' to 'responseNode' for reliability (node: ${webhookName || webhookNode?.id || 'unknown'}).`);
       }
+
+      // Ensure webhookId is set to match path for clean URL registration
+      const webhookPath = String(parameters.path || '').trim();
+      if (webhookPath && !webhookNode.webhookId) {
+        webhookNode.webhookId = webhookPath;
+        warnings.push(`Auto-set webhookId to '${webhookPath}' for clean URL registration (node: ${webhookName || webhookNode?.id || 'unknown'}).`);
+      }
     }
 
     const hasRespondNode = this.hasRespondToWebhookNode(nodes);

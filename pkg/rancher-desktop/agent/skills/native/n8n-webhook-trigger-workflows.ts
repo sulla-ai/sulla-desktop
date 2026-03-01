@@ -100,6 +100,86 @@ Use available n8n tools in this order:
   - **Likely cause:** webhook not registered/active.
   - **Fix:** reactivate and verify registration state.
 
+## Clean Webhook Path Registration
+
+**Problem:** Webhooks register with unwanted \`{workflowId}/webhook/\` prefix instead of a clean path.
+
+**Root Cause:** Missing \`webhookId\` property on the webhook node definition.
+
+**Permanent Fix:** Add \`webhookId\` field to the webhook node with your desired clean path. It **must match** the \`path\` parameter.
+
+\`\`\`json
+{
+  "id": "webhook-node",
+  "name": "Webhook",
+  "type": "n8n-nodes-base.webhook",
+  "typeVersion": 2,
+  "position": [240, 300],
+  "webhookId": "your-clean-path",
+  "parameters": {
+    "httpMethod": "POST",
+    "path": "your-clean-path",
+    "responseMode": "responseNode",
+    "options": {}
+  }
+}
+\`\`\`
+
+**Result:** Webhook registers at \`/webhook/your-clean-path\` instead of \`/webhook/{workflowId}/webhook/your-clean-path\`.
+
+### Failure Signature
+- **Symptom:** Webhook URL contains \`{workflowId}/webhook/\` prefix, making it ugly or breaking integrations expecting a clean path.
+  - **Likely cause:** \`webhookId\` not set on the node definition (only \`path\` in parameters).
+  - **Fix:** Add \`webhookId\` at the node level matching the \`parameters.path\` value.
+
+## Execute Workflow Node Pattern (System-Wide)
+
+**Problem:** Execute Workflow node fails with "Workflow does not exist" error.
+
+**Root Cause:** Called workflows must be ACTIVE (n8n auto-publishes on activation) and use the correct trigger node type.
+
+### Caller workflow (the one with Execute Workflow node)
+- Use standard webhook trigger or any trigger type
+- Execute Workflow node can have any settings (\`waitForExecution: true\` recommended for sync)
+
+### Called workflow (the one being executed)
+- **Must** use \`n8n-nodes-base.executeWorkflowTrigger\` node type (NOT a webhook trigger)
+- **Must** be ACTIVE (n8n auto-publishes on activation)
+- The Execute Workflow Trigger node has no configuration — it is just a receiver
+
+### Example called workflow structure
+\`\`\`json
+{
+  "nodes": [
+    {
+      "id": "trigger-node",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "parameters": {}
+    },
+    {
+      "id": "process-node",
+      "name": "Your Logic Here",
+      "type": "...",
+      "position": [440, 300],
+      "parameters": {}
+    }
+  ],
+  "connections": {
+    "Execute Workflow Trigger": {
+      "main": [[{"node": "Your Logic Here", "type": "main", "index": 0}]]
+    }
+  }
+}
+\`\`\`
+
+### Failure Signature
+- **Symptom:** Execute Workflow node returns "Workflow does not exist"
+  - **Likely cause:** Called workflow uses wrong trigger type (e.g. webhook instead of executeWorkflowTrigger) or is not active.
+  - **Fix:** Change called workflow trigger to \`n8n-nodes-base.executeWorkflowTrigger\` and activate it.
+
 ## Definition of Done
 A webhook-trigger workflow is done only when all are true:
 - Webhook response architecture validated
