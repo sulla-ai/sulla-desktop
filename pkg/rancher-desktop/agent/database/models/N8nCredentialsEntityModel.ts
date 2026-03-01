@@ -43,9 +43,25 @@ export class N8nCredentialsEntityModel extends BaseModel {
     return super.save();
   }
 
+  // CryptoJS 'Salted__' magic bytes — n8n uses CryptoJS-compatible encryption
+  private static readonly SALT_PREFIX = Buffer.from('53616c7465645f5f', 'hex');
+
   /**
-   * Encrypt a credential data object using n8n's AES-256-GCM encryption
-   * and set it on the `data` attribute.
+   * Derive AES-256-CBC key + IV from password + salt using the CryptoJS-compatible
+   * EVP_BytesToKey (MD5) algorithm. This matches n8n's Cipher.getKeyAndIv().
+   */
+  private static getKeyAndIv(salt: Buffer, encryptionKey: string): [Buffer, Buffer] {
+    const password = Buffer.concat([Buffer.from(encryptionKey, 'binary'), salt]);
+    const hash1 = crypto.createHash('md5').update(password).digest();
+    const hash2 = crypto.createHash('md5').update(Buffer.concat([hash1, password])).digest();
+    const iv    = crypto.createHash('md5').update(Buffer.concat([hash2, password])).digest();
+    const key   = Buffer.concat([hash1, hash2]);
+    return [key, iv];
+  }
+
+  /**
+   * Encrypt a credential data object using n8n's AES-256-CBC encryption
+   * (CryptoJS-compatible format) and set it on the `data` attribute.
    * @param credential - Plain object of credential key/value pairs
    */
   async encryptData(credential: Record<string, any>): Promise<void> {
@@ -54,19 +70,17 @@ export class N8nCredentialsEntityModel extends BaseModel {
       throw new Error('No encryption key found in settings');
     }
 
-    const iv = crypto.randomBytes(12);
-    const cipher = crypto.createCipheriv('aes-256-gcm', encryptionKey, iv);
+    const salt = crypto.randomBytes(8);
+    const [key, iv] = N8nCredentialsEntityModel.getKeyAndIv(salt, encryptionKey);
+    const cipher = crypto.createCipheriv('aes-256-cbc', key, iv);
+    const encrypted = cipher.update(JSON.stringify(credential), 'utf8');
 
-    const plaintext = JSON.stringify(credential);
-    let encrypted = cipher.update(plaintext, 'utf8');
-    encrypted = Buffer.concat([encrypted, cipher.final()]);
-    const tag = cipher.getAuthTag();
-
-    this.attributes.data = JSON.stringify({
-      encryptedData: encrypted.toString('base64'),
-      iv:            iv.toString('base64'),
-      tag:           tag.toString('base64'),
-    });
+    this.attributes.data = Buffer.concat([
+      N8nCredentialsEntityModel.SALT_PREFIX,
+      salt,
+      encrypted,
+      cipher.final(),
+    ]).toString('base64');
   }
 
   /**
@@ -125,7 +139,8 @@ export class N8nCredentialsEntityModel extends BaseModel {
   }
 
   /**
-   * Decrypt the credential data using n8n's AES-256-GCM encryption
+   * Decrypt the credential data using n8n's AES-256-CBC encryption
+   * (CryptoJS-compatible format).
    * @returns Decrypted credential data object
    */
   async decryptData(): Promise<any> {
@@ -139,48 +154,18 @@ export class N8nCredentialsEntityModel extends BaseModel {
       throw new Error('No encryption key found in settings');
     }
 
-    // Parse the encrypted data (assuming it's stored as JSON)
-    let parsedData;
-    try {
-      parsedData = JSON.parse(encryptedData);
-    } catch (error) {
-      // If it's not JSON, assume it's directly encrypted data
-      parsedData = encryptedData;
+    const input = Buffer.from(encryptedData, 'base64');
+    if (input.length < 16) {
+      throw new Error('Encrypted data too short');
     }
 
-    // Handle different possible formats
-    if (typeof parsedData === 'object' && parsedData.encryptedData) {
-      // Format: { encryptedData: base64, iv: base64, tag: base64 }
-      const encrypted = Buffer.from(parsedData.encryptedData, 'base64');
-      const iv = Buffer.from(parsedData.iv, 'base64');
-      const tag = Buffer.from(parsedData.tag, 'base64');
+    // Bytes 0-7: 'Salted__' prefix, bytes 8-15: salt, rest: ciphertext
+    const salt = input.subarray(8, 16);
+    const contents = input.subarray(16);
+    const [key, iv] = N8nCredentialsEntityModel.getKeyAndIv(salt, encryptionKey);
+    const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
+    const decrypted = Buffer.concat([decipher.update(contents), decipher.final()]).toString('utf-8');
 
-      const decipher = crypto.createDecipheriv('aes-256-gcm', encryptionKey, iv);
-      decipher.setAuthTag(tag);
-
-      let decrypted = decipher.update(encrypted);
-      decrypted = Buffer.concat([decrypted, decipher.final()]);
-
-      return JSON.parse(decrypted.toString());
-    } else if (typeof parsedData === 'string') {
-      // Assume base64 encoded encrypted data with embedded IV and tag
-      // This is a simplified approach - n8n might use a different format
-      const encrypted = Buffer.from(parsedData, 'base64');
-      
-      // Extract IV (first 12 bytes) and tag (last 16 bytes)
-      const iv = encrypted.subarray(0, 12);
-      const tag = encrypted.subarray(-16);
-      const encryptedPayload = encrypted.subarray(12, -16);
-
-      const decipher = crypto.createDecipheriv('aes-256-gcm', encryptionKey, iv);
-      decipher.setAuthTag(tag);
-
-      let decrypted = decipher.update(encryptedPayload);
-      decrypted = Buffer.concat([decrypted, decipher.final()]);
-
-      return JSON.parse(decrypted.toString());
-    } else {
-      throw new Error('Unsupported encrypted data format');
-    }
+    return JSON.parse(decrypted);
   }
 }

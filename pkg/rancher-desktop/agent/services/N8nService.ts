@@ -680,15 +680,20 @@ export class N8nService {
     data: any;
     isResolvable?: boolean;
   }): Promise<any> {
-    const credential = await N8nCredentialsEntityModel.create({
+    const dataObj = typeof credentialData.data === 'string'
+      ? JSON.parse(credentialData.data)
+      : credentialData.data;
+
+    const credential = new N8nCredentialsEntityModel();
+    credential.fill({
       name: credentialData.name,
       type: credentialData.type,
-      data: JSON.stringify(credentialData.data), // Store data as JSON string
       isResolvable: credentialData.isResolvable ?? false,
-      isManaged: false, // Default values
+      isManaged: false,
       isGlobal: false,
-      resolvableAllowFallback: false
+      resolvableAllowFallback: false,
     });
+    await credential.encryptData(dataObj);
     await credential.save();
     return credential.attributes;
   }
@@ -717,7 +722,10 @@ export class N8nService {
       credential.attributes.type = credentialData.type;
     }
     if (credentialData.data !== undefined) {
-      credential.attributes.data = JSON.stringify(credentialData.data);
+      const dataObj = typeof credentialData.data === 'string'
+        ? JSON.parse(credentialData.data)
+        : credentialData.data;
+      await credential.encryptData(dataObj);
     }
     if (credentialData.isGlobal !== undefined) {
       credential.attributes.isGlobal = credentialData.isGlobal;
