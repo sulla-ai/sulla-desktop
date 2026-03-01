@@ -411,7 +411,7 @@ export class AgentNode extends BaseNode {
       .trim();
 
     if (outcome.status === 'done') {
-      return proseWithoutWrappers || outcome.summary || 'Done.';
+      return proseWithoutWrappers || '';
     }
 
     if (outcome.status === 'continue') {

@@ -134,20 +134,6 @@ export class HeartbeatNode extends BaseNode {
     state.metadata.heartbeatLastCycleSummary = cycleSummary;
     state.metadata.currentFocus = agentMeta.currentFocus || state.metadata.currentFocus || '';
 
-    // Push a summary message to the heartbeat thread so we have continuity
-    if (cycleSummary) {
-      state.messages.push({
-        role: 'assistant',
-        content: `[Heartbeat Cycle ${cycleNum}] ${cycleSummary}`,
-        metadata: {
-          nodeId: this.id,
-          nodeName: this.name,
-          kind: 'heartbeat_cycle_summary',
-          agentStatus,
-          timestamp: Date.now(),
-        },
-      } as ChatMessage);
-    }
 
     // Map agent status to heartbeat status
     if (agentStatus === 'done' || agentStatus === 'blocked') {
@@ -155,9 +141,6 @@ export class HeartbeatNode extends BaseNode {
     } else {
       state.metadata.heartbeatStatus = 'running';
     }
-
-    // Forward WS messages — send cycle update to frontend
-    await this.wsChatMessage(state, `[Heartbeat] Cycle ${cycleNum} complete — ${agentStatus}`, 'system');
 
     const elapsed = Date.now() - cycleStart;
     console.log(`[HeartbeatNode] Cycle ${cycleNum} complete — status: ${agentStatus}, elapsed: ${elapsed}ms`);
