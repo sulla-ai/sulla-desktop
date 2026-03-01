@@ -84,7 +84,7 @@ export const n8nToolManifests: ToolManifest[] = [
   },
   {
     name: 'create_workflow',
-    description: 'Create a new workflow in n8n.',
+    description: "Create a new workflow in n8n. NOTE: For webhooks that return HTTP responses, always use responseMode: 'responseNode' with a Respond to Webhook node. The 'lastNode' mode is unreliable.",
     category: 'n8n',
     schemaDef: {
     name: { type: 'string', description: "Workflow name" },
@@ -420,7 +420,7 @@ export const n8nToolManifests: ToolManifest[] = [
   },
   {
     name: 'update_workflow',
-    description: 'Update an existing workflow in n8n.',
+    description: "Update an existing workflow in n8n. NOTE: For webhooks that return HTTP responses, always use responseMode: 'responseNode' with a Respond to Webhook node. The 'lastNode' mode is unreliable.",
     category: 'n8n',
     schemaDef: {
     id: { type: 'string', description: "Workflow ID" },
