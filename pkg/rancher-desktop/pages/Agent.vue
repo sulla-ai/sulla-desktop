@@ -284,12 +284,39 @@ import { getHumanPresenceTracker } from '@pkg/agent/services/HumanPresenceTracke
 import './assets/AgentModelSelector.css';
 import './agent/personas/persona-profiles.css';
 
+const AUDIO_EXTENSIONS = /\.(mp3|wav|ogg|flac|m4a|aac|webm)$/i;
+
+const audioRenderer: marked.RendererObject = {
+  link({ href, text }: { href: string; text: string }) {
+    if (href && AUDIO_EXTENSIONS.test(href)) {
+      const fileName = text || href.split('/').pop() || 'audio';
+      const mimeMap: Record<string, string> = {
+        mp3: 'audio/mpeg', wav: 'audio/wav', ogg: 'audio/ogg',
+        flac: 'audio/flac', m4a: 'audio/mp4', aac: 'audio/aac', webm: 'audio/webm',
+      };
+      const ext = (href.match(AUDIO_EXTENSIONS)?.[1] || 'mp3').toLowerCase();
+      const mime = mimeMap[ext] || 'audio/mpeg';
+      return `<div class="sulla-audio-player">
+        <div class="sulla-audio-label">${fileName}</div>
+        <audio controls preload="metadata">
+          <source src="${href}" type="${mime}">
+        </audio>
+      </div>`;
+    }
+    return false;
+  },
+};
+
+marked.use({ renderer: audioRenderer });
+
 const renderMarkdown = (markdown: string): string => {
   const raw = typeof markdown === 'string' ? markdown : String(markdown || '');
   const html = (marked(raw) as string) || '';
   return DOMPurify.sanitize(html, {
     USE_PROFILES: { html: true },
-    ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto|tel):|data:image\/(?:png|gif|jpe?g|webp);base64,|\/|\.|#)/i,
+    ADD_TAGS: ['audio', 'source'],
+    ADD_ATTR: ['controls', 'preload', 'src', 'type'],
+    ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto|tel|file):|data:image\/(?:png|gif|jpe?g|webp);base64,|\/|\.|#)/i,
   });
 };
 
@@ -303,7 +330,9 @@ const sanitizeAssetHtml = (html: string): string => {
 
   return DOMPurify.sanitize(raw, {
     USE_PROFILES: { html: true },
-    ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto|tel):|data:image\/(?:png|gif|jpe?g|webp);base64,|\/|\.|#)/i,
+    ADD_TAGS: ['audio', 'source'],
+    ADD_ATTR: ['controls', 'preload', 'src', 'type'],
+    ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto|tel|file):|data:image\/(?:png|gif|jpe?g|webp);base64,|\/|\.|#)/i,
   });
 };
 
@@ -738,5 +767,47 @@ watch(isDark, () => {
 
 .thinking-bubble-content :deep(p) {
   margin: 0;
+}
+
+/* ── Inline Audio Player ── */
+.prose :deep(.sulla-audio-player) {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  margin: 6px 0;
+  border-radius: 10px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+}
+
+.dark .prose :deep(.sulla-audio-player) {
+  background: #1e293b;
+  border-color: #334155;
+}
+
+.prose :deep(.sulla-audio-label) {
+  font-size: 13px;
+  font-weight: 500;
+  color: #334155;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 180px;
+  flex-shrink: 0;
+}
+
+.dark .prose :deep(.sulla-audio-label) {
+  color: #cbd5e1;
+}
+
+.prose :deep(.sulla-audio-player audio) {
+  flex: 1;
+  min-width: 0;
+  height: 36px;
+}
+
+.prose :deep(.sulla-audio-player audio::-webkit-media-controls-panel) {
+  background: transparent;
 }
 </style>
