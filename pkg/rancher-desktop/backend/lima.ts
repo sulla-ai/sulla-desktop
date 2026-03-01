@@ -705,6 +705,13 @@ export default class LimaBackend extends events.EventEmitter implements VMBacken
       });
     }
 
+    // Install Python and Node.js runtimes (idempotent via apk add)
+    config.provision = config.provision || [];
+    config.provision.push({
+      mode:   'system',
+      script: '#!/bin/sh\nset -o errexit\napk add --no-cache python3 py3-pip nodejs npm git jq yq tree rsync curl nano vim',
+    });
+
     this.updateConfigPortForwards(config);
     if (currentConfig) {
       // update existing configuration
