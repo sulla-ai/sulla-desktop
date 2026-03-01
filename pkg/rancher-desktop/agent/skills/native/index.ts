@@ -6,6 +6,7 @@ import { projectManagementSkill } from './project-management';
 import { gitOperationsSkill } from './git-operations';
 import { remotionVideoGeneratorSkill } from './remotion-video-generator';
 import { elevenlabsAudioGeneratorSkill } from './elevenlabs-audio-generator';
+import { n8nWebhookTriggerWorkflowsSkill } from './n8n-webhook-trigger-workflows';
 
 // Register all native skills here
 nativeSkillRegistry.register(dailyIntelligenceMonitorSkill);
@@ -15,5 +16,6 @@ nativeSkillRegistry.register(projectManagementSkill);
 nativeSkillRegistry.register(gitOperationsSkill);
 nativeSkillRegistry.register(remotionVideoGeneratorSkill);
 nativeSkillRegistry.register(elevenlabsAudioGeneratorSkill);
+nativeSkillRegistry.register(n8nWebhookTriggerWorkflowsSkill);
 
 export { nativeSkillRegistry };
