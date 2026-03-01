@@ -28,6 +28,7 @@ export const projectsToolManifests: ToolManifest[] = [
     schemaDef: {
       project_name: { type: 'string', description: 'The folder name / slug for the project (kebab-case recommended).' },
       content: { type: 'string', optional: true, description: 'Optional full PROJECT.md content including YAML frontmatter and markdown body.' },
+      project_dir: { type: 'string', optional: true, description: 'Optional absolute path to create the project in. If omitted, uses the default projects directory (~/<sulla>/projects/).' },
     },
     operationTypes: ['create'],
     loader: () => import('./create_project'),

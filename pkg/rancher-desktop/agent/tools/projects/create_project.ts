@@ -9,8 +9,8 @@ export class CreateProjectWorker extends BaseTool {
   description: string = '';
 
   protected async _validatedCall(input: any): Promise<ToolResponse> {
-    const { project_name, content } = input;
-    const result = await projectRegistry.createProject(project_name, content);
+    const { project_name, content, project_dir } = input;
+    const result = await projectRegistry.createProject(project_name, content, project_dir);
     return {
       successBoolean: !result.startsWith('Failed'),
       responseString: result,

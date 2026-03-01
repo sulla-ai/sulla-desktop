@@ -21,9 +21,11 @@ Remotion Studio runs as a **Docker extension** managed by Sulla Desktop.
 - **Container name:** \`sulla_remotion_studio\`
 - **Port:** \`30310\` (maps to 3000 inside the container)
 - **Studio URL:** \`http://localhost:30310\`
-- **Volumes:**
-  - \`remotion-projects\` → \`/app/projects\` (where video project source files live)
-  - \`remotion-output\` → \`/app/out\` (where rendered videos are written)
+- **Host bind mounts (under \`~/sulla/remotion/\`):**
+  - \`~/sulla/remotion/projects\` → \`/app/projects\` inside container
+  - \`~/sulla/remotion/output\` → \`/app/out\` inside container
+
+Because these are **bind mounts** to the host filesystem, the agent writes project files directly to \`~/sulla/remotion/projects/<video-name>/\` using \`fs_write_file\` and \`fs_mkdir\`. The container sees the changes immediately. Only operations that need the container's Node.js runtime (npm install, rendering) use \`docker exec\`.
 
 ---
 
@@ -33,15 +35,15 @@ Remotion Studio runs as a **Docker extension** managed by Sulla Desktop.
 |------|------|-------|
 | Check if Remotion is installed | \`list_installed_extensions\` | Look for \`sulla-ai/remotion\` in the list |
 | Install Remotion extension | \`install_extension\` | \`id: "docker.io/sulla-ai/remotion:2026.02"\` |
-| Create project PRD | \`create_project\` | Creates the project folder + PROJECT.md (also creates the directory) |
-| Create project dir in container | \`exec\` | \`docker exec sulla_remotion_studio mkdir -p /app/projects/<video-name>/src/scenes\` |
-| Write source files in container | \`exec\` | \`docker exec sulla_remotion_studio sh -c "cat > /app/projects/<video-name>/src/Root.tsx << 'ENDOFFILE' ... ENDOFFILE"\` |
-| Read files in container | \`exec\` | \`docker exec sulla_remotion_studio cat /app/projects/<video-name>/src/Root.tsx\` |
-| Install npm packages in container | \`exec\` | \`docker exec sulla_remotion_studio sh -c "cd /app/projects/<video-name> && npm install lucide-react"\` |
-| Scrape brand data | \`exec\` | curl to Firecrawl API |
-| Download brand assets into container | \`exec\` | \`docker exec sulla_remotion_studio sh -c "curl -sL '<url>' -o /app/projects/<video-name>/public/images/brand/logo.png"\` |
+| Create project PRD | \`create_project\` | Creates the project folder + PROJECT.md. Pass \`project_dir\` to place it under \`~/sulla/remotion/projects/<video-name>\` |
+| Create video project directories | \`fs_mkdir\` | Create \`~/sulla/remotion/projects/<video-name>/src/scenes\`, \`public/images/brand\`, etc. |
+| Write source files | \`fs_write_file\` | Write directly to \`~/sulla/remotion/projects/<video-name>/src/Root.tsx\` etc. |
+| Read source files | \`fs_read_file\` | Read from \`~/sulla/remotion/projects/<video-name>/...\` |
+| Install npm packages | \`exec\` | \`docker exec sulla_remotion_studio sh -c 'cd /app/projects/<video-name> && npm install'\` |
+| Research brand data | \`search_web\` / \`read_url_content\` | Search for the brand, then read the product page to extract colors, logos, copy, etc. |
+| Download brand assets | \`exec\` | curl to download images into \`~/sulla/remotion/projects/<video-name>/public/images/brand/\` |
 | Show preview to user | \`manage_active_asset\` | Opens Remotion Studio at \`http://localhost:30310\` |
-| Render final video | \`exec\` | \`docker exec sulla_remotion_studio sh -c "cd /app/projects/<video-name> && npx remotion render ..."\` |
+| Render final video | \`exec\` | \`docker exec sulla_remotion_studio sh -c 'cd /app/projects/<video-name> && npx remotion render ...'\` |
 
 ---
 
@@ -60,31 +62,42 @@ install_extension({ id: "docker.io/sulla-ai/remotion:2026.02" })
 \`\`\`
 create_project({
   project_name: "<video-name>",
-  content: "---\\ntitle: <Video Name>\\nstatus: active\\ntags: [video, remotion]\\n---\\n# <Video Name>\\n\\n<brief description>"
+  content: "---\\ntitle: <Video Name>\\nstatus: active\\ntags: [video, remotion]\\n---\\n# <Video Name>\\n\\n<brief description>",
+  project_dir: "~/sulla/remotion/projects/<video-name>"
 })
 \`\`\`
-This creates the project folder and PROJECT.md. The project directory path is returned in the response.
+This creates PROJECT.md and README.md inside \`~/sulla/remotion/projects/<video-name>/\`, which is bind-mounted into the container at \`/app/projects/<video-name>/\`.
 
-### 3. Scrape brand data (if featuring a product)
-\`\`\`
-exec({
-  command: "curl -s -X POST 'https://api.firecrawl.dev/v1/scrape' -H 'Content-Type: application/json' -H 'Authorization: Bearer $FIRECRAWL_API_KEY' -d '{\\"url\\": \\"<product-url>\\", \\"formats\\": [\\"markdown\\", \\"extract\\", \\"screenshot\\"], \\"extract\\": {\\"schema\\": {\\"type\\": \\"object\\", \\"properties\\": {\\"brandName\\": {\\"type\\": \\"string\\"}, \\"tagline\\": {\\"type\\": \\"string\\"}, \\"headline\\": {\\"type\\": \\"string\\"}, \\"description\\": {\\"type\\": \\"string\\"}, \\"features\\": {\\"type\\": \\"array\\", \\"items\\": {\\"type\\": \\"string\\"}}, \\"logoUrl\\": {\\"type\\": \\"string\\"}, \\"faviconUrl\\": {\\"type\\": \\"string\\"}, \\"primaryColors\\": {\\"type\\": \\"array\\", \\"items\\": {\\"type\\": \\"string\\"}}, \\"ctaText\\": {\\"type\\": \\"string\\"}, \\"socialLinks\\": {\\"type\\": \\"object\\"}}}}}'"
-})
-\`\`\`
-**MANDATORY** when a video mentions or features any product/company. Use the returned brand data (colors, logos, copy) to drive visual direction.
+### 3. Research brand data (if featuring a product)
+**MANDATORY** when a video mentions or features any product/company.
 
-### 4. Create the video project inside the container
+1. Use \`search_web\` to find the brand's website and key pages
+2. Use \`read_url_content\` to read the product/homepage and extract:
+   - Brand name, tagline, headline, description
+   - Key features and selling points
+   - Logo URL, favicon URL
+   - Primary brand colors (inspect the page content for hex values)
+   - CTA text and social links
+3. Use the extracted brand data (colors, logos, copy) to drive the video's visual direction
+
+### 4. Create the video project directory
 \`\`\`
-exec({
-  command: "docker exec sulla_remotion_studio mkdir -p /app/projects/<video-name>/src/scenes /app/projects/<video-name>/public/images/brand /app/projects/<video-name>/public/audio"
-})
+fs_mkdir({ path: "~/sulla/remotion/projects/<video-name>/src/scenes" })
+fs_mkdir({ path: "~/sulla/remotion/projects/<video-name>/public/images/brand" })
+fs_mkdir({ path: "~/sulla/remotion/projects/<video-name>/public/audio" })
 \`\`\`
 
 ### 5. Write project files
-Write each source file into the container using heredoc via \`exec\`:
+Write each source file directly to the host filesystem:
 \`\`\`
-exec({
-  command: "docker exec sulla_remotion_studio sh -c \\"cat > /app/projects/<video-name>/src/Root.tsx << 'ENDOFFILE'\\nimport { Composition } from 'remotion';\\n...\\nENDOFFILE\\""
+fs_write_file({
+  path: "~/sulla/remotion/projects/<video-name>/package.json",
+  content: "{ \\"name\\": \\"<video-name>\\", \\"dependencies\\": { \\"remotion\\": \\"latest\\", \\"@remotion/cli\\": \\"latest\\", \\"react\\": \\"^18\\", \\"react-dom\\": \\"^18\\", \\"lucide-react\\": \\"latest\\" } }"
+})
+
+fs_write_file({
+  path: "~/sulla/remotion/projects/<video-name>/src/Root.tsx",
+  content: "..."
 })
 \`\`\`
 
@@ -93,9 +106,9 @@ Create these files:
 - \`src/index.ts\` — Entry point
 - \`src/MyVideo.tsx\` — Main video component with scene sequences
 - \`src/scenes/*.tsx\` — Individual scene components
-- \`package.json\` — With remotion and lucide-react dependencies
+- \`package.json\` — With remotion, @remotion/cli, react, react-dom, lucide-react
 
-### 6. Install dependencies inside the container
+### 6. Install dependencies (inside the container)
 \`\`\`
 exec({
   command: "docker exec sulla_remotion_studio sh -c 'cd /app/projects/<video-name> && npm install'",
@@ -106,7 +119,7 @@ exec({
 ### 7. Download brand assets (if scraped)
 \`\`\`
 exec({
-  command: "docker exec sulla_remotion_studio sh -c 'curl -sL \\"<logo-url>\\" -o /app/projects/<video-name>/public/images/brand/logo.png && curl -sL \\"<screenshot-url>\\" -o /app/projects/<video-name>/public/images/brand/screenshot.png'"
+  command: "curl -sL '<logo-url>' -o ~/sulla/remotion/projects/<video-name>/public/images/brand/logo.png && curl -sL '<screenshot-url>' -o ~/sulla/remotion/projects/<video-name>/public/images/brand/screenshot.png"
 })
 \`\`\`
 
@@ -121,10 +134,10 @@ manage_active_asset({
   active: true
 })
 \`\`\`
-Remotion Studio is already running on port 30310. The user can select the project from the Studio UI. Hot-reload works automatically when files change inside the container volume.
+Remotion Studio is already running on port 30310. The user can select the project from the Studio UI. Hot-reload works automatically because the host directory is bind-mounted into the container.
 
 ### 9. Iterate
-User previews in Studio, requests changes. Edit source files via \`exec\` + \`docker exec\` heredocs. Studio hot-reloads.
+User previews in Studio, requests changes. Edit source files with \`fs_write_file\`. Studio hot-reloads automatically.
 
 ### 10. Render (only when user explicitly asks to export)
 \`\`\`
@@ -133,7 +146,7 @@ exec({
   timeout: 300000
 })
 \`\`\`
-Rendered output lands in the \`remotion-output\` volume at \`/app/out/<video-name>.mp4\`.
+Rendered output lands at \`~/sulla/remotion/output/<video-name>.mp4\` on the host.
 
 ---
 
@@ -312,42 +325,43 @@ Before delivering, verify:
 
 ## Implementation Steps
 1. **Ensure Remotion installed** — \`list_installed_extensions\`, then \`install_extension\` if missing
-2. **Create project** — \`create_project\` (creates folder + PROJECT.md)
-3. **Firecrawl brand scrape** — If featuring a product, \`exec\` curl to Firecrawl API
+2. **Create project** — \`create_project\` with \`project_dir: "~/sulla/remotion/projects/<video-name>"\`
+3. **Research brand data** — If featuring a product, \`search_web\` + \`read_url_content\` to extract brand info
 4. **Director's treatment** — Write vibe, camera style, emotional arc
 5. **Visual direction** — Colors, fonts, brand feel, animation style
 6. **Scene breakdown** — List every scene with description, duration, text, transitions
 7. **Plan assets** — User assets + generated images/videos + brand scrape assets
 8. **Define durations** — Vary pacing (2-3s punchy, 4-5s dramatic)
-9. **Create project dirs in container** — \`exec\` docker exec mkdir -p
-10. **Build persistent layer** — \`exec\` docker exec heredoc to write animated background
-11. **Build scenes** — \`exec\` docker exec heredoc for each scene component
-12. **Install deps in container** — \`exec\` docker exec npm install
+9. **Create project dirs** — \`fs_mkdir\` under \`~/sulla/remotion/projects/<video-name>/\`
+10. **Build persistent layer** — \`fs_write_file\` animated background outside scenes
+11. **Build scenes** — \`fs_write_file\` each scene component with enter/exit animations
+12. **Install deps** — \`exec\` docker exec npm install (inside container)
 13. **Open with hook** — High-impact first scene
 14. **Develop narrative** — Content-driven middle scenes
 15. **Strong ending** — Intentional, resolved close
 16. **Show preview** — \`manage_active_asset\` opens Studio at \`http://localhost:30310\`
-17. **Iterate** — \`exec\` docker exec heredoc edits, Studio hot-reloads
+17. **Iterate** — \`fs_write_file\` edits, Studio hot-reloads via bind mount
 18. **Render** — \`exec\` docker exec npx remotion render (only when user asks)
 
-## File Structure (inside container)
+## File Structure
 \`\`\`
-/app/projects/<video-name>/
-├── src/
-│   ├── Root.tsx              # Composition definitions
-│   ├── index.ts              # Entry point
-│   ├── index.css             # Global styles
-│   ├── MyVideo.tsx           # Main video component
-│   └── scenes/               # Scene components (optional)
-├── public/
-│   ├── images/
-│   │   └── brand/            # Firecrawl-scraped assets
-│   └── audio/                # Background music
-├── remotion.config.ts
-└── package.json
-
-/app/out/                     # Rendered video output
-└── <video-name>.mp4
+~/sulla/remotion/
+├── projects/                           # Bind-mounted → /app/projects in container
+│   └── <video-name>/
+│       ├── src/
+│       │   ├── Root.tsx                # Composition definitions
+│       │   ├── index.ts                # Entry point
+│       │   ├── index.css               # Global styles
+│       │   ├── MyVideo.tsx             # Main video component
+│       │   └── scenes/                 # Scene components (optional)
+│       ├── public/
+│       │   ├── images/
+│       │   │   └── brand/              # Firecrawl-scraped assets
+│       │   └── audio/                  # Background music
+│       ├── remotion.config.ts
+│       └── package.json
+└── output/                             # Bind-mounted → /app/out in container
+    └── <video-name>.mp4                # Rendered video output
 \`\`\`
 
 ## Common Components

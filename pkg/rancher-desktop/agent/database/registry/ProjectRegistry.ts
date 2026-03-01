@@ -228,14 +228,14 @@ export class ProjectRegistry {
     return `Project '${name}' not found. Available: ${available}`;
   }
 
-  async createProject(projectName: string, content?: string): Promise<string> {
+  async createProject(projectName: string, content?: string, customDir?: string): Promise<string> {
     await this.ensureInitialized();
 
     const name = String(projectName || '').trim();
     if (!name) return 'Project name is required.';
 
-    const userDir = this.getUserProjectsDir();
-    const projectDir = path.join(userDir, name);
+    const baseDir = customDir ? String(customDir).trim() : path.join(this.getUserProjectsDir(), name);
+    const projectDir = baseDir;
     const projectFile = path.join(projectDir, 'PROJECT.md');
     const projectContent = this.normalizeCreateProjectContent(name, content);
 
