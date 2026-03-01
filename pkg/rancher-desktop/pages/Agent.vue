@@ -91,6 +91,31 @@
  </code></pre>
                 </div>
 
+                <div v-else-if="m.kind === 'channel_message'" class="max-w-[min(760px,92%)]">
+                  <div class="rounded border border-indigo-200 dark:border-indigo-800/50 bg-indigo-50/50 dark:bg-indigo-950/20">
+                    <button
+                      type="button"
+                      class="w-full px-4 py-2 flex items-center justify-between text-left transition-colors hover:bg-indigo-100/50 dark:hover:bg-indigo-900/20"
+                      @click="toggleToolCard(m.id)"
+                    >
+                      <div class="flex items-center gap-2">
+                        <span class="rounded-full bg-indigo-100 dark:bg-indigo-900/40 px-2 py-0.5 text-xs font-medium text-indigo-700 dark:text-indigo-300">
+                          {{ m.channelMeta?.senderId || 'agent' }}
+                        </span>
+                        <span class="text-xs text-slate-500 dark:text-slate-400">channel message</span>
+                      </div>
+                      <svg
+                        width="16" height="16" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg"
+                        class="text-slate-400 transition-transform"
+                        :class="isToolCardExpanded(m.id) ? 'rotate-180' : ''"
+                      >
+                        <path d="M3.13523 6.15803C3.3241 5.95657 3.64052 5.94637 3.84197 6.13523L7.5 9.56464L11.158 6.13523C11.3595 5.94637 11.6759 5.95657 11.8648 6.15803C12.0536 6.35949 12.0434 6.67591 11.842 6.86477L7.84197 10.6148C7.64964 10.7951 7.35036 10.7951 7.15803 10.6148L3.15803 6.86477C2.95657 6.67591 2.94637 6.35949 3.13523 6.15803Z" fill="currentColor" fill-rule="evenodd" clip-rule="evenodd"/>
+                      </svg>
+                    </button>
+                    <div v-show="isToolCardExpanded(m.id)" class="px-4 pb-3 text-sm text-slate-700 dark:text-slate-300" v-html="renderMarkdown(m.content)" />
+                  </div>
+                </div>
+
                 <div v-else-if="m.kind === 'thinking'" class="thinking-bubble max-w-[min(760px,92%)]">
                   <div class="thinking-bubble-inner">
                     <div class="thinking-bubble-content text-xs text-slate-400 dark:text-slate-500 italic" v-html="renderMarkdown(m.content)" />
@@ -255,6 +280,7 @@ import { AgentModelSelectorController } from './agent/AgentModelSelectorControll
 import { getAgentPersonaRegistry, type ChatMessage } from '@pkg/agent';
 import { getN8nVueBridgeService } from '@pkg/agent/services/N8nVueBridgeService';
 import { ipcRenderer } from '@pkg/utils/ipcRenderer';
+import { getHumanPresenceTracker } from '@pkg/agent/services/HumanPresenceTracker';
 import './assets/AgentModelSelector.css';
 import './agent/personas/persona-profiles.css';
 
@@ -313,6 +339,8 @@ const chatController = new ChatInterface();
 const frontendGraphController = new FrontendGraphWebSocketService({
   currentThreadId,
 });
+
+const presenceTracker = getHumanPresenceTracker();
 
 const {
   query,
@@ -561,6 +589,12 @@ onMounted(async () => {
   const n8nVueBridgeService = getN8nVueBridgeService();
   n8nVueBridgeService.markInitialized('Agent.vue:onMounted');
 
+  // Start human presence tracker — writes presence to Redis so agents know where the human is
+  presenceTracker.setCurrentView('Agent Chat');
+  presenceTracker.setCurrentActivity('chatting with agent');
+  presenceTracker.setActiveChannel('chat-controller');
+  presenceTracker.start();
+
   const stored = localStorage.getItem(THEME_STORAGE_KEY);
 
   if (stored === 'dark') {
@@ -589,6 +623,7 @@ watch(systemReady, async (ready) => {
 });
 
 onUnmounted(() => {
+  presenceTracker.stop();
   modelSelector.dispose();
   // Stop listening on each agent's persona service
   registry.state.agents.forEach((agent: { agentId: string }) => {

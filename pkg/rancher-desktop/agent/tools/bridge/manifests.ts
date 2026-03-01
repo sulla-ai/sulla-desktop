@@ -1,0 +1,38 @@
+import type { ToolManifest } from '../registry';
+
+export const bridgeToolManifests: ToolManifest[] = [
+  {
+    name: 'send_channel_message',
+    description: 'Send a message to any WebSocket channel and wait up to 5 seconds for a reply. If the receiver responds in time, the reply is returned inline. Otherwise a "no reply" result is returned and any late reply will arrive on your channel as an incoming message. Every agent runs on a channel (e.g. "chat-controller" for the frontend, "dreaming-protocol" for the heartbeat). Always include your sender_id and sender_channel so the receiver knows where to reply.',
+    category: 'bridge',
+    schemaDef: {
+      channel: { type: 'string', description: 'The target WebSocket channel to send to (e.g. "chat-controller", "dreaming-protocol").' },
+      message: { type: 'string', description: 'The message content to send. Supports markdown.' },
+      sender_id: { type: 'string', description: 'Your agent identifier so the receiver knows who sent the message (e.g. "heartbeat", "chat-controller").' },
+      sender_channel: { type: 'string', optional: true, description: 'The channel you are listening on, so the receiver knows where to reply.' },
+    },
+    operationTypes: ['create'],
+    loader: () => import('./send_channel_message'),
+  },
+  {
+    name: 'update_human_presence',
+    description: 'Update the human presence state in Redis. Call this to inform other agents about what the human is currently viewing, doing, or whether they are available.',
+    category: 'bridge',
+    schemaDef: {
+      available: { type: 'boolean', optional: true, default: true, description: 'Whether the human is currently available for interaction.' },
+      current_view: { type: 'string', optional: true, description: 'What the human is currently viewing (e.g., "Agent Chat", "Settings", "Integrations", "Extensions").' },
+      current_activity: { type: 'string', optional: true, description: 'What the human is currently doing (e.g., "chatting with agent", "configuring integrations", "idle").' },
+      active_channel: { type: 'string', optional: true, description: 'The channel the human is currently listening on.' },
+    },
+    operationTypes: ['update'],
+    loader: () => import('./update_human_presence'),
+  },
+  {
+    name: 'get_human_presence',
+    description: 'Read the current human presence state from Redis. Returns whether the human is available, what they are viewing, their activity, and how long since they were last seen.',
+    category: 'bridge',
+    schemaDef: {},
+    operationTypes: ['read'],
+    loader: () => import('./get_human_presence'),
+  },
+];

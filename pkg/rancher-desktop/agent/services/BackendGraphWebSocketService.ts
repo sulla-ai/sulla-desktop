@@ -47,6 +47,9 @@ export class BackendGraphWebSocketService {
     this.wsService.connect(BACKEND_CHANNEL_ID);
     console.log('[Background] BackendGraphWebSocketService initialized');
 
+    // Register heartbeat agent in the active agents registry
+    this.registerAgent().catch(err => console.warn('[BackendGraphWS] Failed to register agent:', err));
+
     const chatUnsubscribe = this.wsService.onMessage(BACKEND_CHANNEL_ID, (msg) => {
       console.log('[BackendGraphWS] Received message on backend channel:', msg.type, msg);
       this.handleWebSocketMessage(msg);
@@ -248,6 +251,20 @@ export class BackendGraphWebSocketService {
       type: 'system_message',
       data: content,
       timestamp: Date.now(),
+    });
+  }
+
+  private async registerAgent(): Promise<void> {
+    const { getActiveAgentsRegistry } = await import('./ActiveAgentsRegistry');
+    const registry = getActiveAgentsRegistry();
+    await registry.register({
+      agentId: 'heartbeat',
+      channel: BACKEND_CHANNEL_ID,
+      type: 'heartbeat',
+      status: 'running',
+      startedAt: Date.now(),
+      lastActiveAt: Date.now(),
+      description: 'Autonomous heartbeat agent — runs background tasks and projects',
     });
   }
 

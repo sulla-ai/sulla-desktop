@@ -9,7 +9,7 @@ export type ChatMessage = {
   channelId: string;
   role: 'user' | 'assistant' | 'error' | 'system';
   content: string;
-  kind?: 'text' | 'tool' | 'planner' | 'critic' | 'progress' | 'error' | 'thinking';
+  kind?: 'text' | 'tool' | 'planner' | 'critic' | 'progress' | 'error' | 'thinking' | 'channel_message';
   image?: {
     dataUrl: string;
     alt?: string;
@@ -23,6 +23,10 @@ export type ChatMessage = {
     args?: Record<string, unknown>;
     result?: unknown;
     error?: string | null;
+  };
+  channelMeta?: {
+    senderId: string;
+    senderChannel: string;
   };
 };
 

@@ -5,6 +5,8 @@ import { AbortService } from './AbortService';
 import { GraphRegistry, nextThreadId, nextMessageId } from './GraphRegistry';
 import { SullaSettingsModel } from '../database/models/SullaSettingsModel';
 
+const FRONTEND_CHANNEL_ID = 'chat-controller';
+
 export type FrontendGraphWebSocketDeps = {
   currentThreadId: Ref<string | null>;
 };
@@ -27,13 +29,40 @@ export class FrontendGraphWebSocketService {
       this.activeAbort.abort();
       this.activeAbort = null;
     }
+
+    // Frontend is only available while the app window is open.
+    // Remove it from the active agents registry on teardown.
+    this.deregisterAgent().catch(err => console.warn('[FrontendGraphWS] Failed to deregister agent:', err));
   }
 
   private initialize(): void {
-    this.wsService.connect('chat-controller');
-    this.unsubscribe = this.wsService.onMessage('chat-controller', (msg) => {
+    this.wsService.connect(FRONTEND_CHANNEL_ID);
+    this.unsubscribe = this.wsService.onMessage(FRONTEND_CHANNEL_ID, (msg) => {
       this.handleWebSocketMessage(msg);
     });
+
+    // Register frontend agent in the active agents registry
+    this.registerAgent().catch(err => console.warn('[FrontendGraphWS] Failed to register agent:', err));
+  }
+
+  private async registerAgent(): Promise<void> {
+    const { getActiveAgentsRegistry } = await import('./ActiveAgentsRegistry');
+    const registry = getActiveAgentsRegistry();
+    await registry.register({
+      agentId: FRONTEND_CHANNEL_ID,
+      channel: FRONTEND_CHANNEL_ID,
+      type: 'frontend',
+      status: 'running',
+      startedAt: Date.now(),
+      lastActiveAt: Date.now(),
+      description: 'Frontend chat agent — handles direct human conversations',
+    });
+  }
+
+  private async deregisterAgent(): Promise<void> {
+    const { getActiveAgentsRegistry } = await import('./ActiveAgentsRegistry');
+    const registry = getActiveAgentsRegistry();
+    await registry.deregister(FRONTEND_CHANNEL_ID);
   }
 
   private async handleWebSocketMessage(msg: WebSocketMessage): Promise<void> {
@@ -60,7 +89,7 @@ export class FrontendGraphWebSocketService {
     // Scheduler ack
     const metadata = data?.metadata;
     if (metadata?.origin === 'scheduler' && typeof metadata?.eventId === 'number') {
-      this.wsService.send('chat-controller', {
+      this.wsService.send(FRONTEND_CHANNEL_ID, {
         type: 'scheduler_ack',
         data: { eventId: metadata.eventId },
         timestamp: Date.now(),
@@ -71,7 +100,7 @@ export class FrontendGraphWebSocketService {
   }
 
   private async processUserInput(userText: string, threadIdFromMsg?: string): Promise<void> {
-    const channelId = 'chat-controller';
+    const channelId = FRONTEND_CHANNEL_ID;
     const threadId = threadIdFromMsg || nextThreadId();
     
     // Get or create persistent AgentGraph for this thread - do this outside try/catch
@@ -200,7 +229,7 @@ export class FrontendGraphWebSocketService {
   }
 
   private emitAssistantMessage(content: string): void {
-    this.wsService.send('chat-controller', {
+    this.wsService.send(FRONTEND_CHANNEL_ID, {
       type: 'assistant_message',
       data: { role: 'assistant', content },
       timestamp: Date.now(),
@@ -208,7 +237,7 @@ export class FrontendGraphWebSocketService {
   }
 
   private emitSystemMessage(content: string): void {
-    this.wsService.send('chat-controller', {
+    this.wsService.send(FRONTEND_CHANNEL_ID, {
       type: 'system_message',
       data: content,
       timestamp: Date.now(),

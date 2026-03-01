@@ -42,6 +42,7 @@ export class HeartbeatService {
   private async checkAndMaybeTrigger(): Promise<void> {
     try {
       const enabled = await SullaSettingsModel.get('heartbeatEnabled', false);
+      console.log(`[HeartbeatService] heartbeatEnabled = ${JSON.stringify(enabled)} (type: ${typeof enabled})`);
       if (!enabled) return;
 
       const delayMin = Math.max(1, await SullaSettingsModel.get('heartbeatDelayMinutes', 30));

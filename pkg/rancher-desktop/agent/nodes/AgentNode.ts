@@ -17,6 +17,20 @@ You're incredible about finding ways of getting things accomplished;
 You're incredibly resourceful;
 You're constantly thinking outside the box when tasks don't easily come together;`;
 
+const AGENT_PROMPT_CHANNEL_AWARENESS = `## Inter-Agent Communication
+
+You run on the **chat-controller** WebSocket channel. You are part of an agent network:
+- **dreaming-protocol** — the autonomous heartbeat agent (always available, runs background work)
+- **chat-controller** — you (the frontend agent, handles direct human conversations)
+
+To message another agent, use the **send_channel_message** tool with the target channel name, your \`sender_id\` ("chat-controller"), and your \`sender_channel\` ("chat-controller").
+
+**Critical rules:**
+- \`send_channel_message\` is **fire-and-forget**. After sending, continue your work normally.
+- Do NOT poll, search Redis, or look for a reply. If the receiving agent responds, their reply will arrive on your channel as an incoming message automatically.
+- There is no inbox to check. There is no message thread in Redis. Do not go looking for one.
+- If no reply comes, the agent either hasn't responded yet or chose not to. You can try again or move on.`;
+
 const AGENT_PROMPT_DIRECTIVE = `**PRIMARY DIRECTIVE (highest priority — never violate):**
 Accomplish whatever the user has asked in the conversation thread.
 The user messages are your source of truth for objective, constraints, and context.
@@ -115,7 +129,7 @@ export class AgentNode extends BaseNode {
     // ----------------------------------------------------------------
     // 1. BUILD SYSTEM PROMPT
     // ----------------------------------------------------------------
-    const systemPrompt = `${AGENT_PROMPT_BASE}\n\n${AGENT_PROMPT_DIRECTIVE}\n\n${AGENT_PROMPT_COMPLETION_WRAPPERS}`;
+    const systemPrompt = `${AGENT_PROMPT_BASE}\n\n${AGENT_PROMPT_CHANNEL_AWARENESS}\n\n${AGENT_PROMPT_DIRECTIVE}\n\n${AGENT_PROMPT_COMPLETION_WRAPPERS}`;
 
     const enrichedPrompt = await this.enrichPrompt(systemPrompt, state, {
       includeSoul: true,

@@ -219,6 +219,9 @@ async function buildHeartbeatState(wsChannel: string, prompt: string): Promise<H
       heartbeatLastCycleSummary: '',
       currentFocus: '',
       focusReason: '',
+
+      // Environmental context (loaded each cycle by HeartbeatNode)
+      agentsContext: '',
     },
   };
 

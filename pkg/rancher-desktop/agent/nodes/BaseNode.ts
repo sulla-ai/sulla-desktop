@@ -695,8 +695,7 @@ export abstract class BaseNode<T extends BaseThreadState = BaseThreadState> {
             const toolCalls = reply.metadata.tool_calls || [];
             if (toolCalls.length) {
                 console.log(`[${this.name}] Processing ${toolCalls.length} tool calls via executeToolCalls`);
-                const allowedToolNames = await this.getAllowedToolNamesForExecution(llmTools);
-                await this.executeToolCalls(state, toolCalls, allowedToolNames);
+                await this.executeToolCalls(state, toolCalls);
             }
 
             this.triggerBackgroundStateMaintenance(state);
@@ -794,18 +793,6 @@ export abstract class BaseNode<T extends BaseThreadState = BaseThreadState> {
         }
 
         return { tools: filteredTools };
-    }
-
-    private async getAllowedToolNamesForExecution(llmTools: any[]): Promise<string[] | undefined> {
-        if (!Array.isArray(llmTools) || llmTools.length === 0) {
-            return undefined;
-        }
-
-        const names = llmTools
-            .map(tool => tool?.function?.name)
-            .filter((name): name is string => Boolean(name));
-
-        return names.length > 0 ? names : undefined;
     }
 
     protected getDefaultNodeRunPolicy(): Required<NodeRunPolicy> {

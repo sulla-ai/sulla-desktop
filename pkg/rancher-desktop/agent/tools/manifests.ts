@@ -23,8 +23,10 @@ import { skillsToolManifests } from './skills/manifests';
 import { projectsToolManifests } from './projects/manifests';
 import { workspaceToolManifests } from './workspace/manifests';
 import { extensionsToolManifests } from './extensions/manifests';
+import { bridgeToolManifests } from './bridge/manifests';
 
 toolRegistry.registerManifests([
+  ...bridgeToolManifests,
   ...calendarToolManifests,
   ...dockerToolManifests,
   ...extensionsToolManifests,
@@ -45,3 +47,4 @@ toolRegistry.registerManifests([
   ...slackToolManifests,
   ...workspaceToolManifests,
 ]);
+

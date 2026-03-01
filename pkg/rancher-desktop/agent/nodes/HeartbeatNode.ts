@@ -29,6 +29,9 @@ export interface HeartbeatThreadState extends BaseThreadState {
     // What the agent decided to work on
     currentFocus: string;
     focusReason: string;
+
+    // Environmental context (loaded each cycle from Redis)
+    agentsContext: string;
   };
 }
 
@@ -79,6 +82,11 @@ export class HeartbeatNode extends BaseNode {
     if (!state.metadata.availableSkills) {
       state.metadata.availableSkills = await this.loadAvailableSkills();
     }
+
+    // ----------------------------------------------------------------
+    // 1b. ENVIRONMENTAL CONTEXT — active agents, channels, human presence
+    // ----------------------------------------------------------------
+    state.metadata.agentsContext = await this.loadActiveAgentsContext();
 
     // ----------------------------------------------------------------
     // 2. BUILD AUTONOMOUS PROMPT
@@ -200,6 +208,21 @@ export class HeartbeatNode extends BaseNode {
   }
 
   // ======================================================================
+  // HUMAN-HEARTBEAT BRIDGE LOADERS
+  // ======================================================================
+
+  private async loadActiveAgentsContext(): Promise<string> {
+    try {
+      const { getActiveAgentsRegistry } = await import('../services/ActiveAgentsRegistry');
+      const registry = getActiveAgentsRegistry();
+      return await registry.buildContextBlock();
+    } catch (err) {
+      console.warn('[HeartbeatNode] Failed to load active agents context:', err);
+      return '';
+    }
+  }
+
+  // ======================================================================
   // PROMPT BUILDER
   // ======================================================================
 
@@ -238,6 +261,11 @@ export class HeartbeatNode extends BaseNode {
     // Skills
     parts.push(`\n${state.metadata.availableSkills}`);
 
+    // Active agents, channels, and human presence (injected every cycle)
+    if (state.metadata.agentsContext) {
+      parts.push(`\n${state.metadata.agentsContext}`);
+    }
+
     // Continuity from prior cycle
     if (priorSummary && cycleNum > 1) {
       parts.push(`\n## Prior Cycle Summary\n${priorSummary}`);
@@ -251,12 +279,14 @@ export class HeartbeatNode extends BaseNode {
 
 You are running autonomously — no human is watching. Act decisively.
 
-1. **Pick the highest-impact work.** Review active projects and pick the one where you can make the most progress right now. If no projects exist, create one based on your mission.
-2. **Use your tools.** You have full access to: file system, Docker, n8n, git, memory, calendar, playwright, skills, and projects. Use them.
-3. **Learn and create skills.** If you find yourself doing something that could be reusable, create a skill for it using create_skill. If a skill exists for what you need, load and follow it.
-4. **Track your work.** Update project PRDs with progress. Add observational memories for important findings. Update project status when milestones are hit.
-5. **Be concrete.** Don't just plan — execute. Write code, create files, run commands, build automations, deploy things.
-6. **Know when to stop.** If you've accomplished meaningful work or hit a blocker that requires human input, use the DONE or BLOCKED wrapper.
+1. **Respond to incoming messages FIRST.** If there are user messages in this thread (after the autonomous prompt), read them and reply using **send_channel_message** to the sender's channel. This is non-negotiable — never ignore someone talking to you.
+2. **Pick the highest-impact work.** If no incoming messages, review active projects and pick the one where you can make the most progress right now. If no projects exist, create one based on your mission.
+3. **Use your tools.** You have full access to: file system, Docker, n8n, git, memory, calendar, playwright, skills, projects, and the **bridge** tools. Use them.
+4. **Communicate via channels.** To reach the human or another agent, use **send_channel_message** with the target channel from the Active Agents list above. Include your sender_id and sender_channel so they can reply.
+5. **Learn and create skills.** If you find yourself doing something that could be reusable, create a skill for it using create_skill. If a skill exists for what you need, load and follow it.
+6. **Track your work.** Update project PRDs with progress. Add observational memories for important findings. Update project status when milestones are hit.
+7. **Be concrete.** Don't just plan — execute. Write code, create files, run commands, build automations, deploy things.
+8. **Know when to stop.** If you've accomplished meaningful work or hit a blocker that requires human input, use the DONE or BLOCKED wrapper.
 
 If this is your first heartbeat and no projects exist, your first task should be to review any existing skills and memory, then create a project for whatever will deliver the most value.`);
 
@@ -272,14 +302,18 @@ If this is your first heartbeat and no projects exist, your first task should be
     const threadId = `heartbeat_agent_${now}_${parentState.metadata.heartbeatCycleCount}`;
 
     return {
-      messages: [{
-        role: 'user',
-        content: prompt,
-        metadata: {
-          source: 'heartbeat',
-          type: 'autonomous_prompt',
-        },
-      } as ChatMessage],
+      messages: [
+        {
+          role: 'user',
+          content: prompt,
+          metadata: {
+            source: 'heartbeat',
+            type: 'autonomous_prompt',
+          },
+        } as ChatMessage,
+        // Include parent state messages so the agent sees incoming channel messages
+        ...parentState.messages,
+      ],
       metadata: {
         action: 'use_tools',
         threadId,

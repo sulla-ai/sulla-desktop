@@ -550,6 +550,15 @@ export class AgentPersonaService {
           kind,
           content,
         };
+
+        // Attach sender metadata for channel messages so UI can render them distinctly
+        if (kind === 'channel_message') {
+          message.channelMeta = {
+            senderId: typeof data?.senderId === 'string' ? data.senderId : 'unknown',
+            senderChannel: typeof data?.senderChannel === 'string' ? data.senderChannel : '',
+          };
+        }
+
         this.messages.push(message);
         // Turn off loading when assistant responds
         if (role === 'assistant') {
