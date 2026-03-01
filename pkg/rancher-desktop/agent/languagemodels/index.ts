@@ -5,7 +5,7 @@
  * - getLLMService('local' | 'remote' | modelName)
  * - getLocalService() / getRemoteService()
  * - getLocalModel() / getRemoteModel()
- * - getHeartbeatLLM() — respects heartbeatModel → modelMode fallback
+ * - getHeartbeatLLM() — respects heartbeatProvider → primary provider fallback
  *
  * Resolves provider-specific service classes from IntegrationService credentials.
  * Falls back to SullaSettingsModel for legacy settings.
@@ -137,15 +137,15 @@ class LLMRegistryImpl {
   }
 
   /**
-   * Backend/heartbeat-aware service
-   * Uses heartbeatModel → falls back to primary provider
+   * Heartbeat-aware service.
+   * Reads `heartbeatProvider` from settings — 'default' delegates to primary provider,
+   * otherwise resolves the specific provider by ID.
    */
   async getHeartbeatLLM(): Promise<BaseLanguageModel> {
-    const heartbeatModel = await SullaSettingsModel.get('heartbeatModel', 'default');
+    const heartbeatProvider = await SullaSettingsModel.get('heartbeatProvider', 'default');
 
-    if (heartbeatModel === 'local')    return this.getLocalService();
-    if (heartbeatModel === 'remote')   return this.getRemoteService();
-    return this.getPrimaryService(); // default → primary provider
+    if (heartbeatProvider === 'default') return this.getPrimaryService();
+    return this.getServiceByProvider(heartbeatProvider);
   }
 
   async getLocalModel(): Promise<string> {
@@ -350,9 +350,10 @@ export const getService = async (context: 'local' | 'remote', model?: string) =>
 export const getCurrentModel = async () => await LLMRegistry.getCurrentModel();
 export const getCurrentMode = async () => await LLMRegistry.getCurrentMode();
 
-// Primary / Secondary provider exports
+// Primary / Secondary / Heartbeat provider exports
 export const getPrimaryService   = async () => await LLMRegistry.getPrimaryService();
 export const getSecondaryService = async () => await LLMRegistry.getSecondaryService();
+export const getHeartbeatService = async () => await LLMRegistry.getHeartbeatLLM();
 
 // Dynamic model discovery exports
 export const fetchModelsForProvider = async (providerId: string, apiKey?: string) => 

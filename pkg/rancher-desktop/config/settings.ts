@@ -161,8 +161,8 @@ export const defaultSettings = {
     heartbeatEnabled: false,
     heartbeatDelayMinutes: 15,
     heartbeatPrompt: heartbeatPrompt,
-    /** Heartbeat model: 'default' uses main settings, or specific model like 'local:tinyllama:latest' or 'remote:grok:grok-4-1-fast-reasoning' */
-    heartbeatModel: 'default',
+    /** Heartbeat provider: 'default' uses primary provider, or a specific provider id like 'grok', 'anthropic', 'ollama' */
+    heartbeatProvider: 'default',
     /** Sulla username for authentication */
     sullaUsername: '',
     /** Sulla password for authentication */

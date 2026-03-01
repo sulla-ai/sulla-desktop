@@ -145,7 +145,7 @@ export default class SettingsValidator {
         heartbeatEnabled: this.checkBoolean,
         heartbeatDelayMinutes: this.checkNumber(1, 1440),
         heartbeatPrompt: this.checkString,
-        heartbeatModel:  this.checkString,
+        heartbeatProvider: this.checkString,
         sullaUsername: this.checkString,
         sullaPassword: this.checkString,
         sullaEmail: this.checkString,

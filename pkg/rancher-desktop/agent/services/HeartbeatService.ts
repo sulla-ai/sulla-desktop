@@ -68,11 +68,11 @@ export class HeartbeatService {
     try {
       // Fresh config every execution — no caching
       const basePrompt  = await SullaSettingsModel.get('heartbeatPrompt', '');
-      const modelSetting = await SullaSettingsModel.get('heartbeatModel', 'default');
+      const providerSetting = await SullaSettingsModel.get('heartbeatProvider', 'default');
 
       const fullPrompt = this.buildHeartbeatPrompt(basePrompt);
 
-      console.log(`[HeartbeatService] Building heartbeat prompt (modelSetting=${modelSetting})`);
+      console.log(`[HeartbeatService] Building heartbeat prompt (provider=${providerSetting})`);
 
       const { graph, state } = await GraphRegistry.getOrCreateOverlordGraph(
         'dreaming-protocol',

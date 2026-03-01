@@ -143,7 +143,34 @@ export function nextMessageId(): string {
 }
 
 async function buildHeartbeatState(wsChannel: string, prompt: string): Promise<HeartbeatThreadState> {
-  const heartbeatModelSetting = await SullaSettingsModel.get('heartbeatModel', 'default');
+  const heartbeatProvider = await SullaSettingsModel.get('heartbeatProvider', 'default');
+
+  // Resolve provider to model/local flags
+  let llmModel: string;
+  let llmLocal: boolean;
+
+  if (heartbeatProvider === 'default' || heartbeatProvider === 'ollama') {
+    // Use primary provider resolution for 'default', or local for 'ollama'
+    if (heartbeatProvider === 'default') {
+      llmModel = await getCurrentModel();
+      llmLocal = (await getCurrentMode()) === 'local';
+    } else {
+      llmModel = await SullaSettingsModel.get('sullaModel', 'tinyllama:latest');
+      llmLocal = true;
+    }
+  } else {
+    // Remote provider — get model from integration form values
+    llmLocal = false;
+    try {
+      const { getIntegrationService } = await import('./IntegrationService');
+      const integrationService = getIntegrationService();
+      const values = await integrationService.getFormValues(heartbeatProvider);
+      const modelVal = values.find((v: { property: string; value: string }) => v.property === 'model');
+      llmModel = modelVal?.value || '';
+    } catch {
+      llmModel = await SullaSettingsModel.get('remoteModel', '');
+    }
+  }
 
   const now = Date.now();
   const threadId = `heartbeat_${ now }`;
@@ -160,8 +187,8 @@ async function buildHeartbeatState(wsChannel: string, prompt: string): Promise<H
       wsChannel,
       cycleComplete: false,
       waitingForUser: false,
-      llmModel: await resolveModel(heartbeatModelSetting),
-      llmLocal: await resolveIsLocal(heartbeatModelSetting),
+      llmModel,
+      llmLocal,
       options: {},
       currentNodeId: 'input_handler',
       consecutiveSameNode: 0,
@@ -198,20 +225,6 @@ async function buildHeartbeatState(wsChannel: string, prompt: string): Promise<H
   return state;
 }
 
-async function resolveModel(setting: string): Promise<string> {
-  if (setting === 'default') return await getCurrentModel();
-
-  const parts = setting.split(':');
-  if (parts[0] === 'local' && parts.length === 2) return parts[1];
-  if (parts[0] === 'remote' && parts.length >= 3) return parts.slice(2).join(':');
-
-  return await getCurrentModel();
-}
-
-async function resolveIsLocal(setting: string): Promise<boolean> {
-  if (setting === 'default') return (await getCurrentMode()) === 'local';
-  return setting.startsWith('local:');
-}
 
 async function buildAgentState(wsChannel: string, threadId?: string): Promise<AgentGraphState> {
   const id = threadId ?? nextThreadId();

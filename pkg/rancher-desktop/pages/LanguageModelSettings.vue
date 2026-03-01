@@ -128,7 +128,7 @@ export default defineComponent({
       heartbeatEnabled:     true,
       heartbeatDelayMinutes: 30,
       heartbeatPrompt:      '',
-      heartbeatModel:       'default' as string, // 'default' or specific model like 'local:tinyllama:latest' or 'remote:grok:grok-4-1-fast-reasoning'
+      heartbeatProvider:    'default' as string, // 'default' = use primary provider, or a specific provider id
 
       // Soul prompt settings
       soulPrompt: '',
@@ -247,7 +247,7 @@ export default defineComponent({
     // Load all settings from database
     this.soulPrompt = await SullaSettingsModel.get('soulPrompt', soulPrompt);
     this.heartbeatPrompt = await SullaSettingsModel.get('heartbeatPrompt', heartbeatPrompt);
-    this.heartbeatModel = await SullaSettingsModel.get('heartbeatModel', 'default');
+    this.heartbeatProvider = await SullaSettingsModel.get('heartbeatProvider', 'default');
     this.heartbeatDelayMinutes = await SullaSettingsModel.get('heartbeatDelayMinutes', 30);
     this.botName = await SullaSettingsModel.get('botName', 'Sulla');
     this.primaryUserName = await SullaSettingsModel.get('primaryUserName', '');
@@ -966,7 +966,7 @@ export default defineComponent({
           heartbeatEnabled: Boolean(this.heartbeatEnabled),
           heartbeatDelayMinutes: Number(this.heartbeatDelayMinutes) || 30,
           heartbeatPrompt: String(this.heartbeatPrompt || ''),
-          heartbeatModel: String(this.heartbeatModel || ''),
+          heartbeatProvider: String(this.heartbeatProvider || 'default'),
           ...extra,
         };
 
@@ -1318,41 +1318,26 @@ export default defineComponent({
             </p>
           </div>
 
-          <!-- Model Setting -->
+          <!-- Provider Setting -->
           <div class="setting-group">
-            <label class="setting-label">Heartbeat Model</label>
+            <label class="setting-label">Heartbeat Provider</label>
             <select
-              v-model="heartbeatModel"
+              v-model="heartbeatProvider"
               class="model-select"
             >
               <option value="default">
-                Use System Default
+                Use Primary Provider
               </option>
-              <optgroup label="Local Models (Ollama)">
-                <option
-                  v-for="model in installedModels"
-                  :key="'local:' + model.name"
-                  :value="'local:' + model.name"
-                >
-                  {{ model.name }}
-                </option>
-              </optgroup>
-              <optgroup
-                v-for="provider in remoteProviders"
+              <option
+                v-for="provider in availableProviders"
                 :key="provider.id"
-                :label="'Remote: ' + provider.name"
+                :value="provider.id"
               >
-                <option
-                  v-for="model in provider.models"
-                  :key="'remote:' + provider.id + ':' + model.id"
-                  :value="'remote:' + provider.id + ':' + model.id"
-                >
-                  {{ model.name }}
-                </option>
-              </optgroup>
+                {{ provider.name }}
+              </option>
             </select>
             <p class="setting-description">
-              Select which model to use for heartbeat processing. "Use System Default" follows your main model settings.
+              Select which provider to use for heartbeat processing. "Use Primary Provider" follows your primary provider setting from the Models tab.
             </p>
           </div>
 
