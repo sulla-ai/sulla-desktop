@@ -132,6 +132,10 @@ export class ProjectRegistry {
   async searchProjects(query: string): Promise<string> {
     await this.ensureInitialized();
 
+    // Keep search results accurate for projects created outside tool flows
+    // (e.g. manually created PROJECT.md folders on disk).
+    await this.refresh(this.lastInitOptions);
+
     const q = String(query || '').trim();
     if (!q) return 'Please provide a search query.';
 
@@ -225,6 +229,8 @@ export class ProjectRegistry {
   }
 
   async createProject(projectName: string, content?: string): Promise<string> {
+    await this.ensureInitialized();
+
     const name = String(projectName || '').trim();
     if (!name) return 'Project name is required.';
 
@@ -260,6 +266,8 @@ export class ProjectRegistry {
   }
 
   async updateProject(projectName: string, content: string): Promise<string> {
+    await this.ensureInitialized();
+
     const name = String(projectName || '').trim();
     if (!name) return 'Project name is required.';
 
@@ -286,6 +294,8 @@ export class ProjectRegistry {
   }
 
   async patchProject(projectName: string, section: string, content: string): Promise<string> {
+    await this.ensureInitialized();
+
     const name = String(projectName || '').trim();
     if (!name) return 'Project name is required.';
 
@@ -318,6 +328,8 @@ export class ProjectRegistry {
   }
 
   async deleteProject(projectName: string): Promise<string> {
+    await this.ensureInitialized();
+
     const name = String(projectName || '').trim();
     if (!name) return 'Project name is required.';
 
