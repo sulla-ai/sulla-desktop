@@ -1,7 +1,7 @@
 <template>
-  <div class="max-w-lg mx-auto p-6 bg-white dark:bg-gray-800">
+  <div class="max-w-lg mx-0 p-6 bg-white dark:bg-gray-800/30">
     <form @submit.prevent="handleNext">
-      <h2 class="text-2xl font-bold mb-4 text-gray-900 dark:text-gray-100">Remote Model (Optional)</h2>
+      <h2 class="text-2xl font-bold mt-5 mb-4 text-gray-900 dark:text-gray-100">Remote Model (Optional)</h2>
       <p class="mb-6 text-gray-600 dark:text-gray-400">
         Optionally enable a remote model. While your system will be fully configured to run a local model, at times that can be very slow, and many people prefer to run a remote model for better performance. You can toggle between local and remote models at any time.
       </p>
@@ -41,6 +41,7 @@
                 v-model="formData[property.key]"
                 :disabled="selectOptionsLoading[property.key]"
                 class="flex-1 p-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 disabled:opacity-50"
+                :class="{ 'border-red-500': !!errors[property.key] }"
               >
                 <option value="" disabled>
                   {{ selectOptionsLoading[property.key] ? 'Loading...' : (property.placeholder || 'Select...') }}
@@ -75,6 +76,7 @@
               :placeholder="property.placeholder"
               :required="property.required"
               class="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+              :class="{ 'border-red-500': !!errors[property.key] }"
               @blur="onFieldBlur(property.key)"
             >
 
@@ -93,8 +95,8 @@
       </rd-fieldset>
 
       <div class="flex justify-between mt-5">
-        <button type="button" @click="$emit('back')" class="px-6 py-2 text-gray-500 rounded-md bg-gray-100 hover:bg-gray-200 cursor-pointer">Back</button>
-        <button type="submit" class="px-6 py-2 text-white rounded-md hover:opacity-90" :style="{ backgroundColor: '#30a5e9' }">Next</button>
+        <button type="button" @click="$emit('back')" class="px-6 py-2 text-gray-500 rounded-md transition-colors font-medium hover:opacity-90 bg-gray-100 hover:bg-gray-200 cursor-pointer">Back</button>
+        <button type="submit" class="px-6 py-2 text-white rounded-md transition-colors font-medium hover:opacity-90" :style="{ backgroundColor: '#30a5e9' }">Next</button>
       </div>
     </form>
   </div>
@@ -356,9 +358,7 @@ input:hover, select:hover {
   background-color: #f3f4f6; /* slightly darker background */
 }
 
-@media (prefers-color-scheme: dark) {
-  input:hover, select:hover {
-    background-color: #4b5563 !important; /* darker background for dark mode */
-  }
+.dark input:hover, .dark select:hover {
+  background-color: #4b5563 !important; /* darker background for dark mode */
 }
 </style>

@@ -1,7 +1,7 @@
 <template>
-  <div class="max-w-lg mx-auto p-6 bg-white dark:bg-gray-800">
+  <div class="max-w-lg mx-0 p-6 bg-white dark:bg-gray-800/30">
     <form @submit.prevent="handleNextWelcome">
-      <h2 class="text-2xl font-bold mb-4 text-gray-900 dark:text-gray-100">Create Your Account</h2>
+      <h2 class="text-2xl font-bold mt-5 mb-4 text-gray-900 dark:text-gray-100">Create Your Account</h2>
       <p class="mb-6 text-gray-600 dark:text-gray-400">Set up your account details and preferences.</p>
 
       <rd-fieldset legend-text="User Account" class="mb-6 dark:text-gray-100">
@@ -11,11 +11,13 @@
         </div>
         <div class="mb-4">
           <label for="email" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Email:</label>
-          <input id="email" type="email" v-model="sullaEmail" class="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" placeholder="Enter email">
+          <input id="email" type="email" v-model="sullaEmail" class="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" :class="{ 'border-red-500': !!emailError }" placeholder="Enter email">
+          <p v-if="emailError" class="text-red-500 text-sm mt-1">{{ emailError }}</p>
         </div>
         <div class="mb-4">
           <label for="password" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Password:</label>
-          <input id="password" type="password" v-model="sullaPassword" class="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" placeholder="Enter password">
+          <input id="password" type="password" v-model="sullaPassword" class="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" :class="{ 'border-red-500': !!passwordError }" placeholder="Enter password">
+          <p v-if="passwordError" class="text-red-500 text-sm mt-1">{{ passwordError }}</p>
         </div>
       </rd-fieldset>
 
@@ -27,8 +29,8 @@
       </rd-fieldset>
 
       <div class="flex justify-between mt-5">
-        <button v-if="showBack" type="button" @click="$emit('back')" class="px-6 py-2 text-gray-500 rounded-md bg-gray-100 hover:bg-gray-200 cursor-pointer">Back</button>
-        <button type="submit" class="px-6 py-2 text-white rounded-md transition-colors font-medium hover:opacity-90" :style="{ backgroundColor: '#30a5e9' }" :disabled="!isEmailValid || !sullaPassword?.trim()">Next</button>
+        <button v-if="showBack" type="button" @click="$emit('back')" class="px-6 py-2 text-gray-500 rounded-md transition-colors font-medium hover:opacity-90 bg-gray-100 hover:bg-gray-200 cursor-pointer">Back</button>
+        <button type="submit" class="px-6 py-2 text-white rounded-md transition-colors font-medium hover:opacity-90" :style="{ backgroundColor: '#30a5e9' }">Next</button>
       </div>
     </form>
   </div>
@@ -55,6 +57,10 @@ const sullaPassword = ref('');
 const primaryUserName = ref('');
 const sullaSubscribeToUpdates = ref(true);
 
+// Reactive error states
+const emailError = ref('');
+const passwordError = ref('');
+
 // Email validation regex
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -62,6 +68,29 @@ const isEmailValid = computed(() => {
   const email = sullaEmail.value?.trim();
   return email && emailRegex.test(email);
 });
+
+const validateEmail = () => {
+  const email = sullaEmail.value?.trim();
+  if (!email) {
+    emailError.value = 'Email is required.';
+    return false;
+  }
+  if (!emailRegex.test(email)) {
+    emailError.value = 'Please enter a valid email address.';
+    return false;
+  }
+  emailError.value = '';
+  return true;
+};
+
+const validatePassword = () => {
+  if (!sullaPassword.value?.trim()) {
+    passwordError.value = 'Password is required.';
+    return false;
+  }
+  passwordError.value = '';
+  return true;
+};
 
 // Load settings on mount
 onMounted(async () => {
@@ -83,6 +112,10 @@ onMounted(async () => {
 });
 
 const handleNextWelcome = async () => {
+  if (!validateEmail() || !validatePassword()) {
+    return;
+  }
+
   // Load and set service password and encryption key
   console.log('[FirstRunWelcome] Loading service password and encryption key...');
   
@@ -145,9 +178,7 @@ input:hover, select:hover {
   background-color: #f3f4f6; /* slightly darker background */
 }
 
-@media (prefers-color-scheme: dark) {
-  input:hover, select:hover {
-    background-color: #4b5563 !important; /* darker background for dark mode */
-  }
+dark input:hover, .dark select:hover {
+  background-color: #4b5563 !important; /* darker background for dark mode */
 }
 </style>

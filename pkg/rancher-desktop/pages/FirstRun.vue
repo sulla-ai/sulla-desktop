@@ -29,7 +29,7 @@
                   </div>
 
                   <div v-if="currentStep > 0 && currentStep < 3 && (startupController.state.progressMax.value > 0 || startupController.state.progressMax.value === -1)" class="mt-6 p-4 bg-gray-100 dark:bg-gray-800 rounded-lg">
-                    <h4 class="text-sm font-semibold mb-2">Startup Progress</h4>
+                    <h4 class="text-sm font-semibold mb-2 dark:text-gray-100">Startup Progress</h4>
                     <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5 mb-2">
                       <div class="h-2.5 rounded-full" :style="{ width: `${progressPercent}%`, backgroundColor: '#30a5e9' }"></div>
                     </div>
@@ -41,7 +41,7 @@
               </div>
             </div>
 
-            <div class="max-w-2xl min-w-0 flex-auto px-4 py-8 lg:max-w-none lg:pr-0 lg:pl-8 xl:px-16">
+            <div class="max-w-2xl min-w-0 flex-auto px-4 lg:max-w-none lg:pr-0 lg:pl-8 xl:px-16">
               <div ref="transcriptEl" id="chat-messages-list" class="pb-40">
                 <component :is="steps[currentStep]" @next="next" @back="back" :startup-controller="startupController" :show-back="currentStep > 0" />
               </div>
