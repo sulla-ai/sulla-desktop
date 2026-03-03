@@ -143,7 +143,7 @@
     "vue-router": "4.6.4",
     "vue-select": "3.20.4",
     "vuex": "4.1.0",
-    "which": "6.0.0",
+    "which": "6.0.1",
     "yaml": "2.8.2",
     "zod-to-json-schema": "3.23.5"
   },
