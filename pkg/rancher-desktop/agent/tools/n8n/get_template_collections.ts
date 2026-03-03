@@ -10,10 +10,13 @@ export class GetTemplateCollectionsWorker extends BaseTool {
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     try {
       const service = await createN8nService();
-      const collections = await service.getTemplateCollections({
+      const response = await service.getTemplateCollections({
         page: input.page,
         limit: input.limit,
       });
+
+      // API returns { collections: [...] } wrapper, extract the array
+      const collections = Array.isArray(response) ? response : (response?.collections || []);
 
       if (!collections || collections.length === 0) {
         return {
@@ -26,9 +29,15 @@ export class GetTemplateCollectionsWorker extends BaseTool {
       collections.forEach((collection: any, index: number) => {
         responseString += `${index + 1}. Name: ${collection.name}\n`;
         responseString += `   ID: ${collection.id}\n`;
-        responseString += `   Description: ${collection.description || 'N/A'}\n`;
-        responseString += `   Category: ${collection.category || 'N/A'}\n`;
-        responseString += `   Templates: ${collection.templates?.length || 0}\n\n`;
+        if (collection.description) {
+          responseString += `   Description: ${collection.description}\n`;
+        }
+        // Handle workflow array - collections contain workflow IDs
+        const workflowCount = collection.workflows?.length || 0;
+        if (workflowCount > 0) {
+          responseString += `   Workflows: ${workflowCount} templates\n`;
+        }
+        responseString += `\n`;
       });
 
       return {

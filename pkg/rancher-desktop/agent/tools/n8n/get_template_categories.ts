@@ -10,7 +10,10 @@ export class GetTemplateCategoriesWorker extends BaseTool {
   protected async _validatedCall(input: any): Promise<ToolResponse> {
     try {
       const service = await createN8nService();
-      const categories = await service.getTemplateCategories();
+      const response = await service.getTemplateCategories();
+
+      // API returns { categories: [...] } wrapper, extract the array
+      const categories = Array.isArray(response) ? response : (response?.categories || []);
 
       if (!categories || categories.length === 0) {
         return {
@@ -21,9 +24,15 @@ export class GetTemplateCategoriesWorker extends BaseTool {
 
       let responseString = `n8n Template Categories (${categories.length} found):\n\n`;
       categories.forEach((category: any, index: number) => {
-        responseString += `${index + 1}. Name: ${category.name}\n`;
+        const displayName = category.displayName || category.name;
+        const icon = category.icon || '';
+        const parentInfo = category.parent ? ` (Parent: ${category.parent.name})` : '';
+        responseString += `${index + 1}. ${icon} ${displayName}${parentInfo}\n`;
         responseString += `   ID: ${category.id}\n`;
-        responseString += `   Description: ${category.description || 'N/A'}\n\n`;
+        if (category.description) {
+          responseString += `   Description: ${category.description}\n`;
+        }
+        responseString += `\n`;
       });
 
       return {
