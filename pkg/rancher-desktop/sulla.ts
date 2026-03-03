@@ -171,13 +171,41 @@ export async function instantiateSullaStart(): Promise<void> {
 
         SullaIntegrations();
 
-        // Ensure llama.cpp binaries are installed on bare metal (not inside Lima VM)
+        // Ensure llama.cpp binaries are installed, download user's model, and start server
         try {
             const llamaCppService = getLlamaCppService();
             await llamaCppService.ensure();
             console.log('[Background] LlamaCppService initialized - llama.cpp ready:', llamaCppService.isReady);
+
+            if (llamaCppService.isReady) {
+                // Read the user's selected model from settings
+                const { SullaSettingsModel } = await import('@pkg/agent/database/models/SullaSettingsModel');
+                const { GGUF_MODELS } = await import('@pkg/agent/services/LlamaCppService');
+                let modelKey = await SullaSettingsModel.get('sullaModel', 'qwen3.5-0.8b');
+
+                // Map legacy Ollama-format keys (e.g. 'qwen2:0.5b') to GGUF keys (e.g. 'qwen2-0.5b')
+                if (!(modelKey in GGUF_MODELS)) {
+                    const mapped = modelKey.replace(/:/g, '-');
+                    if (mapped in GGUF_MODELS) {
+                        console.log(`[Background] Mapped legacy model key '${modelKey}' -> '${mapped}'`);
+                        modelKey = mapped;
+                    } else {
+                        console.warn(`[Background] Unknown model key '${modelKey}', falling back to qwen3.5-0.8b`);
+                        modelKey = 'qwen3.5-0.8b';
+                    }
+                }
+                console.log(`[Background] User selected model: ${modelKey}`);
+
+                // Download the GGUF model (no-ops if already on disk)
+                const modelPath = await llamaCppService.downloadModel(modelKey);
+                console.log(`[Background] Model ready at: ${modelPath}`);
+
+                // Start llama-server on port 30114
+                await llamaCppService.startServer(modelPath);
+                console.log(`[Background] llama-server running at ${llamaCppService.serverBaseUrl}`);
+            }
         } catch (error) {
-            console.error('[Background] Failed to ensure llama.cpp:', error);
+            console.error('[Background] Failed to start llama.cpp server:', error);
         }
 
     } catch (ex: any) {

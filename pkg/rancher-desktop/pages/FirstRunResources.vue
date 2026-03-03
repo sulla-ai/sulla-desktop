@@ -144,7 +144,7 @@ onMounted(async () => {
   });
 
   // Load sullaModel from SullaSettingsModel
-  const loadedModel = await SullaSettingsModel.get('sullaModel', 'qwen2:0.5b');
+  const loadedModel = await SullaSettingsModel.get('sullaModel', 'qwen3.5-0.8b');
   sullaModel.value = loadedModel;
 
   ipcRenderer.send('k8s-versions');
@@ -162,50 +162,42 @@ onMounted(async () => {
   });
 });
 
-// Ollama models sorted by resource requirements (smallest to largest)
-const OLLAMA_MODELS = [
+// GGUF models sorted by resource requirements (smallest to largest)
+// Keys match the GGUF_MODELS registry in LlamaCppService.ts
+const GGUF_MODELS = [
   {
-    name: 'qwen2:0.5b', displayName: 'Qwen2 0.5B', size: '377MB', minMemoryGB: 1, minCPUs: 1, description: 'Alibaba\'s compact Qwen2 model, very lightweight',
+    name: 'qwen3.5-0.8b', displayName: 'Qwen3.5 0.8B', size: '600MB', minMemoryGB: 1, minCPUs: 1, description: 'Qwen3.5 0.8B \u2014 latest generation, fast and lightweight default',
   },
   {
-    name: 'qwen2:1.5b', displayName: 'Qwen2 1.5B', size: '934MB', minMemoryGB: 2, minCPUs: 2, description: 'Alibaba\'s Qwen2 model, efficient for basic tasks',
+    name: 'qwen2-1.5b', displayName: 'Qwen2 1.5B', size: '1.0GB', minMemoryGB: 2, minCPUs: 2, description: 'Alibaba\'s Qwen2 model, efficient for basic tasks',
   },
   {
-    name: 'phi3:mini', displayName: 'Phi-3 Mini', size: '2.2GB', minMemoryGB: 4, minCPUs: 2, description: 'Microsoft\'s efficient 3.8B model, great reasoning capabilities',
+    name: 'phi3-mini', displayName: 'Phi-3 Mini', size: '2.2GB', minMemoryGB: 4, minCPUs: 2, description: 'Microsoft\'s efficient 3.8B model, great reasoning capabilities',
   },
   {
-    name: 'gemma:2b', displayName: 'Gemma 2B', size: '1.7GB', minMemoryGB: 4, minCPUs: 2, description: 'Google\'s lightweight model, good general performance',
+    name: 'gemma-2b', displayName: 'Gemma 2B', size: '1.7GB', minMemoryGB: 4, minCPUs: 2, description: 'Google\'s lightweight model, good general performance',
   },
   {
-    name: 'llama3.2:1b', displayName: 'Llama 3.2 1B', size: '1.3GB', minMemoryGB: 4, minCPUs: 2, description: 'Meta\'s smallest Llama 3.2, efficient and capable',
+    name: 'llama3.2-1b', displayName: 'Llama 3.2 1B', size: '1.3GB', minMemoryGB: 4, minCPUs: 2, description: 'Meta\'s smallest Llama 3.2, efficient and capable',
   },
   {
-    name: 'llama3.2:3b', displayName: 'Llama 3.2 3B', size: '2.0GB', minMemoryGB: 4, minCPUs: 2, description: 'Meta\'s compact Llama 3.2, balanced performance',
+    name: 'llama3.2-3b', displayName: 'Llama 3.2 3B', size: '2.0GB', minMemoryGB: 4, minCPUs: 2, description: 'Meta\'s compact Llama 3.2, balanced performance',
   },
   {
-    name: 'mistral:7b', displayName: 'Mistral 7B', size: '4.1GB', minMemoryGB: 5, minCPUs: 2, description: 'Excellent 7B model, strong coding and reasoning',
+    name: 'mistral-7b', displayName: 'Mistral 7B', size: '4.1GB', minMemoryGB: 5, minCPUs: 2, description: 'Excellent 7B model, strong coding and reasoning',
   },
   {
-    name: 'qwen2:7b', displayName: 'Qwen2 7B', size: '4.4GB', minMemoryGB: 5, minCPUs: 2, description: 'Alibaba\'s Qwen2 7B model, strong performance',
+    name: 'qwen2-7b', displayName: 'Qwen2 7B', size: '4.4GB', minMemoryGB: 5, minCPUs: 2, description: 'Alibaba\'s Qwen2 7B model, strong performance',
   },
   {
-    name: 'llama3.1:8b', displayName: 'Llama 3.1 8B', size: '4.7GB', minMemoryGB: 6, minCPUs: 2, description: 'Meta\'s latest 8B model, excellent all-around performance',
+    name: 'llama3.1-8b', displayName: 'Llama 3.1 8B', size: '4.7GB', minMemoryGB: 6, minCPUs: 2, description: 'Meta\'s latest 8B model, excellent all-around performance',
   },
   {
-    name: 'gemma:7b', displayName: 'Gemma 7B', size: '5.0GB', minMemoryGB: 6, minCPUs: 2, description: 'Google\'s larger model, improved capabilities',
+    name: 'gemma-7b', displayName: 'Gemma 7B', size: '5.0GB', minMemoryGB: 6, minCPUs: 2, description: 'Google\'s larger model, improved capabilities',
   },
   {
-    name: 'codellama:7b', displayName: 'Code Llama 7B', size: '3.8GB', minMemoryGB: 5, minCPUs: 2, description: 'Specialized for code generation and understanding',
+    name: 'codellama-7b', displayName: 'Code Llama 7B', size: '3.8GB', minMemoryGB: 5, minCPUs: 2, description: 'Specialized for code generation and understanding',
   },
-  {
-    name: 'llama3.1:70b', displayName: 'Llama 3.1 70B', size: '40GB', minMemoryGB: 48, minCPUs: 8, description: 'Meta\'s flagship model, state-of-the-art performance',
-  },
-  {
-    name: 'mixtral:8x7b', displayName: 'Mixtral 8x7B', size: '26GB', minMemoryGB: 32, minCPUs: 8, description: 'Mixture of experts, excellent quality and speed',
-  },
-  {
-    name: 'deepseek-coder:33b', displayName: 'DeepSeek Coder 33B', size: '19GB', minMemoryGB: 24, minCPUs: 6, description: 'Advanced coding model, excellent for development',
-  }
 ];
 
 // Dynamic system resources
@@ -214,14 +206,14 @@ const availNumCPUs = computed(() => os.cpus().length);
 const allocatedMemoryGB = computed(() => settings.value.virtualMachine.memoryInGB);
 const allocatedCPUs = computed(() => settings.value.virtualMachine.numberCPUs);
 
-// Ollama gets ~70% of VM memory and ~75% of CPUs (rest for K8s, other pods)
-const ollamaMemoryGB = computed(() => Math.floor(allocatedMemoryGB.value * 0.7));
-const ollamaCPUs = computed(() => Math.floor(allocatedCPUs.value * 0.75));
+// llama.cpp runs on bare metal — use ~70% of VM memory and ~75% of CPUs for model budget
+const modelMemoryGB = computed(() => Math.floor(allocatedMemoryGB.value * 0.7));
+const modelCPUs = computed(() => Math.floor(allocatedCPUs.value * 0.75));
 
 const availableModels = computed(() =>
-  OLLAMA_MODELS.map(model => ({
+  GGUF_MODELS.map(model => ({
     ...model,
-    available: ollamaMemoryGB.value >= model.minMemoryGB && ollamaCPUs.value >= model.minCPUs,
+    available: modelMemoryGB.value >= model.minMemoryGB && modelCPUs.value >= model.minCPUs,
   }))
 );
 
@@ -251,7 +243,7 @@ const autoSelectBestModel = () => {
       sullaModel.value = available[available.length - 1].name;
     } else {
       // Fallback to smallest model
-      sullaModel.value = 'qwen2:0.5b';
+      sullaModel.value = 'qwen3.5-0.8b';
     }
   }
 };

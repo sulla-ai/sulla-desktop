@@ -2156,15 +2156,14 @@ export default class LimaBackend extends events.EventEmitter implements VMBacken
       this.progressTracker.numeric('Sulla services ready', 64, 100);
     });
 
-    // Pull and load Ollama model
-    await this.progressTracker.action('Pulling & loading Ollama model', 300, async () => {
-      await this.pullOllamaModelDocker();
-    });
-
-    // Pull and load Ollama model
-    await this.progressTracker.action('Pulling & loading Vector Embedding model', 300, async () => {
-      await this.pullNomicEmbedModel();
-    });
+    // Ollama model pulls replaced by bare-metal llama.cpp (LlamaCppService)
+    // await this.progressTracker.action('Pulling & loading Ollama model', 300, async () => {
+    //   await this.pullOllamaModelDocker();
+    // });
+    //
+    // await this.progressTracker.action('Pulling & loading Vector Embedding model', 300, async () => {
+    //   await this.pullNomicEmbedModel();
+    // });
 
     markSullaDockerServicesStarted();
     instantiateSullaStart();
@@ -2210,13 +2209,12 @@ export default class LimaBackend extends events.EventEmitter implements VMBacken
       });
     }
 
-    // Enable GPU support for ollama service
-    if (compose.services?.sulla_ollama) {
-      // Add GPU layers environment variable
-      if (!compose.services.sulla_ollama.environment) {
-        compose.services.sulla_ollama.environment = [];
-      }
-    }
+    // Ollama GPU config removed — replaced by bare-metal llama.cpp (LlamaCppService)
+    // if (compose.services?.sulla_ollama) {
+    //   if (!compose.services.sulla_ollama.environment) {
+    //     compose.services.sulla_ollama.environment = [];
+    //   }
+    // }
 
     const composeYaml = yaml.stringify(compose, { defaultStringType: 'QUOTE_DOUBLE' });
     await this.writeFile('/tmp/sulla-docker-compose.yml', composeYaml, 0o644);
@@ -2263,7 +2261,8 @@ export default class LimaBackend extends events.EventEmitter implements VMBacken
    * Waits for all Sulla Docker services to be healthy by checking their container status.
    */
   private async waitForSullaDockerServices(): Promise<void> {
-    const services = ['sulla_ollama', 'sulla_neo4j', 'sulla_postgres', 'sulla_redis', 'sulla_ws_server', 'sulla_n8n'];
+    // sulla_ollama removed — replaced by bare-metal llama.cpp (LlamaCppService)
+    const services = ['sulla_neo4j', 'sulla_postgres', 'sulla_redis', 'sulla_ws_server', 'sulla_n8n'];
 
     for (const service of services) {
       await this.waitForDockerServiceHealthy(service);

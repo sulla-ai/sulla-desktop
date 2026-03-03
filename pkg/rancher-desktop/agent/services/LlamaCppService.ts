@@ -3,12 +3,132 @@ import * as path from 'path';
 import * as os from 'os';
 import * as https from 'https';
 import * as http from 'http';
-import { execSync, spawn } from 'child_process';
+import { execSync, spawn, ChildProcess } from 'child_process';
 
 const LOG_PREFIX = '[LlamaCppService]';
 
+/** Port llama-server listens on (same as old Ollama port) */
+const LLAMA_SERVER_PORT = 30114;
+
 /** GitHub API endpoint for latest llama.cpp release */
 const GITHUB_API_LATEST = 'https://api.github.com/repos/ggml-org/llama.cpp/releases/latest';
+
+/**
+ * Registry of GGUF models available for download.
+ * Keys match the model names used in FirstRunResources.vue.
+ * Each entry has the direct HuggingFace download URL and filename.
+ */
+export interface GGUFModelEntry {
+    displayName: string;
+    filename: string;
+    url: string;
+    size: string;
+    minMemoryGB: number;
+    minCPUs: number;
+    description: string;
+}
+
+export const GGUF_MODELS: Record<string, GGUFModelEntry> = {
+    'qwen3.5-0.8b': {
+        displayName: 'Qwen3.5 0.8B',
+        filename: 'Qwen3.5-0.8B-Q4_K_M.gguf',
+        url: 'https://huggingface.co/unsloth/Qwen3.5-0.8B-GGUF/resolve/main/Qwen3.5-0.8B-Q4_K_M.gguf',
+        size: '600MB',
+        minMemoryGB: 1,
+        minCPUs: 1,
+        description: "Qwen3.5 0.8B — latest generation, fast and lightweight default",
+    },
+    'qwen2-1.5b': {
+        displayName: 'Qwen2 1.5B',
+        filename: 'qwen2-1_5b-instruct-q4_k_m.gguf',
+        url: 'https://huggingface.co/Qwen/Qwen2-1.5B-Instruct-GGUF/resolve/main/qwen2-1_5b-instruct-q4_k_m.gguf',
+        size: '1.0GB',
+        minMemoryGB: 2,
+        minCPUs: 2,
+        description: "Alibaba's Qwen2 model, efficient for basic tasks",
+    },
+    'phi3-mini': {
+        displayName: 'Phi-3 Mini',
+        filename: 'Phi-3-mini-4k-instruct-q4.gguf',
+        url: 'https://huggingface.co/microsoft/Phi-3-mini-4k-instruct-gguf/resolve/main/Phi-3-mini-4k-instruct-q4.gguf',
+        size: '2.2GB',
+        minMemoryGB: 4,
+        minCPUs: 2,
+        description: "Microsoft's efficient 3.8B model, great reasoning capabilities",
+    },
+    'gemma-2b': {
+        displayName: 'Gemma 2B',
+        filename: 'gemma-2b-it-Q4_K_M.gguf',
+        url: 'https://huggingface.co/google/gemma-2b-it-GGUF/resolve/main/gemma-2b-it-Q4_K_M.gguf',
+        size: '1.7GB',
+        minMemoryGB: 4,
+        minCPUs: 2,
+        description: "Google's lightweight model, good general performance",
+    },
+    'llama3.2-1b': {
+        displayName: 'Llama 3.2 1B',
+        filename: 'Llama-3.2-1B-Instruct-Q4_K_M.gguf',
+        url: 'https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/main/Llama-3.2-1B-Instruct-Q4_K_M.gguf',
+        size: '1.3GB',
+        minMemoryGB: 4,
+        minCPUs: 2,
+        description: "Meta's smallest Llama 3.2, efficient and capable",
+    },
+    'llama3.2-3b': {
+        displayName: 'Llama 3.2 3B',
+        filename: 'Llama-3.2-3B-Instruct-Q4_K_M.gguf',
+        url: 'https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-GGUF/resolve/main/Llama-3.2-3B-Instruct-Q4_K_M.gguf',
+        size: '2.0GB',
+        minMemoryGB: 4,
+        minCPUs: 2,
+        description: "Meta's compact Llama 3.2, balanced performance",
+    },
+    'mistral-7b': {
+        displayName: 'Mistral 7B',
+        filename: 'mistral-7b-instruct-v0.3.Q4_K_M.gguf',
+        url: 'https://huggingface.co/MistralAI/Mistral-7B-Instruct-v0.3-GGUF/resolve/main/mistral-7b-instruct-v0.3.Q4_K_M.gguf',
+        size: '4.1GB',
+        minMemoryGB: 5,
+        minCPUs: 2,
+        description: 'Excellent 7B model, strong coding and reasoning',
+    },
+    'qwen2-7b': {
+        displayName: 'Qwen2 7B',
+        filename: 'qwen2-7b-instruct-q4_k_m.gguf',
+        url: 'https://huggingface.co/Qwen/Qwen2-7B-Instruct-GGUF/resolve/main/qwen2-7b-instruct-q4_k_m.gguf',
+        size: '4.4GB',
+        minMemoryGB: 5,
+        minCPUs: 2,
+        description: "Alibaba's Qwen2 7B model, strong performance",
+    },
+    'llama3.1-8b': {
+        displayName: 'Llama 3.1 8B',
+        filename: 'Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf',
+        url: 'https://huggingface.co/bartowski/Meta-Llama-3.1-8B-Instruct-GGUF/resolve/main/Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf',
+        size: '4.7GB',
+        minMemoryGB: 6,
+        minCPUs: 2,
+        description: "Meta's latest 8B model, excellent all-around performance",
+    },
+    'gemma-7b': {
+        displayName: 'Gemma 7B',
+        filename: 'gemma-7b-it-Q4_K_M.gguf',
+        url: 'https://huggingface.co/google/gemma-7b-it-GGUF/resolve/main/gemma-7b-it-Q4_K_M.gguf',
+        size: '5.0GB',
+        minMemoryGB: 6,
+        minCPUs: 2,
+        description: "Google's larger model, improved capabilities",
+    },
+    'codellama-7b': {
+        displayName: 'Code Llama 7B',
+        filename: 'codellama-7b-instruct.Q4_K_M.gguf',
+        url: 'https://huggingface.co/TheBloke/CodeLlama-7B-Instruct-GGUF/resolve/main/codellama-7b-instruct.Q4_K_M.gguf',
+        size: '3.8GB',
+        minMemoryGB: 5,
+        minCPUs: 2,
+        description: 'Specialized for code generation and understanding',
+    },
+};
 
 /**
  * Resolves the project root directory.
@@ -101,6 +221,36 @@ function httpGet(url: string, headers: Record<string, string> = {}): Promise<Buf
                 res.on('data', (chunk: Buffer) => chunks.push(chunk));
                 res.on('end', () => resolve(Buffer.concat(chunks)));
                 res.on('error', reject);
+            });
+            req.on('error', reject);
+        };
+        makeRequest(url, 10);
+    });
+}
+
+/**
+ * Stream an HTTPS GET to a file on disk (for large model downloads).
+ * Follows redirects just like httpGet.
+ */
+function httpGetToFile(url: string, destPath: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+        const makeRequest = (requestUrl: string, remainingRedirects: number) => {
+            if (remainingRedirects <= 0) {
+                return reject(new Error('Too many redirects'));
+            }
+            const mod = requestUrl.startsWith('https') ? https : http;
+            const req = mod.get(requestUrl, { headers: { 'User-Agent': 'sulla-desktop' } }, (res) => {
+                if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+                    return makeRequest(res.headers.location, remainingRedirects - 1);
+                }
+                if (res.statusCode && res.statusCode >= 400) {
+                    return reject(new Error(`HTTP ${res.statusCode} for ${requestUrl}`));
+                }
+                const file = fs.createWriteStream(destPath);
+                res.pipe(file);
+                file.on('finish', () => { file.close(); resolve(); });
+                file.on('error', (err) => { fs.unlinkSync(destPath); reject(err); });
+                res.on('error', (err) => { fs.unlinkSync(destPath); reject(err); });
             });
             req.on('error', reject);
         };
@@ -235,6 +385,9 @@ export function getLlamaCppService(): LlamaCppService {
 export class LlamaCppService {
     private _ready = false;
     private _installedTag: string | null = null;
+    private _serverProcess: ChildProcess | null = null;
+    private _serverRunning = false;
+    private _activeModel: string | null = null;
 
     /** Paths exposed for other services */
     get llmRoot(): string { return getLlmRoot(); }
@@ -244,6 +397,10 @@ export class LlamaCppService {
 
     get installedTag(): string | null { return this._installedTag; }
     get isReady(): boolean { return this._ready; }
+    get isServerRunning(): boolean { return this._serverRunning; }
+    get activeModel(): string | null { return this._activeModel; }
+    get serverPort(): number { return LLAMA_SERVER_PORT; }
+    get serverBaseUrl(): string { return `http://127.0.0.1:${LLAMA_SERVER_PORT}`; }
 
     /**
      * Resolve the absolute path to a llama.cpp binary (e.g. 'llama-server').
@@ -251,6 +408,17 @@ export class LlamaCppService {
      */
     getBinaryPath(name: string): string | null {
         return findBinary(name);
+    }
+
+    /**
+     * Get the absolute path to a downloaded model GGUF file.
+     * Returns null if the model file doesn't exist on disk.
+     */
+    getModelPath(modelKey: string): string | null {
+        const entry = GGUF_MODELS[modelKey];
+        if (!entry) return null;
+        const p = path.join(getModelsDir(), entry.filename);
+        return fs.existsSync(p) ? p : null;
     }
 
     /**
@@ -321,5 +489,177 @@ export class LlamaCppService {
         await downloadAndExtract(latestTag);
         this._installedTag = latestTag;
         this._ready = !!findBinary('llama-server');
+    }
+
+    /**
+     * Download a GGUF model file into the models directory.
+     * No-ops if the model file already exists on disk.
+     *
+     * @param modelKey Key from the GGUF_MODELS registry (e.g. 'qwen2-0.5b')
+     * @returns Absolute path to the downloaded .gguf file
+     */
+    async downloadModel(modelKey: string): Promise<string> {
+        const entry = GGUF_MODELS[modelKey];
+        if (!entry) {
+            throw new Error(`${LOG_PREFIX} Unknown model key: ${modelKey}`);
+        }
+
+        const destPath = path.join(getModelsDir(), entry.filename);
+
+        if (fs.existsSync(destPath)) {
+            const stat = fs.statSync(destPath);
+            console.log(`${LOG_PREFIX} Model ${entry.displayName} already exists (${(stat.size / 1024 / 1024).toFixed(1)} MB)`);
+            return destPath;
+        }
+
+        console.log(`${LOG_PREFIX} Downloading model ${entry.displayName} from ${entry.url} ...`);
+
+        // Stream to a temp file then rename — avoids partial files on crash
+        const tmpPath = destPath + '.tmp';
+        try {
+            await httpGetToFile(entry.url, tmpPath);
+            fs.renameSync(tmpPath, destPath);
+            const stat = fs.statSync(destPath);
+            console.log(`${LOG_PREFIX} Model ${entry.displayName} downloaded (${(stat.size / 1024 / 1024).toFixed(1)} MB)`);
+        } catch (err) {
+            try { fs.unlinkSync(tmpPath); } catch { /* ignore */ }
+            throw err;
+        }
+
+        return destPath;
+    }
+
+    /**
+     * Start llama-server with the given model on port 30114.
+     * If a server is already running it will be stopped first.
+     *
+     * @param modelPath Absolute path to the .gguf model file
+     * @param port      Port to listen on (default: LLAMA_SERVER_PORT)
+     */
+    async startServer(modelPath: string, port: number = LLAMA_SERVER_PORT): Promise<void> {
+        if (this._serverRunning) {
+            console.log(`${LOG_PREFIX} Server already running, stopping first...`);
+            await this.stopServer();
+        }
+
+        const serverBin = findBinary('llama-server');
+        if (!serverBin) {
+            throw new Error(`${LOG_PREFIX} llama-server binary not found — run ensure() first`);
+        }
+
+        if (!fs.existsSync(modelPath)) {
+            throw new Error(`${LOG_PREFIX} Model file not found: ${modelPath}`);
+        }
+
+        console.log(`${LOG_PREFIX} Starting llama-server on port ${port} with model ${modelPath}`);
+
+        const args = [
+            '--model', modelPath,
+            '--port', String(port),
+            '--host', '127.0.0.1',
+            '--ctx-size', '4096',
+            '--n-gpu-layers', '999',
+        ];
+
+        const proc = spawn(serverBin, args, {
+            stdio: ['ignore', 'pipe', 'pipe'],
+            detached: false,
+        });
+
+        this._serverProcess = proc;
+
+        proc.stdout?.on('data', (chunk: Buffer) => {
+            const text = chunk.toString('utf-8').trim();
+            if (text) console.log(`${LOG_PREFIX} [server] ${text}`);
+        });
+
+        proc.stderr?.on('data', (chunk: Buffer) => {
+            const text = chunk.toString('utf-8').trim();
+            if (text) console.log(`${LOG_PREFIX} [server:err] ${text}`);
+        });
+
+        proc.on('close', (code) => {
+            console.log(`${LOG_PREFIX} llama-server exited with code ${code}`);
+            this._serverRunning = false;
+            this._serverProcess = null;
+        });
+
+        proc.on('error', (err) => {
+            console.error(`${LOG_PREFIX} llama-server spawn error:`, err);
+            this._serverRunning = false;
+            this._serverProcess = null;
+        });
+
+        // Wait for the server to become responsive
+        await this.waitForReady(port);
+        this._serverRunning = true;
+        this._activeModel = path.basename(modelPath);
+        console.log(`${LOG_PREFIX} llama-server is ready on http://127.0.0.1:${port}`);
+    }
+
+    /**
+     * Stop the running llama-server process.
+     */
+    async stopServer(): Promise<void> {
+        if (!this._serverProcess) {
+            this._serverRunning = false;
+            return;
+        }
+
+        console.log(`${LOG_PREFIX} Stopping llama-server (pid ${this._serverProcess.pid})...`);
+
+        this._serverProcess.kill('SIGTERM');
+
+        // Give it 5 seconds to exit gracefully, then SIGKILL
+        await new Promise<void>((resolve) => {
+            const timeout = setTimeout(() => {
+                if (this._serverProcess) {
+                    console.log(`${LOG_PREFIX} Force-killing llama-server`);
+                    this._serverProcess.kill('SIGKILL');
+                }
+                resolve();
+            }, 5000);
+
+            if (this._serverProcess) {
+                this._serverProcess.on('close', () => {
+                    clearTimeout(timeout);
+                    resolve();
+                });
+            } else {
+                clearTimeout(timeout);
+                resolve();
+            }
+        });
+
+        this._serverProcess = null;
+        this._serverRunning = false;
+        this._activeModel = null;
+        console.log(`${LOG_PREFIX} llama-server stopped`);
+    }
+
+    /**
+     * Poll the server health endpoint until it responds (max 60s).
+     */
+    private async waitForReady(port: number, timeoutMs: number = 60000): Promise<void> {
+        const start = Date.now();
+        const url = `http://127.0.0.1:${port}/health`;
+
+        while (Date.now() - start < timeoutMs) {
+            try {
+                const res = await new Promise<number>((resolve, reject) => {
+                    const req = http.get(url, (r) => {
+                        r.resume();
+                        resolve(r.statusCode ?? 0);
+                    });
+                    req.on('error', reject);
+                    req.setTimeout(2000, () => { req.destroy(); reject(new Error('timeout')); });
+                });
+                if (res === 200) return;
+            } catch {
+                // Not ready yet
+            }
+            await new Promise(r => setTimeout(r, 1000));
+        }
+        throw new Error(`${LOG_PREFIX} llama-server did not become ready within ${timeoutMs / 1000}s`);
     }
 }
