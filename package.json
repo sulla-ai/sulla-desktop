@@ -129,7 +129,7 @@
     "node-schedule": "^2.1.1",
     "pg": "^8.17.2",
     "playwright": "^1.58.2",
-    "posthog-node": "5.23.0",
+    "posthog-node": "5.25.0",
     "preact": "^10.28.2",
     "proxy-agent": "^6.5.0",
     "rancher-icons": "https://github.com/rancher/icons.git#v2.0.21",
