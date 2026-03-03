@@ -1,6 +1,5 @@
 <template>
   <div class="mx-auto p-6 dark:bg-gray-800/30">
-    <div v-if="resourceError" class="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-md dark:bg-red-900 dark:border-red-600 dark:text-red-100">{{ resourceError }}</div>
     <form @submit.prevent="handleNext">
       <h2 class="text-2xl font-bold mt-5 mb-4 text-gray-900 dark:text-gray-100">Specify AI Resources</h2>
       <p class="mb-6 text-gray-600 dark:text-gray-400">Choose the resources allocated to your AI Agent and the local language model. Your agent and the model and all resources they manage will not be allowed to use more than the allocated resources.</p>
@@ -69,6 +68,8 @@
           </div>
         </div>
       </Transition>
+
+      <div v-if="resourceError" class="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-md dark:bg-red-900 dark:border-red-600 dark:text-red-100">{{ resourceError }}</div>
 
       <div class="flex justify-end mt-5">
         <button v-if="showBack" type="button" @click="$emit('back')" class="px-6 py-2 text-gray-500 rounded-md transition-colors font-medium hover:opacity-90 bg-gray-100 hover:bg-gray-200 cursor-pointer">Back</button>
