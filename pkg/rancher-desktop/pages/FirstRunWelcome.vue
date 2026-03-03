@@ -144,4 +144,10 @@ input:hover, select:hover {
   border-color: #374151; /* darker gray border */
   background-color: #f3f4f6; /* slightly darker background */
 }
+
+@media (prefers-color-scheme: dark) {
+  input:hover, select:hover {
+    background-color: #4b5563 !important; /* darker background for dark mode */
+  }
+}
 </style>

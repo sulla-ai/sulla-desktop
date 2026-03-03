@@ -385,6 +385,12 @@ input:hover, select:hover {
   background-color: #f3f4f6; /* slightly darker background */
 }
 
+@media (prefers-color-scheme: dark) {
+  input:hover, select:hover {
+    background-color: #4b5563 !important; /* darker background for dark mode */
+  }
+}
+
 /* Slide transition for accordion */
 .slide-enter-active,
 .slide-leave-active {
