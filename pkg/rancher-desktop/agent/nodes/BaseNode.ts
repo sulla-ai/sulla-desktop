@@ -209,42 +209,68 @@ Remove them when finished. highly prefer these tools for any web task.
 
 # SKILL SYSTEM
 
-You have a permanent, growing library of expert skills stored at {{skills_dir}}.
+You have a permanent, growing library of expert skills stored at {{skills_dir}}
 
-**When to use skills:**
-- If the user explicitly asks you to follow a skill, or you know a skill exists for the task, call load_skill("exact-skill-name") and follow it.
-- If you are about to create a new skill, call search_skills first to avoid duplicates.
-- Native skills (marked as "native" in search results) are executable code — call them directly like any other tool.
-- Do NOT call search_skills as a pre-check on every task. Only search when you specifically intend to load or create a skill.
+**Core Rule (never break this):**  
+You are a skill-driven desktop agent. Use existing skills for EVERYTHING possible — never reinvent the wheel or improvise when a skill already exists. This is non-negotiable.
 
-**Creating skills:**
-- If the user asks to create/build/make a skill:
-    a. Output your <GAME_PLAN>.
-    b. Wait for explicit user approval.
-    c. Output the COMPLETE SKILL.md inside <NEW_SKILL> tags.
-    d. Call create_skill("kebab-case-skill-name", "the entire markdown content string").
-    e. Confirm to the user.
+**Skill Index:**
+{{skills_index}}
+
+**Exact reasoning order on EVERY single turn (follow this step-by-step):**
+1. Read the user request.
+2. Look at the always-visible Skill Index. Is there an obvious or close match?
+3. If yes → immediately call load_skill("exact-skill-name") and follow it exactly.
+4. If unsure or no obvious match → IMMEDIATELY call search_skills("precise one-sentence description of what you need") to get the best matches.
+5. Pick the best skill(s) from the results (native skills are executable code — call them directly like any other tool). You may call multiple in parallel or chain them.
+6. Only if literally ZERO skills match (even after searching) may you improvise or propose creating a new one.
+
+**When to use search_skills:**
+- Any time step 2 or 4 above triggers it.  
+- Before creating any new skill (to avoid duplicates).  
+- This is now encouraged and lightweight — it is your #1 tool for success.
+
+**Creating / editing skills:**
+- Skills live as folders inside {{skills_dir}}. Each skill is a folder named in kebab-case containing a \`SKILL.md\` file.
+- The \`SKILL.md\` format is YAML frontmatter + markdown body:
+\`\`\`
+---
+slug: my-skill-name
+title: My Skill Name
+tags: [skill]
+triggers: ["when the user asks to ...", "short phrase"]
+---
+(markdown instructions / steps)
+\`\`\`
+- Required frontmatter: \`slug\`, \`title\`, \`tags\` (must include "skill"). Optional: \`triggers\`, \`category\`, \`section\`, \`author\`.
+- To create or edit a skill, just write/edit the file directly at \`{{skills_dir}}/<skill-name>/SKILL.md\`. You have full filesystem access — use it.
+- Before creating a new skill, call search_skills to check for duplicates.
+
+Native skills (marked as "native" in search results) are executable code — call them directly like any other tool.
 
 Current skills directory: {{skills_dir}}
 
 # PROJECT SYSTEM
 
-You have a project management system for tracking structured workspaces. Each project has a \`PROJECT.md\` (the PRD — full project resource document) and a \`README.md\`.
+Projects are workspace folders that contain a \`PROJECT.md\` file (the PRD — project resource document). A folder becomes a project when it has a \`PROJECT.md\`. Projects live at {{projects_dir}} by default.
 
-**Tools:**
+**Discovery tools:**
 - \`search_projects\` (always available in meta) — find existing projects by name/description/status/tags
-- \`load_project\` — load the full PROJECT.md content
-- \`create_project\` — create a new project folder with PROJECT.md + README.md scaffold
-- \`update_project\` — overwrite the entire PROJECT.md
-- \`patch_project\` — update a specific markdown section without rewriting the whole file
-- \`delete_project\` — remove a project
+- \`load_project\` — load the full PROJECT.md content for a project
+
+**Creating a project:**
+1. Use \`create_workspace("my-project-name")\` to create the folder — it returns the absolute path.
+2. Create a \`PROJECT.md\` file in that folder. This is what makes it a project. Write it directly using your filesystem tools.
+3. The PROJECT.md format is YAML frontmatter + markdown body (see the \`project-management\` skill for templates).
+
+**Editing a project:**
+- Read and edit \`PROJECT.md\` directly using your filesystem tools. No special project tools needed.
 
 **Rules:**
 - Before creating a new project, call search_projects to check for duplicates.
-- Use patch_project for incremental updates to specific sections.
 - Projects live at {{projects_dir}} by default.
 - Do NOT call search_projects as a pre-check on every task. Only search when you intend to create or load a project.
-- The active projects file is {{active_projects_file}}. When you create or work on a project that is truly active (not archived or completed), ensure it is listed there. If a project is no longer active, remove it from this file by updating the project status to "completed" or "archived". The agent may directly edit this file to curate the active list.
+- The active projects file is {{active_projects_file}}. When you create or work on a project that is truly active (not archived or completed), ensure it is listed there. If a project is no longer active, remove it from this file by updating the project status to "completed" or "archived". You may directly edit this file.
 
 Current projects directory: {{projects_dir}}
 ---
@@ -351,6 +377,38 @@ export abstract class BaseNode<T extends BaseThreadState = BaseThreadState> {
             AwarenessMessage = AwarenessMessage.replaceAll('{{formattedTime}}', formattedTime);
             AwarenessMessage = AwarenessMessage.replaceAll('{{timeZone}}', timeZone);
             AwarenessMessage = AwarenessMessage.replaceAll('{{skills_dir}}', skillsDir);
+
+            // Build skills index from native + dynamic registries
+            let skillsIndex = '_No skills registered yet._';
+            try {
+                const indexLines: string[] = [];
+
+                // Native skills
+                try {
+                    const { nativeSkillRegistry } = await import('../skills/native/index');
+                    const nativeSkills = nativeSkillRegistry.getAll();
+                    for (const ns of nativeSkills) {
+                        indexLines.push(`- **${ns.name}** (native): ${ns.description}`);
+                    }
+                } catch { /* native registry not available */ }
+
+                // Dynamic / filesystem skills
+                const { skillsRegistry } = await import('../database/registry/SkillsRegistry');
+                const summaries = await skillsRegistry.getSkillSummaries();
+                if (summaries && summaries.length > 0) {
+                    for (const s of summaries) {
+                        const trigger = Array.isArray(s.triggers) && s.triggers.length > 0
+                            ? ` — use when: ${s.triggers.join('; ')}`
+                            : '';
+                        indexLines.push(`- **${s.name}** (\`${s.slug}\`)${s.description ? `: ${s.description}` : ''}${trigger}`);
+                    }
+                }
+
+                if (indexLines.length > 0) {
+                    skillsIndex = indexLines.join('\n');
+                }
+            } catch { /* registry not available */ }
+            AwarenessMessage = AwarenessMessage.replaceAll('{{skills_index}}', skillsIndex);
             AwarenessMessage = AwarenessMessage.replaceAll('{{projects_dir}}', projectsDir);
             AwarenessMessage = AwarenessMessage.replaceAll('{{active_projects_file}}', activeProjectsFile);
 

@@ -2,8 +2,8 @@ import type { NativeSkillDefinition } from './NativeSkillRegistry';
 
 const SKILL_DOC = `---
 schemaversion: 1
-slug: sop-software-development
-title: "Create new Software Development Project"
+slug: new-software-development-project
+title: "New Software Development Project"
 section: "Standard Operating Procedures"
 category: "Software Development"
 tags:
@@ -102,7 +102,7 @@ Followed by:
 `;
 
 export const softwareDevelopmentSkill: NativeSkillDefinition = {
-  name: 'software-development',
+  name: 'new-software-development-project',
   description: 'Start a new software development project from scratch — workspace, Docker, GitHub, deployment, and PRD generation.',
   tags: ['skill', 'software-development', 'coding', 'vibe-coding', 'docker', 'github'],
   version: '1.0',

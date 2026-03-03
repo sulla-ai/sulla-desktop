@@ -158,7 +158,7 @@ export class HeartbeatNode extends BaseNode {
       const summaries = await projectRegistry.listProjects();
 
       if (!summaries || summaries.length === 0) {
-        return 'No active projects found. You may create new projects using the create_project tool.';
+        return 'No active projects found. Create a project by using create_workspace then writing a PROJECT.md in the folder.';
       }
 
       const lines = summaries.map(p =>
@@ -167,7 +167,7 @@ export class HeartbeatNode extends BaseNode {
       return `## Active Projects\n${lines.join('\n')}`;
     } catch (err) {
       console.warn('[HeartbeatNode] Failed to load projects:', err);
-      return 'Unable to load projects — use search_projects tool to discover them.';
+      return 'Unable to load projects — use search_projects to discover them or browse the projects directory.';
     }
   }
 
@@ -177,7 +177,7 @@ export class HeartbeatNode extends BaseNode {
       const summaries = await skillsRegistry.getSkillSummaries();
 
       if (!summaries || summaries.length === 0) {
-        return 'No skills found yet. You can create skills using the create_skill tool.';
+        return 'No skills found yet. Create skills by writing SKILL.md files in the skills directory.';
       }
 
       const lines = summaries.map(s =>
