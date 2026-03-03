@@ -1,12 +1,26 @@
-# Sulla Desktop
+<div align="center">
+  <img src="https://raw.githubusercontent.com/sulla-ai/sulla-desktop/main/resources/icons/logo-sulla-desktop-nobg.png" alt="Sulla Desktop" width="200" />
+  <h1>Sulla Desktop</h1>
+  <p><strong>Your private AI executive assistant that runs on your machine.</strong></p>
+  <p>Fully open-source, desktop-native autonomous agent with persistent memory, calendar engine, Docker workspaces, and n8n automation — all yours to own and extend.</p>
+  <p>
+    <a href="https://github.com/sulla-ai/sulla-desktop/releases/latest">
+      <img src="https://img.shields.io/github/v/release/sulla-ai/sulla-desktop?label=Latest&color=green" alt="Latest Release" />
+    </a>
+    <a href="LICENSE">
+      <img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="Apache 2.0 License" />
+    </a>
+    <a href="https://github.com/sulla-ai/sulla-desktop/stargazers">
+      <img src="https://img.shields.io/github/stars/sulla-ai/sulla-desktop?style=flat&color=yellow" alt="GitHub Stars" />
+    </a>
+  </p>
+</div>
 
-**Your private AI executive assistant that runs on your machine.**
+<div align="center">
+  <img src="./preview.gif" alt="Sulla preview" width="600" />
+</div>
 
-Sulla is a fully open-source, desktop-native autonomous agent built for AI automation enthusiasts, n8n power users, vibe coders, and busy business owners. Persistent long-term memory, calendar engine, n8n automation layer, Docker workspaces — all yours to own and extend. No subscriptions. No cloud lock-in.
-
-Designed for people who live in n8n, love building workflows, code by feel, or simply have too many high-value tasks and not enough hours.
-
-![Sulla preview](https://github.com/user-attachments/assets/aff9dbc9-8968-4ef3-9097-ee045cd4b706)
+Designed for people who live in n8n, love building workflows, code by feel, or simply have too many high-value tasks and not enough hours. No subscriptions. No cloud lock-in.
 
 ## Sulla Desktop — Your Personal AI Assistant Layer
 
