@@ -143,19 +143,6 @@ export const n8nToolManifests: ToolManifest[] = [
     loader: () => import('./diagnose_webhook'),
   },
   {
-    name: 'execute_n8n_workflow',
-    description: 'Execute a workflow through a dedicated universal gateway workflow webhook, creating/activating the gateway if needed.',
-    category: 'n8n',
-    schemaDef: {
-    workflowId: { type: 'string', description: 'Workflow ID.' },
-    data: { type: 'object', optional: true, description: 'Optional run payload.' },
-    mode: { type: 'string', optional: true, description: 'Execution mode: async (default) or sync.' },
-    timeoutMs: { type: 'number', optional: true, description: 'Only for mode=sync: max wait time in milliseconds (default 30000).' },
-  },
-    operationTypes: ['execute'],
-    loader: () => import('./execute_n8n_workflow'),
-  },
-  {
     name: 'get_credential',
     description: 'Get one n8n credential by ID.',
     category: 'n8n',

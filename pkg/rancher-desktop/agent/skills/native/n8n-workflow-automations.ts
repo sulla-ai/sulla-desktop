@@ -66,14 +66,30 @@ After the universal core PRD sections (YAML frontmatter + Goal through What Has 
 - **Workflow Details** — Workflow name, High-level node flow, Total nodes and connections
 - **Execution Steps** — Incremental build plan, each step verified with get_workflow / get_workflow_node_list before proceeding
 
-## Execution Pattern
+## Webhook-First Development Pattern (CRITICAL)
 
-Each workflow is built incrementally:
-1. Create empty workflow with basic settings
-2. Add trigger node + verify
-3. Add processing nodes one at a time, verify each
-4. Add error handling + fallback
-5. Validate full payload, activate, run manual test
+**Every new workflow MUST start with a Webhook trigger node.** This is non-negotiable during development.
+
+Why: A webhook is the only trigger type you can fire on-demand via curl. Without it, you have no way to manually test the workflow during development.
+
+### Build sequence:
+1. Create the workflow with a **Webhook** node as the first/trigger node.
+2. Activate the workflow so the webhook URL becomes live.
+3. Add processing nodes one at a time, verifying each by curling the webhook.
+4. Add error handling + fallback nodes.
+5. Test the full end-to-end flow by curling the webhook with realistic payload data.
+6. **Only after everything works**: if the final trigger should be something else (cron/schedule, app event, polling, etc.), add that trigger node alongside the webhook or swap it out.
+
+### Testing via webhook:
+- After activating, use \`diagnose_webhook\` to confirm the webhook URL is reachable.
+- Trigger the workflow with curl: \`curl -X POST <webhook-url> -H "Content-Type: application/json" -d '{"test": true}'\`
+- Check execution results via \`get_executions\` or the n8n dashboard.
+
+### Swapping to production trigger:
+Once the workflow logic is fully tested and working:
+- Add the desired production trigger (e.g., Schedule Trigger, App Trigger, etc.) using \`patch_workflow\`.
+- You may keep the webhook node for future manual testing, or remove it.
+- Re-verify the workflow executes correctly with the new trigger.
 
 Each step must be completed and verified before the next begins.
 `;
