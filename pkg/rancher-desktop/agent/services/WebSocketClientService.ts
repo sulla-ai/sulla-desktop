@@ -287,7 +287,9 @@ export class WebSocketClientService {
       // for the same channel during bootstrap; disconnecting CONNECTING sockets causes
       // "WebSocket is closed before the connection is established" and first-message delays.
       if (conn.isConnected() || conn.isConnecting()) return true;
-      conn.disconnect();
+      // Reuse the same connection instance so existing onMessage handlers remain attached.
+      conn.connect();
+      return true;
     }
 
     conn = new WebSocketConnection({ url, channel: connectionId });
