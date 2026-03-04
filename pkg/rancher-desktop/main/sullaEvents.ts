@@ -26,6 +26,47 @@ function getTrainingLogsDir(): string {
 let activeTrainingProcess: ReturnType<typeof import('child_process').spawn> | null = null;
 let isTrainingRunning = false;
 
+/** Lock file path for cross-restart training protection */
+function getTrainingLockFile(): string {
+  try {
+    const { app } = require('electron');
+    return path.join(app.getPath('userData'), 'llm', 'training', '.training.lock');
+  } catch {
+    return path.join(process.cwd(), 'llm', 'training', '.training.lock');
+  }
+}
+
+/** Write a lock file with PID so stale locks can be detected */
+function acquireTrainingLock(): void {
+  const lockFile = getTrainingLockFile();
+  fs.mkdirSync(path.dirname(lockFile), { recursive: true });
+  fs.writeFileSync(lockFile, JSON.stringify({ pid: process.pid, startedAt: new Date().toISOString() }), 'utf-8');
+  isTrainingRunning = true;
+}
+
+/** Remove the lock file */
+function releaseTrainingLock(): void {
+  isTrainingRunning = false;
+  try { fs.unlinkSync(getTrainingLockFile()); } catch { /* already gone */ }
+}
+
+/** Check if training is actually running (handles stale locks from crashed processes) */
+function isTrainingLocked(): boolean {
+  if (isTrainingRunning) return true;
+  const lockFile = getTrainingLockFile();
+  if (!fs.existsSync(lockFile)) return false;
+  try {
+    const lock = JSON.parse(fs.readFileSync(lockFile, 'utf-8'));
+    // Check if the PID that wrote the lock is still alive
+    process.kill(lock.pid, 0); // signal 0 = existence check, no actual signal sent
+    return true; // process is still alive
+  } catch {
+    // PID is dead or lock file is corrupt — stale lock, clean it up
+    try { fs.unlinkSync(lockFile); } catch { /* ignore */ }
+    return false;
+  }
+}
+
 /**
  * Initialize Sulla-specific IPC handlers.
  */
@@ -36,7 +77,7 @@ export function initSullaEvents(): void {
    * captures stdout/stderr to a timestamped log file, and returns the log filename.
    */
   ipcMainProxy.handle('training-run', async(_event: unknown, modelKey: string, sources: { documentProcessing: boolean; loraTraining: boolean; skills: boolean }) => {
-    if (isTrainingRunning) {
+    if (isTrainingLocked()) {
       throw new Error('A training run is already in progress');
     }
 
@@ -77,8 +118,8 @@ export function initSullaEvents(): void {
     ].join('\n');
     fs.writeFileSync(logPath, header, 'utf-8');
 
-    // Mark training as active for status polling
-    isTrainingRunning = true;
+    // Mark training as active for status polling (disk lock + in-memory flag)
+    acquireTrainingLock();
 
     // Fire-and-forget — the UI will poll the log file
     const runAll = async() => {
@@ -98,14 +139,32 @@ export function initSullaEvents(): void {
         const docScript = path.join(scriptsDir, 'documents_processor.py');
 
         // Run a child-process phase, piping output to log
-        const runPhase = (label: string, script: string, args: string[]): Promise<void> => {
+        const runPhase = (label: string, script: string, args: string[], timeoutMs: number = 7_200_000): Promise<void> => {
           return new Promise((resolve, reject) => {
             fs.appendFileSync(logPath, `\n--- ${label} ---\n\n`, 'utf-8');
             const proc = require('child_process').spawn(python, [script, ...args], {
               stdio: ['ignore', 'pipe', 'pipe'],
               env:   { ...process.env },
+              detached: process.platform !== 'win32', // create process group for clean kill
             });
             activeTrainingProcess = proc;
+            let settled = false;
+
+            // Timeout guard: kill entire process group if phase hangs
+            const timer = setTimeout(() => {
+              if (settled) return;
+              settled = true;
+              fs.appendFileSync(logPath, `\n[${label}] TIMEOUT: exceeded ${Math.round(timeoutMs / 60000)} minutes, killing process\n`, 'utf-8');
+              try {
+                if (process.platform === 'win32') {
+                  require('child_process').execSync(`taskkill /pid ${proc.pid} /T /F`, { stdio: 'pipe' });
+                } else if (proc.pid) {
+                  process.kill(-proc.pid, 'SIGKILL'); // kill process group
+                }
+              } catch { /* already dead */ }
+              activeTrainingProcess = null;
+              reject(new Error(`${label} timed out after ${Math.round(timeoutMs / 60000)} minutes`));
+            }, timeoutMs);
 
             proc.stdout?.on('data', (chunk: Buffer) => {
               fs.appendFileSync(logPath, chunk);
@@ -114,6 +173,9 @@ export function initSullaEvents(): void {
               fs.appendFileSync(logPath, chunk);
             });
             proc.on('close', (code: number | null) => {
+              clearTimeout(timer);
+              if (settled) return;
+              settled = true;
               activeTrainingProcess = null;
               if (code === 0) {
                 fs.appendFileSync(logPath, `\n[${label}] Completed successfully (exit code 0)\n`, 'utf-8');
@@ -124,6 +186,9 @@ export function initSullaEvents(): void {
               }
             });
             proc.on('error', (err: Error) => {
+              clearTimeout(timer);
+              if (settled) return;
+              settled = true;
               activeTrainingProcess = null;
               fs.appendFileSync(logPath, `\n[${label}] Process error: ${err.message}\n`, 'utf-8');
               reject(err);
@@ -134,7 +199,7 @@ export function initSullaEvents(): void {
         // Phase 1: Document Processing (only if selected)
         if (sources.documentProcessing) {
           try {
-            await runPhase('Documents Processing', docScript, ['--llm-root', llmRoot]);
+            await runPhase('Documents Processing', docScript, ['--llm-root', llmRoot], 600_000);
           } catch {
             fs.appendFileSync(logPath, `\nDocument processing failed, continuing...\n`, 'utf-8');
           }
@@ -145,7 +210,7 @@ export function initSullaEvents(): void {
         // Phase 2: LoRA Training (only if selected)
         if (sources.loraTraining) {
           try {
-            await runPhase('LoRA Training', trainScript, ['--model', entry.trainingRepo!, '--llm-root', llmRoot]);
+            await runPhase('LoRA Training', trainScript, ['--model', entry.trainingRepo!, '--llm-root', llmRoot], 7_200_000);
           } catch {
             // Error already logged to file
           }
@@ -163,12 +228,12 @@ export function initSullaEvents(): void {
       } catch (err) {
         fs.appendFileSync(logPath, `\n[ERROR] ${err}\n`, 'utf-8');
       } finally {
-        isTrainingRunning = false;
+        releaseTrainingLock();
         fs.appendFileSync(logPath, `\n=== Training Run Finished: ${new Date().toISOString()} ===\n`, 'utf-8');
       }
     };
 
-    runAll().catch(() => { isTrainingRunning = false; });
+    runAll().catch(() => { releaseTrainingLock(); });
 
     return { logFilename, logPath };
   });
@@ -177,7 +242,7 @@ export function initSullaEvents(): void {
    * Check if a training run is currently in progress.
    */
   ipcMainProxy.handle('training-status', async() => {
-    return { running: isTrainingRunning };
+    return { running: isTrainingLocked() };
   });
 
   /**
@@ -569,6 +634,14 @@ function rescheduleNightlyTraining(enabled: boolean, hour: number, minute: numbe
 
   nightlyTrainingTimer = setTimeout(async() => {
     console.log('[Sulla] Nightly training timer fired');
+
+    if (isTrainingLocked()) {
+      console.log('[Sulla] Skipping nightly training — another training run is already in progress');
+      rescheduleNightlyTraining(true, hour, minute);
+      return;
+    }
+
+    acquireTrainingLock();
     try {
       const { getLlamaCppService } = await import('@pkg/agent/services/LlamaCppService');
       const { SullaSettingsModel } = await import('@pkg/agent/database/models/SullaSettingsModel');
@@ -584,10 +657,12 @@ function rescheduleNightlyTraining(enabled: boolean, hour: number, minute: numbe
       const logPath = path.join(logsDir, logFilename);
       fs.writeFileSync(logPath, `=== Nightly Training Run (Scheduled) ===\nStarted: ${new Date().toISOString()}\nModel: ${modelKey}\n\n`, 'utf-8');
 
-      await service.runFullNightlyTraining(modelKey);
+      await service.runFullNightlyTraining(modelKey, logPath);
       fs.appendFileSync(logPath, `\n=== Completed: ${new Date().toISOString()} ===\n`, 'utf-8');
     } catch (err) {
       console.error('[Sulla] Nightly training failed:', err);
+    } finally {
+      releaseTrainingLock();
     }
 
     // Re-arm for the next day

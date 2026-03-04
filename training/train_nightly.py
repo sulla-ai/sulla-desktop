@@ -24,6 +24,7 @@ import argparse
 import glob
 import json
 import os
+import platform
 import shutil
 import sys
 from pathlib import Path
@@ -125,37 +126,70 @@ def main():
         print("[train_nightly] Need at least 5 training samples. Waiting for more feedback.")
         sys.exit(0)
 
-    # 3. Load model with Unsloth
+    # 3. Pre-flight RAM check — fail fast instead of OOM-killing the system
     try:
+        if platform.system() == "Darwin":
+            import subprocess
+            mem_bytes = int(subprocess.check_output(["sysctl", "-n", "hw.memsize"]).strip())
+        else:
+            mem_bytes = os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES")
+        mem_gb = mem_bytes / (1024 ** 3)
+        # Rough rule: 4-bit loading needs ~1.2x the parameter count in GB of RAM
+        # 0.8B→2GB, 4B→6GB, 9B→12GB. Use 4GB as absolute floor.
+        min_ram_gb = 4
+        model_lower = args.model.lower()
+        if "9b" in model_lower or "8b" in model_lower or "7b" in model_lower:
+            min_ram_gb = 12
+        elif "4b" in model_lower or "3b" in model_lower:
+            min_ram_gb = 6
+        if mem_gb < min_ram_gb:
+            print(f"[train_nightly] ERROR: Not enough RAM for training. Have {mem_gb:.1f} GB, need ~{min_ram_gb} GB minimum.")
+            print(f"[train_nightly] Consider using a smaller model or a machine with more memory.")
+            sys.exit(1)
+        print(f"[train_nightly] RAM check: {mem_gb:.1f} GB available (need ~{min_ram_gb} GB) — OK")
+    except Exception as e:
+        print(f"[train_nightly] WARNING: Could not check RAM ({e}), proceeding anyway")
+
+    # 4. Load model with Unsloth
+    try:
+        import torch
         from unsloth import FastLanguageModel
-    except ImportError:
-        print("[train_nightly] ERROR: unsloth not installed. Run installTrainingDeps() first.")
+        from datasets import Dataset
+        from trl import SFTTrainer
+        from transformers import TrainingArguments
+    except ImportError as e:
+        print(f"[train_nightly] ERROR: Required package not installed ({e}). Run installTrainingDeps() first.")
         sys.exit(1)
 
     print(f"[train_nightly] Loading model: {args.model}")
-    model, tokenizer = FastLanguageModel.get_peft_model(
-        FastLanguageModel.from_pretrained(
-            model_name=args.model,
-            max_seq_length=2048,
-            dtype=None,  # auto-detect
-            load_in_4bit=True,
-        )[0],
-        r=args.lora_r,
-        target_modules=["q_proj", "k_proj", "v_proj", "o_proj",
-                         "gate_proj", "up_proj", "down_proj"],
-        lora_alpha=args.lora_r,
-        lora_dropout=0,
-        bias="none",
-        use_gradient_checkpointing="unsloth",
-    )
+    try:
+        model, tokenizer = FastLanguageModel.get_peft_model(
+            FastLanguageModel.from_pretrained(
+                model_name=args.model,
+                max_seq_length=2048,
+                dtype=None,  # auto-detect
+                load_in_4bit=True,
+            )[0],
+            r=args.lora_r,
+            target_modules=["q_proj", "k_proj", "v_proj", "o_proj",
+                             "gate_proj", "up_proj", "down_proj"],
+            lora_alpha=args.lora_r,
+            lora_dropout=0,
+            bias="none",
+            use_gradient_checkpointing="unsloth",
+        )
+    except torch.cuda.OutOfMemoryError:
+        print("[train_nightly] ERROR: GPU out of memory. Try a smaller model or reduce batch size.")
+        sys.exit(1)
+    except Exception as e:
+        print(f"[train_nightly] ERROR: Failed to load model '{args.model}': {e}")
+        print("[train_nightly] This can happen if the model files are corrupted. Try re-downloading the training model.")
+        sys.exit(1)
 
-    # 4. Prepare dataset
-    from datasets import Dataset
+    # 5. Prepare dataset
     dataset = Dataset.from_list(training_data)
 
-    from trl import SFTTrainer
-    from transformers import TrainingArguments
-
+    # 6. Train
     trainer = SFTTrainer(
         model=model,
         tokenizer=tokenizer,
@@ -177,9 +211,19 @@ def main():
     )
 
     print("[train_nightly] Starting LoRA training...")
-    trainer.train()
+    try:
+        trainer.train()
+    except torch.cuda.OutOfMemoryError:
+        print("[train_nightly] ERROR: GPU OOM during training. Try reducing --batch-size or using a smaller model.")
+        sys.exit(1)
+    except RuntimeError as e:
+        if "out of memory" in str(e).lower():
+            print(f"[train_nightly] ERROR: Out of memory during training: {e}")
+            print("[train_nightly] Try reducing --batch-size or using a smaller model.")
+            sys.exit(1)
+        raise
 
-    # 5. Evaluate on test_set if present
+    # 7. Evaluate on test_set if present
     test_dir = training_dir / "test_set"
     if test_dir.exists():
         test_convs = load_feedback(test_dir)
@@ -189,17 +233,23 @@ def main():
             metrics = trainer.evaluate(eval_dataset=test_dataset)
             print(f"[train_nightly] Eval metrics: {metrics}")
 
-    # 6. Merge LoRA + export GGUF
+    # 8. Merge LoRA + export GGUF
     print("[train_nightly] Merging LoRA adapter and exporting GGUF...")
     merged_dir = str(output_dir / "merged")
 
-    model.save_pretrained_gguf(
-        merged_dir,
-        tokenizer,
-        quantization_method=args.quant_method,
-    )
+    try:
+        model.save_pretrained_gguf(
+            merged_dir,
+            tokenizer,
+            quantization_method=args.quant_method,
+        )
+    except Exception as e:
+        print(f"[train_nightly] ERROR: GGUF export failed: {e}")
+        print("[train_nightly] The LoRA adapter was trained successfully but could not be exported.")
+        print(f"[train_nightly] Checkpoint saved at: {output_dir / 'checkpoints'}")
+        sys.exit(1)
 
-    # 7. Copy the new GGUF to models/ directory
+    # 9. Copy the new GGUF to models/ directory
     gguf_files = glob.glob(str(Path(merged_dir) / "*.gguf"))
     if gguf_files:
         newest_gguf = max(gguf_files, key=os.path.getmtime)
@@ -210,12 +260,18 @@ def main():
     else:
         print("[train_nightly] WARNING: No GGUF file produced after merge.")
 
-    # 8. Archive processed feedback
+    # 10. Archive processed feedback
     archive_dir = feedback_dir / "processed"
     archive_dir.mkdir(exist_ok=True)
     for fpath in glob.glob(str(feedback_dir / "*.jsonl")):
         fname = Path(fpath).name
-        shutil.move(fpath, str(archive_dir / fname))
+        dest = str(archive_dir / fname)
+        try:
+            shutil.move(fpath, dest)
+        except OSError:
+            # shutil.move fails across filesystems — fall back to copy+delete
+            shutil.copy2(fpath, dest)
+            os.remove(fpath)
     print(f"[train_nightly] Archived {len(glob.glob(str(archive_dir / '*.jsonl')))} feedback files")
 
     print("[train_nightly] Done!")

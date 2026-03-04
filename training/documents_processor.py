@@ -51,7 +51,8 @@ def extract_text(file_path: Path) -> str:
 
         if suffix in (".md", ".txt"):
             return file_path.read_text(encoding="utf-8", errors="ignore")
-    except Exception:
+    except Exception as e:
+        print(f"  [ERROR] Failed to extract text from {file_path.name}: {e}")
         return ""
 
     return ""
@@ -131,9 +132,16 @@ def main():
             if file_path.suffix.lower() not in file_types:
                 continue
 
-            # Compute hash for incremental detection
+            # Compute hash for incremental detection (chunked to avoid OOM on large files)
             try:
-                file_hash = hashlib.md5(file_path.read_bytes()).hexdigest()
+                h = hashlib.md5()
+                with open(file_path, "rb") as fh:
+                    while True:
+                        chunk = fh.read(1_048_576)  # 1 MB chunks
+                        if not chunk:
+                            break
+                        h.update(chunk)
+                file_hash = h.hexdigest()
             except (PermissionError, OSError) as e:
                 print(f"  [SKIP] Cannot read {file_path}: {e}")
                 continue
