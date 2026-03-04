@@ -32,8 +32,9 @@ export interface OAuthProviderConfig {
    * How client credentials are sent to the token endpoint:
    * - 'body' (default): client_id + client_secret in POST body
    * - 'header': HTTP Basic auth header
+   * - 'none': public client (no client_secret sent)
    */
-  clientAuthMethod?: 'body' | 'header';
+  clientAuthMethod?: 'body' | 'header' | 'none';
   /**
    * Additional query parameters appended to the authorize URL.
    * Useful for provider-specific params like `access_type=offline` (Google).
@@ -48,6 +49,26 @@ export interface OAuthProviderConfig {
    * Defaults to 300 (5 minutes).
    */
   refreshBufferSeconds?: number;
+  /**
+   * If true, use PKCE (S256 code_challenge) in the authorization flow.
+   * Required for public clients that don't use a client_secret.
+   */
+  usePKCE?: boolean;
+  /**
+   * Built-in client_id for public OAuth apps (e.g. OpenAI Codex CLI).
+   * When set, the user does NOT need to supply their own client_id/secret.
+   */
+  builtInClientId?: string;
+  /**
+   * Fixed port the callback server must listen on.
+   * Required when the provider's OAuth app has a hardcoded redirect_uri.
+   */
+  fixedCallbackPort?: number;
+  /**
+   * Fixed path for the callback URL (e.g. '/auth/callback').
+   * Defaults to '/oauth/callback' if not specified.
+   */
+  fixedCallbackPath?: string;
 }
 
 /**

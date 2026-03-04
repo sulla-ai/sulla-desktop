@@ -42,17 +42,39 @@ const ERROR_HTML = (msg: string) => `<!DOCTYPE html>
   <p>${ msg }</p>
 </div></body></html>`;
 
+export interface OAuthCallbackServerOptions {
+  /** The `state` value we sent in the authorize URL — used to validate the callback. */
+  expectedState: string;
+  /** How long to wait before rejecting (default 5 min). */
+  timeoutMs?: number;
+  /** Fixed port to listen on (default: random available port). */
+  fixedPort?: number;
+  /** Path to match for the callback (default: '/oauth/callback'). */
+  callbackPath?: string;
+  /** Use 'localhost' instead of '127.0.0.1' in the redirect URI (some providers require this). */
+  useLocalhostHostname?: boolean;
+}
+
 /**
  * Start an ephemeral localhost HTTP server that waits for a single OAuth callback.
  *
- * @param expectedState The `state` value we sent in the authorize URL — used to validate the callback.
- * @param timeoutMs     How long to wait before rejecting (default 5 min).
  * @returns The redirect_uri the server is listening on, plus a promise that resolves with the auth code.
  */
 export function startOAuthCallbackServer(
-  expectedState: string,
+  optionsOrState: string | OAuthCallbackServerOptions,
   timeoutMs = 300_000,
 ): { redirectUri: string; codePromise: Promise<OAuthCallbackResult>; shutdown: () => void } {
+  // Support legacy call signature: startOAuthCallbackServer(state, timeoutMs)
+  const opts: OAuthCallbackServerOptions = typeof optionsOrState === 'string'
+    ? { expectedState: optionsOrState, timeoutMs }
+    : optionsOrState;
+
+  const expectedState = opts.expectedState;
+  const timeout_ms = opts.timeoutMs ?? timeoutMs;
+  const callbackPath = opts.callbackPath ?? '/oauth/callback';
+  const listenPort = opts.fixedPort ?? 0;
+  const hostname = opts.useLocalhostHostname ? 'localhost' : '127.0.0.1';
+
   let resolveFn: (result: OAuthCallbackResult) => void;
   let rejectFn: (err: Error) => void;
 
@@ -70,8 +92,8 @@ export function startOAuthCallbackServer(
 
     const parsed = new URL(req.url, `http://127.0.0.1`);
 
-    // Only handle the /oauth/callback path
-    if (parsed.pathname !== '/oauth/callback') {
+    // Only handle the configured callback path
+    if (parsed.pathname !== callbackPath) {
       res.writeHead(404, { 'Content-Type': 'text/plain' });
       res.end('Not found');
       return;
@@ -111,19 +133,19 @@ export function startOAuthCallbackServer(
     cleanup();
   });
 
-  // Listen on a random available port on loopback
-  server.listen(0, '127.0.0.1');
+  // Listen on the configured port (0 = random) on loopback
+  server.listen(listenPort, '127.0.0.1');
   const address = server.address();
   const port = typeof address === 'object' && address ? address.port : 0;
-  const redirectUri = `http://127.0.0.1:${ port }/oauth/callback`;
+  const redirectUri = `http://${ hostname }:${ port }${ callbackPath }`;
 
-  const timeout = setTimeout(() => {
+  const timeoutHandle = setTimeout(() => {
     rejectFn(new Error('OAuth callback timed out'));
     cleanup();
-  }, timeoutMs);
+  }, timeout_ms);
 
   function cleanup() {
-    clearTimeout(timeout);
+    clearTimeout(timeoutHandle);
     try {
       server.close();
     } catch { /* already closed */ }
