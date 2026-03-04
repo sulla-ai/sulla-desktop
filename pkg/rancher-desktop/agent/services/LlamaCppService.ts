@@ -235,6 +235,58 @@ function detectGpuCapability(): boolean {
     return hasNvidiaGpu();
 }
 
+/**
+ * Check available disk space on the volume containing the given path.
+ * Returns available bytes. Throws with a clear message if below requiredBytes.
+ */
+function assertDiskSpace(dirPath: string, requiredBytes: number, label: string): void {
+    try {
+        // statfs is available in Node 18.15+ (Electron 28+)
+        const stats = fs.statfsSync(dirPath);
+        const availableBytes = stats.bavail * stats.bsize;
+        const requiredGB = (requiredBytes / 1e9).toFixed(1);
+        const availableGB = (availableBytes / 1e9).toFixed(1);
+
+        if (availableBytes < requiredBytes) {
+            throw new Error(
+                `${LOG_PREFIX} Not enough disk space for ${label}. ` +
+                `Need ${requiredGB} GB, only ${availableGB} GB available. ` +
+                `Free up space and try again.`,
+            );
+        }
+        console.log(`${LOG_PREFIX} Disk space check for ${label}: need ${requiredGB} GB, have ${availableGB} GB — OK`);
+    } catch (err: any) {
+        // If statfsSync is not available (older Node), skip check rather than crash
+        if (err?.code === 'ERR_METHOD_NOT_IMPLEMENTED' || err?.message?.includes('statfsSync')) {
+            console.warn(`${LOG_PREFIX} Disk space check skipped (statfsSync not available)`);
+            return;
+        }
+        throw err;
+    }
+}
+
+/**
+ * Retry an async operation with exponential backoff.
+ * Used for network-dependent operations (pip install, file downloads).
+ */
+async function withRetry<T>(fn: () => Promise<T>, label: string, maxAttempts: number = 3, baseDelayMs: number = 5000): Promise<T> {
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+            return await fn();
+        } catch (err: any) {
+            const msg = err?.message || String(err);
+            if (attempt === maxAttempts) {
+                console.error(`${LOG_PREFIX} ${label}: failed after ${maxAttempts} attempts — ${msg}`);
+                throw err;
+            }
+            const delay = baseDelayMs * Math.pow(2, attempt - 1);
+            console.warn(`${LOG_PREFIX} ${label}: attempt ${attempt}/${maxAttempts} failed (${msg}), retrying in ${delay / 1000}s...`);
+            await new Promise(r => setTimeout(r, delay));
+        }
+    }
+    throw new Error('unreachable');
+}
+
 /** Track whether we downloaded a GPU-accelerated build */
 let _isGpuBuild = false;
 export function isGpuBuild(): boolean { return _isGpuBuild; }
@@ -636,6 +688,11 @@ export class LlamaCppService {
 
         fs.mkdirSync(destDir, { recursive: true });
 
+        // Pre-flight disk space check — training models are typically 2-20 GB
+        // Use 2x the GGUF sizeBytes as a conservative estimate for the full-precision training model
+        const estimatedSize = entry.sizeBytes * 3;
+        assertDiskSpace(getTrainingDir(), estimatedSize, `training model download (${entry.trainingRepo})`);
+
         log(`Downloading training model ${entry.trainingRepo} ...`);
 
         // Fetch the file list from HuggingFace API
@@ -660,9 +717,12 @@ export class LlamaCppService {
             }
 
             log(`  [${i + 1}/${fileList.length}] ${file.path}`);
-            await httpGetToFile(fileUrl, fileDest, (received, total) => {
-                onProgress?.(i, fileList.length, file.path, received, total);
-            });
+            await withRetry(
+                () => httpGetToFile(fileUrl, fileDest, (received, total) => {
+                    onProgress?.(i, fileList.length, file.path, received, total);
+                }),
+                `download ${file.path}`,
+            );
         }
 
         // Mark download as complete
@@ -720,16 +780,39 @@ export class LlamaCppService {
         fs.mkdirSync(getTrainingDir(), { recursive: true });
         fs.mkdirSync(feedbackDir, { recursive: true });
 
-        // Check if venv already has all required packages
+        // Pre-flight disk space check — venv + deps typically ~8-10 GB (torch alone is ~3 GB)
+        assertDiskSpace(getTrainingDir(), 10_000_000_000, 'training dependencies install');
+
+        // Check if venv already has all required packages AND a valid Python version
         const existingPython = this.getTrainingPython();
         if (existingPython) {
+            let needsRecreate = false;
+            // Verify venv Python is 3.10+ (unsloth_zoo uses PEP 604 syntax)
             try {
-                execSync(`"${existingPython}" -c "import unsloth; import fitz; import docx"`, { stdio: 'pipe' });
-                log('Training deps already installed');
-                progress('Training dependencies ready', 100, 100);
-                return;
+                const versionStr = execSync(`"${existingPython}" --version`, { stdio: 'pipe' }).toString().trim();
+                const match = versionStr.match(/Python 3\.(\d+)/);
+                if (!match || parseInt(match[1], 10) < 10) {
+                    log(`Venv Python too old (${versionStr}), need 3.10+. Recreating venv...`);
+                    needsRecreate = true;
+                }
             } catch {
-                log('Venv exists but required packages missing, recreating venv...');
+                log('Venv Python not working, recreating venv...');
+                needsRecreate = true;
+            }
+
+            if (!needsRecreate) {
+                try {
+                    execSync(`"${existingPython}" -c "import unsloth; import fitz; import docx"`, { stdio: 'pipe' });
+                    log('Training deps already installed');
+                    progress('Training dependencies ready', 100, 100);
+                    return;
+                } catch {
+                    log('Venv exists but required packages missing, recreating venv...');
+                    needsRecreate = true;
+                }
+            }
+
+            if (needsRecreate) {
                 fs.rmSync(venvDir, { recursive: true, force: true });
             }
         }
@@ -738,7 +821,7 @@ export class LlamaCppService {
         progress('Finding Python 3...', 5, 100);
         const python3 = this.findPython3();
         if (!python3) {
-            throw new Error(`${LOG_PREFIX} Python 3 not found on this system — required for training`);
+            throw new Error(`${LOG_PREFIX} Python 3.10+ not found on this system — required for training (unsloth requires Python >= 3.10)`);
         }
         log(`Using system Python: ${python3}`);
 
@@ -759,8 +842,9 @@ export class LlamaCppService {
         let packages: string[];
 
         if (platform === 'darwin') {
-            // macOS: plain unsloth + mlx-lm for Apple Silicon fine-tuning + doc processing libs
-            packages = ['unsloth', 'mlx-lm', 'torch', 'torchvision', 'torchaudio', 'pymupdf', 'python-docx', 'markdown'];
+            // macOS: unsloth + torch for fine-tuning + doc processing libs
+            // mlx-lm is optional (Apple Silicon only), installed separately below
+            packages = ['unsloth', 'torch', 'torchvision', 'torchaudio', 'pymupdf', 'python-docx', 'markdown'];
         } else {
             // Linux / Windows: CUDA backend + doc processing libs
             packages = ['unsloth', 'torch', 'torchvision', 'torchaudio', 'pymupdf', 'python-docx', 'markdown', '--extra-index-url', 'https://download.pytorch.org/whl/cu121'];
@@ -771,29 +855,59 @@ export class LlamaCppService {
 
         if (platform === 'darwin') {
             // macOS: install torch first, then unsloth --no-deps to avoid xformers (CUDA-only) build failure
-            progress('Installing PyTorch (step 1/3)...', 20, 100);
-            log('  Step 1/3: Installing PyTorch...');
-            await this.spawnWithLog(venvPython, ['-m', 'pip', 'install', 'torch', 'torchvision', 'torchaudio'], logPath, 600_000);
+            progress('Installing PyTorch (step 1/4)...', 20, 100);
+            log('  Step 1/4: Installing PyTorch...');
+            await withRetry(
+                () => this.spawnWithLog(venvPython, ['-m', 'pip', 'install', 'torch', 'torchvision', 'torchaudio'], logPath, 600_000),
+                'pip install torch',
+            );
 
-            progress('Installing Unsloth + MLX (step 2/3)...', 50, 100);
-            log('  Step 2/3: Installing unsloth + mlx-lm...');
-            await this.spawnWithLog(venvPython, ['-m', 'pip', 'install', '--no-deps', 'unsloth', 'unsloth_zoo'], logPath, 600_000);
-            await this.spawnWithLog(venvPython, ['-m', 'pip', 'install', 'mlx-lm'], logPath, 600_000);
+            progress('Installing Unsloth (step 2/4)...', 40, 100);
+            log('  Step 2/4: Installing unsloth...');
+            await withRetry(
+                () => this.spawnWithLog(venvPython, ['-m', 'pip', 'install', '--no-deps', 'unsloth', 'unsloth_zoo'], logPath, 600_000),
+                'pip install unsloth',
+            );
 
-            progress('Installing document processing libs (step 3/3)...', 75, 100);
-            log('  Step 3/3: Installing remaining deps + doc processing libs...');
-            await this.spawnWithLog(venvPython, ['-m', 'pip', 'install',
-                // unsloth runtime deps (--no-deps means we must supply them)
-                'wheel', 'diffusers', 'msgspec', 'torchao',
-                'peft', 'datasets', 'bitsandbytes',
-                'trl', 'accelerate', 'huggingface_hub', 'hf_transfer',
-                'sentencepiece', 'protobuf', 'tyro',
-                // doc processing
-                'pymupdf', 'python-docx', 'markdown',
-            ], logPath, 600_000);
+            progress('Installing document processing libs (step 3/4)...', 60, 100);
+            log('  Step 3/4: Installing remaining deps + doc processing libs...');
+            await withRetry(
+                () => this.spawnWithLog(venvPython, ['-m', 'pip', 'install',
+                    // unsloth runtime deps (--no-deps means we must supply them)
+                    'wheel', 'diffusers', 'msgspec', 'torchao',
+                    'peft', 'datasets', 'bitsandbytes',
+                    'trl', 'accelerate', 'huggingface_hub', 'hf_transfer',
+                    'sentencepiece', 'protobuf', 'tyro',
+                    // doc processing
+                    'pymupdf', 'python-docx', 'markdown',
+                ], logPath, 600_000),
+                'pip install deps',
+            );
+
+            // mlx-lm is optional — only works on Apple Silicon (arm64).
+            // The training scripts don't import it directly; unsloth detects it at runtime.
+            // Non-fatal: if it fails (Intel Mac, dep conflicts), training still works via torch.
+            if (os.arch() === 'arm64') {
+                progress('Installing MLX acceleration (step 4/4, optional)...', 85, 100);
+                log('  Step 4/4: Installing mlx-lm (Apple Silicon acceleration, optional)...');
+                try {
+                    await withRetry(
+                        () => this.spawnWithLog(venvPython, ['-m', 'pip', 'install', 'mlx-lm'], logPath, 600_000),
+                        'pip install mlx-lm',
+                    );
+                } catch (err: any) {
+                    log(`  WARNING: mlx-lm installation failed (non-fatal): ${err?.message || err}`);
+                    log('  Training will use PyTorch backend instead of MLX.');
+                }
+            } else {
+                log('  Skipping mlx-lm (Intel Mac — MLX requires Apple Silicon)');
+            }
         } else {
             progress('Installing training dependencies...', 30, 100);
-            await this.spawnWithLog(venvPython, ['-m', 'pip', 'install', ...packages], logPath, 600_000);
+            await withRetry(
+                () => this.spawnWithLog(venvPython, ['-m', 'pip', 'install', ...packages], logPath, 600_000),
+                'pip install training deps',
+            );
         }
 
         progress('Training dependencies installed', 100, 100);
@@ -810,13 +924,24 @@ export class LlamaCppService {
             const proc = spawnProc(cmd, args, {
                 stdio: ['ignore', 'pipe', 'pipe'],
                 env: { ...process.env, PIP_NO_CACHE_DIR: '1' },
+                detached: os.platform() !== 'win32', // process group for clean kill
             });
 
+            let settled = false;
             let timer: ReturnType<typeof setTimeout> | null = null;
             if (timeout) {
                 timer = setTimeout(() => {
-                    proc.kill();
-                    reject(new Error(`Process timed out after ${timeout}ms`));
+                    if (settled) return;
+                    settled = true;
+                    // Kill entire process group (torch spawns workers)
+                    try {
+                        if (os.platform() === 'win32') {
+                            execSync(`taskkill /pid ${proc.pid} /T /F`, { stdio: 'pipe' });
+                        } else if (proc.pid) {
+                            process.kill(-proc.pid, 'SIGKILL');
+                        }
+                    } catch { /* already dead */ }
+                    reject(new Error(`Process timed out after ${Math.round(timeout / 1000)}s`));
                 }, timeout);
             }
 
@@ -834,6 +959,8 @@ export class LlamaCppService {
             });
             proc.on('close', (code: number | null) => {
                 if (timer) clearTimeout(timer);
+                if (settled) return;
+                settled = true;
                 if (code === 0) resolve();
                 else {
                     const tail = stderrBuf.slice(-500).trim();
@@ -842,29 +969,39 @@ export class LlamaCppService {
             });
             proc.on('error', (err: Error) => {
                 if (timer) clearTimeout(timer);
+                if (settled) return;
+                settled = true;
                 reject(err);
             });
         });
     }
 
     /**
-     * Find a working Python 3 binary on the system.
+     * Find a working Python >= 3.10 binary on the system.
+     * unsloth_zoo uses PEP 604 union syntax (str | Path) which requires 3.10+.
+     * Tries versioned candidates in descending order so the newest Python is preferred.
      */
     private findPython3(): string | null {
         const candidates = os.platform() === 'win32'
-            ? ['python', 'python3', 'py -3']
-            : ['python3', 'python'];
+            ? ['python3.13', 'python3.12', 'python3.11', 'python3.10', 'python3', 'python', 'py -3']
+            : ['python3.13', 'python3.12', 'python3.11', 'python3.10', 'python3', 'python'];
+
+        const MIN_MINOR = 10; // require >= 3.10
 
         for (const cmd of candidates) {
             try {
-                const version = execSync(`${cmd} --version`, { stdio: 'pipe' }).toString().trim();
-                if (version.includes('Python 3')) {
-                    // Return the resolved path
-                    if (os.platform() === 'win32') {
-                        return execSync(`where ${cmd.split(' ')[0]}`, { stdio: 'pipe' }).toString().trim().split('\n')[0];
-                    }
-                    return execSync(`which ${cmd}`, { stdio: 'pipe' }).toString().trim();
+                const versionStr = execSync(`${cmd} --version`, { stdio: 'pipe' }).toString().trim();
+                // Parse "Python 3.X.Y"
+                const match = versionStr.match(/Python 3\.(\d+)/);
+                if (!match) continue;
+                const minor = parseInt(match[1], 10);
+                if (minor < MIN_MINOR) continue;
+
+                // Return the resolved path
+                if (os.platform() === 'win32') {
+                    return execSync(`where ${cmd.split(' ')[0]}`, { stdio: 'pipe' }).toString().trim().split('\n')[0];
                 }
+                return execSync(`which ${cmd}`, { stdio: 'pipe' }).toString().trim();
             } catch { /* not found */ }
         }
         return null;
@@ -931,17 +1068,14 @@ export class LlamaCppService {
      * Run the documents processor to scan for new/changed documents
      * and generate QA training pairs.
      */
-    async processDocuments(): Promise<void> {
+    async processDocuments(logPath?: string): Promise<void> {
         const python = this.getTrainingPython();
         if (!python) {
             throw new Error(`${LOG_PREFIX} Training venv not installed — run ensureTrainingSystem() first`);
         }
         const script = path.join(getTrainingScriptsDir(), 'documents_processor.py');
         console.log(`${LOG_PREFIX} Running documents processor...`);
-        execSync(`"${python}" "${script}" --llm-root "${getLlmRoot()}"`, {
-            stdio: 'pipe',
-            timeout: 300_000, // 5 min
-        });
+        await this.spawnWithLog(python, [script, '--llm-root', getLlmRoot()], logPath, 300_000);
         console.log(`${LOG_PREFIX} Documents processing complete`);
     }
 
@@ -952,7 +1086,7 @@ export class LlamaCppService {
      *
      * Call this from a scheduler (launchd / cron / Task Scheduler).
      */
-    async runFullNightlyTraining(modelKey: string): Promise<void> {
+    async runFullNightlyTraining(modelKey: string, logPath?: string): Promise<void> {
         const entry = GGUF_MODELS[modelKey];
         if (!entry?.trainingRepo) {
             throw new Error(`${LOG_PREFIX} Model ${modelKey} has no training repo`);
@@ -965,7 +1099,7 @@ export class LlamaCppService {
 
         // 1. Process documents
         try {
-            await this.processDocuments();
+            await this.processDocuments(logPath);
         } catch (err) {
             console.error(`${LOG_PREFIX} Document processing failed (continuing with training):`, err);
         }
@@ -973,10 +1107,7 @@ export class LlamaCppService {
         // 2. Run training
         const script = path.join(getTrainingScriptsDir(), 'train_nightly.py');
         console.log(`${LOG_PREFIX} Running nightly training with model ${entry.trainingRepo}...`);
-        execSync(`"${python}" "${script}" --model "${entry.trainingRepo}" --llm-root "${getLlmRoot()}"`, {
-            stdio: 'pipe',
-            timeout: 3_600_000, // 1 hour
-        });
+        await this.spawnWithLog(python, [script, '--model', entry.trainingRepo, '--llm-root', getLlmRoot()], logPath, 7_200_000);
         console.log(`${LOG_PREFIX} Nightly training complete`);
     }
 
@@ -1071,6 +1202,9 @@ export class LlamaCppService {
             console.log(`${LOG_PREFIX} Model ${entry.displayName} already exists (${(stat.size / 1024 / 1024).toFixed(1)} MB)`);
             return destPath;
         }
+
+        // Pre-flight disk space check (model size + tmp file headroom)
+        assertDiskSpace(getModelsDir(), entry.sizeBytes * 1.1, `model download (${entry.displayName})`);
 
         console.log(`${LOG_PREFIX} Downloading model ${entry.displayName} from ${entry.url} ...`);
 
