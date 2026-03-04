@@ -258,97 +258,9 @@
                   </p>
                 </div>
 
-                <!-- Account Label (required only for new accounts) -->
-                <div v-if="connectedAccounts.length === 0 || isAddingAccount" class="space-y-2 mb-4">
-                  <label for="__account_label" class="block text-sm font-medium text-slate-700 dark:text-slate-300">
-                    Account Label
-                    <span class="text-red-500">*</span>
-                  </label>
-                  <input
-                    id="__account_label"
-                    type="text"
-                    v-model="newAccountLabel"
-                    placeholder="e.g. Work Gmail, Personal Gmail, Team Slack"
-                    class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-slate-700 dark:text-white"
-                    :class="{ 'border-red-500': errors['__account_label'] }"
-                  >
-                  <p class="text-xs text-slate-500 dark:text-slate-400">
-                    A friendly name to identify this account (e.g. your email address or team name)
-                  </p>
-                  <p v-if="errors['__account_label']" class="text-xs text-red-500">
-                    {{ errors['__account_label'] }}
-                  </p>
-                </div>
-                
-                <!-- Configuration Form (credential fields) -->
-                <div v-if="integration.properties && integration.properties.length > 0" class="space-y-4 mb-6">
-                  <div v-for="property in integration.properties" :key="property.key" class="space-y-2">
-                    <label :for="property.key" class="block text-sm font-medium text-slate-700 dark:text-slate-300">
-                      {{ property.title }}
-                      <span v-if="property.required" class="text-red-500">*</span>
-                    </label>
-
-                    <!-- Select field -->
-                    <div v-if="property.type === 'select'" class="relative">
-                      <select
-                        :id="property.key"
-                        v-model="formData[property.key]"
-                        :required="property.required"
-                        class="w-full appearance-none rounded-lg border border-gray-300 px-3 py-2 pr-8 text-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-slate-700 dark:text-white"
-                        :class="{ 'border-red-500': errors[property.key] }"
-                      >
-                        <option value="" disabled>{{ selectOptionsLoading[property.key] ? 'Loading...' : property.placeholder || 'Select...' }}</option>
-                        <option
-                          v-for="opt in (selectOptions[property.key] || [])"
-                          :key="opt.value"
-                          :value="opt.value"
-                        >
-                          {{ opt.label }}{{ opt.description ? ` — ${opt.description}` : '' }}
-                        </option>
-                      </select>
-                      <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
-                        <svg class="h-4 w-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-                        </svg>
-                      </div>
-                      <button
-                        v-if="property.selectBoxId && !selectOptionsLoading[property.key]"
-                        type="button"
-                        class="absolute right-7 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
-                        title="Refresh options"
-                        @click="fetchSelectOptions(property)"
-                      >
-                        <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                        </svg>
-                      </button>
-                    </div>
-
-                    <!-- Standard input field -->
-                    <input
-                      v-else
-                      :id="property.key"
-                      :type="property.type"
-                      v-model="formData[property.key]"
-                      :placeholder="property.placeholder"
-                      :required="property.required"
-                      class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-slate-700 dark:text-white"
-                      :class="{ 'border-red-500': errors[property.key] }"
-                      @blur="onDependencyFieldBlur(property.key)"
-                    >
-                    <p v-if="property.hint" class="text-xs text-slate-500 dark:text-slate-400">
-                      {{ property.hint }}
-                    </p>
-                    <p v-if="errors[property.key]" class="text-xs text-red-500">
-                      {{ errors[property.key] }}
-                    </p>
-                  </div>
-                </div>
-                
-                <div class="space-y-4">
-                  <!-- OAuth connect button -->
+                <!-- OAuth sign-in section (completely independent of credentials form) -->
+                <div v-if="(integration.authType === 'oauth' || integration.oauth) && !isEditingAccount" class="space-y-2 mb-6">
                   <button
-                    v-if="integration.authType === 'oauth' && !isEditingAccount"
                     @click="handleOAuthConnect()"
                     :disabled="isLoading"
                     class="w-full rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 flex items-center justify-center"
@@ -357,32 +269,130 @@
                       <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                       <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a8 8 0 01-16 0v4a8 8 0 0016 0z"></path>
                     </svg>
-                    {{ isLoading ? 'Authorizing...' : `Connect with ${integration.name}` }}
+                    {{ isLoading ? 'Authorizing...' : `Sign in with ${integration.name}` }}
                   </button>
-                  <!-- Standard credentials connect button -->
-                  <button
-                    v-else
-                    @click="handleConnect()"
-                    :disabled="isLoading"
-                    class="w-full rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 flex items-center justify-center"
-                  >
-                    <svg v-if="isLoading" class="animate-spin h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24">
-                      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a8 8 0 01-16 0v4a8 8 0 0016 0z"></path>
-                    </svg>
-                    {{ isLoading
-                      ? (isEditingAccount ? 'Saving...' : 'Connecting...')
-                      : (isEditingAccount ? 'Save Changes' : 'Connect Now') }}
-                  </button>
-                  <p v-if="integration.authType === 'oauth' && !isEditingAccount" class="text-xs text-slate-500 dark:text-slate-400">
-                    Your browser will open to authorize access. Client credentials are saved locally.
-                  </p>
-                  <p v-else class="text-xs text-slate-500 dark:text-slate-400">
-                    {{ isEditingAccount
-                      ? 'Update and save credentials for this connected account'
-                      : 'Connect your account to start using this integration' }}
+                  <p class="text-xs text-slate-500 dark:text-slate-400">
+                    Your browser will open to sign in and authorize access.
                   </p>
                   <p v-if="oauthError" class="text-xs text-red-500">{{ oauthError }}</p>
+                </div>
+
+                <!-- Divider when both OAuth and credentials are available -->
+                <div v-if="integration.oauth && integration.authType !== 'oauth' && !isEditingAccount" class="flex items-center gap-3 mb-6">
+                  <div class="flex-1 border-t border-slate-300 dark:border-slate-600"></div>
+                  <span class="text-xs text-slate-400 dark:text-slate-500 uppercase">or connect with credentials</span>
+                  <div class="flex-1 border-t border-slate-300 dark:border-slate-600"></div>
+                </div>
+
+                <!-- Credentials section (account label + properties + connect button) -->
+                <div v-if="integration.authType !== 'oauth' || isEditingAccount">
+                  <!-- Account Label (required only for new accounts) -->
+                  <div v-if="connectedAccounts.length === 0 || isAddingAccount" class="space-y-2 mb-4">
+                    <label for="__account_label" class="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                      Account Label
+                      <span class="text-red-500">*</span>
+                    </label>
+                    <input
+                      id="__account_label"
+                      type="text"
+                      v-model="newAccountLabel"
+                      placeholder="e.g. Work Gmail, Personal Gmail, Team Slack"
+                      class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-slate-700 dark:text-white"
+                      :class="{ 'border-red-500': errors['__account_label'] }"
+                    >
+                    <p class="text-xs text-slate-500 dark:text-slate-400">
+                      A friendly name to identify this account (e.g. your email address or team name)
+                    </p>
+                    <p v-if="errors['__account_label']" class="text-xs text-red-500">
+                      {{ errors['__account_label'] }}
+                    </p>
+                  </div>
+                  
+                  <!-- Configuration Form (credential fields) -->
+                  <div v-if="integration.properties && integration.properties.length > 0" class="space-y-4 mb-6">
+                    <div v-for="property in integration.properties" :key="property.key" class="space-y-2">
+                      <label :for="property.key" class="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                        {{ property.title }}
+                        <span v-if="property.required" class="text-red-500">*</span>
+                      </label>
+
+                      <!-- Select field -->
+                      <div v-if="property.type === 'select'" class="relative">
+                        <select
+                          :id="property.key"
+                          v-model="formData[property.key]"
+                          :required="property.required"
+                          class="w-full appearance-none rounded-lg border border-gray-300 px-3 py-2 pr-8 text-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-slate-700 dark:text-white"
+                          :class="{ 'border-red-500': errors[property.key] }"
+                        >
+                          <option value="" disabled>{{ selectOptionsLoading[property.key] ? 'Loading...' : property.placeholder || 'Select...' }}</option>
+                          <option
+                            v-for="opt in (selectOptions[property.key] || [])"
+                            :key="opt.value"
+                            :value="opt.value"
+                          >
+                            {{ opt.label }}{{ opt.description ? ` — ${opt.description}` : '' }}
+                          </option>
+                        </select>
+                        <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
+                          <svg class="h-4 w-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </div>
+                        <button
+                          v-if="property.selectBoxId && !selectOptionsLoading[property.key]"
+                          type="button"
+                          class="absolute right-7 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                          title="Refresh options"
+                          @click="fetchSelectOptions(property)"
+                        >
+                          <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                          </svg>
+                        </button>
+                      </div>
+
+                      <!-- Standard input field -->
+                      <input
+                        v-else
+                        :id="property.key"
+                        :type="property.type"
+                        v-model="formData[property.key]"
+                        :placeholder="property.placeholder"
+                        :required="property.required"
+                        class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-slate-700 dark:text-white"
+                        :class="{ 'border-red-500': errors[property.key] }"
+                        @blur="onDependencyFieldBlur(property.key)"
+                      >
+                      <p v-if="property.hint" class="text-xs text-slate-500 dark:text-slate-400">
+                        {{ property.hint }}
+                      </p>
+                      <p v-if="errors[property.key]" class="text-xs text-red-500">
+                        {{ errors[property.key] }}
+                      </p>
+                    </div>
+                  </div>
+                  
+                  <div class="space-y-2">
+                    <button
+                      @click="handleConnect()"
+                      :disabled="isLoading"
+                      class="w-full rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 flex items-center justify-center"
+                    >
+                      <svg v-if="isLoading" class="animate-spin h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a8 8 0 01-16 0v4a8 8 0 0016 0z"></path>
+                      </svg>
+                      {{ isLoading
+                        ? (isEditingAccount ? 'Saving...' : 'Connecting...')
+                        : (isEditingAccount ? 'Save Changes' : 'Connect Now') }}
+                    </button>
+                    <p class="text-xs text-slate-500 dark:text-slate-400">
+                      {{ isEditingAccount
+                        ? 'Update and save credentials for this connected account'
+                        : 'Connect your account to start using this integration' }}
+                    </p>
+                  </div>
                 </div>
               </div>
 
@@ -717,7 +727,7 @@ const disconnectAccount = async (accountId: string) => {
   isLoading.value = true;
   try {
     // For OAuth integrations, revoke tokens first
-    if (integration.value.authType === 'oauth') {
+    if (integration.value.authType === 'oauth' || integration.value.oauth) {
       try {
         await integrationService.revokeOAuthTokens(integration.value.id, accountId);
       } catch (err) {
@@ -847,43 +857,33 @@ const handleOAuthConnect = async () => {
   errors.value = {};
   oauthError.value = '';
 
-  const isCreatingAccount = connectedAccounts.value.length === 0 || isAddingAccount.value;
-  const label = newAccountLabel.value.trim();
+  // OAuth connections use a fixed account id — no label needed
+  const targetAccountId = 'oauth';
 
-  if (isCreatingAccount && !label) {
-    errors.value['__account_label'] = 'Account label is required';
-    return;
-  }
+  // Only check for client_id/client_secret when the integration is
+  // authType 'oauth' (OAuth-only with user-supplied credentials like Google).
+  let clientId = '';
+  let clientSecret = '';
 
-  const targetAccountId = isCreatingAccount
-    ? label.toLowerCase().replace(/[^a-z0-9]+/g, '_')
-    : (editingAccountId.value || selectedAccountId.value || activeAccountId.value);
+  if (integration.value.authType === 'oauth') {
+    const props = integration.value.properties ?? [];
+    const hasClientIdProp = props.some(p => p.key === 'client_id');
+    const hasClientSecretProp = props.some(p => p.key === 'client_secret');
 
-  // Validate form (client_id and client_secret are required for OAuth)
-  if (!validateForm()) return;
+    if (hasClientIdProp && hasClientSecretProp) {
+      clientId = formData.value['client_id'] || '';
+      clientSecret = formData.value['client_secret'] || '';
 
-  const clientId = formData.value['client_id'];
-  const clientSecret = formData.value['client_secret'];
-
-  if (!clientId || !clientSecret) {
-    oauthError.value = 'Client ID and Client Secret are required for OAuth connection.';
-    return;
+      if (!clientId || !clientSecret) {
+        oauthError.value = 'Client ID and Client Secret are required for OAuth connection.';
+        return;
+      }
+    }
   }
 
   isLoading.value = true;
   try {
-    if (isCreatingAccount) {
-      await integrationService.setAccountLabel(integration.value.id, targetAccountId, label);
-    }
-
-    // Save client credentials for this account before starting the flow
-    const formInputs = Object.entries(formData.value).map(([key, value]) => ({
-      integration_id: integration.value!.id,
-      account_id: targetAccountId,
-      property: key,
-      value: value
-    }));
-    await integrationService.setFormValues(formInputs);
+    await integrationService.setAccountLabel(integration.value.id, targetAccountId, integration.value.name + ' OAuth');
 
     // Start the OAuth flow — this opens the browser and waits for callback
     await integrationService.startOAuthFlow(
@@ -894,17 +894,8 @@ const handleOAuthConnect = async () => {
       targetAccountId,
     );
 
-    // If this is the first account, set it as active
-    if (isCreatingAccount && connectedAccounts.value.length === 0) {
-      await integrationService.setActiveAccount(integration.value.id, targetAccountId);
-    }
-
-    // Reset form state
-    isAddingAccount.value = false;
-    isEditingAccount.value = false;
-    editingAccountId.value = null;
-    newAccountLabel.value = '';
-    formData.value = {};
+    // Set the OAuth account as active
+    await integrationService.setActiveAccount(integration.value.id, targetAccountId);
 
     await refreshAccounts();
     integration.value.connected = await integrationService.isAnyAccountConnected(integration.value.id);

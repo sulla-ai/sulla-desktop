@@ -64,8 +64,8 @@ export class OAuthService {
    *
    * @param integrationId  The integration being connected (e.g. 'gmail').
    * @param providerId     The OAuthProvider id (e.g. 'google').
-   * @param clientId       The user's OAuth client ID (from integration form).
-   * @param clientSecret   The user's OAuth client secret (from integration form).
+   * @param clientId       The user's OAuth client ID (from integration form). Optional for public-client providers with builtInClientId.
+   * @param clientSecret   The user's OAuth client secret. Optional for public-client providers.
    * @param accountId      Multi-account support — defaults to 'default'.
    * @param extraScopes    Additional scopes beyond the provider defaults.
    */
@@ -83,16 +83,33 @@ export class OAuthService {
     }
     const cfg = provider.config;
 
+    // Resolve effective client_id (built-in takes precedence for public clients)
+    const effectiveClientId = cfg.builtInClientId || clientId;
+    const effectiveClientSecret = cfg.clientAuthMethod === 'none' ? '' : clientSecret;
+
     // Generate CSRF state
     const state = crypto.randomBytes(24).toString('hex');
 
-    // Start callback server
-    const { redirectUri, codePromise, shutdown } = startOAuthCallbackServer(state);
+    // Generate PKCE verifier/challenge if required
+    let codeVerifier: string | undefined;
+    let codeChallenge: string | undefined;
+    if (cfg.usePKCE) {
+      codeVerifier = crypto.randomBytes(32).toString('base64url');
+      codeChallenge = crypto.createHash('sha256').update(codeVerifier).digest('base64url');
+    }
+
+    // Start callback server (with optional fixed port/path)
+    const { redirectUri, codePromise, shutdown } = startOAuthCallbackServer({
+      expectedState: state,
+      fixedPort:     cfg.fixedCallbackPort,
+      callbackPath:  cfg.fixedCallbackPath,
+      useLocalhostHostname: !!cfg.fixedCallbackPort,
+    });
     console.log(`${ LOG_PREFIX } Callback server listening at ${ redirectUri }`);
 
     try {
       // Build authorize URL
-      const authorizeUrl = this.buildAuthorizeUrl(cfg, clientId, redirectUri, state, extraScopes);
+      const authorizeUrl = this.buildAuthorizeUrl(cfg, effectiveClientId, redirectUri, state, extraScopes, codeChallenge);
       console.log(`${ LOG_PREFIX } Opening browser for authorization...`);
 
       // Open in user's default browser
@@ -103,7 +120,7 @@ export class OAuthService {
       console.log(`${ LOG_PREFIX } Received authorization code`);
 
       // Exchange code for tokens
-      const tokens = await this.exchangeCode(cfg, clientId, clientSecret, code, redirectUri);
+      const tokens = await this.exchangeCode(cfg, effectiveClientId, effectiveClientSecret, code, redirectUri, codeVerifier);
       console.log(`${ LOG_PREFIX } Token exchange successful`);
 
       // Let the provider do post-processing
@@ -117,7 +134,7 @@ export class OAuthService {
       await integrationService.setConnectionStatus(integrationId, true, accountId);
 
       // Schedule proactive refresh
-      this.scheduleRefresh(integrationId, accountId, providerId, clientId, clientSecret, tokens);
+      this.scheduleRefresh(integrationId, accountId, providerId, effectiveClientId, effectiveClientSecret, tokens);
 
       return tokens;
     } catch (err) {
@@ -134,6 +151,7 @@ export class OAuthService {
     redirectUri: string,
     state: string,
     extraScopes: string[],
+    codeChallenge?: string,
   ): string {
     const sep = cfg.scopeSeparator ?? ' ';
     const allScopes = [...cfg.scopes, ...extraScopes];
@@ -147,6 +165,12 @@ export class OAuthService {
       ...cfg.extraAuthorizeParams,
     });
 
+    // PKCE code_challenge
+    if (codeChallenge) {
+      params.set('code_challenge', codeChallenge);
+      params.set('code_challenge_method', 'S256');
+    }
+
     return `${ cfg.authorizeUrl }?${ params.toString() }`;
   }
 
@@ -158,6 +182,7 @@ export class OAuthService {
     clientSecret: string,
     code: string,
     redirectUri: string,
+    codeVerifier?: string,
   ): Promise<OAuthTokenSet> {
     const body: Record<string, string> = {
       grant_type:   'authorization_code',
@@ -165,6 +190,11 @@ export class OAuthService {
       redirect_uri: redirectUri,
       ...cfg.extraTokenParams,
     };
+
+    // PKCE code_verifier
+    if (codeVerifier) {
+      body.code_verifier = codeVerifier;
+    }
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/x-www-form-urlencoded',
@@ -174,6 +204,9 @@ export class OAuthService {
     if (cfg.clientAuthMethod === 'header') {
       const basic = Buffer.from(`${ clientId }:${ clientSecret }`).toString('base64');
       headers.Authorization = `Basic ${ basic }`;
+    } else if (cfg.clientAuthMethod === 'none') {
+      // Public client — only send client_id, no secret
+      body.client_id = clientId;
     } else {
       body.client_id = clientId;
       body.client_secret = clientSecret;
@@ -234,6 +267,8 @@ export class OAuthService {
     if (cfg.clientAuthMethod === 'header') {
       const basic = Buffer.from(`${ clientId }:${ clientSecret }`).toString('base64');
       headers.Authorization = `Basic ${ basic }`;
+    } else if (cfg.clientAuthMethod === 'none') {
+      body.client_id = clientId;
     } else {
       body.client_id = clientId;
       body.client_secret = clientSecret;
@@ -375,29 +410,40 @@ export class OAuthService {
     }
 
     const provider = getOAuthProvider(stored.provider_id);
-    const bufferMs = ((provider?.config.refreshBufferSeconds ?? 300) * 1000);
+    const providerCfg = provider?.config;
+    const bufferMs = ((providerCfg?.refreshBufferSeconds ?? 300) * 1000);
 
     // Still valid?
     if (Date.now() < stored.expires_at - bufferMs) {
       return stored.access_token;
     }
 
-    // Need to refresh — we need client credentials
-    if (!clientId || !clientSecret) {
-      // Try to read them from IntegrationService form values
-      const integrationService = getIntegrationService();
-      const cidVal = await integrationService.getIntegrationValue(integrationId, 'client_id', accountId);
-      const csVal = await integrationService.getIntegrationValue(integrationId, 'client_secret', accountId);
+    // Need to refresh — resolve client credentials
 
-      if (!cidVal?.value || !csVal?.value) {
-        throw new Error(`${ LOG_PREFIX } Token expired and no client credentials available for refresh`);
+    if (!clientId) {
+      // Use built-in client_id for public clients, otherwise read from form
+      if (providerCfg?.builtInClientId) {
+        clientId = providerCfg.builtInClientId;
+      } else {
+        const integrationService = getIntegrationService();
+        const cidVal = await integrationService.getIntegrationValue(integrationId, 'client_id', accountId);
+        if (!cidVal?.value) {
+          throw new Error(`${ LOG_PREFIX } Token expired and no client_id available for refresh`);
+        }
+        clientId = cidVal.value;
       }
-      clientId = cidVal.value;
+    }
+    if (!clientSecret && providerCfg?.clientAuthMethod !== 'none') {
+      const integrationService = getIntegrationService();
+      const csVal = await integrationService.getIntegrationValue(integrationId, 'client_secret', accountId);
+      if (!csVal?.value) {
+        throw new Error(`${ LOG_PREFIX } Token expired and no client_secret available for refresh`);
+      }
       clientSecret = csVal.value;
     }
 
     const refreshed = await this.refreshAccessToken(
-      integrationId, accountId, stored.provider_id, clientId, clientSecret,
+      integrationId, accountId, stored.provider_id, clientId!, clientSecret ?? '',
     );
 
     return refreshed.access_token;
@@ -470,11 +516,22 @@ export class OAuthService {
       const integrationService = getIntegrationService();
 
       for (const row of rows) {
-        // Read client credentials from IntegrationService
-        const cidVal = await integrationService.getIntegrationValue(row.integration_id, 'client_id', row.account_id);
-        const csVal = await integrationService.getIntegrationValue(row.integration_id, 'client_secret', row.account_id);
+        // Read client credentials — use built-in for public clients
+        const provider = getOAuthProvider(row.provider_id);
+        const providerCfg = provider?.config;
+        let cid = providerCfg?.builtInClientId || '';
+        let cs = '';
 
-        if (!cidVal?.value || !csVal?.value) {
+        if (!cid) {
+          const cidVal = await integrationService.getIntegrationValue(row.integration_id, 'client_id', row.account_id);
+          cid = cidVal?.value || '';
+        }
+        if (providerCfg?.clientAuthMethod !== 'none') {
+          const csVal = await integrationService.getIntegrationValue(row.integration_id, 'client_secret', row.account_id);
+          cs = csVal?.value || '';
+        }
+
+        if (!cid || (providerCfg?.clientAuthMethod !== 'none' && !cs)) {
           console.warn(`${ LOG_PREFIX } Skipping refresh timer for ${ row.integration_id }/${ row.account_id } — missing client credentials`);
           continue;
         }
@@ -491,8 +548,8 @@ export class OAuthService {
           row.integration_id,
           row.account_id,
           row.provider_id,
-          cidVal.value,
-          csVal.value,
+          cid,
+          cs,
           tokens,
         );
       }

@@ -5,3 +5,4 @@ export { registerOAuthProvider, getOAuthProvider, getAllOAuthProviders } from '.
 
 // Auto-register concrete providers on import
 import './providers/GoogleOAuth';
+import './providers/OpenAIOAuth';
