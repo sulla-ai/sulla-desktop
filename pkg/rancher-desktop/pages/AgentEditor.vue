@@ -1,7 +1,16 @@
 <template>
   <div class="h-screen overflow-hidden font-sans flex flex-col page-root" :class="{ dark: isDark }">
     <PostHogTracker page-name="AgentFilesystem" />
-    <AgentHeader :is-dark="isDark" :toggle-theme="toggleTheme" @toggle-left-pane="leftPaneVisible = !leftPaneVisible" @toggle-center-pane="centerPaneVisible = !centerPaneVisible" @toggle-right-pane="rightPaneVisible = !rightPaneVisible" />
+    <EditorHeader
+      :is-dark="isDark"
+      :toggle-theme="toggleTheme"
+      :left-pane-visible="leftPaneVisible"
+      :bottom-pane-visible="bottomPaneVisible"
+      :right-pane-visible="rightPaneVisible"
+      @toggle-left-pane="leftPaneVisible = !leftPaneVisible"
+      @toggle-bottom-pane="bottomPaneVisible = !bottomPaneVisible"
+      @toggle-right-pane="rightPaneVisible = !rightPaneVisible"
+    />
 
     <div class="flex h-full min-h-0 overflow-hidden">
         <div class="main-content">
@@ -18,7 +27,7 @@
         </div>
 
         <!-- Left sidebar: File tree -->
-        <div class="left-pane" v-show="leftPaneVisible" :class="{ dark: isDark }">
+        <div class="left-pane" v-show="leftPaneVisible" :class="{ dark: isDark }" :style="{ width: leftPaneWidth + 'px' }">
           <div class="file-tree-wrapper">
             <!-- Search -->
             <FileSearch
@@ -44,6 +53,14 @@
             />
           </div>
         </div>
+
+        <!-- Resize handle: left pane -->
+        <div
+          v-show="leftPaneVisible"
+          class="resize-handle resize-handle-v"
+          :class="{ dark: isDark }"
+          @mousedown="startResize('left', $event)"
+        ></div>
 
         <!-- Right content: Editor area -->
         <div class="editor-panel" v-show="centerPaneVisible" :class="{ dark: isDark }">
@@ -77,12 +94,9 @@
 
             <!-- Empty state (no tabs open) -->
             <div v-if="openTabs.length === 0" class="empty-state">
-              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="empty-icon">
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                <polyline points="14 2 14 8 20 8" />
-              </svg>
-              <p class="empty-text">Select a file to view its contents</p>
-              <p class="empty-hint">Browse your sulla workspace using the file tree on the left</p>
+              <img :src="sullaMutedIconUrl" alt="Sulla" class="empty-icon-img">
+              <p class="empty-text">Sulla Editor</p>
+              <p class="empty-hint">an editor built for vibe coders</p>
             </div>
 
             <!-- Active tab content -->
@@ -145,8 +159,16 @@
             </template>
           </div>
 
+          <!-- Resize handle: bottom pane -->
+          <div
+            v-show="bottomPaneVisible"
+            class="resize-handle resize-handle-h"
+            :class="{ dark: isDark }"
+            @mousedown="startResize('bottom', $event)"
+          ></div>
+
           <!-- Bottom center pane -->
-          <div class="editor-bottom" :class="{ dark: isDark }">
+          <div v-show="bottomPaneVisible" class="editor-bottom" :class="{ dark: isDark }" :style="{ height: bottomPaneHeight + 'px' }">
             <!-- Terminal tabs header -->
             <div class="terminal-tabs-header" :class="{ dark: isDark }">
               <div class="terminal-tabs">
@@ -197,9 +219,17 @@
           </div>
         </div>
 
-        <!-- Right pane -->
-        <div class="right-pane" v-show="rightPaneVisible" :class="{ dark: isDark }">
-          <!-- Empty for now -->
+        <!-- Resize handle: right pane -->
+        <div
+          v-show="rightPaneVisible"
+          class="resize-handle resize-handle-v"
+          :class="{ dark: isDark }"
+          @mousedown="startResize('right', $event)"
+        ></div>
+
+        <!-- Right pane: Chat -->
+        <div class="right-pane" v-show="rightPaneVisible" :class="{ dark: isDark }" :style="{ width: rightPaneWidth + 'px' }">
+          <EditorChat :is-dark="isDark" />
         </div>
       </div>
     </div>
@@ -224,7 +254,7 @@ import { defineComponent, ref, computed, reactive, markRaw, onMounted, onBeforeU
 import { ipcRenderer } from 'electron';
 
 import PostHogTracker from '@pkg/components/PostHogTracker.vue';
-import AgentHeader from './agent/AgentHeader.vue';
+import EditorHeader from './editor/EditorHeader.vue';
 import FileTreeSidebar from './filesystem/FileTreeSidebar.vue';
 import MarkdownEditor from './filesystem/MarkdownEditor.vue';
 import CodeEditor from './filesystem/CodeEditor.vue';
@@ -234,6 +264,7 @@ import GitChanges from './editor/GitChanges.vue';
 import IconPanel from './editor/IconPanel.vue';
 import FileSearch from './editor/FileSearch.vue';
 import GitPane from './editor/GitPane.vue';
+import EditorChat from './editor/EditorChat.vue';
 
 import type { FileEntry } from './filesystem/FileTreeSidebar.vue';
 
@@ -286,7 +317,7 @@ export default defineComponent({
 
   components: {
     PostHogTracker,
-    AgentHeader,
+    EditorHeader,
     FileTreeSidebar,
     MarkdownEditor,
     CodeEditor,
@@ -296,17 +327,86 @@ export default defineComponent({
     IconPanel,
     FileSearch,
     GitPane,
+    EditorChat,
   },
 
   setup(props, { emit }) {
     const isDark = ref(false);
     const THEME_STORAGE_KEY = 'agentTheme';
+    const sullaMutedIconUrl = new URL('../../../resources/icons/sulla-muted-icon.png', import.meta.url).toString();
     const rootPath = ref('');
     const openTabs = ref<TabState[]>([]);
     const activeTabKey = ref('');
     const leftPaneVisible = ref(true);
     const centerPaneVisible = ref(true);
     const rightPaneVisible = ref(true);
+    const bottomPaneVisible = ref(true);
+
+    // Resizable pane sizes (persisted to localStorage)
+    const PANE_STORAGE_KEY = 'agentEditorPaneSizes';
+    const savedSizes = (() => {
+      try {
+        return JSON.parse(localStorage.getItem(PANE_STORAGE_KEY) || '{}');
+      } catch { return {}; }
+    })();
+    const leftPaneWidth = ref<number>(savedSizes.left ?? 280);
+    const rightPaneWidth = ref<number>(savedSizes.right ?? 280);
+    const bottomPaneHeight = ref<number>(savedSizes.bottom ?? 200);
+
+    function savePaneSizes() {
+      localStorage.setItem(PANE_STORAGE_KEY, JSON.stringify({
+        left:   leftPaneWidth.value,
+        right:  rightPaneWidth.value,
+        bottom: bottomPaneHeight.value,
+      }));
+    }
+
+    type ResizeTarget = 'left' | 'right' | 'bottom';
+    let resizeTarget: ResizeTarget | null = null;
+    let resizeStartPos = 0;
+    let resizeStartSize = 0;
+
+    function startResize(target: ResizeTarget, e: MouseEvent) {
+      e.preventDefault();
+      resizeTarget = target;
+      if (target === 'bottom') {
+        resizeStartPos = e.clientY;
+        resizeStartSize = bottomPaneHeight.value;
+      } else if (target === 'left') {
+        resizeStartPos = e.clientX;
+        resizeStartSize = leftPaneWidth.value;
+      } else {
+        resizeStartPos = e.clientX;
+        resizeStartSize = rightPaneWidth.value;
+      }
+      document.addEventListener('mousemove', onResizeMove);
+      document.addEventListener('mouseup', onResizeEnd);
+      document.body.style.cursor = target === 'bottom' ? 'row-resize' : 'col-resize';
+      document.body.style.userSelect = 'none';
+    }
+
+    function onResizeMove(e: MouseEvent) {
+      if (!resizeTarget) return;
+      if (resizeTarget === 'bottom') {
+        const delta = resizeStartPos - e.clientY;
+        bottomPaneHeight.value = Math.max(100, Math.min(600, resizeStartSize + delta));
+      } else if (resizeTarget === 'left') {
+        const delta = e.clientX - resizeStartPos;
+        leftPaneWidth.value = Math.max(150, Math.min(600, resizeStartSize + delta));
+      } else {
+        const delta = resizeStartPos - e.clientX;
+        rightPaneWidth.value = Math.max(150, Math.min(600, resizeStartSize + delta));
+      }
+    }
+
+    function onResizeEnd() {
+      resizeTarget = null;
+      document.removeEventListener('mousemove', onResizeMove);
+      document.removeEventListener('mouseup', onResizeEnd);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      savePaneSizes();
+    }
     const searchMode = ref(false);
     const gitMode = ref(false);
     const searchQuery = ref('');
@@ -625,6 +725,7 @@ export default defineComponent({
 
     return {
       isDark,
+      sullaMutedIconUrl,
       toggleTheme,
       toggleFileTree,
       toggleSearch,
@@ -636,6 +737,11 @@ export default defineComponent({
       leftPaneVisible,
       centerPaneVisible,
       rightPaneVisible,
+      bottomPaneVisible,
+      leftPaneWidth,
+      rightPaneWidth,
+      bottomPaneHeight,
+      startResize,
       searchMode,
       gitMode,
       searchQuery,
@@ -678,21 +784,6 @@ export default defineComponent({
   color: #fafafa;
 }
 
-.file-tree-panel {
-  width: 280px;
-  min-width: 200px;
-  max-width: 400px;
-  flex-shrink: 0;
-  border-right: 1px solid #cbd5e1;
-  overflow: hidden;
-  background: #f8fafc;
-}
-
-.file-tree-panel.dark {
-  border-right-color: #3c3c3c;
-  background: #1e293b;
-}
-
 .editor-panel {
   flex: 1;
   display: flex;
@@ -721,10 +812,9 @@ export default defineComponent({
 }
 
 .editor-bottom {
-  height: 200px;
-  min-height: 150px;
-  max-height: 300px;
   flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
   border-top: 1px solid #cbd5e1;
   overflow: hidden;
   background: #f8fafc;
@@ -736,9 +826,6 @@ export default defineComponent({
 }
 
 .right-pane {
-  width: 280px;
-  min-width: 200px;
-  max-width: 400px;
   flex-shrink: 0;
   border-left: 1px solid #cbd5e1;
   border-right: 1px solid #cbd5e1;
@@ -768,6 +855,12 @@ export default defineComponent({
 
 .dark .empty-icon {
   opacity: 0.2;
+}
+
+.empty-icon-img {
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
 }
 
 .empty-text {
@@ -1007,8 +1100,42 @@ export default defineComponent({
   height: 100%;
 }
 
+/* Resize handles */
+.resize-handle {
+  flex-shrink: 0;
+  background: transparent;
+  position: relative;
+  z-index: 10;
+}
+
+.resize-handle-v {
+  width: 5px;
+  cursor: col-resize;
+  margin: 0 -2px;
+}
+
+.resize-handle-h {
+  height: 5px;
+  cursor: row-resize;
+  margin: -2px 0;
+}
+
+.resize-handle:hover,
+.resize-handle:active {
+  background: #0078d4;
+  opacity: 0.5;
+}
+
+.resize-handle:active {
+  opacity: 0.8;
+}
+
+.resize-handle.dark:hover,
+.resize-handle.dark:active {
+  background: #4fa3e0;
+}
+
 .left-pane {
-  width: 280px;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;

@@ -61,11 +61,20 @@ export default defineComponent({
       }
     };
 
+    let fitTimeout: ReturnType<typeof setTimeout> | null = null;
     const fitTerminal = () => {
-      if (fitAddon) {
-        fitAddon.fit();
-        sendResize();
-      }
+      if (fitTimeout) clearTimeout(fitTimeout);
+      fitTimeout = setTimeout(() => {
+        if (!fitAddon || !terminalElement.value) return;
+        const { clientWidth, clientHeight } = terminalElement.value;
+        if (clientWidth < 10 || clientHeight < 10) return;
+        try {
+          fitAddon.fit();
+          sendResize();
+        } catch {
+          // ignore fit errors during rapid resize
+        }
+      }, 30);
     };
 
     const connectWebSocket = () => {
@@ -163,5 +172,11 @@ export default defineComponent({
 
 .terminal-wrapper :deep(.xterm) {
   height: 100%;
+  overflow: hidden;
+}
+
+.terminal-wrapper :deep(.xterm-viewport) {
+  overflow-y: hidden !important;
+  background-color: inherit !important;
 }
 </style>
