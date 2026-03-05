@@ -315,16 +315,19 @@ export function openModelTraining() {
 export function openEditor() {
   console.log('[openEditor] Called.');
 
-  const { width, height } = screen.getPrimaryDisplay().workAreaSize;
+  const fullSize = screen.getPrimaryDisplay().size;
+  const workArea = screen.getPrimaryDisplay().workAreaSize;
 
-  const defaultWidth = Math.min(Math.trunc(width * 0.8), 1200);
-  const defaultHeight = Math.min(Math.trunc(height * 0.8), 800);
+  const defaultWidth = Math.trunc(fullSize.width * 0.9);
+  const defaultHeight = workArea.height;
 
   const window = createWindow(
     'editor',
     editorUrl,
     {
       title:          'Sulla Desktop - Editor',
+      x:              0,
+      y:              0,
       width:          defaultWidth,
       height:         defaultHeight,
       resizable:      true,

@@ -3,14 +3,46 @@
     <PostHogTracker page-name="AgentFilesystem" />
     <AgentHeader :is-dark="isDark" :toggle-theme="toggleTheme" @toggle-left-pane="leftPaneVisible = !leftPaneVisible" @toggle-center-pane="centerPaneVisible = !centerPaneVisible" @toggle-right-pane="rightPaneVisible = !rightPaneVisible" />
 
-    <div class="flex flex-1 min-h-0 overflow-hidden">
+    <div class="flex h-full min-h-0 overflow-hidden">
+        <div class="main-content">
+        <!-- Icon Panel -->
+        <IconPanel
+          :is-dark="isDark"
+          :left-pane-visible="leftPaneVisible"
+          :search-mode="searchMode"
+          :git-mode="gitMode"
+          @toggle-file-tree="toggleFileTree"
+          @toggle-search="toggleSearch"
+          @toggle-git="toggleGit"
+        />
+        </div>
+
         <!-- Left sidebar: File tree -->
-        <div class="file-tree-panel" v-show="leftPaneVisible" :class="{ dark: isDark }">
-          <FileTreeSidebar
-            :is-dark="isDark"
-            :highlight-path="highlightPath"
-            @file-selected="onFileSelected"
-          />
+        <div class="left-pane" v-show="leftPaneVisible" :class="{ dark: isDark }">
+          <div class="file-tree-wrapper">
+            <!-- Search -->
+            <FileSearch
+              v-show="searchMode"
+              v-model="searchQuery"
+              :is-dark="isDark"
+            />
+
+            <!-- Git pane -->
+            <GitPane
+              v-show="gitMode"
+              :git-changes="gitChanges"
+              :is-dark="isDark"
+            />
+
+            <!-- File tree -->
+            <FileTreeSidebar
+              v-show="!searchMode && !gitMode"
+              :root-path="rootPath"
+              :highlight-path="highlightPath"
+              :is-dark="isDark"
+              @file-selected="onFileSelected"
+            />
+          </div>
         </div>
 
         <!-- Right content: Editor area -->
@@ -25,7 +57,7 @@
                 class="tab"
                 :class="{ active: activeTabKey === `${tab.path}-${tab.editorType || 'code'}`, dark: isDark }"
                 @click="switchTab(tab)"
-                @contextmenu.prevent="onTabContextMenu($event, tab)"
+                @contextmenu.prevent="$emit('tab-context-menu', $event, tab)"
               >
                 <span class="tab-icon">
                   <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
@@ -56,14 +88,14 @@
             <!-- Active tab content -->
             <template v-if="activeTab">
               <!-- Loading state -->
-              <div v-if="activeTab.loading" class="empty-state">
+              <div v-if="activeTab?.loading" class="empty-state">
                 <div class="loading-spinner"></div>
-                <p class="empty-text">Loading {{ activeTab.name }}…</p>
+                <p class="empty-text">Loading {{ activeTab?.name }}…</p>
               </div>
 
               <!-- Error state -->
-              <div v-else-if="activeTab.error" class="empty-state">
-                <p class="error-text">{{ activeTab.error }}</p>
+              <div v-else-if="activeTab?.error" class="empty-state">
+                <p class="error-text">{{ activeTab?.error }}</p>
               </div>
 
               <!-- Editor content -->
@@ -81,11 +113,11 @@
                     </span>
                   </div>
                   <button
-                    v-if="activeTab && activeTab.dirty"
+                    v-if="activeTab?.dirty"
                     class="save-button"
                     :class="{ dark: isDark }"
                     @click="saveActiveTab"
-                    :disabled="activeTab.loading"
+                    :disabled="activeTab?.loading"
                   >
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                       <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
@@ -101,11 +133,11 @@
                   <component
                     :is="activeEditorComponent"
                     ref="editorRef"
-                    :content="activeTab.content"
-                    :file-path="activeTab.path"
-                    :file-ext="activeTab.ext"
+                    :content="activeTab?.content || ''"
+                    :file-path="activeTab?.path || ''"
+                    :file-ext="activeTab?.ext || ''"
                     :is-dark="isDark"
-                    :read-only="activeTab.editorType === 'preview'"
+                    :read-only="activeTab?.editorType === 'preview'"
                     @dirty="markActiveTabDirty"
                   />
                 </div>
@@ -115,7 +147,7 @@
 
           <!-- Bottom center pane -->
           <div class="editor-bottom" :class="{ dark: isDark }">
-            <!-- Empty for now -->
+            <XTermTerminal :is-dark="isDark" />
           </div>
         </div>
 
@@ -123,80 +155,26 @@
         <div class="right-pane" v-show="rightPaneVisible" :class="{ dark: isDark }">
           <!-- Empty for now -->
         </div>
+      </div>
     </div>
-  </div>
 
   <!-- Tab Context Menu -->
-  <Teleport to="body">
-    <div
-      v-if="tabContextMenu.visible"
-      ref="tabContextMenuRef"
-      class="tab-context-menu"
-      :class="{ dark: isDark }"
-      :style="{ top: tabContextMenu.y + 'px', left: tabContextMenu.x + 'px' }"
-      @contextmenu.prevent
-    >
-      <!-- View in Finder -->
-      <button class="context-menu-item" @click="viewInFinder(tabContextMenu.tab!)">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-          <circle cx="12" cy="12" r="3" />
-        </svg>
-        <span>View in Finder</span>
-      </button>
+  <TabContextMenu
+    :visible="tabContextMenu.visible"
+    :x="tabContextMenu.x"
+    :y="tabContextMenu.y"
+    :tab="tabContextMenu.tab"
+    :is-dark="isDark"
+    @view-in-finder="viewInFinder"
+    @open-with-editor="openWithEditor"
+    @save-tab="saveTab"
+    @close-tab="closeTab"
+  />
 
-      <!-- Open with... -->
-      <div class="context-menu-sep"></div>
-      <div class="context-menu-subheader">Open with…</div>
-      <button class="context-menu-item" @click="openWithEditor(tabContextMenu.tab!, 'code')">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
-        </svg>
-        <span>Code Editor</span>
-      </button>
-      <button
-        v-if="tabContextMenu.tab && MARKDOWN_EXTS.has(tabContextMenu.tab.ext.toLowerCase())"
-        class="context-menu-item"
-        @click="openWithEditor(tabContextMenu.tab!, 'markdown')"
-      >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-          <polyline points="14 2 14 8 20 8"/>
-          <line x1="16" y1="13" x2="8" y2="13"/>
-          <line x1="16" y1="17" x2="8" y2="17"/>
-          <polyline points="10 9 9 9 8 9"/>
-        </svg>
-        <span>Markdown Editor</span>
-      </button>
-      <button
-        v-if="tabContextMenu.tab && MARKDOWN_EXTS.has(tabContextMenu.tab.ext.toLowerCase())"
-        class="context-menu-item"
-        @click="openWithEditor(tabContextMenu.tab!, 'preview')"
-      >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-          <polyline points="14 2 14 8 20 8"/>
-        </svg>
-        <span>Preview</span>
-      </button>
-
-      <!-- Save (if dirty) -->
-      <div v-if="tabContextMenu.tab?.dirty" class="context-menu-sep"></div>
-      <button v-if="tabContextMenu.tab?.dirty" class="context-menu-item" @click="saveTab(tabContextMenu.tab!)">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
-          <polyline points="17,21 17,13 7,13 7,21"/>
-          <polyline points="7,3 7,8 15,8"/>
-        </svg>
-        <span>Save</span>
-        <span class="context-menu-shortcut">⌘S</span>
-      </button>
-    </div>
-  </Teleport>
 </template>
 
 <script lang="ts">
-import { defineComponent, ref, computed, reactive, markRaw, onMounted, onBeforeUnmount, type Component } from 'vue';
+import { defineComponent, ref, computed, reactive, markRaw, onMounted, onBeforeUnmount, nextTick, type Component } from 'vue';
 import { ipcRenderer } from 'electron';
 
 import PostHogTracker from '@pkg/components/PostHogTracker.vue';
@@ -204,6 +182,12 @@ import AgentHeader from './agent/AgentHeader.vue';
 import FileTreeSidebar from './filesystem/FileTreeSidebar.vue';
 import MarkdownEditor from './filesystem/MarkdownEditor.vue';
 import CodeEditor from './filesystem/CodeEditor.vue';
+import XTermTerminal from './editor/XTermTerminal.vue';
+import TabContextMenu from './editor/TabContextMenu.vue';
+import GitChanges from './editor/GitChanges.vue';
+import IconPanel from './editor/IconPanel.vue';
+import FileSearch from './editor/FileSearch.vue';
+import GitPane from './editor/GitPane.vue';
 
 import type { FileEntry } from './filesystem/FileTreeSidebar.vue';
 
@@ -260,6 +244,12 @@ export default defineComponent({
     FileTreeSidebar,
     MarkdownEditor,
     CodeEditor,
+    XTermTerminal,
+    TabContextMenu,
+    GitChanges,
+    IconPanel,
+    FileSearch,
+    GitPane,
   },
 
   setup(props, { emit }) {
@@ -271,6 +261,16 @@ export default defineComponent({
     const leftPaneVisible = ref(true);
     const centerPaneVisible = ref(true);
     const rightPaneVisible = ref(true);
+    const searchMode = ref(false);
+    const gitMode = ref(false);
+    const searchQuery = ref('');
+    const gitChanges = ref<{status: string, file: string}[]>([]);
+
+    const getGitChanges = async () => {
+      if (rootPath.value) {
+        gitChanges.value = await (window as any).sulla.getGitChanges(rootPath.value);
+      }
+    };
 
     onMounted(async () => {
       const stored = localStorage.getItem(THEME_STORAGE_KEY);
@@ -289,9 +289,49 @@ export default defineComponent({
       localStorage.setItem(THEME_STORAGE_KEY, isDark.value ? 'dark' : 'light');
     }
 
+    function toggleFileTree() {
+      if (!leftPaneVisible.value) {
+        leftPaneVisible.value = true;
+        searchMode.value = false;
+        gitMode.value = false;
+      } else if (searchMode.value || gitMode.value) {
+        searchMode.value = false;
+        gitMode.value = false;
+      } else {
+        leftPaneVisible.value = false;
+      }
+    }
+
+    function toggleSearch() {
+      if (!leftPaneVisible.value) {
+        leftPaneVisible.value = true;
+        searchMode.value = true;
+        gitMode.value = false;
+      } else if (!searchMode.value) {
+        searchMode.value = true;
+        gitMode.value = false;
+      } else {
+        leftPaneVisible.value = false;
+      }
+    }
+
+    function toggleGit() {
+      if (!leftPaneVisible.value) {
+        leftPaneVisible.value = true;
+        searchMode.value = false;
+        gitMode.value = true;
+      } else if (!gitMode.value) {
+        searchMode.value = false;
+        gitMode.value = true;
+      } else {
+        leftPaneVisible.value = false;
+      }
+    }
+
     async function loadRootPath() {
       try {
         rootPath.value = await ipcRenderer.invoke('filesystem-get-root');
+        await getGitChanges();
       } catch { /* ignore */ }
     }
     loadRootPath();
@@ -319,8 +359,11 @@ export default defineComponent({
 
     async function loadTabContent(tab: TabState) {
       try {
+        console.log('Loading file content for path:', tab.path);
         tab.content = await ipcRenderer.invoke('filesystem-read-file', tab.path);
+        console.log('File content loaded successfully, length:', tab.content?.length);
       } catch (err: any) {
+        console.error('Failed to load file content:', err);
         tab.error = err?.message || 'Failed to read file';
       } finally {
         tab.loading = false;
@@ -403,6 +446,7 @@ export default defineComponent({
       tabContextMenu.value.visible = false;
     }
 
+    // Functions needed by FileTree component
     function viewInFinder(tab: TabState) {
       // Set highlight path to highlight the file in the file tree
       highlightPath.value = tab.path;
@@ -487,17 +531,7 @@ export default defineComponent({
       }
     }
 
-    const tabContextMenuRef = ref<HTMLElement | null>(null);
-
-    onMounted(() => {
-      window.addEventListener('keydown', onKeyDown);
-      // Add click outside handler for tab context menu
-      document.addEventListener('mousedown', (e) => {
-        if (tabContextMenuRef.value && !tabContextMenuRef.value.contains(e.target as Node)) {
-          hideTabContextMenu();
-        }
-      });
-    });
+    // Tab context menu removed - now in FileTree component
 
     onBeforeUnmount(() => {
       window.removeEventListener('keydown', onKeyDown);
@@ -507,31 +541,37 @@ export default defineComponent({
     return {
       isDark,
       toggleTheme,
+      toggleFileTree,
+      toggleSearch,
+      toggleGit,
       openTabs,
       activeTabKey,
       activeTab,
-      activeEditorComponent,
-      activeBreadcrumbs,
-      getIconColor,
-      onFileSelected,
-      switchTab,
-      closeTab,
-      editorRef,
-      markActiveTabDirty,
-      saveActiveTab,
-      tabContextMenu,
-      tabContextMenuRef,
-      hideTabContextMenu,
-      onTabContextMenu,
-      viewInFinder,
-      openWithEditor,
-      saveTab,
-      highlightPath,
-      loadTabContent,
+      rootPath,
       leftPaneVisible,
       centerPaneVisible,
       rightPaneVisible,
+      searchMode,
+      gitMode,
+      searchQuery,
+      gitChanges,
       MARKDOWN_EXTS,
+      highlightPath,
+      loadTabContent,
+      switchTab,
+      onTabContextMenu,
+      getIconColor,
+      closeTab,
+      activeBreadcrumbs,
+      saveActiveTab,
+      activeEditorComponent,
+      markActiveTabDirty,
+      viewInFinder,
+      openWithEditor,
+      saveTab,
+      onFileSelected,
+      editorRef,
+      tabContextMenu,
     };
   },
 });
@@ -553,7 +593,7 @@ export default defineComponent({
   min-width: 200px;
   max-width: 400px;
   flex-shrink: 0;
-  border-right: 1px solid #e2e8f0;
+  border-right: 1px solid #cbd5e1;
   overflow: hidden;
   background: #f8fafc;
 }
@@ -582,12 +622,20 @@ export default defineComponent({
   overflow: hidden;
 }
 
+.editor-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+}
+
 .editor-bottom {
   height: 200px;
   min-height: 150px;
   max-height: 300px;
   flex-shrink: 0;
-  border-top: 1px solid #e2e8f0;
+  border-top: 1px solid #cbd5e1;
   overflow: hidden;
   background: #f8fafc;
 }
@@ -602,13 +650,15 @@ export default defineComponent({
   min-width: 200px;
   max-width: 400px;
   flex-shrink: 0;
-  border-left: 1px solid #e2e8f0;
+  border-left: 1px solid #cbd5e1;
+  border-right: 1px solid #cbd5e1;
   overflow: hidden;
   background: #f8fafc;
 }
 
 .right-pane.dark {
   border-left-color: #3c3c3c;
+  border-right-color: #3c3c3c;
   background: #1e293b;
 }
 
@@ -673,7 +723,7 @@ export default defineComponent({
   align-items: stretch;
   height: 35px;
   background: #f8fafc;
-  border-bottom: 1px solid #e0e0e0;
+  border-bottom: 1px solid #cbd5e1;
   flex-shrink: 0;
   overflow-x: auto;
   overflow-y: hidden;
@@ -695,7 +745,7 @@ export default defineComponent({
   padding: 0 12px;
   font-size: 13px;
   color: #333;
-  border-right: 1px solid #e0e0e0;
+  border-right: 1px solid #cbd5e1;
   background: #eef2f6;
   cursor: pointer;
   flex-shrink: 0;
@@ -791,7 +841,7 @@ export default defineComponent({
   font-size: 12px;
   color: #888;
   background: #ffffff;
-  border-bottom: 1px solid #e8e8e8;
+  border-bottom: 1px solid #cbd5e1;
   flex-shrink: 0;
 }
 
@@ -856,81 +906,158 @@ export default defineComponent({
   color: #aaa;
 }
 
-/* Tab Context Menu */
-.tab-context-menu {
-  position: fixed;
-  z-index: 9999;
-  min-width: 180px;
+<style scoped>
+.page-root {
   background: #ffffff;
-  border: 1px solid #e2e8f0;
-  border-radius: 6px;
-  padding: 4px 0;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12), 0 1px 3px rgba(0, 0, 0, 0.08);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  font-size: 13px;
+  color: #0d0d0d;
 }
 
-.tab-context-menu.dark {
-  background: #2d2d2d;
-  border-color: #404040;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4), 0 1px 3px rgba(0, 0, 0, 0.3);
-}
-
-.tab-context-menu .context-menu-item {
+.main-content {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 6px 12px;
-  border: none;
-  background: none;
+  height: 100%;
+}
+
+.left-pane {
+  width: 280px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid #cbd5e1;
+}
+
+.file-tree-wrapper {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.git-container {
+  padding: 12px;
+}
+
+.git-change {
+  padding: 4px 0;
+  font-size: 13px;
   color: #333;
   cursor: pointer;
-  text-align: left;
-  line-height: 1;
 }
 
-.tab-context-menu .context-menu-item:hover {
-  background: #f1f5f9;
-}
-
-.dark .tab-context-menu .context-menu-item {
+.dark .git-change {
   color: #ccc;
 }
+</style>
 
-.dark .tab-context-menu .context-menu-item:hover {
-  background: #383838;
+<style scoped>
+.terminal-tabs-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  height: 35px;
+  background: #f8fafc;
+  border-bottom: 1px solid #cbd5e1;
+  flex-shrink: 0;
 }
 
-.tab-context-menu .context-menu-sep {
-  height: 1px;
-  background: #e2e8f0;
-  margin: 4px 0;
+.terminal-tabs-header.dark {
+  background: #1e293b;
+  border-bottom-color: #3c3c3c;
 }
 
-.dark .tab-context-menu .context-menu-sep {
-  background: #404040;
+.terminal-tabs {
+  display: flex;
+  gap: 4px;
 }
 
-.tab-context-menu .context-menu-subheader {
-  padding: 8px 12px;
-  font-weight: bold;
-  font-size: 12px;
-  color: #666;
+.terminal-tab {
+  padding: 0 12px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  background: #eef2f6;
+  border-radius: 4px 4px 0 0;
+  cursor: pointer;
+  font-size: 13px;
+  color: #333;
 }
 
-.dark .tab-context-menu .context-menu-subheader {
-  color: #ccc;
+.terminal-tab:hover {
+  background: #e8ecf0;
 }
 
-.tab-context-menu .context-menu-shortcut {
-  margin-left: auto;
-  font-size: 11px;
+.terminal-tab.active {
+  background: #ffffff;
+  color: #333;
+  border-bottom: 1px solid #ffffff;
+  margin-bottom: -1px;
+}
+
+.dark .terminal-tab {
+  background: #2d2d2d;
   color: #999;
-  padding-left: 16px;
 }
 
-.dark .tab-context-menu .context-menu-shortcut {
-  color: #666;
+.dark .terminal-tab:hover {
+  background: #323232;
+  color: #ccc;
+}
+
+.dark .terminal-tab.active {
+  background: #0f172a;
+  border-bottom-color: #0f172a;
+  color: #ccc;
+}
+
+.add-terminal-btn {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: #0078d4;
+  color: white;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.add-terminal-btn:hover {
+  background: #005a9e;
+}
+
+.close-tab-btn {
+  margin-left: auto;
+  border: none;
+  background: none;
+  color: #999;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 2px;
+}
+
+.close-tab-btn:hover {
+  color: #fff;
+  background: #d32f2f;
+}
+
+.terminal-container {
+  flex: 1;
+  overflow: hidden;
+}
+
+.terminal-wrapper {
+  width: 100%;
+  height: 100%;
+}
+
+.terminal-wrapper .xterm {
+  height: 100%;
 }
 </style>

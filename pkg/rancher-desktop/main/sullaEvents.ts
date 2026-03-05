@@ -101,6 +101,23 @@ export function initSullaEvents(): void {
     return root;
   });
 
+  ipcMainProxy.handle('filesystem-get-git-changes', async (event, path) => {
+    const { execSync } = require('child_process');
+    try {
+      const output = execSync('git status --porcelain', { cwd: path, encoding: 'utf8' });
+      const lines = output.split('\n').filter((line: string) => line.trim());
+      const changes = lines.map((line: string) => {
+        const status = line.slice(0, 2).trim();
+        const file = line.slice(3);
+        return { status, file };
+      });
+      return changes;
+    } catch (error) {
+      console.error('Error getting git changes:', error);
+      return [];
+    }
+  });
+
   ipcMainProxy.handle('filesystem-read-dir', async(_event: unknown, dirPath: string) => {
     const resolved = assertInsideSullaHome(dirPath);
     const entries = fs.readdirSync(resolved, { withFileTypes: true });
@@ -128,12 +145,16 @@ export function initSullaEvents(): void {
   });
 
   ipcMainProxy.handle('filesystem-read-file', async(_event: unknown, filePath: string) => {
+    console.log('filesystem-read-file called with path:', filePath);
     const resolved = assertInsideSullaHome(filePath);
+    console.log('Resolved path:', resolved);
     const stat = fs.statSync(resolved);
     if (stat.size > 5 * 1024 * 1024) {
       throw new Error('File too large to open (>5MB)');
     }
-    return fs.readFileSync(resolved, 'utf-8');
+    const content = fs.readFileSync(resolved, 'utf-8');
+    console.log('File read successfully, size:', content.length);
+    return content;
   });
 
   ipcMainProxy.handle('filesystem-write-file', async(_event: unknown, filePath: string, content: string) => {

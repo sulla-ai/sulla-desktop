@@ -138,6 +138,7 @@ export interface IpcMainInvokeEvents {
 
   // #region Filesystem
   'filesystem-get-root':  () => string;
+  'filesystem-get-git-changes': (path: string) => Promise<{status: string, file: string}[]>;
   'filesystem-read-dir':  (dirPath: string) => Array<{ name: string; path: string; isDir: boolean; size: number; ext: string }>;
   'filesystem-read-file':  (filePath: string) => string;
   'filesystem-write-file': (filePath: string, content: string) => void;
