@@ -113,12 +113,34 @@
         </svg>
         <span>Open with Default App</span>
       </button>
+      <div v-if="!isDir" class="context-menu-sep"></div>
+
+      <!-- Open with... (files only) -->
+      <template v-if="!isDir">
+        <div class="context-menu-subheader">Open with…</div>
+        <button class="context-menu-item" @click="action('open-code-editor')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+          </svg>
+          <span>Code Editor</span>
+        </button>
+        <button v-if="isMarkdownFile" class="context-menu-item" @click="action('open-markdown-editor')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <line x1="16" y1="13" x2="8" y2="13"/>
+            <line x1="16" y1="17" x2="8" y2="17"/>
+            <polyline points="10 9 9 9 8 9"/>
+          </svg>
+          <span>Markdown Editor</span>
+        </button>
+      </template>
     </div>
   </Teleport>
 </template>
 
 <script lang="ts">
-import { defineComponent, ref, onMounted, onBeforeUnmount, nextTick } from 'vue';
+import { defineComponent, ref, onMounted, onBeforeUnmount, nextTick, computed } from 'vue';
 
 export default defineComponent({
   name: 'FileContextMenu',
@@ -135,13 +157,15 @@ export default defineComponent({
     const posX = ref(0);
     const posY = ref(0);
     const isDir = ref(false);
+    const fileExt = ref('');
     const menuRef = ref<HTMLElement | null>(null);
 
     let targetPath = '';
 
-    function show(event: MouseEvent, filePath: string, dir: boolean) {
+    function show(event: MouseEvent, filePath: string, dir: boolean, ext?: string) {
       targetPath = filePath;
       isDir.value = dir;
+      fileExt.value = ext || '';
       posX.value = event.clientX;
       posY.value = event.clientY;
       visible.value = true;
@@ -167,6 +191,11 @@ export default defineComponent({
       hide();
     }
 
+    const isMarkdownFile = computed(() => {
+      const ext = fileExt.value.toLowerCase();
+      return ['.md', '.markdown', '.mdx'].includes(ext);
+    });
+
     function onClickOutside(e: MouseEvent) {
       if (menuRef.value && !menuRef.value.contains(e.target as Node)) {
         hide();
@@ -189,7 +218,7 @@ export default defineComponent({
 
     expose({ show, hide });
 
-    return { visible, posX, posY, isDir, menuRef, action, hasClipboard: props.hasClipboard };
+    return { visible, posX, posY, isDir, menuRef, action, hasClipboard: props.hasClipboard, isMarkdownFile };
   },
 });
 </script>
@@ -275,5 +304,16 @@ export default defineComponent({
 
 .dark .context-menu-sep {
   background: #404040;
+}
+
+.context-menu-subheader {
+  padding: 8px 12px;
+  font-weight: bold;
+  font-size: 12px;
+  color: #666;
+}
+
+.dark .context-menu-subheader {
+  color: #ccc;
 }
 </style>

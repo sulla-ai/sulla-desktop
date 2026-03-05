@@ -89,7 +89,9 @@ export default defineComponent({
     isDark:   { type: Boolean, default: false },
   },
 
-  setup(props) {
+  emits: ['dirty'],
+
+  setup(props, { emit }) {
     const containerRef = ref<HTMLDivElement | null>(null);
     let editor: monaco.editor.IStandaloneCodeEditor | null = null;
 
@@ -102,7 +104,7 @@ export default defineComponent({
         value:       props.content,
         language,
         theme:       props.isDark ? 'vs-dark' : 'vs',
-        readOnly:    true,
+        readOnly:    false,
         automaticLayout: true,
         minimap:     { enabled: true },
         scrollBeyondLastLine: false,
@@ -111,6 +113,12 @@ export default defineComponent({
         renderLineHighlight: 'line',
         wordWrap:    'on',
         padding:     { top: 8 },
+      });
+
+      // Listen for content changes to mark as dirty
+      editor.onDidChangeModelContent(() => {
+        // Emit dirty event to parent component
+        emit('dirty');
       });
     }
 
@@ -144,7 +152,15 @@ export default defineComponent({
       }
     });
 
-    return { containerRef };
+    // Expose method to get current editor content
+    const getContent = () => {
+      return editor?.getValue() || props.content;
+    };
+
+    return {
+      containerRef,
+      getContent,
+    };
   },
 });
 </script>

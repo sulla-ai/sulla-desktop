@@ -14,7 +14,7 @@ import '@blocknote/mantine/style.css';
 // Shared editor ref so the Vue layer can call getMarkdown()
 let _sharedEditor: BlockNoteEditor | null = null;
 
-function BlockNoteWrapper(props: { content: string; darkMode: boolean; onDirty: () => void }) {
+function BlockNoteWrapper(props: { content: string; darkMode: boolean; onDirty: () => void; readOnly: boolean }) {
   const [editor] = React.useState(() => {
     const ed = BlockNoteEditor.create();
     _sharedEditor = ed;
@@ -49,7 +49,7 @@ function BlockNoteWrapper(props: { content: string; darkMode: boolean; onDirty: 
 
   return React.createElement(BlockNoteView as any, {
     editor,
-    editable: true,
+    editable: !props.readOnly,
     theme: props.darkMode ? 'dark' : 'light',
     onChange: () => { props.onDirty(); },
   });
@@ -62,6 +62,7 @@ export default defineComponent({
     content:  { type: String, default: '' },
     filePath: { type: String, default: '' },
     isDark:   { type: Boolean, default: false },
+    readOnly: { type: Boolean, default: false },
   },
 
   emits: ['dirty'],
@@ -81,6 +82,7 @@ export default defineComponent({
         React.createElement(BlockNoteWrapper, {
           content:  props.content,
           darkMode: props.isDark,
+          readOnly: props.readOnly,
           onDirty:  () => emit('dirty'),
         }),
       );
@@ -99,6 +101,7 @@ export default defineComponent({
 
     watch(() => props.content, renderReact);
     watch(() => props.isDark, renderReact);
+    watch(() => props.readOnly, renderReact);
 
     onBeforeUnmount(() => {
       if (reactRoot) {

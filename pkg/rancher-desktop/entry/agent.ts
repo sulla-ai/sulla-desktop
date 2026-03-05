@@ -18,7 +18,6 @@ import AgentIntegrationDetail from '../pages/AgentIntegrationDetail.vue';
 import AgentExtensions from '../pages/AgentExtensions.vue';
 import AgentAutomations from '../pages/AgentAutomations.vue';
 import FirstRun from '../pages/FirstRun.vue';
-import AgentFilesystem from '../pages/AgentFilesystem.vue';
 import ExtensionView from '../pages/ExtensionView.vue';
 
 const router = createRouter({
@@ -27,7 +26,6 @@ const router = createRouter({
     { path: '/', redirect: '/Chat' },
     { path: '/Chat', component: Agent, name: 'AgentChat' },
     { path: '/Calendar', component: AgentCalendar, name: 'AgentCalendar' },
-    { path: '/Filesystem', component: AgentFilesystem, name: 'AgentFilesystem' },
     { path: '/Integrations', component: AgentIntegrations, name: 'AgentIntegrations' },
     { path: '/Integrations/:id', component: AgentIntegrationDetail, name: 'AgentIntegrationDetail' },
     { path: '/Extensions', component: AgentExtensions, name: 'AgentExtensions' },

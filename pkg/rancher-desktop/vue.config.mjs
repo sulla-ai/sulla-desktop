@@ -117,5 +117,10 @@ export default {
       template: path.join(import.meta.dirname, 'public', 'model-training.html'),
       filename: 'model-training.html',
     },
+    'editor': {
+      entry:    path.join(import.meta.dirname, 'entry', 'editor.ts'),
+      template: path.join(import.meta.dirname, 'public', 'editor.html'),
+      filename: 'editor.html',
+    },
   },
 };

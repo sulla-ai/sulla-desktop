@@ -55,6 +55,7 @@
         :loading-dirs="loadingDirs"
         :selected-path="selectedPath"
         :drop-target-path="dropTargetPath"
+        :highlight-path="highlightPath"
         @toggle-dir="toggleDir"
         @select-file="selectFile"
         @context-menu="onContextMenu"
@@ -72,7 +73,7 @@
 </template>
 
 <script lang="ts">
-import { defineComponent, ref, onMounted } from 'vue';
+import { defineComponent, ref, onMounted, watch } from 'vue';
 import { ipcRenderer, clipboard } from 'electron';
 import FileTreeNode from './FileTreeNode.vue';
 import FileContextMenu from './FileContextMenu.vue';
@@ -83,6 +84,7 @@ export interface FileEntry {
   isDir: boolean;
   size: number;
   ext: string;
+  editorType?: 'code' | 'markdown';
 }
 
 export default defineComponent({
@@ -92,6 +94,7 @@ export default defineComponent({
 
   props: {
     isDark: { type: Boolean, default: false },
+    highlightPath: { type: String, default: '' },
   },
 
   emits: ['file-selected', 'tree-changed'],
@@ -152,7 +155,7 @@ export default defineComponent({
     const fileClipboard = ref<{ path: string; operation: 'copy' | 'cut' } | null>(null);
 
     function onContextMenu(payload: { event: MouseEvent; entry: FileEntry }) {
-      contextMenuRef.value?.show(payload.event, payload.entry.path, payload.entry.isDir);
+      contextMenuRef.value?.show(payload.event, payload.entry.path, payload.entry.isDir, payload.entry.ext);
     }
 
     async function refreshDir(dirPath: string) {
@@ -258,6 +261,28 @@ export default defineComponent({
         case 'open-external':
           await ipcRenderer.invoke('filesystem-open-external', targetPath);
           break;
+        case 'open-code-editor':
+          // Emit file-selected with forced code editor
+          emit('file-selected', {
+            name: targetPath.split('/').pop() || '',
+            path: targetPath,
+            isDir: false,
+            size: 0,
+            ext: targetPath.split('.').pop() || '',
+            editorType: 'code'
+          });
+          break;
+        case 'open-markdown-editor':
+          // Emit file-selected with forced markdown editor
+          emit('file-selected', {
+            name: targetPath.split('/').pop() || '',
+            path: targetPath,
+            isDir: false,
+            size: 0,
+            ext: targetPath.split('.').pop() || '',
+            editorType: 'markdown'
+          });
+          break;
         }
       } catch (err: any) {
         console.error(`Context action "${type}" failed:`, err);
@@ -353,6 +378,34 @@ export default defineComponent({
       }
       emit('tree-changed');
     }
+
+    // Watch for highlightPath changes to expand directories
+    watch(() => props.highlightPath, async (newPath: string) => {
+      if (!newPath) return;
+
+      // Split the path into segments to expand each directory
+      const segments = newPath.split('/').filter((s: string) => s);
+      let currentPath = '';
+
+      for (const segment of segments) {
+        currentPath += '/' + segment;
+
+        // Skip if this is the file itself (last segment)
+        if (currentPath === newPath) break;
+
+        // Expand this directory if not already expanded
+        if (!expandedDirs.value.has(currentPath)) {
+          expandedDirs.value = new Set([...expandedDirs.value, currentPath]);
+          // Load children if not already loaded
+          if (!childrenMap.value[currentPath]) {
+            await loadChildren(currentPath);
+          }
+        }
+      }
+
+      // Set as selected path to highlight it
+      selectedPath.value = newPath;
+    }, { immediate: true });
 
     onMounted(loadRoot);
 

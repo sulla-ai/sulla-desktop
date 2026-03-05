@@ -5,6 +5,7 @@
       :class="{
         'is-dir': entry.isDir,
         'is-selected': selectedPath === entry.path,
+        'is-highlighted': highlightPath === entry.path,
         'drop-target': entry.isDir && dropTargetPath === entry.path,
       }"
       :style="{ paddingLeft: (depth * 16 + 8) + 'px' }"
@@ -60,6 +61,7 @@
         :loading-dirs="loadingDirs"
         :selected-path="selectedPath"
         :drop-target-path="dropTargetPath"
+        :highlight-path="highlightPath"
         @toggle-dir="$emit('toggle-dir', $event)"
         @select-file="$emit('select-file', $event)"
         @context-menu="$emit('context-menu', $event)"
@@ -93,6 +95,7 @@ export default defineComponent({
     loadingDirs:  { type: Object as PropType<Set<string>>, required: true },
     selectedPath:   { type: String, default: '' },
     dropTargetPath: { type: String, default: '' },
+    highlightPath:  { type: String, default: '' },
   },
 
   emits: ['toggle-dir', 'select-file', 'context-menu', 'drop-files', 'drag-hover'],
@@ -164,6 +167,16 @@ export default defineComponent({
 
 :global(.dark) .file-tree-row.is-selected {
   background: rgba(0, 120, 212, 0.3);
+}
+
+.file-tree-row.is-highlighted {
+  background: rgba(255, 193, 7, 0.1);
+  border-left: 3px solid #ffc107;
+}
+
+:global(.dark) .file-tree-row.is-highlighted {
+  background: rgba(255, 193, 7, 0.2);
+  border-left-color: #ffeb3b;
 }
 
 .chevron {
