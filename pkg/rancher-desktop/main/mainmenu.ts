@@ -248,7 +248,7 @@ function getMacApplicationMenu(): MenuItem[] {
         { type: 'separator' },
         ...getPreferencesMenuItem(),
         {
-          label: 'Open Editor',
+          label: 'Open Agent Workbench',
           click: openEditor,
         },
         { type: 'separator' },
@@ -271,7 +271,7 @@ function getMacApplicationMenu(): MenuItem[] {
           click:       openMain,
         },
         {
-          label: 'Open Editor',
+          label: 'Open Agent Workbench',
           click: openEditor,
         },
         { type: 'separator' },
@@ -308,7 +308,7 @@ function getWindowsApplicationMenu(): MenuItem[] {
           click:       openMain,
         },
         {
-          label: '&Open Editor',
+          label: '&Open Agent Workbench',
           click: openEditor,
         },
         { type: 'separator' },

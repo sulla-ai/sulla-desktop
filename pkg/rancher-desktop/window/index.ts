@@ -325,7 +325,7 @@ export function openEditor() {
     'editor',
     editorUrl,
     {
-      title:          'Sulla Desktop - Editor',
+      title:          'Sulla Desktop - Agent Workbench',
       x:              0,
       y:              0,
       width:          defaultWidth,

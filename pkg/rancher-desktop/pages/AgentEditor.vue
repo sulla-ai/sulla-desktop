@@ -99,7 +99,7 @@
             <!-- Empty state (no tabs open) -->
             <div v-if="openTabs.length === 0" class="empty-state">
               <img :src="sullaMutedIconUrl" alt="Sulla" class="empty-icon-img">
-              <p class="empty-text">Sulla Editor</p>
+              <p class="empty-text">Agent Workbench</p>
               <p class="empty-hint">an editor built for vibe coders</p>
             </div>
 

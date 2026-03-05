@@ -43,7 +43,7 @@ export class EditorChatInterface {
       this.registry.upsertAgent({
         isRunning:       true,
         agentId:         DEV_EDITOR_CHANNEL,
-        agentName:       'Sulla Editor',
+        agentName:       'Agent Workbench',
         templateId:      'glass-core',
         emotion:         'calm',
         status:          'online',
