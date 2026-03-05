@@ -147,7 +147,53 @@
 
           <!-- Bottom center pane -->
           <div class="editor-bottom" :class="{ dark: isDark }">
-            <XTermTerminal :is-dark="isDark" />
+            <!-- Terminal tabs header -->
+            <div class="terminal-tabs-header" :class="{ dark: isDark }">
+              <div class="terminal-tabs">
+                <div
+                  v-for="tab in terminalTabs"
+                  :key="tab.id"
+                  class="terminal-tab"
+                  :class="{ active: activeTerminalTab === tab.id, dark: isDark }"
+                  @click="switchTerminalTab(tab.id)"
+                >
+                  <span>{{ tab.name }}</span>
+                  <button
+                    v-if="terminalTabs.length > 1"
+                    class="terminal-tab-close"
+                    :class="{ dark: isDark }"
+                    @click.stop="closeTerminalTab(tab.id)"
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <line x1="18" y1="6" x2="6" y2="18"></line>
+                      <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+              <button
+                class="terminal-tab-add"
+                :class="{ dark: isDark }"
+                @click="createNewTerminalTab"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="12" y1="5" x2="12" y2="19"></line>
+                  <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+              </button>
+            </div>
+            
+            <!-- Terminal content -->
+            <div class="terminal-content">
+              <div
+                v-for="tab in terminalTabs"
+                :key="tab.id"
+                v-show="activeTerminalTab === tab.id"
+                class="terminal-pane"
+              >
+                <XTermTerminal :is-dark="isDark" :session-id="tab.sessionId" />
+              </div>
+            </div>
           </div>
         </div>
 
@@ -265,6 +311,45 @@ export default defineComponent({
     const gitMode = ref(false);
     const searchQuery = ref('');
     const gitChanges = ref<{status: string, file: string}[]>([]);
+
+    // Terminal tabs state
+    const terminalTabs = ref([
+      { id: 'terminal-1', name: 'Terminal 1', sessionId: '' }
+    ]);
+    const activeTerminalTab = ref('terminal-1');
+    let terminalCounter = 1;
+
+    // Terminal tab functions
+    function createNewTerminalTab() {
+      terminalCounter++;
+      const newTab = {
+        id: `terminal-${terminalCounter}`,
+        name: `Terminal ${terminalCounter}`,
+        sessionId: ''
+      };
+      terminalTabs.value.push(newTab);
+      activeTerminalTab.value = newTab.id;
+    }
+
+    function closeTerminalTab(tabId: string) {
+      if (terminalTabs.value.length <= 1) return; // Don't close last tab
+      
+      const index = terminalTabs.value.findIndex(tab => tab.id === tabId);
+      if (index === -1) return;
+      
+      const wasActive = activeTerminalTab.value === tabId;
+      terminalTabs.value.splice(index, 1);
+      
+      if (wasActive) {
+        // Switch to the last tab
+        const lastTab = terminalTabs.value[terminalTabs.value.length - 1];
+        activeTerminalTab.value = lastTab.id;
+      }
+    }
+
+    function switchTerminalTab(tabId: string) {
+      activeTerminalTab.value = tabId;
+    }
 
     const getGitChanges = async () => {
       if (rootPath.value) {
@@ -555,6 +640,11 @@ export default defineComponent({
       gitMode,
       searchQuery,
       gitChanges,
+      terminalTabs,
+      activeTerminalTab,
+      createNewTerminalTab,
+      closeTerminalTab,
+      switchTerminalTab,
       MARKDOWN_EXTS,
       highlightPath,
       loadTabContent,
@@ -1006,6 +1096,62 @@ export default defineComponent({
   background: #0f172a;
   border-bottom-color: #0f172a;
   color: #ccc;
+}
+
+.terminal-tab-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 6px;
+  padding: 2px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  opacity: 0.6;
+  transition: opacity 0.1s;
+}
+
+.terminal-tab-close:hover {
+  opacity: 1;
+}
+
+.terminal-tab-close.dark {
+  color: #ccc;
+}
+
+.terminal-tab-add {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  opacity: 0.6;
+  transition: opacity 0.1s;
+  color: #666;
+}
+
+.terminal-tab-add:hover {
+  opacity: 1;
+}
+
+.terminal-tab-add.dark {
+  color: #ccc;
+}
+
+.terminal-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.terminal-pane {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .add-terminal-btn {
