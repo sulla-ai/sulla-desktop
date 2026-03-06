@@ -1,5 +1,11 @@
 <template>
-  <div class="workflow-editor" :class="{ dark: isDark }">
+  <div
+    ref="flowContainer"
+    class="workflow-editor"
+    :class="{ dark: isDark }"
+    @dragover.prevent="onDragOver"
+    @drop="onDrop"
+  >
     <VueFlow
       v-model:nodes="nodes"
       v-model:edges="edges"
@@ -12,6 +18,9 @@
       @node-click="onNodeClick"
       @pane-click="onPaneClick"
     >
+      <template #node-workflow="nodeProps">
+        <WorkflowCustomNode v-bind="nodeProps" :is-dark="isDark" />
+      </template>
       <Background :variant="BackgroundVariant.Dots" :gap="16" :size="1" />
       <Controls />
       <MiniMap />
@@ -20,7 +29,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, watch } from 'vue';
 import { VueFlow, useVueFlow } from '@vue-flow/core';
 import { Background, BackgroundVariant } from '@vue-flow/background';
 import { Controls } from '@vue-flow/controls';
@@ -31,59 +40,76 @@ import '@vue-flow/controls/dist/style.css';
 import '@vue-flow/minimap/dist/style.css';
 
 import type { Node, Edge, Connection, NodeChange, EdgeChange } from '@vue-flow/core';
+import type { WorkflowDefinition, WorkflowNodeData } from './workflow/types';
+import WorkflowCustomNode from './workflow/WorkflowCustomNode.vue';
+import { getNodeDefinition } from './workflow/nodeRegistry';
 
-defineProps<{
+const props = defineProps<{
   isDark: boolean;
+  workflowData?: WorkflowDefinition | null;
 }>();
 
 const emit = defineEmits<{
-  'node-selected': [node: { id: string; label: string; type?: string } | null];
+  'node-selected': [node: { id: string; label: string; type?: string; data?: WorkflowNodeData } | null];
+  'workflow-changed': [];
 }>();
 
-const { applyNodeChanges, applyEdgeChanges, addEdges } = useVueFlow();
+const flowContainer = ref<HTMLElement | null>(null);
 
-const nodes = ref<Node[]>([
-  {
-    id: '1',
-    type: 'input',
-    label: 'Start',
-    position: { x: 250, y: 0 },
-  },
-  {
-    id: '2',
-    label: 'Process',
-    position: { x: 250, y: 150 },
-  },
-  {
-    id: '3',
-    type: 'output',
-    label: 'End',
-    position: { x: 250, y: 300 },
-  },
-]);
+const { applyNodeChanges, applyEdgeChanges, addEdges, addNodes, project, getViewport } = useVueFlow();
 
-const edges = ref<Edge[]>([
-  { id: 'e1-2', source: '1', target: '2', animated: true },
-  { id: 'e2-3', source: '2', target: '3', animated: true },
-]);
+const nodes = ref<Node[]>([]);
+const edges = ref<Edge[]>([]);
+
+// Load workflow data when prop changes
+watch(
+  () => props.workflowData,
+  (wf) => {
+    if (wf) {
+      nodes.value = wf.nodes.map(n => ({
+        id:       n.id,
+        type:     n.type,
+        position: { ...n.position },
+        data:     { ...n.data },
+      }));
+      edges.value = wf.edges.map(e => ({
+        id:           e.id,
+        source:       e.source,
+        target:       e.target,
+        sourceHandle: e.sourceHandle,
+        targetHandle: e.targetHandle,
+        label:        e.label,
+        animated:     e.animated ?? true,
+      }));
+    } else {
+      nodes.value = [];
+      edges.value = [];
+    }
+  },
+  { immediate: true },
+);
 
 function onNodesChange(changes: NodeChange[]) {
   applyNodeChanges(changes);
+  emit('workflow-changed');
 }
 
 function onEdgesChange(changes: EdgeChange[]) {
   applyEdgeChanges(changes);
+  emit('workflow-changed');
 }
 
 function onConnect(connection: Connection) {
-  addEdges([connection]);
+  addEdges([{ ...connection, animated: true }]);
+  emit('workflow-changed');
 }
 
 function onNodeClick({ node }: { node: Node }) {
   emit('node-selected', {
     id:    node.id,
-    label: node.label as string,
+    label: (node.data as WorkflowNodeData)?.label ?? (node.label as string),
     type:  node.type,
+    data:  node.data as WorkflowNodeData,
   });
 }
 
@@ -93,13 +119,83 @@ function onPaneClick() {
 
 function updateNodeLabel(nodeId: string, label: string) {
   const node = nodes.value.find(n => n.id === nodeId);
-
-  if (node) {
-    node.label = label;
+  if (node && node.data) {
+    (node.data as WorkflowNodeData).label = label;
   }
 }
 
-defineExpose({ updateNodeLabel });
+function updateNodeConfig(nodeId: string, config: Record<string, any>) {
+  const node = nodes.value.find(n => n.id === nodeId);
+  if (node && node.data) {
+    (node.data as WorkflowNodeData).config = { ...config };
+  }
+  emit('workflow-changed');
+}
+
+// ── Drag and drop from palette ──
+
+function onDragOver(event: DragEvent) {
+  if (event.dataTransfer) {
+    event.dataTransfer.dropEffect = 'move';
+  }
+}
+
+function onDrop(event: DragEvent) {
+  const raw = event.dataTransfer?.getData('application/vueflow');
+  if (!raw) return;
+
+  const { subtype, category } = JSON.parse(raw);
+  const definition = getNodeDefinition(subtype);
+  if (!definition) return;
+
+  const bounds = flowContainer.value?.getBoundingClientRect();
+  const position = project({
+    x: event.clientX - (bounds?.left ?? 0),
+    y: event.clientY - (bounds?.top ?? 0),
+  });
+
+  const newNode: Node = {
+    id:   `node-${ Date.now() }`,
+    type: 'workflow',
+    position,
+    data: {
+      subtype,
+      category,
+      label:  definition.defaultLabel,
+      config: definition.defaultConfig(),
+    } as WorkflowNodeData,
+  };
+
+  addNodes([newNode]);
+  emit('workflow-changed');
+}
+
+// ── Serialization ──
+
+function serialize(): { nodes: any[]; edges: any[]; viewport: any } {
+  const vp = getViewport();
+
+  return {
+    nodes: nodes.value.map(n => ({
+      id:       n.id,
+      type:     n.type,
+      position: { x: n.position.x, y: n.position.y },
+      data:     { ...(n.data as WorkflowNodeData) },
+    })),
+    edges: edges.value.map(e => ({
+      id:           e.id,
+      source:       e.source,
+      target:       e.target,
+      sourceHandle: e.sourceHandle,
+      targetHandle: e.targetHandle,
+      label:        e.label,
+      animated:     e.animated,
+    })),
+    viewport: { x: vp.x, y: vp.y, zoom: vp.zoom },
+  };
+}
+
+defineExpose({ updateNodeLabel, updateNodeConfig, serialize });
 </script>
 
 <style scoped>
@@ -118,17 +214,6 @@ defineExpose({ updateNodeLabel });
 /* Dark theme overrides */
 .workflow-editor.dark :deep(.vue-flow) {
   background: #1a1a2e;
-}
-
-.workflow-editor.dark :deep(.vue-flow__node) {
-  background: #2d2d44;
-  color: #e2e8f0;
-  border-color: #4a4a6a;
-}
-
-.workflow-editor.dark :deep(.vue-flow__node.selected) {
-  border-color: #6366f1;
-  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.3);
 }
 
 .workflow-editor.dark :deep(.vue-flow__edge-path) {

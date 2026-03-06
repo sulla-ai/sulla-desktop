@@ -84,6 +84,9 @@
               v-show="workflowMode"
               :is-dark="isDark"
               @close="leftPaneVisible = false"
+              @workflow-activated="onWorkflowActivated"
+              @workflow-closed="onWorkflowClosed"
+              @workflow-created="onWorkflowCreated"
             />
 
             <!-- File tree -->
@@ -110,7 +113,7 @@
         <!-- Right content: Editor area -->
         <div class="editor-panel" v-show="centerPaneVisible" :class="{ dark: isDark }">
           <!-- Workflow canvas (replaces tabbed editor when workflow mode is active) -->
-          <WorkflowEditor v-if="workflowMode" ref="workflowEditorRef" :is-dark="isDark" @node-selected="onWorkflowNodeSelected" />
+          <WorkflowEditor v-if="workflowMode" ref="workflowEditorRef" :is-dark="isDark" :workflow-data="activeWorkflowData" @node-selected="onWorkflowNodeSelected" @workflow-changed="onWorkflowChanged" />
 
           <!-- Top editor area -->
           <div class="editor-top" v-show="!workflowMode">
@@ -345,6 +348,7 @@
             @close="onWorkflowNodePanelClose"
             @update-label="onWorkflowNodeLabelUpdate"
             @update-trigger="() => {}"
+            @update-node-config="onWorkflowNodeConfigUpdate"
           />
           <!-- Chat (default) -->
           <EditorChat
@@ -624,8 +628,10 @@ export default defineComponent({
     const dockerMode = ref(false);
     const agentMode = ref(false);
     const workflowMode = ref(false);
-    const selectedWorkflowNode = ref<{ id: string; label: string; type?: string } | null>(null);
+    const selectedWorkflowNode = ref<{ id: string; label: string; type?: string; data?: any } | null>(null);
     const workflowEditorRef = ref<InstanceType<typeof WorkflowEditor> | null>(null);
+    const activeWorkflowData = ref<any>(null);
+    let workflowSaveTimer: ReturnType<typeof setTimeout> | null = null;
     const searchQuery = ref('');
     const searchPath = ref('');
     const searchResults = ref<Array<{ path: string; name: string; line: number; preview: string; score: number; source: 'fts' | 'filename' }>>([]);
@@ -796,7 +802,7 @@ export default defineComponent({
       }
     }
 
-    function onWorkflowNodeSelected(node: { id: string; label: string; type?: string } | null) {
+    function onWorkflowNodeSelected(node: { id: string; label: string; type?: string; data?: any } | null) {
       selectedWorkflowNode.value = node;
       if (node) {
         rightPaneVisible.value = true;
@@ -812,9 +818,66 @@ export default defineComponent({
       }
     }
 
+    function onWorkflowNodeConfigUpdate(nodeId: string, config: Record<string, any>) {
+      workflowEditorRef.value?.updateNodeConfig(nodeId, config);
+    }
+
     function onWorkflowNodePanelClose() {
       selectedWorkflowNode.value = null;
       rightPaneVisible.value = false;
+    }
+
+    async function onWorkflowActivated(workflowId: string) {
+      try {
+        const data = await ipcRenderer.invoke('workflow-get', workflowId);
+        activeWorkflowData.value = data;
+      } catch {
+        // New workflow not yet saved — start with empty canvas
+        activeWorkflowData.value = {
+          id: workflowId, name: workflowId, description: '', version: 1,
+          createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+          nodes: [], edges: [],
+        };
+      }
+    }
+
+    function onWorkflowClosed(_workflowId: string) {
+      activeWorkflowData.value = null;
+      selectedWorkflowNode.value = null;
+      rightPaneVisible.value = false;
+    }
+
+    async function onWorkflowCreated(workflowId: string, workflowName: string) {
+      const newWorkflow = {
+        id: workflowId, name: workflowName, description: '', version: 1,
+        createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+        nodes: [], edges: [],
+      };
+      try {
+        await ipcRenderer.invoke('workflow-save', newWorkflow);
+      } catch (err) {
+        console.error('Failed to save new workflow:', err);
+      }
+      activeWorkflowData.value = newWorkflow;
+    }
+
+    function onWorkflowChanged() {
+      if (!activeWorkflowData.value) return;
+      if (workflowSaveTimer) clearTimeout(workflowSaveTimer);
+      workflowSaveTimer = setTimeout(() => {
+        const serialized = workflowEditorRef.value?.serialize();
+        if (serialized && activeWorkflowData.value) {
+          const toSave = {
+            ...activeWorkflowData.value,
+            nodes: serialized.nodes,
+            edges: serialized.edges,
+            viewport: serialized.viewport,
+          };
+          ipcRenderer.invoke('workflow-save', toSave).catch((err: any) => {
+            console.error('Failed to auto-save workflow:', err);
+          });
+        }
+      }, 500);
     }
 
     async function loadRootPath() {
@@ -1403,7 +1466,13 @@ export default defineComponent({
       workflowEditorRef,
       onWorkflowNodeSelected,
       onWorkflowNodeLabelUpdate,
+      onWorkflowNodeConfigUpdate,
       onWorkflowNodePanelClose,
+      onWorkflowActivated,
+      onWorkflowClosed,
+      onWorkflowCreated,
+      onWorkflowChanged,
+      activeWorkflowData,
       toggleAgent,
       toggleWorkflow,
       openContainerPort,

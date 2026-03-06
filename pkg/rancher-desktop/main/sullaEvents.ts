@@ -8,6 +8,7 @@ import * as path from 'path';
 import { getIpcMainProxy } from '@pkg/main/ipcMain';
 import * as window from '@pkg/window';
 import Logging from '@pkg/utils/logging';
+import { initSullaWorkflowEvents } from './sullaWorkflowEvents';
 
 const console = Logging.background;
 const ipcMainProxy = getIpcMainProxy(console);
@@ -1250,6 +1251,8 @@ export function initSullaEvents(): void {
 
     return result;
   });
+
+  initSullaWorkflowEvents();
 
   console.log('[Sulla] IPC event handlers initialized');
 }

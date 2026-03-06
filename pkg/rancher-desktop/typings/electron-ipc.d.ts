@@ -157,6 +157,13 @@ export interface IpcMainInvokeEvents {
   'agents-delete':    (agentId: string) => boolean;
   'agents-get-template-variables': () => { key: string; label: string; preview: string }[];
   'tools-list-by-category': () => Array<{ category: string; description: string; tools: { name: string; description: string; operationTypes: string[] }[] }>;
+
+  // Workflow CRUD
+  'workflow-list':   () => Array<{ id: string; name: string; updatedAt: string }>;
+  'workflow-get':    (workflowId: string) => any;
+  'workflow-save':   (workflow: any) => boolean;
+  'workflow-delete': (workflowId: string) => boolean;
+
   'git-commit':       (dirPath: string, message: string) => boolean;
   'git-pull':         (dirPath: string) => { success: boolean; output: string };
   'git-push':         (dirPath: string) => { success: boolean; output: string };

@@ -22,12 +22,47 @@
         />
       </div>
 
-      <!-- Trigger panel for Start/input nodes -->
-      <TriggerNodePanel
-        v-if="node.type === 'input'"
+      <!-- Type-specific config panels -->
+      <AgentNodeConfig
+        v-if="node.data?.category === 'agent'"
         :is-dark="isDark"
         :node-id="node.id"
-        @update-trigger="(nodeId, triggerType) => $emit('update-trigger', nodeId, triggerType)"
+        :config="node.data.config"
+        @update-config="(nodeId, config) => $emit('update-node-config', nodeId, config)"
+      />
+
+      <RouterNodeConfig
+        v-else-if="node.data?.subtype === 'router'"
+        :is-dark="isDark"
+        :node-id="node.id"
+        :config="node.data.config"
+        @update-config="(nodeId, config) => $emit('update-node-config', nodeId, config)"
+      />
+
+      <ConditionNodeConfig
+        v-else-if="node.data?.subtype === 'condition'"
+        :is-dark="isDark"
+        :node-id="node.id"
+        :config="node.data.config"
+        @update-config="(nodeId, config) => $emit('update-node-config', nodeId, config)"
+      />
+
+      <FlowControlNodeConfig
+        v-else-if="node.data?.category === 'flow-control'"
+        :is-dark="isDark"
+        :node-id="node.id"
+        :subtype="node.data.subtype"
+        :config="node.data.config"
+        @update-config="(nodeId, config) => $emit('update-node-config', nodeId, config)"
+      />
+
+      <IONodeConfig
+        v-else-if="node.data?.category === 'io'"
+        :is-dark="isDark"
+        :node-id="node.id"
+        :subtype="node.data.subtype"
+        :config="node.data.config"
+        @update-config="(nodeId, config) => $emit('update-node-config', nodeId, config)"
       />
     </div>
   </div>
@@ -35,7 +70,12 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import TriggerNodePanel from './TriggerNodePanel.vue';
+import type { WorkflowNodeData } from './workflow/types';
+import AgentNodeConfig from './workflow/AgentNodeConfig.vue';
+import RouterNodeConfig from './workflow/RouterNodeConfig.vue';
+import ConditionNodeConfig from './workflow/ConditionNodeConfig.vue';
+import FlowControlNodeConfig from './workflow/FlowControlNodeConfig.vue';
+import IONodeConfig from './workflow/IONodeConfig.vue';
 
 const props = defineProps<{
   isDark: boolean;
@@ -43,6 +83,7 @@ const props = defineProps<{
     id: string;
     label: string;
     type?: string;
+    data?: WorkflowNodeData;
   };
 }>();
 
@@ -50,9 +91,18 @@ defineEmits<{
   'close': [];
   'update-label': [nodeId: string, label: string];
   'update-trigger': [nodeId: string, triggerType: string];
+  'update-node-config': [nodeId: string, config: Record<string, any>];
 }>();
 
 const panelTitle = computed(() => {
+  if (props.node.data?.category) {
+    const cat = props.node.data.category;
+    if (cat === 'trigger') return 'Trigger';
+    if (cat === 'agent') return 'Agent';
+    if (cat === 'routing') return 'Routing';
+    if (cat === 'flow-control') return 'Flow Control';
+    if (cat === 'io') return 'I/O';
+  }
   if (props.node.type === 'input') return 'Trigger';
   if (props.node.type === 'output') return 'Output';
   return 'Node';

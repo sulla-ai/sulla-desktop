@@ -187,6 +187,7 @@
       :has-clipboard="!!fileClipboard"
       @action="handleContextAction"
     />
+    <InlinePrompt ref="inlinePromptRef" :is-dark="isDark" />
   </div>
 </template>
 
@@ -194,6 +195,7 @@
 import { ref, onMounted, onBeforeUnmount, computed } from 'vue';
 import { ipcRenderer, clipboard } from 'electron';
 import FileContextMenu from '@pkg/pages/filesystem/FileContextMenu.vue';
+import InlinePrompt from './InlinePrompt.vue';
 
 interface AgentInfo {
   id: string;
@@ -239,6 +241,7 @@ const fileClipboard = ref<{ path: string; operation: 'copy' | 'cut' } | null>(nu
 
 // Context menu ref (exposed methods: show/hide aren't typed by Options API)
 const contextMenuRef = ref<{ show: (e: MouseEvent, path: string, isDir: boolean, ext: string) => void; hide: () => void } | null>(null);
+const inlinePromptRef = ref<InstanceType<typeof InlinePrompt> | null>(null);
 
 const deleteConfirmName = computed(() => deleteConfirm.value?.name ?? '');
 const deleteConfirmIsAgent = computed(() => deleteConfirm.value?.isAgent ?? false);
@@ -363,7 +366,7 @@ function showContextMenu(event: MouseEvent, filePath: string, isDir: boolean, ex
 async function handleContextAction(action: { type: string; path: string; isDir: boolean }) {
   switch (action.type) {
     case 'new-file': {
-      const name = prompt('New file name:');
+      const name = await inlinePromptRef.value?.show('New file name:');
       if (!name) return;
       try {
         await ipcRenderer.invoke('filesystem-create-file', action.path, name);
@@ -374,7 +377,7 @@ async function handleContextAction(action: { type: string; path: string; isDir: 
       break;
     }
     case 'new-folder': {
-      const name = prompt('New folder name:');
+      const name = await inlinePromptRef.value?.show('New folder name:');
       if (!name) return;
       try {
         await ipcRenderer.invoke('filesystem-create-dir', action.path, name);
@@ -407,7 +410,7 @@ async function handleContextAction(action: { type: string; path: string; isDir: 
     }
     case 'rename': {
       const currentName = action.path.split('/').pop() || '';
-      const newName = prompt('Rename to:', currentName);
+      const newName = await inlinePromptRef.value?.show('Rename to:', currentName);
       if (!newName || newName === currentName) return;
       try {
         await ipcRenderer.invoke('filesystem-rename', action.path, newName);

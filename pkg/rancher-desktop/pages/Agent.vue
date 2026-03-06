@@ -256,10 +256,12 @@
       </div>
     </div>
     </div>
+  <InlinePrompt ref="inlinePromptRef" :is-dark="isDark" />
   </div>
 </template>
 
 <script setup lang="ts">
+import InlinePrompt from './editor/InlinePrompt.vue';
 import StartupOverlay from './agent/StartupOverlay.vue';
 import AgentHeader from './agent/AgentHeader.vue';
 import AgentPersonaLibrary from './agent/personas/AgentPersonaLibrary.vue';
@@ -337,6 +339,7 @@ const sanitizeAssetHtml = (html: string): string => {
 
 const THEME_STORAGE_KEY = 'agentTheme';
 const isDark = ref(false);
+const inlinePromptRef = ref<InstanceType<typeof InlinePrompt> | null>(null);
 
 const syncN8nInterfaceTheme = (): void => {
   const n8nVueBridgeService = getN8nVueBridgeService();
@@ -579,9 +582,9 @@ const onDocumentAssetInput = (assetId: string, event: Event): void => {
   service.updateDocumentAssetContent(assetId, target.innerHTML || '');
 };
 
-const applyDocumentFormat = (command: string, value?: string): void => {
+const applyDocumentFormat = async(command: string, value?: string): Promise<void> => {
   if (command === 'createLink') {
-    const url = window.prompt('Enter URL');
+    const url = await inlinePromptRef.value?.show('Enter URL');
     if (!url) {
       return;
     }

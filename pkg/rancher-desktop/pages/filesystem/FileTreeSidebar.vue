@@ -75,6 +75,7 @@
       :has-clipboard="!!fileClipboard"
       @action="onContextAction"
     />
+    <InlinePrompt ref="inlinePromptRef" :is-dark="isDark" />
   </div>
 </template>
 
@@ -83,6 +84,7 @@ import { defineComponent, ref, onMounted, onBeforeUnmount, watch } from 'vue';
 import { ipcRenderer, clipboard } from 'electron';
 import FileTreeNode from './FileTreeNode.vue';
 import FileContextMenu from './FileContextMenu.vue';
+import InlinePrompt from '../editor/InlinePrompt.vue';
 
 export interface FileEntry {
   name: string;
@@ -96,7 +98,7 @@ export interface FileEntry {
 export default defineComponent({
   name: 'FileTreeSidebar',
 
-  components: { FileTreeNode, FileContextMenu },
+  components: { FileTreeNode, FileContextMenu, InlinePrompt },
 
   props: {
     isDark: { type: Boolean, default: false },
@@ -113,6 +115,7 @@ export default defineComponent({
     const loading = ref(true);
     const selectedPath = ref('');
     const rootPath = ref('');
+    const inlinePromptRef = ref<InstanceType<typeof InlinePrompt> | null>(null);
 
     async function loadRoot() {
       loading.value = true;
@@ -186,7 +189,7 @@ export default defineComponent({
       try {
         switch (type) {
         case 'new-file': {
-          const name = prompt('New file name:');
+          const name = await inlinePromptRef.value?.show('New file name:');
           if (!name) return;
           await ipcRenderer.invoke('filesystem-create-file', targetPath, name);
           await refreshDir(targetPath);
@@ -197,7 +200,7 @@ export default defineComponent({
           break;
         }
         case 'new-folder': {
-          const name = prompt('New folder name:');
+          const name = await inlinePromptRef.value?.show('New folder name:');
           if (!name) return;
           await ipcRenderer.invoke('filesystem-create-dir', targetPath, name);
           await refreshDir(targetPath);
@@ -233,7 +236,7 @@ export default defineComponent({
         }
         case 'rename': {
           const oldName = targetPath.substring(targetPath.lastIndexOf('/') + 1);
-          const newName = prompt('Rename to:', oldName);
+          const newName = await inlinePromptRef.value?.show('Rename to:', oldName);
           if (!newName || newName === oldName) return;
           await ipcRenderer.invoke('filesystem-rename', targetPath, newName);
           await refreshParentOrRoot(targetPath);
@@ -300,7 +303,7 @@ export default defineComponent({
     const uploadInputRef = ref<HTMLInputElement | null>(null);
 
     async function newFileAtRoot() {
-      const name = prompt('New file name:');
+      const name = await inlinePromptRef.value?.show('New file name:');
       if (!name) return;
       try {
         await ipcRenderer.invoke('filesystem-create-file', rootPath.value, name);
@@ -312,7 +315,7 @@ export default defineComponent({
     }
 
     async function newFolderAtRoot() {
-      const name = prompt('New folder name:');
+      const name = await inlinePromptRef.value?.show('New folder name:');
       if (!name) return;
       try {
         await ipcRenderer.invoke('filesystem-create-dir', rootPath.value, name);
@@ -469,6 +472,7 @@ export default defineComponent({
       toggleDir,
       selectFile,
       contextMenuRef,
+      inlinePromptRef,
       fileClipboard,
       onContextMenu,
       onContextAction,
