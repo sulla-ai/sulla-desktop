@@ -13,12 +13,35 @@ export type FrontendGraphWebSocketDeps = {
 
 export class FrontendGraphWebSocketService {
   private readonly wsService = getWebSocketClientService();
-  private readonly channelId: string;
+  private channelId: string;
   private unsubscribe: (() => void) | null = null;
   private activeAbort: AbortService | null = null;
 
   constructor(private readonly deps: FrontendGraphWebSocketDeps, channelId?: string) {
     this.channelId = channelId || DEFAULT_CHANNEL_ID;
+    this.initialize();
+  }
+
+  /**
+   * Switch to a different agent channel. Tears down the old subscription
+   * and re-initializes on the new channel.
+   */
+  async switchChannel(newChannelId: string): Promise<void> {
+    if (newChannelId === this.channelId) return;
+
+    // Tear down old channel
+    if (this.unsubscribe) {
+      this.unsubscribe();
+      this.unsubscribe = null;
+    }
+    if (this.activeAbort) {
+      this.activeAbort.abort();
+      this.activeAbort = null;
+    }
+    await this.deregisterAgent().catch(() => {});
+
+    // Switch and re-initialize
+    this.channelId = newChannelId;
     this.initialize();
   }
 

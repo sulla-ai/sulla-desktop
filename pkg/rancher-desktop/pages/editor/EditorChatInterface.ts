@@ -1,8 +1,6 @@
-// EditorChatInterface.ts — Lightweight chat controller for the editor's dev-editor channel
+// EditorChatInterface.ts — Chat controller that uses the active agent from the registry
 import { ref, watch, computed } from 'vue';
-import { getAgentPersonaRegistry, type ChatMessage, type AgentRegistryEntry } from '@pkg/agent';
-
-const DEV_EDITOR_CHANNEL = 'dev-editor';
+import { getAgentPersonaRegistry, type ChatMessage } from '@pkg/agent';
 
 export class EditorChatInterface {
   private readonly registry = getAgentPersonaRegistry();
@@ -12,52 +10,37 @@ export class EditorChatInterface {
 
   private watcher: ReturnType<typeof watch> | null = null;
 
+  private get activeAgentId(): string {
+    return this.registry.state.activeAgentId;
+  }
+
   readonly graphRunning = computed(() => {
-    const persona = this.registry.getPersonaService(DEV_EDITOR_CHANNEL);
+    const persona = this.registry.getPersonaService(this.activeAgentId);
     return persona?.graphRunning.value ?? false;
   });
 
   readonly loading = computed(() => {
-    return this.registry.isLoading(DEV_EDITOR_CHANNEL);
+    return this.registry.isLoading(this.activeAgentId);
   });
 
   constructor() {
-    // Ensure the dev-editor agent entry exists in the registry
-    this.ensureRegistryEntry();
-
-    // Create/get the persona service (connects to WS automatically)
-    this.registry.getOrCreatePersonaService(DEV_EDITOR_CHANNEL);
-
-    // Watch persona messages and mirror into our ref
+    // Watch active agent's messages and mirror into our ref
     this.watcher = watch(
-      () => this.registry.getPersonaService(DEV_EDITOR_CHANNEL)?.messages.length ?? 0,
+      () => {
+        const persona = this.registry.getPersonaService(this.activeAgentId);
+        return persona?.messages.length ?? 0;
+      },
       () => this.updateMessages(),
     );
+
+    // Also re-sync messages when active agent changes
+    watch(() => this.registry.state.activeAgentId, () => this.updateMessages());
 
     this.updateMessages();
   }
 
-  private ensureRegistryEntry(): void {
-    const existing = this.registry.state.agents.find(a => a.agentId === DEV_EDITOR_CHANNEL);
-    if (!existing) {
-      this.registry.upsertAgent({
-        isRunning:       true,
-        agentId:         DEV_EDITOR_CHANNEL,
-        agentName:       'Agent Workbench',
-        templateId:      'glass-core',
-        emotion:         'calm',
-        status:          'online',
-        tokensPerSecond: 847,
-        totalTokensUsed: 0,
-        temperature:     0.7,
-        messages:        [],
-        loading:         false,
-      } as AgentRegistryEntry);
-    }
-  }
-
   private updateMessages(): void {
-    const persona = this.registry.getPersonaService(DEV_EDITOR_CHANNEL);
+    const persona = this.registry.getPersonaService(this.activeAgentId);
     this.messages.value = persona ? [...persona.messages] : [];
   }
 
@@ -67,9 +50,9 @@ export class EditorChatInterface {
 
     this.query.value = '';
 
-    const persona = this.registry.getPersonaService(DEV_EDITOR_CHANNEL);
+    const persona = this.registry.getPersonaService(this.activeAgentId);
     if (!persona) {
-      console.warn('[EditorChatInterface] No persona service for dev-editor');
+      console.warn(`[EditorChatInterface] No persona service for ${this.activeAgentId}`);
       return;
     }
 
@@ -77,11 +60,12 @@ export class EditorChatInterface {
   }
 
   stop(): void {
-    const persona = this.registry.getPersonaService(DEV_EDITOR_CHANNEL);
+    const agentId = this.activeAgentId;
+    const persona = this.registry.getPersonaService(agentId);
     if (persona) {
-      persona.emitStopSignal(DEV_EDITOR_CHANNEL);
+      persona.emitStopSignal(agentId);
       persona.graphRunning.value = false;
-      this.registry.setLoading(DEV_EDITOR_CHANNEL, false);
+      this.registry.setLoading(agentId, false);
     }
   }
 

@@ -275,7 +275,6 @@ import {
 } from '@pkg/agent';
 import { AgentSettingsController } from './agent/AgentSettingsController';
 import { ChatInterface } from './agent/ChatInterface';
-import { FrontendGraphWebSocketService } from '@pkg/agent/services/FrontendGraphWebSocketService';
 import { AgentModelSelectorController } from './agent/AgentModelSelectorController';
 import { getAgentPersonaRegistry, type ChatMessage } from '@pkg/agent';
 import { getN8nVueBridgeService } from '@pkg/agent/services/N8nVueBridgeService';
@@ -364,10 +363,6 @@ const settingsController = new AgentSettingsController(
 );
 
 const chatController = new ChatInterface();
-
-const frontendGraphController = new FrontendGraphWebSocketService({
-  currentThreadId,
-});
 
 const presenceTracker = getHumanPresenceTracker();
 
@@ -664,7 +659,6 @@ onUnmounted(() => {
     registry.getOrCreatePersonaService(agent.agentId).stopListening();
   });
   chatController.dispose();
-  frontendGraphController.dispose();
 });
 
 const send = () => {

@@ -152,7 +152,7 @@ export interface IpcMainInvokeEvents {
   'git-diff':         (dirPath: string, file: string, staged: boolean) => string;
   'git-show-head':    (dirPath: string, file: string) => string;
   'git-show-staged':  (dirPath: string, file: string) => string;
-  'agents-list':      () => { id: string; name: string; description: string; type: string; path: string }[];
+  'agents-list':      () => { id: string; name: string; description: string; type: string; templateId: string; path: string }[];
   'agents-get-prompt-templates': () => { soul: string; environment: string };
   'agents-delete':    (agentId: string) => boolean;
   'agents-get-template-variables': () => { key: string; label: string; preview: string }[];

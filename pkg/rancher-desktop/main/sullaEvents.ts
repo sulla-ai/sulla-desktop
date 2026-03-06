@@ -1141,7 +1141,7 @@ export function initSullaEvents(): void {
     if (!fs.existsSync(agentsDir)) return [];
 
     const entries = fs.readdirSync(agentsDir, { withFileTypes: true });
-    const agents: { id: string; name: string; description: string; type: string; path: string }[] = [];
+    const agents: { id: string; name: string; description: string; type: string; templateId: string; path: string }[] = [];
 
     for (const entry of entries) {
       if (!entry.isDirectory() || entry.name.startsWith('.')) continue;
@@ -1158,6 +1158,7 @@ export function initSullaEvents(): void {
           name:        parsed.name || entry.name,
           description: parsed.description || '',
           type:        parsed.type || 'worker',
+          templateId:  parsed.templateId || 'glass-core',
           path:        agentDir,
         });
       } catch (err) {

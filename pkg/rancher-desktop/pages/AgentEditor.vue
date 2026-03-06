@@ -218,6 +218,7 @@
                 <div class="editor-content" @contextmenu="onEditorContextMenu">
                   <component
                     :is="activeEditorComponent"
+                    :key="activeTab?.path || ''"
                     ref="editorRef"
                     :content="activeTab?.content || ''"
                     :original-content="activeTab?.originalContent || ''"
@@ -340,6 +341,7 @@
             :loading="chatLoading"
             :graph-running="chatGraphRunning"
             :model-selector="modelSelector"
+            :agent-registry="agentRegistry"
             :total-tokens-used="chatTotalTokensUsed"
             @update:query="chatUpdateQuery"
             @send="chatSend"
@@ -477,9 +479,14 @@ export default defineComponent({
     const rightPaneVisible = ref(true);
     const bottomPaneVisible = ref(true);
 
-    // Editor chat (dev-editor channel)
+    // Agent registry for agent selector
+    const agentRegistry = getAgentPersonaRegistry();
+
+    // Editor chat (uses active agent from registry)
     const editorCurrentThreadId = ref<string | null>(null);
-    const editorGraphWs = new FrontendGraphWebSocketService({ currentThreadId: editorCurrentThreadId }, 'dev-editor');
+    // Don't connect to 'chat-controller' — BackendGraphWebSocketService handles that channel in the main process.
+    // The graph WS will be created lazily when the user switches to a non-default agent.
+    let editorGraphWs: FrontendGraphWebSocketService | null = null;
     const editorChat = new EditorChatInterface();
     const chatMessages = editorChat.messages;
     const chatQuery = editorChat.query;
@@ -488,6 +495,23 @@ export default defineComponent({
     const chatSend = () => editorChat.send();
     const chatStop = () => editorChat.stop();
     const chatUpdateQuery = (val: string) => { editorChat.query.value = val; };
+
+    // Channels owned by BackendGraphWebSocketService in the main process.
+    // The editor must NOT create a FrontendGraphWebSocketService for these.
+    const BACKEND_CHANNELS = new Set(['chat-controller', 'heartbeat', 'dreaming-protocol']);
+
+    // When the active agent changes, create or switch the graph WS to the new channel.
+    watch(() => agentRegistry.state.activeAgentId, (newAgentId) => {
+      if (BACKEND_CHANNELS.has(newAgentId)) {
+        return;
+      }
+      editorCurrentThreadId.value = null;
+      if (!editorGraphWs) {
+        editorGraphWs = new FrontendGraphWebSocketService({ currentThreadId: editorCurrentThreadId }, newAgentId);
+      } else {
+        editorGraphWs.switchChannel(newAgentId);
+      }
+    });
 
     // Model selector for editor chat
     const editorModelName = ref('');
@@ -504,10 +528,9 @@ export default defineComponent({
       modelMode:   editorModelMode,
     });
 
-    // Token usage from the dev-editor persona
-    const registry = getAgentPersonaRegistry();
+    // Token usage from the active agent persona
     const chatTotalTokensUsed = computed(() => {
-      const persona = registry.getPersonaService('dev-editor');
+      const persona = agentRegistry.getActivePersonaService();
       return persona?.state.totalTokensUsed ?? 0;
     });
 
@@ -1088,7 +1111,33 @@ export default defineComponent({
       activeTabKey.value = key;
     }
 
-    async function onEditAgent(agent: { id: string; name: string; description: string; type: string; path: string }) {
+    function activateAgentInRegistry(agent: { id: string; name: string; templateId?: string }) {
+      // Ensure the agent entry exists in the registry
+      if (!agentRegistry.state.agents.some(a => a.agentId === agent.id)) {
+        agentRegistry.upsertAgent({
+          isRunning:       true,
+          agentId:         agent.id,
+          agentName:       agent.name,
+          templateId:      (agent.templateId || 'glass-core') as any,
+          emotion:         'calm',
+          status:          'online',
+          tokensPerSecond: 0,
+          totalTokensUsed: 0,
+          temperature:     0.7,
+          messages:        [],
+          loading:         false,
+        } as any);
+      }
+      // Create persona service (connects WebSocket on this agent's channel)
+      agentRegistry.getOrCreatePersonaService(agent.id);
+      // Set as active so the chat interface routes to this agent
+      agentRegistry.setActiveAgent(agent.id);
+    }
+
+    async function onEditAgent(agent: { id: string; name: string; description: string; type: string; templateId?: string; path: string }) {
+      // Activate this agent: ensure it exists in registry, connect its WS, and set active
+      activateAgentInRegistry(agent);
+
       const editPath = `agent-form://edit/${agent.id}`;
       const key = `${editPath}-agent-form`;
       const existing = openTabs.value.find(t => `${t.path}-${t.editorType || 'code'}` === key);
@@ -1117,20 +1166,12 @@ export default defineComponent({
       activeTabKey.value = key;
     }
 
-    function onAgentFormSaved(agentPath: string) {
-      // Close the form tab
-      const formTab = openTabs.value.find(t => t.editorType === 'agent-form');
-      if (formTab) closeTab(formTab);
+    function onAgentFormSaved(_agentPath: string) {
       // Refresh the agent pane listing
       agentPaneRef.value?.refresh();
-      // Open the newly created agent.yaml
-      onFileSelected({
-        name: 'agent.yaml',
-        path: `${agentPath}/agent.yaml`,
-        isDir: false,
-        size:  0,
-        ext:   '.yaml',
-      });
+      // Mark the form tab as clean (no longer dirty)
+      const formTab = openTabs.value.find(t => t.editorType === 'agent-form');
+      if (formTab) formTab.dirty = false;
     }
 
     function markActiveTabDirty() {
@@ -1260,7 +1301,7 @@ export default defineComponent({
       document.removeEventListener('mousedown', onEditorMenuOutsideClick);
       document.removeEventListener('click', onInjectMenuOutsideClick);
       editorChat.dispose();
-      editorGraphWs.dispose();
+      editorGraphWs?.dispose();
       modelSelector.dispose();
     });
 
@@ -1275,6 +1316,7 @@ export default defineComponent({
       chatStop,
       chatUpdateQuery,
       modelSelector,
+      agentRegistry,
       chatTotalTokensUsed,
       toggleTheme,
       toggleFileTree,

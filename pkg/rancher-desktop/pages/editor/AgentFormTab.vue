@@ -40,6 +40,36 @@
         <option value="judge">Judge</option>
       </select>
 
+      <label class="form-label">Template</label>
+      <select v-model="form.templateId" class="form-select" :class="{ dark: isDark }">
+        <option value="glass-core">Glass Core</option>
+        <option value="terminal">Terminal</option>
+        <option value="industrial">Industrial</option>
+        <option value="biosynthetic">Biosynthetic</option>
+      </select>
+
+      <hr class="form-separator" :class="{ dark: isDark }" />
+
+      <h3 class="form-section-title">Skills</h3>
+      <p v-if="skillsLoading" class="form-hint">Loading skills...</p>
+      <p v-else-if="skillsFolders.length === 0" class="form-hint">No skills folders found.</p>
+      <div v-else class="skills-list">
+        <label
+          v-for="skill in skillsFolders"
+          :key="skill"
+          class="skill-checkbox"
+          :class="{ dark: isDark }"
+        >
+          <input
+            type="checkbox"
+            :value="skill"
+            v-model="form.skills"
+            @change="emit('dirty')"
+          />
+          <span class="skill-name">{{ skill }}</span>
+        </label>
+      </div>
+
       <div class="form-actions">
         <button class="save-btn" :class="{ dark: isDark }" :disabled="saving" @click="save">
           {{ saving ? (isEditMode ? 'Saving...' : 'Creating...') : (isEditMode ? 'Save Changes' : 'Create Agent') }}
@@ -78,13 +108,17 @@ const form = reactive({
   name: '',
   description: '',
   type: 'worker',
+  templateId: 'glass-core',
+  skills: [] as string[],
 });
 
 const errors = reactive({ id: '', name: '' });
 const saving = ref(false);
 const saveError = ref('');
+const skillsFolders = ref<string[]>([]);
+const skillsLoading = ref(false);
 
-onMounted(() => {
+onMounted(async() => {
   // If content is provided (edit mode), parse YAML to pre-fill form
   if (props.content) {
     try {
@@ -93,6 +127,8 @@ onMounted(() => {
         form.name = parsed.name || '';
         form.description = parsed.description || '';
         form.type = parsed.type || 'worker';
+        form.templateId = parsed.templateId || 'glass-core';
+        form.skills = Array.isArray(parsed.skills) ? parsed.skills : [];
       }
     } catch { /* ignore parse errors */ }
   }
@@ -100,7 +136,26 @@ onMounted(() => {
   if (isEditMode.value && props.filePath) {
     form.id = props.filePath.replace('agent-form://edit/', '');
   }
+
+  // Load skills folders
+  await loadSkillsFolders();
 });
+
+async function loadSkillsFolders() {
+  skillsLoading.value = true;
+  try {
+    const vars: { key: string; preview: string }[] = await ipcRenderer.invoke('agents-get-template-variables');
+    const skillsDirVar = vars.find(v => v.key === '{{skills_dir}}');
+    if (!skillsDirVar) return;
+
+    const entries: { name: string; isDir: boolean }[] = await ipcRenderer.invoke('filesystem-read-dir', skillsDirVar.preview);
+    skillsFolders.value = entries.filter(e => e.isDir).map(e => e.name);
+  } catch (err) {
+    console.error('Failed to load skills folders:', err);
+  } finally {
+    skillsLoading.value = false;
+  }
+}
 
 function enforceSlug() {
   form.id = form.id
@@ -148,6 +203,8 @@ async function save() {
       name: form.name.trim(),
       description: form.description.trim(),
       type: form.type,
+      templateId: form.templateId,
+      skills: form.skills,
     });
 
     await ipcRenderer.invoke('filesystem-write-file', `${agentDir}/agent.yaml`, agentYaml);
@@ -310,5 +367,54 @@ async function save() {
 
 .save-btn.dark:hover {
   background: #1a8ae8;
+}
+
+.form-separator {
+  border: none;
+  border-top: 1px solid #e2e8f0;
+  margin: 24px 0 16px 0;
+}
+
+.form-separator.dark {
+  border-top-color: #334155;
+}
+
+.form-section-title {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0 0 12px 0;
+}
+
+.skills-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.skill-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.skill-checkbox:hover {
+  background: rgba(0,0,0,0.04);
+}
+
+.skill-checkbox.dark:hover {
+  background: rgba(255,255,255,0.04);
+}
+
+.skill-checkbox input[type="checkbox"] {
+  margin: 0;
+  cursor: pointer;
+}
+
+.skill-name {
+  user-select: none;
 }
 </style>

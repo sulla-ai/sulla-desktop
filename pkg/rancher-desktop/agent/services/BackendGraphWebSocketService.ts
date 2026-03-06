@@ -1,14 +1,25 @@
 // BackendGraphWebSocketService.ts
-// listens for messages from the frontend and processes them
+// Main-process graph executor: handles the heartbeat (dreaming-protocol) channel
+// and the chat-controller agent channel. Dynamic agent channels are handled
+// by FrontendGraphWebSocketService in the renderer.
 import { getWebSocketClientService, type WebSocketMessage } from './WebSocketClientService';
 import { getSchedulerService } from './SchedulerService';
 import type { CalendarEventData } from './CalendarClient';
 import { AbortService } from './AbortService';
 import { GraphRegistry, nextThreadId, nextMessageId } from './GraphRegistry';
+import { SullaSettingsModel } from '../database/models/SullaSettingsModel';
+import type { AgentGraphState } from '../nodes/Graph';
 import type { HeartbeatThreadState } from '../nodes/HeartbeatNode';
 
 const BACKEND_CHANNEL_ID = 'dreaming-protocol';
 const CALENDAR_CHANNEL_ID = 'calendar_event';
+const CHAT_CONTROLLER_CHANNEL_ID = 'chat-controller';
+
+/** Per-channel state for agent channels (e.g. chat-controller). */
+type AgentChannelState = {
+  unsubscribe: () => void;
+  activeAbort: AbortService | null;
+};
 
 let backendGraphWebSocketServiceInstance: BackendGraphWebSocketService | null = null;
 
@@ -25,6 +36,9 @@ export class BackendGraphWebSocketService {
   private unsubscribes: (() => void)[] = [];
   private activeAbort: AbortService | null = null;
 
+  /** Registered agent channels (non-heartbeat). Each gets its own abort & unsubscribe. */
+  private readonly agentChannels = new Map<string, AgentChannelState>();
+
   constructor() {
     this.initialize();
   }
@@ -34,83 +48,99 @@ export class BackendGraphWebSocketService {
     this.unsubscribes.forEach(unsub => unsub());
     this.unsubscribes = [];
     if (this.activeAbort) {
-      console.log('[BackendGraphWS] Aborting active execution during dispose');
       this.activeAbort.abort();
       this.activeAbort = null;
     }
+    // Tear down agent channels
+    for (const [, ch] of this.agentChannels) {
+      ch.activeAbort?.abort();
+      ch.unsubscribe();
+    }
+    this.agentChannels.clear();
     console.log('[BackendGraphWS] Service disposed');
   }
 
   private initialize(): void {
-    // Initialize chat controller backend channel
+    // Initialize heartbeat (dreaming-protocol) channel
     console.log('[BackendGraphWS] Initializing backend channel:', BACKEND_CHANNEL_ID);
     this.wsService.connect(BACKEND_CHANNEL_ID);
-    console.log('[Background] BackendGraphWebSocketService initialized');
 
     // Register heartbeat agent in the active agents registry
     this.registerAgent().catch(err => console.warn('[BackendGraphWS] Failed to register agent:', err));
 
     const chatUnsubscribe = this.wsService.onMessage(BACKEND_CHANNEL_ID, (msg) => {
-      console.log('[BackendGraphWS] Received message on backend channel:', msg.type, msg);
       this.handleWebSocketMessage(msg);
     });
     if (chatUnsubscribe) {
       this.unsubscribes.push(chatUnsubscribe);
-      console.log('[BackendGraphWS] Chat channel subscription added');
     }
 
     // Initialize calendar event channel
-    console.log('[BackendGraphWS] Initializing calendar channel:', CALENDAR_CHANNEL_ID);
     this.wsService.connect(CALENDAR_CHANNEL_ID);
-    console.log('[Background] BackendGraphWebSocketService calendar channel initialized');
 
     const calendarUnsubscribe = this.wsService.onMessage(CALENDAR_CHANNEL_ID, (msg) => {
-      console.log('[BackendGraphWS] Received calendar message:', msg.type, msg);
       this.handleCalendarMessage(msg);
     });
     if (calendarUnsubscribe) {
       this.unsubscribes.push(calendarUnsubscribe);
-      console.log('[BackendGraphWS] Calendar channel subscription added successfully');
-    } else {
-      console.warn('[BackendGraphWS] Failed to add calendar channel subscription');
     }
+
+    // Register the chat-controller agent channel (always handled by the backend
+    // so it works regardless of which renderer windows are open).
+    this.initAgentChannel(CHAT_CONTROLLER_CHANNEL_ID);
+
+    console.log('[Background] BackendGraphWebSocketService initialized');
   }
 
-  private async handleWebSocketMessage(msg: WebSocketMessage): Promise<void> {
-    console.log('[BackendGraphWS] Handling WebSocket message:', msg.type);
+  /**
+   * Initialize a fixed agent channel. Connects to WS, subscribes to messages,
+   * and registers in the active agents registry.
+   */
+  private initAgentChannel(channelId: string): void {
+    console.log('[BackendGraphWS] Initializing agent channel:', channelId);
+    this.wsService.connect(channelId);
 
+    const unsub = this.wsService.onMessage(channelId, (msg) => {
+      this.handleAgentChannelMessage(channelId, msg);
+    });
+
+    if (!unsub) {
+      console.warn('[BackendGraphWS] Failed to subscribe to agent channel:', channelId);
+      return;
+    }
+
+    this.agentChannels.set(channelId, { unsubscribe: unsub, activeAbort: null });
+
+    this.registerAgentInRegistry(channelId).catch(err =>
+      console.warn('[BackendGraphWS] Failed to register agent channel:', channelId, err));
+  }
+
+  // ------------------------------------------------------------------
+  // Heartbeat channel handling (dreaming-protocol)
+  // ------------------------------------------------------------------
+
+  private async handleWebSocketMessage(msg: WebSocketMessage): Promise<void> {
     if (msg.type === 'graph_runtime_update') {
       this.handleGraphRuntimeUpdate(msg);
       return;
     }
-    
+
     if (msg.type === 'stop_run') {
-      console.log('[BackendGraphWS] stop_run received, aborting active execution');
       this.activeAbort?.abort();
       return;
     }
 
-    if (msg.type !== 'user_message') {
-      console.log('[BackendGraphWS] Ignoring non-user message type:', msg.type);
-      return;
-    }
+    if (msg.type !== 'user_message') return;
 
     const data = typeof msg.data === 'string' ? { content: msg.data } : (msg.data as any);
     const content = (data?.content ?? '').trim();
-    console.log('[BackendGraphWS] Processing user message content:', content.substring(0, 100) + (content.length > 100 ? '...' : ''));
-    
-    if (!content) {
-      console.log('[BackendGraphWS] Empty content, skipping message');
-      return;
-    }
+    if (!content) return;
 
     const threadIdFromMsg = data?.threadId as string | undefined;
-    console.log('[BackendGraphWS] Thread ID from message:', threadIdFromMsg || 'none provided');
 
     // Scheduler ack
     const metadata = data?.metadata;
     if (metadata?.origin === 'scheduler' && typeof metadata?.eventId === 'number') {
-      console.log('[BackendGraphWS] Sending scheduler ack for event:', metadata.eventId);
       this.wsService.send(BACKEND_CHANNEL_ID, {
         type: 'scheduler_ack',
         data: { eventId: metadata.eventId },
@@ -118,7 +148,6 @@ export class BackendGraphWebSocketService {
       });
     }
 
-    console.log('[BackendGraphWS] Starting user input processing');
     await this.processUserInput(content, threadIdFromMsg);
   }
 
@@ -149,46 +178,31 @@ export class BackendGraphWebSocketService {
   }
 
   private async processUserInput(userText: string, threadIdFromMsg?: string): Promise<void> {
-    // Get or create persistent graph for this thread - do this outside try/catch
-    console.log('[BackendGraphWS] Graph retrieved/created for channelId:', BACKEND_CHANNEL_ID);
-
     const { graph, state } = await GraphRegistry.getOrCreateOverlordGraph(
       BACKEND_CHANNEL_ID
     ) as { graph: any; state: HeartbeatThreadState };
 
-    // Create a fresh AbortService for this run and wire it into state
     const abort = new AbortService();
     this.activeAbort = abort;
     state.metadata.options.abort = abort;
 
     try {
-
-      // === NEW: Notify AgentPersonaService about the threadId ===
       if (!threadIdFromMsg) {
-        console.log('[BackendGraphWS] New thread created, notifying frontend:', state.metadata.threadId);
         this.wsService.send(BACKEND_CHANNEL_ID, {
           type: 'thread_created',
-          data: {
-            threadId: state.metadata.threadId
-          },
-          timestamp: Date.now()
+          data: { threadId: state.metadata.threadId },
+          timestamp: Date.now(),
         });
-      } else {
-        console.log('[BackendGraphWS] Using existing thread:', threadIdFromMsg);
       }
 
-      // Append new user message
-      const newMsg = {
+      state.messages.push({
         id: nextMessageId(),
         role: 'user',
         content: userText,
         timestamp: Date.now(),
-        metadata: { source: 'user' }
-      };
-      state.messages.push(newMsg as any);
-      console.log('[BackendGraphWS] Added user message to state, total messages:', state.messages.length);
+        metadata: { source: 'user' },
+      } as any);
 
-      // Reset pause flags when real user input comes in
       const resumeNodeId = state.metadata.waitingForUser === true
         ? String(state.metadata.currentNodeId || '').trim()
         : '';
@@ -198,37 +212,26 @@ export class BackendGraphWebSocketService {
       state.metadata.iterations = 0;
       state.metadata.cycleComplete = false;
       state.metadata.waitingForUser = false;
-      console.log('[BackendGraphWS] Reset pause flags, starting graph execution');
 
-      // Execute on the persistent graph
       await graph.execute(state, shouldResumeFromCurrentNode ? resumeNodeId : 'input_handler');
-      console.log('[BackendGraphWS] Graph execution completed');
 
-      // Build response from final state
       const summaryContent = state.metadata.finalSummary?.trim() || (state.metadata as any).response?.trim() || '';
       const lastAssistantMessage = [...state.messages]
         .reverse()
         .find(msg => msg.role === 'assistant' && typeof msg.content === 'string' && msg.content.trim());
       const content = summaryContent || (lastAssistantMessage?.content?.trim() || '');
-      console.log('[BackendGraphWS] Generated response content length:', content.length);
 
       if (content) {
-        console.log('[BackendGraphWS] Emitting assistant message');
-        this.emitAssistantMessage(content);
-      } else {
-        console.log('[BackendGraphWS] No assistant content to emit');
+        this.emitMessage(BACKEND_CHANNEL_ID, 'assistant_message', { role: 'assistant', content });
       }
-
     } catch (err: any) {
       if (err.name === 'AbortError') {
-        console.log('[BackendGraphWS] Execution aborted');
-        this.emitSystemMessage('Execution stopped.');
+        this.emitMessage(BACKEND_CHANNEL_ID, 'system_message', 'Execution stopped.');
       } else {
         console.error('[BackendGraphWS] Error:', err);
-        this.emitSystemMessage(`Error: ${err.message || String(err)}`);
+        this.emitMessage(BACKEND_CHANNEL_ID, 'system_message', `Error: ${err.message || String(err)}`);
       }
     } finally {
-      // Reset here — after graph run completes
       state.metadata.consecutiveSameNode = 0;
       state.metadata.iterations = 0;
       (state.metadata as any).agentLoopCount = 0;
@@ -236,22 +239,169 @@ export class BackendGraphWebSocketService {
     }
   }
 
-  private emitAssistantMessage(content: string): void {
-    console.log('[BackendGraphWS] Emitting assistant message, content length:', content.length);
-    this.wsService.send(BACKEND_CHANNEL_ID, {
-      type: 'assistant_message',
-      data: { role: 'assistant', content },
-      timestamp: Date.now(),
-    });
+  // ------------------------------------------------------------------
+  // Agent channel handling (chat-controller + dynamically registered)
+  // ------------------------------------------------------------------
+
+  private async handleAgentChannelMessage(channelId: string, msg: WebSocketMessage): Promise<void> {
+    if (msg.type === 'graph_runtime_update') {
+      this.handleGraphRuntimeUpdate(msg);
+      return;
+    }
+
+    if (msg.type === 'stop_run') {
+      console.log('[BackendGraphWS] stop_run on agent channel:', channelId);
+      const ch = this.agentChannels.get(channelId);
+      ch?.activeAbort?.abort();
+      return;
+    }
+
+    if (msg.type === 'continue_run') {
+      console.log('[BackendGraphWS] continue_run on agent channel:', channelId);
+      await this.continueAgentGraphExecution(channelId);
+      return;
+    }
+
+    if (msg.type !== 'user_message') return;
+
+    const data = typeof msg.data === 'string' ? { content: msg.data } : (msg.data as any);
+    const content = (data?.content ?? '').trim();
+    if (!content) return;
+
+    const threadIdFromMsg = data?.threadId as string | undefined;
+
+    // Scheduler ack
+    const metadata = data?.metadata;
+    if (metadata?.origin === 'scheduler' && typeof metadata?.eventId === 'number') {
+      this.wsService.send(channelId, {
+        type: 'scheduler_ack',
+        data: { eventId: metadata.eventId },
+        timestamp: Date.now(),
+      });
+    }
+
+    await this.processAgentInput(channelId, content, threadIdFromMsg);
   }
 
-  private emitSystemMessage(content: string): void {
-    console.log('[BackendGraphWS] Emitting system message:', content);
-    this.wsService.send(BACKEND_CHANNEL_ID, {
-      type: 'system_message',
-      data: content,
-      timestamp: Date.now(),
-    });
+  private async processAgentInput(channelId: string, userText: string, threadIdFromMsg?: string): Promise<void> {
+    const threadId = threadIdFromMsg || nextThreadId();
+    const { graph, state } = await GraphRegistry.getOrCreateAgentGraph(channelId, threadId) as { graph: any; state: AgentGraphState };
+
+    const ch = this.agentChannels.get(channelId);
+    const abort = new AbortService();
+    if (ch) ch.activeAbort = abort;
+    state.metadata.options.abort = abort;
+
+    // Refresh model context from current settings
+    const mode = await SullaSettingsModel.get('modelMode', 'local');
+    state.metadata.llmLocal = mode === 'local';
+    state.metadata.llmModel = mode === 'remote'
+      ? await SullaSettingsModel.get('remoteModel', '')
+      : await SullaSettingsModel.get('sullaModel', '');
+
+    try {
+      if (!threadIdFromMsg) {
+        this.wsService.send(channelId, {
+          type: 'thread_created',
+          data: { threadId: state.metadata.threadId },
+          timestamp: Date.now(),
+        });
+      }
+
+      state.metadata.wsChannel = channelId;
+
+      state.messages.push({
+        id: nextMessageId(),
+        role: 'user',
+        content: userText,
+        timestamp: Date.now(),
+        metadata: { source: 'user' },
+      } as any);
+
+      const resumeNodeId = state.metadata.waitingForUser === true
+        ? String(state.metadata.currentNodeId || '').trim()
+        : '';
+      const shouldResumeFromCurrentNode = !!resumeNodeId
+        && resumeNodeId !== 'input_handler'
+        && resumeNodeId !== 'output';
+
+      state.metadata.consecutiveSameNode = 0;
+      state.metadata.iterations = 0;
+      state.metadata.agentLoopCount = 0;
+      state.metadata.cycleComplete = false;
+      state.metadata.waitingForUser = false;
+
+      await graph.execute(state, shouldResumeFromCurrentNode ? resumeNodeId : 'input_handler');
+    } catch (err: any) {
+      if (err.name === 'AbortError') {
+        console.log('[BackendGraphWS] Agent execution aborted on', channelId);
+        this.emitMessage(channelId, 'system_message', 'Execution stopped.');
+      } else {
+        console.error('[BackendGraphWS] Agent error on', channelId, err);
+        this.emitMessage(channelId, 'system_message', `Error: ${err.message || String(err)}`);
+      }
+    } finally {
+      state.metadata.consecutiveSameNode = 0;
+      state.metadata.iterations = 0;
+      state.metadata.agentLoopCount = 0;
+      if (ch) ch.activeAbort = null;
+    }
+  }
+
+  private async continueAgentGraphExecution(channelId: string): Promise<void> {
+    // Find the most recent thread for this channel in the GraphRegistry
+    // The channel's thread is stored in the graph state's wsChannel
+    const ch = this.agentChannels.get(channelId);
+    if (!ch) return;
+
+    // Look through the registry for a state with this wsChannel
+    // We need to find the active graph for this channel
+    let found: { graph: any; state: AgentGraphState } | null = null;
+    // The GraphRegistry doesn't expose iteration, so we use the channelId as key
+    const existing = GraphRegistry.get(channelId);
+    if (existing) {
+      found = existing as any;
+    }
+
+    if (!found) {
+      console.warn('[BackendGraphWS] No existing graph to continue on channel:', channelId);
+      return;
+    }
+
+    const { graph, state } = found;
+    const abort = new AbortService();
+    ch.activeAbort = abort;
+    state.metadata.options.abort = abort;
+
+    try {
+      state.metadata.consecutiveSameNode = 0;
+      state.metadata.iterations = 0;
+      state.metadata.agentLoopCount = 0;
+      state.metadata.cycleComplete = false;
+      state.metadata.waitingForUser = false;
+
+      await graph.execute(state, 'agent');
+    } catch (err: any) {
+      if (err.name === 'AbortError') {
+        this.emitMessage(channelId, 'system_message', 'Execution stopped.');
+      } else {
+        console.error('[BackendGraphWS] Continue error on', channelId, err);
+        this.emitMessage(channelId, 'system_message', `Error: ${err.message || String(err)}`);
+      }
+    } finally {
+      state.metadata.consecutiveSameNode = 0;
+      state.metadata.iterations = 0;
+      state.metadata.agentLoopCount = 0;
+      ch.activeAbort = null;
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // Shared helpers
+  // ------------------------------------------------------------------
+
+  private emitMessage(channelId: string, type: string, data: unknown): void {
+    this.wsService.send(channelId, { type, data, timestamp: Date.now() });
   }
 
   private async registerAgent(): Promise<void> {
@@ -270,10 +420,23 @@ export class BackendGraphWebSocketService {
     });
   }
 
+  private async registerAgentInRegistry(channelId: string): Promise<void> {
+    const { getActiveAgentsRegistry } = await import('./ActiveAgentsRegistry');
+    const registry = getActiveAgentsRegistry();
+    await registry.register({
+      agentId:      channelId,
+      name:         channelId === CHAT_CONTROLLER_CHANNEL_ID ? 'Sulla' : `Agent (${channelId})`,
+      role:         'Chat agent',
+      channel:      channelId,
+      type:         'agent',
+      status:       'running',
+      startedAt:    Date.now(),
+      lastActiveAt: Date.now(),
+      description:  `Agent graph executor on channel ${channelId}`,
+    });
+  }
+
   private async handleCalendarMessage(msg: WebSocketMessage): Promise<void> {
-    console.log('[BackendGraphWS] handleCalendarMessage called with:', msg);
-    
-    // The calendar message data is directly on the message object, not in msg.data
     const calendarMsg = msg as CalendarWebSocketMessage;
 
     if (!calendarMsg || typeof calendarMsg.type !== 'string') {
@@ -282,34 +445,25 @@ export class BackendGraphWebSocketService {
     }
 
     const { type, event } = calendarMsg;
-    console.log('[BackendGraphWS] Processing calendar message type:', type, 'event:', event);
 
     if (type === 'scheduled' && event) {
       try {
-        console.log('[BackendGraphWS] Scheduling calendar event:', event);
         this.schedulerService.scheduleEvent(event);
-        console.log('[BackendGraphWS] Calendar event scheduled successfully');
       } catch (err) {
         console.error('[BackendGraphWS] Failed to schedule calendar event:', err);
       }
     } else if (type === 'cancel' && event?.id) {
       try {
-        console.log('[BackendGraphWS] Canceling calendar event:', event.id);
         this.schedulerService.cancelEvent(event.id);
-        console.log('[BackendGraphWS] Calendar event canceled successfully');
       } catch (err) {
         console.error('[BackendGraphWS] Failed to cancel calendar event:', err);
       }
     } else if (type === 'reschedule' && event) {
       try {
-        console.log('[BackendGraphWS] Rescheduling calendar event:', event);
         this.schedulerService.rescheduleEvent(event);
-        console.log('[BackendGraphWS] Calendar event rescheduled successfully');
       } catch (err) {
         console.error('[BackendGraphWS] Failed to reschedule calendar event:', err);
       }
-    } else {
-      console.log('[BackendGraphWS] Unknown calendar message type:', type);
     }
   }
 }

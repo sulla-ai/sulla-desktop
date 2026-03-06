@@ -53,7 +53,7 @@
         >
           <!-- Agent row -->
           <div class="agent-row-wrapper">
-            <button class="agent-row" :class="{ dark: isDark }" @click="openAgentYaml(agent)">
+            <button class="agent-row" :class="{ dark: isDark }" @click="editAgent(agent)">
               <img :src="logoUrl" class="agent-logo" alt="" />
               <div class="agent-meta">
                 <span class="agent-name">{{ agent.name }}</span>
@@ -220,16 +220,6 @@ async function loadAgents() {
   } finally {
     loading.value = false;
   }
-}
-
-function openAgentYaml(agent: AgentInfo) {
-  emit('file-selected', {
-    name: 'agent.yaml',
-    path: `${agent.path}/agent.yaml`,
-    isDir: false,
-    size: 0,
-    ext: '.yaml',
-  });
 }
 
 const MARKDOWN_EXTS = new Set(['.md', '.markdown', '.mdx']);
