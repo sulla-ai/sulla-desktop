@@ -1058,6 +1058,40 @@ export function initSullaEvents(): void {
     return await search(query, dirPath);
   });
 
+  // ─────────────────────────────────────────────────────────────
+  // Docker handlers
+  // ─────────────────────────────────────────────────────────────
+
+  ipcMainProxy.handle('docker-list-containers', async () => {
+    const { execSync } = require('child_process');
+
+    try {
+      const raw = execSync('docker ps -a --format "{{json .}}"', {
+        encoding: 'utf8',
+        timeout:  15000,
+      }).trim();
+
+      if (!raw) return [];
+
+      return raw.split('\n').filter((l: string) => l.trim()).map((line: string) => {
+        const c = JSON.parse(line);
+
+        return {
+          id:     c.ID,
+          name:   c.Names,
+          image:  c.Image,
+          status: c.Status,
+          state:  c.State,
+          ports:  c.Ports,
+        };
+      });
+    } catch (err: any) {
+      console.error('[Sulla] docker-list-containers failed:', err.message);
+
+      return [];
+    }
+  });
+
   console.log('[Sulla] IPC event handlers initialized');
 }
 

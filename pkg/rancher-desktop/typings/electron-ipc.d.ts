@@ -228,6 +228,10 @@ export interface IpcMainInvokeEvents {
   'host/isArm': () => boolean;
   // #endregion
 
+  // #region Docker
+  'docker-list-containers': () => Array<{ id: string; name: string; image: string; status: string; state: string; ports: string }>;
+  // #endregion
+
   // #region Snapshots
   'show-snapshots-confirm-dialog':  (options: { window: Partial<Electron.MessageBoxOptions>, format: SnapshotDialog }) => any;
   'show-snapshots-blocking-dialog': (options: { window: Partial<Electron.MessageBoxOptions>, format: SnapshotDialog }) => any;

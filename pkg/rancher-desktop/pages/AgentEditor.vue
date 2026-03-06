@@ -20,9 +20,11 @@
           :left-pane-visible="leftPaneVisible"
           :search-mode="searchMode"
           :git-mode="gitMode"
+          :docker-mode="dockerMode"
           @toggle-file-tree="toggleFileTree"
           @toggle-search="toggleSearch"
           @toggle-git="toggleGit"
+          @toggle-docker="toggleDocker"
         />
         </div>
 
@@ -49,9 +51,16 @@
               @file-selected="onFileSelected"
             />
 
+            <!-- Docker pane -->
+            <DockerPane
+              v-show="dockerMode"
+              :is-dark="isDark"
+              @open-container-port="openContainerPort"
+            />
+
             <!-- File tree -->
             <FileTreeSidebar
-              v-show="!searchMode && !gitMode"
+              v-show="!searchMode && !gitMode && !dockerMode"
               :root-path="rootPath"
               :highlight-path="highlightPath"
               :is-dark="isDark"
@@ -280,6 +289,8 @@ import TabContextMenu from './editor/TabContextMenu.vue';
 import IconPanel from './editor/IconPanel.vue';
 import FileSearch from './editor/FileSearch.vue';
 import GitPane from './editor/GitPane.vue';
+import DockerPane from './editor/DockerPane.vue';
+import WebViewTab from './editor/WebViewTab.vue';
 import EditorChat from './editor/EditorChat.vue';
 import { EditorChatInterface } from './editor/EditorChatInterface';
 import { FrontendGraphWebSocketService } from '@pkg/agent/services/FrontendGraphWebSocketService';
@@ -296,7 +307,7 @@ interface TabState {
   loading: boolean;
   error: string;
   dirty: boolean;
-  editorType?: 'code' | 'markdown' | 'preview';
+  editorType?: 'code' | 'markdown' | 'preview' | 'webview';
 }
 
 const MARKDOWN_EXTS = new Set(['.md', '.markdown', '.mdx']);
@@ -325,6 +336,7 @@ const editorRegistry: Record<string, Component> = {
   markdown:  markRaw(MarkdownEditor),
   code:      markRaw(CodeEditor),
   preview:   markRaw(MarkdownEditor), // Preview uses markdown editor but read-only
+  webview:   markRaw(WebViewTab),
 };
 
 function resolveEditorType(ext: string): string {
@@ -346,6 +358,7 @@ export default defineComponent({
     IconPanel,
     FileSearch,
     GitPane,
+    DockerPane,
     EditorChat,
   },
 
@@ -462,6 +475,7 @@ export default defineComponent({
     }
     const searchMode = ref(false);
     const gitMode = ref(false);
+    const dockerMode = ref(false);
     const searchQuery = ref('');
     const searchPath = ref('');
     const searchResults = ref<Array<{ path: string; name: string; line: number; preview: string; score: number; source: 'fts' | 'filename' }>>([]);
@@ -526,14 +540,18 @@ export default defineComponent({
       localStorage.setItem(THEME_STORAGE_KEY, isDark.value ? 'dark' : 'light');
     }
 
+    function clearModes() {
+      searchMode.value = false;
+      gitMode.value = false;
+      dockerMode.value = false;
+    }
+
     function toggleFileTree() {
       if (!leftPaneVisible.value) {
         leftPaneVisible.value = true;
-        searchMode.value = false;
-        gitMode.value = false;
-      } else if (searchMode.value || gitMode.value) {
-        searchMode.value = false;
-        gitMode.value = false;
+        clearModes();
+      } else if (searchMode.value || gitMode.value || dockerMode.value) {
+        clearModes();
       } else {
         leftPaneVisible.value = false;
       }
@@ -542,11 +560,11 @@ export default defineComponent({
     function toggleSearch() {
       if (!leftPaneVisible.value) {
         leftPaneVisible.value = true;
+        clearModes();
         searchMode.value = true;
-        gitMode.value = false;
       } else if (!searchMode.value) {
+        clearModes();
         searchMode.value = true;
-        gitMode.value = false;
       } else {
         leftPaneVisible.value = false;
       }
@@ -555,11 +573,24 @@ export default defineComponent({
     function toggleGit() {
       if (!leftPaneVisible.value) {
         leftPaneVisible.value = true;
-        searchMode.value = false;
+        clearModes();
         gitMode.value = true;
       } else if (!gitMode.value) {
-        searchMode.value = false;
+        clearModes();
         gitMode.value = true;
+      } else {
+        leftPaneVisible.value = false;
+      }
+    }
+
+    function toggleDocker() {
+      if (!leftPaneVisible.value) {
+        leftPaneVisible.value = true;
+        clearModes();
+        dockerMode.value = true;
+      } else if (!dockerMode.value) {
+        clearModes();
+        dockerMode.value = true;
       } else {
         leftPaneVisible.value = false;
       }
@@ -809,6 +840,27 @@ export default defineComponent({
 
     // Tab context menu removed - now in FileTree component
 
+    function openContainerPort({ url, name }: { url: string; name: string }) {
+      const key = `${url}-webview`;
+      const existing = openTabs.value.find(t => `${t.path}-${t.editorType || 'code'}` === key);
+      if (existing) {
+        activeTabKey.value = key;
+        return;
+      }
+      const tab: TabState = reactive({
+        path:       url,
+        name,
+        ext:        '',
+        content:    url,
+        loading:    false,
+        error:      '',
+        dirty:      false,
+        editorType: 'webview',
+      });
+      openTabs.value = [...openTabs.value, tab];
+      activeTabKey.value = key;
+    }
+
     onBeforeUnmount(() => {
       window.removeEventListener('keydown', onKeyDown);
       document.removeEventListener('mousedown', () => {});
@@ -833,6 +885,9 @@ export default defineComponent({
       toggleFileTree,
       toggleSearch,
       toggleGit,
+      toggleDocker,
+      dockerMode,
+      openContainerPort,
       openTabs,
       activeTabKey,
       activeTab,
