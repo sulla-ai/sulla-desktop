@@ -143,6 +143,15 @@ export interface BaseThreadState {
 export interface AgentGraphState extends BaseThreadState {
   metadata: BaseThreadState['metadata'] & {
     agent?: {
+      // Config (loaded at graph creation from agent.yaml)
+      name?: string;
+      description?: string;
+      type?: string;
+      skills?: string[];
+      tools?: string[];         // allowlist of tool names
+      prompt?: string;          // compiled .md files, no variable substitution
+
+      // Execution outcomes (set during runtime)
       status?: 'done' | 'blocked' | 'continue' | 'in_progress';
       status_report?: string | null;
       response?: string | null;

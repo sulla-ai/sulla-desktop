@@ -350,15 +350,45 @@ export abstract class BaseNode<T extends BaseThreadState = BaseThreadState> {
 
         const parts: string[] = [];
 
-        // Resolve the agent ID from the graph state's wsChannel
+        // Resolve the agent ID and config from graph state
         const agentId = String(state.metadata.wsChannel || '').trim();
+        const agentMeta = (state.metadata as any).agent as {
+            name?: string; prompt?: string; tools?: string[];
+        } | undefined;
 
-        // Try to load agent-specific prompt files from ~/sulla/agents/{agentId}/
-        // If found, these replace the global soul prompt.
-        const agentPrompt = agentId ? await loadAgentPromptFiles(agentId) : null;
+        // Use pre-compiled prompt from state if available, otherwise fall back to filesystem
+        let agentPrompt: string | null = null;
+        if (agentMeta?.prompt) {
+            // Apply template vars + identity prefix to pre-compiled prompt
+            const promptVars = await getTemplateVariables();
+            promptVars['{{agent_name}}'] = agentMeta.name || agentId;
+            promptVars['{{agent_id}}'] = agentId;
+            promptVars['{{agent_dir}}'] = path.join(resolveSullaAgentsDir(), agentId);
+
+            // Filter {{tool_categories}} to only show categories with allowed tools
+            if (agentMeta.tools?.length) {
+                const allowSet = new Set(agentMeta.tools);
+                const filteredCategories = toolRegistry.getCategoriesWithDescriptions()
+                    .filter(({ category }: { category: string }) => {
+                        const toolsInCat = toolRegistry.getToolNamesForCategory(category);
+                        return category === 'meta' || toolsInCat.some((name: string) => allowSet.has(name));
+                    });
+                promptVars['{{tool_categories}}'] = filteredCategories
+                    .map(({ category, description }: { category: string; description: string }) => `- ${category}: ${description}`)
+                    .join('\n');
+            }
+
+            const primaryUserName = await SullaSettingsModel.get('primaryUserName', '');
+            const identityPrefix = primaryUserName.trim()
+                ? `You are ${agentMeta.name || agentId} (agent: ${agentId})\nThe Human's name is: ${primaryUserName}\n\n`
+                : `You are ${agentMeta.name || agentId} (agent: ${agentId})\n\n`;
+            agentPrompt = identityPrefix + applyTemplateVars(agentMeta.prompt, promptVars);
+        } else {
+            agentPrompt = agentId ? await loadAgentPromptFiles(agentId) : null;
+        }
 
         if (agentPrompt) {
-            // Agent has its own prompt files — use them as the identity/soul
+            // Agent has its own prompt — use as the identity/soul
             parts.push(agentPrompt);
         } else if (options.includeSoul) {
             // Fall back to global soul prompt from settings
@@ -370,6 +400,20 @@ export abstract class BaseNode<T extends BaseThreadState = BaseThreadState> {
 
         // Build environment awareness with template variable substitution
         const vars = await getTemplateVariables();
+
+        // Filter {{tool_categories}} for agent allowlist (if not already done above)
+        if (agentMeta?.tools?.length) {
+            const allowSet = new Set(agentMeta.tools);
+            const filteredCategories = toolRegistry.getCategoriesWithDescriptions()
+                .filter(({ category }: { category: string }) => {
+                    const toolsInCat = toolRegistry.getToolNamesForCategory(category);
+                    return category === 'meta' || toolsInCat.some((name: string) => allowSet.has(name));
+                });
+            vars['{{tool_categories}}'] = filteredCategories
+                .map(({ category, description }: { category: string; description: string }) => `- ${category}: ${description}`)
+                .join('\n');
+        }
+
         const AwarenessMessage = applyTemplateVars(ENVIRONMENT_PROMPT, vars);
 
         if (options.includeEnvironment !== false) {
@@ -653,6 +697,19 @@ export abstract class BaseNode<T extends BaseThreadState = BaseThreadState> {
 
           const filtered = await this.filterLLMToolsByAccessPolicy(llmTools, options);
           llmTools = filtered.tools;
+
+          // Apply agent tool allowlist from agent config
+          const agentToolAllowlist = (state.metadata as any).agent?.tools;
+          if (Array.isArray(agentToolAllowlist) && agentToolAllowlist.length > 0) {
+            const allowSet = new Set(agentToolAllowlist);
+            // Always allow meta tools (browse_tools, etc.)
+            const metaNames = toolRegistry.getToolNamesForCategory('meta');
+            metaNames.forEach(n => allowSet.add(n));
+            llmTools = llmTools.filter((t: any) => {
+              const name = t?.function?.name;
+              return name && allowSet.has(name);
+            });
+          }
         }
 
         const previousToolAccessPolicy = (state.metadata as any).__toolAccessPolicy;
@@ -1456,6 +1513,15 @@ export abstract class BaseNode<T extends BaseThreadState = BaseThreadState> {
         const allowedCategories = policy.allowedCategories;
         if (allowedCategories?.length && !allowedCategories.includes(category)) {
             return `Tool category not allowed in this node: ${toolName} (category: ${category || 'unknown'})`;
+        }
+
+        // Agent config tool allowlist (defense in depth)
+        const agentTools = (state.metadata as any).agent?.tools;
+        if (Array.isArray(agentTools) && agentTools.length > 0) {
+            const metaNames = toolRegistry.getToolNamesForCategory('meta');
+            if (!agentTools.includes(toolName) && !metaNames.includes(toolName)) {
+                return `Tool not allowed by agent config: ${toolName}`;
+            }
         }
 
         return null;
