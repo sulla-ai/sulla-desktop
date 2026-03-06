@@ -453,7 +453,7 @@ const emit = defineEmits<{
 
 const loading = ref(false);
 const repoStates = ref<RepoState[]>([]);
-const treeView = ref(false);
+const treeView = ref(true);
 
 // ─── Tree view helpers ───────────────────────────────────────────
 
