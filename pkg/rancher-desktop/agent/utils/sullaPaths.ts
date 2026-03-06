@@ -12,6 +12,7 @@ const SULLA_SKILLS_DIR_ENV = 'SULLA_SKILLS_DIR';
 const SULLA_WORKSPACES_DIR_ENV = 'SULLA_WORKSPACES_DIR';
 const SULLA_AGENTS_DIR_ENV = 'SULLA_AGENTS_DIR';
 const SULLA_CONVERSATIONS_DIR_ENV = 'SULLA_CONVERSATIONS_DIR';
+const SULLA_WORKFLOWS_DIR_ENV = 'SULLA_WORKFLOWS_DIR';
 
 export function resolveSullaHomeDir(): string {
   const envPath = String(process.env[SULLA_HOME_DIR_ENV] || '').trim();
@@ -58,6 +59,15 @@ export function resolveSullaAgentsDir(): string {
   return path.join(resolveSullaHomeDir(), 'agents');
 }
 
+export function resolveSullaWorkflowsDir(): string {
+  const envPath = String(process.env[SULLA_WORKFLOWS_DIR_ENV] || '').trim();
+  if (envPath) {
+    return path.isAbsolute(envPath) ? envPath : path.resolve(envPath);
+  }
+
+  return path.join(resolveSullaHomeDir(), 'workflows');
+}
+
 export function resolveSullaConversationsDir(): string {
   const envPath = String(process.env[SULLA_CONVERSATIONS_DIR_ENV] || '').trim();
   if (envPath) {
@@ -70,6 +80,7 @@ export function resolveSullaConversationsDir(): string {
 const BOOTSTRAP_REPOS: { dir: () => string; repo: string }[] = [
   { dir: resolveSullaAgentsDir, repo: 'https://github.com/sulla-ai/agents.git' },
   { dir: resolveSullaSkillsDir, repo: 'https://github.com/sulla-ai/skills.git' },
+  { dir: resolveSullaWorkflowsDir, repo: 'https://github.com/sulla-ai/workflows.git' },
 ];
 
 export async function bootstrapSullaHome(): Promise<void> {
