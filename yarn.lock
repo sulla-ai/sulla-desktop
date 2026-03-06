@@ -4729,7 +4729,7 @@
     postcss "^8.5.6"
     source-map-js "^1.2.1"
 
-"@vue/compiler-sfc@^3.5.18":
+"@vue/compiler-sfc@3.5.29", "@vue/compiler-sfc@^3.5.18":
   version "3.5.29"
   resolved "https://registry.yarnpkg.com/@vue/compiler-sfc/-/compiler-sfc-3.5.29.tgz#8b1b0707fb53c122fedd566244a564eaf40ee71f"
   integrity sha512-oJZhN5XJs35Gzr50E82jg2cYdZQ78wEwvRO6Y63TvLVTc+6xICzJHP1UIecdSPPYIbkautNBanDiWYa64QSFIA==
