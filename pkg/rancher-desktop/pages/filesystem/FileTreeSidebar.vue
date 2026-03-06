@@ -25,6 +25,12 @@
             <line x1="12" y1="3" x2="12" y2="15" />
           </svg>
         </button>
+        <button class="action-btn" title="Close Panel" @click="$emit('close')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
       </div>
       <input
         ref="uploadInputRef"
@@ -73,7 +79,7 @@
 </template>
 
 <script lang="ts">
-import { defineComponent, ref, onMounted, watch } from 'vue';
+import { defineComponent, ref, onMounted, onBeforeUnmount, watch } from 'vue';
 import { ipcRenderer, clipboard } from 'electron';
 import FileTreeNode from './FileTreeNode.vue';
 import FileContextMenu from './FileContextMenu.vue';
@@ -97,7 +103,7 @@ export default defineComponent({
     highlightPath: { type: String, default: '' },
   },
 
-  emits: ['file-selected', 'tree-changed'],
+  emits: ['file-selected', 'tree-changed', 'close'],
 
   setup(props, { emit }) {
     const entries = ref<FileEntry[]>([]);
@@ -407,7 +413,50 @@ export default defineComponent({
       selectedPath.value = newPath;
     }, { immediate: true });
 
-    onMounted(loadRoot);
+    // ── Auto-refresh heartbeat ─────────────────────────────
+    let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+
+    async function heartbeat() {
+      if (!rootPath.value) return;
+      try {
+        const freshRoot = await ipcRenderer.invoke('filesystem-read-dir', rootPath.value);
+        const oldNames = entries.value.map(e => `${e.name}:${e.isDir}`).join(',');
+        const newNames = freshRoot.map((e: FileEntry) => `${e.name}:${e.isDir}`).join(',');
+        if (oldNames !== newNames) {
+          entries.value = freshRoot;
+        }
+        // Also refresh any expanded directories
+        for (const dirPath of expandedDirs.value) {
+          const freshChildren = await ipcRenderer.invoke('filesystem-read-dir', dirPath);
+          const oldChildNames = (childrenMap.value[dirPath] || []).map((e: FileEntry) => `${e.name}:${e.isDir}`).join(',');
+          const newChildNames = freshChildren.map((e: FileEntry) => `${e.name}:${e.isDir}`).join(',');
+          if (oldChildNames !== newChildNames) {
+            childrenMap.value = { ...childrenMap.value, [dirPath]: freshChildren };
+          }
+        }
+      } catch { /* ignore */ }
+    }
+
+    // Expose refresh for parent components
+    function refresh() {
+      loadRoot();
+      // Also refresh expanded dirs
+      for (const dirPath of expandedDirs.value) {
+        refreshDir(dirPath);
+      }
+    }
+
+    onMounted(() => {
+      loadRoot();
+      heartbeatTimer = setInterval(heartbeat, 3000);
+    });
+
+    onBeforeUnmount(() => {
+      if (heartbeatTimer) {
+        clearInterval(heartbeatTimer);
+        heartbeatTimer = null;
+      }
+    });
 
     return {
       entries,
@@ -434,6 +483,7 @@ export default defineComponent({
       onScrollDrop,
       onDragHover,
       onDropFiles,
+      refresh,
     };
   },
 });
@@ -460,14 +510,22 @@ export default defineComponent({
 .file-tree-header {
   display: flex;
   align-items: center;
-  padding: 8px 12px;
+  padding: 0 8px 0 12px;
+  height: 35px;
   font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.8px;
+  letter-spacing: 0.5px;
   text-transform: uppercase;
-  color: #6f6f6f;
-  border-bottom: 1px solid #e0e0e0;
+  color: #64748b;
+  background: #f8fafc;
+  border-bottom: 1px solid #cbd5e1;
   flex-shrink: 0;
+}
+
+.dark .file-tree-header {
+  color: #94a3b8;
+  background: #1e293b;
+  border-bottom-color: #3c3c3c;
 }
 
 .file-tree-actions {
@@ -502,11 +560,6 @@ export default defineComponent({
 .dark .action-btn:hover {
   background: rgba(255, 255, 255, 0.1);
   color: #ccc;
-}
-
-.dark .file-tree-header {
-  color: #999;
-  border-bottom-color: #3c3c3c;
 }
 
 .file-tree-scroll.drop-active {

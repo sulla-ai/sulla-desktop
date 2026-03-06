@@ -164,6 +164,7 @@ export interface IpcMainInvokeEvents {
   'filesystem-read-dir':  (dirPath: string) => Array<{ name: string; path: string; isDir: boolean; size: number; ext: string }>;
   'filesystem-read-file':  (filePath: string) => string;
   'filesystem-write-file': (filePath: string, content: string) => void;
+  'filesystem-save-dialog': (defaultName: string, defaultPath?: string) => string | null;
   'filesystem-rename':     (oldPath: string, newName: string) => string;
   'filesystem-delete':     (targetPath: string) => void;
   'filesystem-create-file':(dirPath: string, fileName: string) => string;

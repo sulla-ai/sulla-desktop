@@ -3,6 +3,12 @@
     <!-- Header -->
     <div class="chat-header" :class="{ dark: isDark }">
       <span class="chat-header-title">Chat</span>
+      <button class="chat-close-btn" :class="{ dark: isDark }" title="Close Panel" @click="$emit('close')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+      </button>
     </div>
 
     <!-- Messages -->
@@ -170,6 +176,7 @@ const emit = defineEmits<{
   'update:query': [value: string];
   'send': [];
   'stop': [];
+  'close': [];
 }>();
 
 const tokenLabel = computed(() => {
@@ -238,7 +245,8 @@ watch(() => props.messages.length, () => scrollToBottom());
 .chat-header {
   display: flex;
   align-items: center;
-  padding: 0 12px;
+  justify-content: space-between;
+  padding: 0 8px 0 12px;
   height: 35px;
   background: #f8fafc;
   border-bottom: 1px solid #cbd5e1;
@@ -251,13 +259,42 @@ watch(() => props.messages.length, () => scrollToBottom());
 }
 
 .chat-header-title {
-  font-size: 13px;
-  font-weight: 500;
-  color: #333;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #64748b;
 }
 
 .chat-header.dark .chat-header-title {
-  color: #ccc;
+  color: #94a3b8;
+}
+
+.chat-close-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  color: #94a3b8;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.chat-close-btn:hover {
+  background: rgba(0,0,0,0.06);
+  color: #475569;
+}
+
+.chat-close-btn.dark {
+  color: #64748b;
+}
+
+.chat-close-btn.dark:hover {
+  background: rgba(255,255,255,0.08);
+  color: #94a3b8;
 }
 
 .chat-messages {

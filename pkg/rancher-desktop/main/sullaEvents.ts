@@ -424,6 +424,17 @@ export function initSullaEvents(): void {
     fs.writeFileSync(resolved, content, 'utf-8');
   });
 
+  ipcMainProxy.handle('filesystem-save-dialog', async(_event: unknown, defaultName: string, defaultPath?: string) => {
+    const { dialog } = require('electron');
+    const result = await dialog.showSaveDialog({
+      title: 'Save File',
+      defaultPath: defaultPath ? path.join(defaultPath, defaultName) : defaultName,
+      properties: ['createDirectory', 'showOverwriteConfirmation'],
+    });
+    if (result.canceled || !result.filePath) return null;
+    return result.filePath;
+  });
+
   ipcMainProxy.handle('filesystem-rename', async(_event: unknown, oldPath: string, newName: string) => {
     const resolved = assertInsideSullaHome(oldPath);
     const newPath = path.join(path.dirname(resolved), newName);

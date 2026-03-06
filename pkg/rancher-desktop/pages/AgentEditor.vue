@@ -41,6 +41,7 @@
               :indexing="qmdIndexing"
               :searching="qmdSearching"
               @file-selected="onFileSelected"
+              @close="leftPaneVisible = false"
             />
 
             <!-- Git pane -->
@@ -50,6 +51,7 @@
               :is-dark="isDark"
               @file-selected="onFileSelected"
               @open-diff="onOpenDiff"
+              @close="leftPaneVisible = false"
             />
 
             <!-- Docker pane -->
@@ -59,15 +61,18 @@
               @open-container-port="openContainerPort"
               @docker-logs="openDockerLogs"
               @docker-exec="openDockerExec"
+              @close="leftPaneVisible = false"
             />
 
             <!-- File tree -->
             <FileTreeSidebar
+              ref="fileTreeRef"
               v-show="!searchMode && !gitMode && !dockerMode"
               :root-path="rootPath"
               :highlight-path="highlightPath"
               :is-dark="isDark"
               @file-selected="onFileSelected"
+              @close="leftPaneVisible = false"
             />
           </div>
         </div>
@@ -84,29 +89,53 @@
         <div class="editor-panel" v-show="centerPaneVisible" :class="{ dark: isDark }">
           <!-- Top editor area -->
           <div class="editor-top">
-            <!-- Tab bar (always visible when tabs exist) -->
-            <div v-if="openTabs.length > 0" class="tab-bar" :class="{ dark: isDark }">
-              <div
-                v-for="tab in openTabs"
-                :key="`${tab.path}-${tab.editorType || 'code'}`"
-                class="tab"
-                :class="{ active: activeTabKey === `${tab.path}-${tab.editorType || 'code'}`, dark: isDark }"
-                @click="switchTab(tab)"
-                @contextmenu.prevent="$emit('tab-context-menu', $event, tab)"
-              >
-                <span class="tab-icon">
-                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-                    <path d="M3.5 1C2.94772 1 2.5 1.44772 2.5 2V14C2.5 14.5523 2.94772 15 3.5 15H12.5C13.0523 15 13.5 14.5523 13.5 14V5L9.5 1H3.5Z" :fill="getIconColor(tab.ext)" stroke-width="0.5" :stroke="getIconColor(tab.ext)"/>
-                    <path d="M9.5 1V5H13.5" :stroke="getIconColor(tab.ext)" stroke-width="0.8" fill="none"/>
+            <!-- Tab bar (always visible) -->
+            <div class="tab-bar" :class="{ dark: isDark, empty: openTabs.length === 0 }">
+              <div class="tab-bar-tabs">
+                <div
+                  v-for="tab in openTabs"
+                  :key="`${tab.path}-${tab.editorType || 'code'}`"
+                  class="tab"
+                  :class="{ active: activeTabKey === `${tab.path}-${tab.editorType || 'code'}`, dark: isDark }"
+                  @click="switchTab(tab)"
+                  @contextmenu.prevent="$emit('tab-context-menu', $event, tab)"
+                >
+                  <span class="tab-icon">
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                      <path d="M3.5 1C2.94772 1 2.5 1.44772 2.5 2V14C2.5 14.5523 2.94772 15 3.5 15H12.5C13.0523 15 13.5 14.5523 13.5 14V5L9.5 1H3.5Z" :fill="getIconColor(tab.ext)" stroke-width="0.5" :stroke="getIconColor(tab.ext)"/>
+                      <path d="M9.5 1V5H13.5" :stroke="getIconColor(tab.ext)" stroke-width="0.8" fill="none"/>
+                    </svg>
+                  </span>
+                  <span class="tab-label">{{ tab.name }}{{ tab.editorType === 'diff' ? ' (diff)' : '' }}</span>
+                  <span v-if="tab.dirty" class="tab-dirty-dot"></span>
+                  <span class="tab-close" @click.stop="closeTab(tab)">
+                    <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+                      <path d="M8 8.707l3.646 3.647.708-.707L8.707 8l3.647-3.646-.707-.708L8 7.293 4.354 3.646l-.708.708L7.293 8l-3.647 3.646.708.707L8 8.707z"/>
+                    </svg>
+                  </span>
+                </div>
+              </div>
+              <!-- Tab bar actions (right side) -->
+              <div class="tab-bar-actions">
+                <button class="tab-bar-action-btn" :class="{ dark: isDark }" title="More actions" @click.stop="editorMenu.visible = !editorMenu.visible">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                    <circle cx="12" cy="5" r="2"/>
+                    <circle cx="12" cy="12" r="2"/>
+                    <circle cx="12" cy="19" r="2"/>
                   </svg>
-                </span>
-                <span class="tab-label">{{ tab.name }}{{ tab.editorType === 'diff' ? ' (diff)' : '' }}</span>
-                <span v-if="tab.dirty" class="tab-dirty-dot"></span>
-                <span class="tab-close" @click.stop="closeTab(tab)">
-                  <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
-                    <path d="M8 8.707l3.646 3.647.708-.707L8.707 8l3.647-3.646-.707-.708L8 7.293 4.354 3.646l-.708.708L7.293 8l-3.647 3.646.708.707L8 8.707z"/>
+                </button>
+              </div>
+              <!-- Editor dropdown menu -->
+              <div v-if="editorMenu.visible" ref="editorDropdownRef" class="editor-dropdown" :class="{ dark: isDark }">
+                <button class="editor-dropdown-item" :class="{ dark: isDark }" @click="createNewUntitledTab">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                    <line x1="12" y1="18" x2="12" y2="12"/>
+                    <line x1="9" y1="15" x2="15" y2="15"/>
                   </svg>
-                </span>
+                  <span>New File</span>
+                </button>
               </div>
             </div>
 
@@ -222,6 +251,13 @@
                   <line x1="5" y1="12" x2="19" y2="12"></line>
                 </svg>
               </button>
+              <div style="flex:1"></div>
+              <button class="pane-close-btn" :class="{ dark: isDark }" title="Close" @click="bottomPaneVisible = false">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18"></line>
+                  <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+              </button>
             </div>
             
             <!-- Terminal content -->
@@ -259,6 +295,7 @@
             @update:query="chatUpdateQuery"
             @send="chatSend"
             @stop="chatStop"
+            @close="rightPaneVisible = false"
           />
         </div>
       </div>
@@ -543,6 +580,7 @@ export default defineComponent({
       }
 
       await modelSelector.start();
+      document.addEventListener('mousedown', onEditorMenuOutsideClick);
     });
 
     function toggleTheme() {
@@ -808,6 +846,39 @@ export default defineComponent({
       tabContextMenu.value.visible = false;
     }
 
+    // ─── Editor menu (ellipsis in tab bar) ────────────────────────
+    const editorMenu = reactive({ visible: false });
+    const editorDropdownRef = ref<HTMLDivElement | null>(null);
+    let untitledCounter = 0;
+
+    function createNewUntitledTab() {
+      editorMenu.visible = false;
+      untitledCounter++;
+      const name = `Untitled-${untitledCounter}`;
+      const key = `untitled://${name}-code`;
+
+      const tab: TabState = reactive({
+        path:       `untitled://${name}`,
+        name:       name,
+        ext:        '.txt',
+        content:    '',
+        loading:    false,
+        error:      '',
+        dirty:      false,
+        editorType: 'code',
+      });
+
+      openTabs.value = [...openTabs.value, tab];
+      activeTabKey.value = key;
+    }
+
+    // Close editor menu on outside click
+    function onEditorMenuOutsideClick(e: MouseEvent) {
+      if (editorMenu.visible && editorDropdownRef.value && !editorDropdownRef.value.contains(e.target as Node)) {
+        editorMenu.visible = false;
+      }
+    }
+
     // Functions needed by FileTree component
     function viewInFinder(tab: TabState) {
       // Set highlight path to highlight the file in the file tree
@@ -856,6 +927,7 @@ export default defineComponent({
 
     // Editor ref for accessing exposed methods (e.g. getMarkdown)
     const editorRef = ref<any>(null);
+    const fileTreeRef = ref<any>(null);
 
     function markActiveTabDirty() {
       const tab = activeTab.value;
@@ -878,9 +950,28 @@ export default defineComponent({
           content = editorRef.value.getContent();
         }
 
+        // Untitled files need a save dialog
+        if (tab.path.startsWith('untitled://')) {
+          const savePath: string | null = await ipcRenderer.invoke(
+            'filesystem-save-dialog',
+            tab.name,
+            rootPath.value || undefined,
+          );
+          if (!savePath) return; // User cancelled
+
+          // Update tab identity
+          const fileName = savePath.split('/').pop() || tab.name;
+          const ext = fileName.includes('.') ? '.' + fileName.split('.').pop() : '.txt';
+          tab.path = savePath;
+          tab.name = fileName;
+          tab.ext = ext;
+          activeTabKey.value = `${tab.path}-${tab.editorType || 'code'}`;
+        }
+
         await ipcRenderer.invoke('filesystem-write-file', tab.path, content);
         tab.dirty = false;
         tab.content = content;
+        fileTreeRef.value?.refresh();
       } catch (err: any) {
         console.error('Save failed:', err);
       }
@@ -962,7 +1053,7 @@ export default defineComponent({
 
     onBeforeUnmount(() => {
       window.removeEventListener('keydown', onKeyDown);
-      document.removeEventListener('mousedown', () => {});
+      document.removeEventListener('mousedown', onEditorMenuOutsideClick);
       editorChat.dispose();
       editorGraphWs.dispose();
       modelSelector.dispose();
@@ -1030,7 +1121,11 @@ export default defineComponent({
       onFileSelected,
       onOpenDiff,
       editorRef,
+      fileTreeRef,
       tabContextMenu,
+      editorMenu,
+      editorDropdownRef,
+      createNewUntitledTab,
     };
   },
 });
@@ -1171,17 +1266,117 @@ export default defineComponent({
   background: #f8fafc;
   border-bottom: 1px solid #cbd5e1;
   flex-shrink: 0;
-  overflow-x: auto;
-  overflow-y: hidden;
+  position: relative;
 }
 
 .tab-bar::-webkit-scrollbar {
   height: 0;
 }
 
+.tab-bar.empty {
+  border-bottom: none;
+  background: #ffffff;
+}
+
+.tab-bar.empty.dark {
+  background: #0f172a;
+}
+
 .tab-bar.dark {
   background: #1e293b;
   border-bottom-color: #3c3c3c;
+}
+
+.tab-bar-tabs {
+  display: flex;
+  align-items: stretch;
+  overflow-x: auto;
+  overflow-y: hidden;
+  flex: 1;
+  min-width: 0;
+}
+
+.tab-bar-tabs::-webkit-scrollbar {
+  height: 0;
+}
+
+.tab-bar-actions {
+  display: flex;
+  align-items: center;
+  padding: 0 4px;
+  flex-shrink: 0;
+}
+
+.tab-bar-action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  color: #666;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.tab-bar-action-btn:hover {
+  background: rgba(0,0,0,0.06);
+  color: #333;
+}
+
+.tab-bar-action-btn.dark {
+  color: #999;
+}
+
+.tab-bar-action-btn.dark:hover {
+  background: rgba(255,255,255,0.08);
+  color: #ccc;
+}
+
+.editor-dropdown {
+  position: absolute;
+  top: 35px;
+  right: 4px;
+  min-width: 160px;
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+  z-index: 100;
+  padding: 4px 0;
+}
+
+.editor-dropdown.dark {
+  background: #1e293b;
+  border-color: #3c3c3c;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+}
+
+.editor-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 12px;
+  border: none;
+  background: transparent;
+  color: #333;
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.editor-dropdown-item:hover {
+  background: #f1f5f9;
+}
+
+.editor-dropdown-item.dark {
+  color: #ccc;
+}
+
+.editor-dropdown-item.dark:hover {
+  background: #334155;
 }
 
 .tab {
@@ -1396,6 +1591,33 @@ export default defineComponent({
 .resize-handle.dark:hover,
 .resize-handle.dark:active {
   background: #4fa3e0;
+}
+
+.pane-close-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  color: #94a3b8;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.pane-close-btn:hover {
+  background: rgba(0,0,0,0.06);
+  color: #475569;
+}
+
+.pane-close-btn.dark {
+  color: #64748b;
+}
+
+.pane-close-btn.dark:hover {
+  background: rgba(255,255,255,0.08);
+  color: #94a3b8;
 }
 
 .left-pane {

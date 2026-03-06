@@ -1,13 +1,21 @@
 <template>
   <div class="docker-pane" :class="{ dark: isDark }">
-    <div class="docker-header">
+    <div class="docker-header" :class="{ dark: isDark }">
       <span class="docker-title">Docker</span>
-      <button class="refresh-btn" :class="{ dark: isDark }" @click="refresh" :disabled="loading">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <polyline points="23,4 23,10 17,10" />
-          <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
-        </svg>
-      </button>
+      <div class="docker-header-actions">
+        <button class="refresh-btn" :class="{ dark: isDark }" @click="refresh" :disabled="loading">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="23,4 23,10 17,10" />
+            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+          </svg>
+        </button>
+        <button class="refresh-btn" :class="{ dark: isDark }" @click="$emit('close')" title="Close Panel">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
     </div>
 
     <div v-if="loading && containers.length === 0" class="docker-status">Loading...</div>
@@ -102,7 +110,7 @@ export default defineComponent({
     isDark: { type: Boolean, default: false },
   },
 
-  emits: ['open-container-port', 'docker-logs', 'docker-exec'],
+  emits: ['open-container-port', 'docker-logs', 'docker-exec', 'close'],
 
   setup() {
     const containers = ref<DockerContainer[]>([]);
@@ -190,18 +198,28 @@ export default defineComponent({
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 12px;
+  padding: 0 8px 0 12px;
+  height: 35px;
   font-weight: 600;
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
   color: #64748b;
-  border-bottom: 1px solid #e2e8f0;
+  background: #f8fafc;
+  border-bottom: 1px solid #cbd5e1;
+  flex-shrink: 0;
 }
 
-.dark .docker-header {
+.docker-header.dark {
   color: #94a3b8;
-  border-bottom-color: #334155;
+  background: #1e293b;
+  border-bottom-color: #3c3c3c;
+}
+
+.docker-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
 }
 
 .refresh-btn {
