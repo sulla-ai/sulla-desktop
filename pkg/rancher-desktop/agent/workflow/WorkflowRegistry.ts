@@ -13,6 +13,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
+import yaml from 'yaml';
+
 import type {
   WorkflowDefinition,
   TriggerNodeSubtype,
@@ -132,11 +134,12 @@ export class WorkflowRegistry {
     console.log(`[WorkflowRegistry] Found ${entries.length} entries in workflows dir`);
 
     for (const entry of entries) {
-      if (!entry.isFile() || !entry.name.endsWith('.json')) continue;
+      if (!entry.isFile() || !(entry.name.endsWith('.yaml') || entry.name.endsWith('.json'))) continue;
 
       try {
-        const raw = fs.readFileSync(path.join(this.workflowsDir, entry.name), 'utf-8');
-        const definition: WorkflowDefinition = JSON.parse(raw);
+        const filePath = path.join(this.workflowsDir, entry.name);
+        const raw = fs.readFileSync(filePath, 'utf-8');
+        const definition: WorkflowDefinition = entry.name.endsWith('.json') ? JSON.parse(raw) : yaml.parse(raw);
 
         console.log(`[WorkflowRegistry] Scanning "${entry.name}": name="${definition.name}", enabled=${definition.enabled}`);
 
@@ -215,13 +218,19 @@ ${workflowList}`;
    * Load a specific workflow by ID.
    */
   private loadWorkflow(workflowId: string): WorkflowDefinition {
-    const filePath = path.join(this.workflowsDir, `${workflowId}.json`);
+    const yamlPath = path.join(this.workflowsDir, `${workflowId}.yaml`);
 
-    if (!fs.existsSync(filePath)) {
-      throw new Error(`Workflow not found: ${workflowId}`);
+    if (fs.existsSync(yamlPath)) {
+      return yaml.parse(fs.readFileSync(yamlPath, 'utf-8'));
     }
 
-    return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    const jsonPath = path.join(this.workflowsDir, `${workflowId}.json`);
+
+    if (fs.existsSync(jsonPath)) {
+      return JSON.parse(fs.readFileSync(jsonPath, 'utf-8'));
+    }
+
+    throw new Error(`Workflow not found: ${workflowId}`);
   }
 }
 

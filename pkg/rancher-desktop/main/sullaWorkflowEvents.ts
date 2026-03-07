@@ -1,11 +1,12 @@
 /**
  * Workflow IPC event handlers for the visual workflow editor.
- * Manages CRUD operations and execution for workflow definitions stored as JSON files.
+ * Manages CRUD operations and execution for workflow definitions stored as YAML files.
  */
 
 import * as fs from 'fs';
 import * as path from 'path';
 
+import yaml from 'yaml';
 import { getIpcMainProxy } from '@pkg/main/ipcMain';
 import Logging from '@pkg/utils/logging';
 
@@ -32,6 +33,43 @@ function getWorkflowsDir(): string {
   return resolveSullaWorkflowsDir();
 }
 
+/**
+ * Resolve workflow file path — prefers .yaml, falls back to legacy .json.
+ */
+function resolveWorkflowPath(dir: string, workflowId: string): string | null {
+  const yamlPath = path.join(dir, `${ workflowId }.yaml`);
+
+  if (fs.existsSync(yamlPath)) return yamlPath;
+  const jsonPath = path.join(dir, `${ workflowId }.json`);
+
+  if (fs.existsSync(jsonPath)) return jsonPath;
+
+  return null;
+}
+
+/**
+ * Parse a workflow file (YAML or JSON based on extension).
+ */
+function parseWorkflowFile(filePath: string): any {
+  const raw = fs.readFileSync(filePath, 'utf-8');
+
+  return filePath.endsWith('.json') ? JSON.parse(raw) : yaml.parse(raw);
+}
+
+/**
+ * Check if a directory entry is a workflow file (.yaml or legacy .json).
+ */
+function isWorkflowFile(entry: fs.Dirent): boolean {
+  return entry.isFile() && (entry.name.endsWith('.yaml') || entry.name.endsWith('.json'));
+}
+
+/**
+ * Extract workflow ID from filename (strip extension).
+ */
+function workflowIdFromFilename(name: string): string {
+  return name.replace(/\.(yaml|json)$/, '');
+}
+
 export function initSullaWorkflowEvents(): void {
   // List all workflows (returns array of { id, name, updatedAt })
   ipcMainProxy.handle('workflow-list', async() => {
@@ -45,17 +83,16 @@ export function initSullaWorkflowEvents(): void {
     const workflows: { id: string; name: string; updatedAt: string }[] = [];
 
     for (const entry of entries) {
-      if (!entry.isFile() || !entry.name.endsWith('.json')) {
+      if (!isWorkflowFile(entry)) {
         continue;
       }
       try {
         const filePath = path.join(dir, entry.name);
-        const raw = fs.readFileSync(filePath, 'utf-8');
-        const parsed = JSON.parse(raw);
+        const parsed = parseWorkflowFile(filePath);
 
         workflows.push({
-          id:        parsed.id || entry.name.replace('.json', ''),
-          name:      parsed.name || entry.name.replace('.json', ''),
+          id:        parsed.id || workflowIdFromFilename(entry.name),
+          name:      parsed.name || workflowIdFromFilename(entry.name),
           updatedAt: parsed.updatedAt || '',
         });
       } catch (err) {
@@ -68,13 +105,13 @@ export function initSullaWorkflowEvents(): void {
 
   // Get a single workflow by ID
   ipcMainProxy.handle('workflow-get', async(_event: unknown, workflowId: string) => {
-    const filePath = path.join(getWorkflowsDir(), `${ workflowId }.json`);
+    const filePath = resolveWorkflowPath(getWorkflowsDir(), workflowId);
 
-    if (!fs.existsSync(filePath)) {
+    if (!filePath) {
       throw new Error(`Workflow not found: ${ workflowId }`);
     }
 
-    return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    return parseWorkflowFile(filePath);
   });
 
   // Save (create or update) a workflow
@@ -87,9 +124,17 @@ export function initSullaWorkflowEvents(): void {
       workflow.createdAt = workflow.updatedAt;
     }
 
-    const filePath = path.join(dir, `${ workflow.id }.json`);
+    const filePath = path.join(dir, `${ workflow.id }.yaml`);
 
-    fs.writeFileSync(filePath, JSON.stringify(workflow, null, 2), 'utf-8');
+    fs.writeFileSync(filePath, yaml.stringify(workflow, { lineWidth: 0 }), 'utf-8');
+
+    // Remove legacy .json file if it exists
+    const legacyPath = path.join(dir, `${ workflow.id }.json`);
+
+    if (fs.existsSync(legacyPath)) {
+      fs.unlinkSync(legacyPath);
+    }
+
     console.log(`[Sulla] Workflow saved: ${ workflow.id }`);
 
     return true;
@@ -97,12 +142,16 @@ export function initSullaWorkflowEvents(): void {
 
   // Delete a workflow
   ipcMainProxy.handle('workflow-delete', async(_event: unknown, workflowId: string) => {
-    const filePath = path.join(getWorkflowsDir(), `${ workflowId }.json`);
+    const dir = getWorkflowsDir();
 
-    if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
-      console.log(`[Sulla] Workflow deleted: ${ workflowId }`);
+    for (const ext of ['.yaml', '.json']) {
+      const filePath = path.join(dir, `${ workflowId }${ ext }`);
+
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
     }
+    console.log(`[Sulla] Workflow deleted: ${ workflowId }`);
 
     return true;
   });
@@ -111,13 +160,13 @@ export function initSullaWorkflowEvents(): void {
 
   // Execute a workflow — returns executionId immediately, sends events via WebSocket
   ipcMainProxy.handle('workflow-execute', async(_event: unknown, workflowId: string, triggerPayload: unknown) => {
-    const filePath = path.join(getWorkflowsDir(), `${ workflowId }.json`);
+    const filePath = resolveWorkflowPath(getWorkflowsDir(), workflowId);
 
-    if (!fs.existsSync(filePath)) {
+    if (!filePath) {
       throw new Error(`Workflow not found: ${ workflowId }`);
     }
 
-    const definition: WorkflowDefinition = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    const definition: WorkflowDefinition = parseWorkflowFile(filePath);
 
     // Dynamic import to avoid bundling workflow engine into renderer
     const { WorkflowExecutor } = await import('@pkg/agent/workflow/WorkflowExecutor');
