@@ -92,7 +92,7 @@
       <!-- Agent selector + Model selector + token info -->
       <div class="chat-footer-bar" :class="{ dark: isDark }">
         <!-- Agent selector -->
-        <div class="agent-selector-wrap">
+        <div v-if="!hideAgentSelector" class="agent-selector-wrap">
           <button
             type="button"
             class="agent-trigger"
@@ -213,6 +213,7 @@ const props = defineProps<{
   modelSelector?: AgentModelSelectorController;
   agentRegistry?: AgentPersonaRegistry;
   totalTokensUsed?: number;
+  hideAgentSelector?: boolean;
 }>();
 
 const showAgentMenu = ref(false);

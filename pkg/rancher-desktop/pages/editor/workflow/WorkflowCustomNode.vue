@@ -1,7 +1,15 @@
 <template>
   <div
     class="workflow-custom-node"
-    :class="{ dark: isDark, selected: selected }"
+    :class="{
+      dark: isDark,
+      selected: selected,
+      'exec-running':   data.execution?.status === 'running',
+      'exec-completed': data.execution?.status === 'completed',
+      'exec-failed':    data.execution?.status === 'failed',
+      'exec-waiting':   data.execution?.status === 'waiting',
+      'exec-skipped':   data.execution?.status === 'skipped',
+    }"
   >
     <!-- Target handle (top) — hidden for trigger nodes -->
     <Handle
@@ -24,6 +32,14 @@
 
     <!-- Label -->
     <div class="node-label">{{ data.label }}</div>
+
+    <!-- Execution status badge -->
+    <div v-if="data.execution" class="node-exec-badge" :class="data.execution.status">
+      <svg v-if="data.execution.status === 'running'" class="exec-spinner" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+      <svg v-else-if="data.execution.status === 'completed'" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+      <svg v-else-if="data.execution.status === 'failed'" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      <svg v-else-if="data.execution.status === 'waiting'" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+    </div>
 
     <!-- Source handle (bottom) — hidden when node has route handles -->
     <Handle
@@ -213,5 +229,86 @@ const routeHandles = computed(() => {
 
 .route-handle-label.dark {
   color: #94a3b8;
+}
+
+/* ── Execution status styles ── */
+
+.workflow-custom-node.exec-running .node-icon-box {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.3);
+  animation: exec-pulse 1.5s ease-in-out infinite;
+}
+
+.workflow-custom-node.exec-completed .node-icon-box {
+  border-color: #22c55e;
+  box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.25);
+}
+
+.workflow-custom-node.exec-failed .node-icon-box {
+  border-color: #ef4444;
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.25);
+}
+
+.workflow-custom-node.exec-waiting .node-icon-box {
+  border-color: #f59e0b;
+  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.25);
+  animation: exec-pulse 2s ease-in-out infinite;
+}
+
+.workflow-custom-node.exec-skipped .node-icon-box {
+  opacity: 0.4;
+}
+
+.workflow-custom-node.exec-skipped .node-label {
+  opacity: 0.4;
+}
+
+@keyframes exec-pulse {
+  0%, 100% { box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.3); }
+  50%      { box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.15); }
+}
+
+.workflow-custom-node.exec-waiting .node-icon-box {
+  animation-name: exec-pulse-amber;
+}
+
+@keyframes exec-pulse-amber {
+  0%, 100% { box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.3); }
+  50%      { box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.15); }
+}
+
+.node-exec-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  margin-top: -2px;
+}
+
+.node-exec-badge.running {
+  color: #6366f1;
+}
+
+.node-exec-badge.completed {
+  color: #22c55e;
+}
+
+.node-exec-badge.failed {
+  color: #ef4444;
+}
+
+.node-exec-badge.waiting {
+  color: #f59e0b;
+}
+
+.exec-spinner {
+  animation: exec-spin 1s linear infinite;
+}
+
+@keyframes exec-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
 }
 </style>

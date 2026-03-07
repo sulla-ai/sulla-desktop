@@ -142,6 +142,43 @@
                 <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
               </svg>
             </button>
+            <button
+              class="workflow-enable-btn"
+              :class="{ dark: isDark, enabled: activeWorkflowData?.enabled }"
+              :title="activeWorkflowData?.enabled ? 'Disable workflow (live)' : 'Enable workflow (go live)'"
+              @click="toggleWorkflowEnabled"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M18.36 6.64a9 9 0 1 1-12.73 0"/>
+                <line x1="12" y1="2" x2="12" y2="12"/>
+              </svg>
+              {{ activeWorkflowData?.enabled ? 'Live' : 'Disabled' }}
+            </button>
+            <div class="workflow-save-divider" :class="{ dark: isDark }"></div>
+            <button
+              v-if="!workflowExecutionId"
+              class="workflow-run-btn"
+              :class="{ dark: isDark }"
+              title="Run workflow"
+              @click="runWorkflow"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="5 3 19 12 5 21 5 3"/>
+              </svg>
+              Run
+            </button>
+            <button
+              v-else
+              class="workflow-stop-btn"
+              :class="{ dark: isDark }"
+              title="Stop workflow"
+              @click="stopWorkflow"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="6" y="6" width="12" height="12" rx="1"/>
+              </svg>
+              Stop
+            </button>
           </div>
 
           <!-- Top editor area -->
@@ -408,20 +445,21 @@
             @update-trigger="() => {}"
             @update-node-config="onWorkflowNodeConfigUpdate"
           />
-          <!-- Chat (default) -->
+          <!-- Chat (default / workflow mode) -->
           <EditorChat
             v-else
             :is-dark="isDark"
             :messages="chatMessages"
             :query="chatQuery"
             :loading="chatLoading"
-            :graph-running="chatGraphRunning"
+            :graph-running="chatGraphRunning || !!workflowExecutionId"
             :model-selector="modelSelector"
             :agent-registry="agentRegistry"
+            :hide-agent-selector="workflowChatMode"
             :total-tokens-used="chatTotalTokensUsed"
             @update:query="chatUpdateQuery"
-            @send="chatSend"
-            @stop="chatStop"
+            @send="workflowChatMode ? workflowChatSend() : chatSend()"
+            @stop="workflowExecutionId ? stopWorkflow() : chatStop()"
             @close="rightPaneVisible = false"
           />
         </div>
@@ -691,6 +729,9 @@ export default defineComponent({
     const activeWorkflowData = ref<any>(null);
     const workflowSaveStatus = ref<'idle' | 'unsaved' | 'saving' | 'saved'>('idle');
     const workflowSettingsOpen = ref(false);
+    const workflowExecutionId = ref<string | null>(null);
+    const workflowChatMode = ref(false);
+    let workflowExecUnsubscribe: (() => void) | null = null;
     let workflowSaveTimer: ReturnType<typeof setTimeout> | null = null;
     let workflowSavedResetTimer: ReturnType<typeof setTimeout> | null = null;
     const searchQuery = ref('');
@@ -900,6 +941,13 @@ export default defineComponent({
       }
     }
 
+    function toggleWorkflowEnabled() {
+      if (!activeWorkflowData.value) return;
+      activeWorkflowData.value = { ...activeWorkflowData.value, enabled: !activeWorkflowData.value.enabled };
+      onWorkflowChanged();
+      saveWorkflowNow();
+    }
+
     function onWorkflowSettingsClose() {
       workflowSettingsOpen.value = false;
       rightPaneVisible.value = false;
@@ -919,6 +967,226 @@ export default defineComponent({
       }
     }
 
+    async function runWorkflow() {
+      if (!activeWorkflowData.value) return;
+
+      // Save first to ensure latest version is on disk
+      saveWorkflowNow();
+
+      // Open the chat pane so the user can send a message to trigger the workflow
+      selectedWorkflowNode.value = null;
+      workflowSettingsOpen.value = false;
+      workflowChatMode.value = true;
+      rightPaneVisible.value = true;
+
+      // Clear previous execution state from nodes
+      workflowEditorRef.value?.clearAllExecution();
+    }
+
+    /**
+     * Called when the user sends a message in chat while in workflow mode.
+     * Dispatches the message to the active workflow via the registry.
+     */
+    async function workflowChatSend() {
+      if (!activeWorkflowData.value || !chatQuery.value.trim()) return;
+
+      const message = chatQuery.value.trim();
+      chatUpdateQuery('');
+
+      // Add the user message to chat
+      chatMessages.value = [
+        ...chatMessages.value,
+        {
+          id:        `wf-user-${Date.now()}`,
+          channelId: 'workflow',
+          role:      'user' as const,
+          content:   message,
+        },
+      ];
+
+      try {
+        const { executionId } = await ipcRenderer.invoke(
+          'workflow-execute',
+          activeWorkflowData.value.id,
+          message,
+        );
+        workflowExecutionId.value = executionId;
+
+        // Subscribe to execution events via IPC
+        const handler = (_ev: any, event: any) => {
+          handleWorkflowExecutionEvent(event);
+        };
+        ipcRenderer.on(`workflow-execution-event-${executionId}`, handler);
+        workflowExecUnsubscribe = () => {
+          ipcRenderer.removeListener(`workflow-execution-event-${executionId}`, handler);
+        };
+
+        // Add a system message showing execution started
+        chatMessages.value = [
+          ...chatMessages.value,
+          {
+            id:        `wf-sys-${Date.now()}`,
+            channelId: 'workflow',
+            role:      'system' as const,
+            content:   `Workflow "${activeWorkflowData.value.name}" started...`,
+          },
+        ];
+
+        startExecutionPolling(executionId);
+      } catch (err: any) {
+        console.error('Failed to execute workflow:', err);
+        chatMessages.value = [
+          ...chatMessages.value,
+          {
+            id:        `wf-err-${Date.now()}`,
+            channelId: 'workflow',
+            role:      'error' as const,
+            content:   `Failed to start workflow: ${err.message}`,
+          },
+        ];
+      }
+    }
+
+    function stopWorkflow() {
+      if (!workflowExecutionId.value) return;
+      ipcRenderer.invoke('workflow-execution-abort', workflowExecutionId.value).catch(() => {});
+      cleanupExecution();
+    }
+
+    function cleanupExecution() {
+      if (workflowExecUnsubscribe) {
+        workflowExecUnsubscribe();
+        workflowExecUnsubscribe = null;
+      }
+      workflowExecutionId.value = null;
+    }
+
+    let executionPollTimer: ReturnType<typeof setTimeout> | null = null;
+
+    function startExecutionPolling(executionId: string) {
+      if (executionPollTimer) clearTimeout(executionPollTimer);
+
+      const poll = async() => {
+        if (workflowExecutionId.value !== executionId) return;
+        try {
+          const status = await ipcRenderer.invoke('workflow-execution-status', executionId);
+          if (status && (status.status === 'completed' || status.status === 'failed' || status.status === 'aborted')) {
+            // Execution finished — keep the visual state but allow re-run
+            workflowExecutionId.value = null;
+            if (workflowExecUnsubscribe) {
+              workflowExecUnsubscribe();
+              workflowExecUnsubscribe = null;
+            }
+            return;
+          }
+        } catch { /* ignore */ }
+        executionPollTimer = setTimeout(poll, 1000);
+      };
+      executionPollTimer = setTimeout(poll, 1000);
+    }
+
+    function handleWorkflowExecutionEvent(event: any) {
+      if (!event || !workflowEditorRef.value) return;
+
+      const nodeId = event.nodeId;
+
+      switch (event.type) {
+        case 'node_started':
+          workflowEditorRef.value.updateNodeExecution(nodeId, {
+            status:    'running',
+            startedAt: event.timestamp,
+          });
+          break;
+
+        case 'node_completed':
+          workflowEditorRef.value.updateNodeExecution(nodeId, {
+            status:      'completed',
+            threadId:    event.threadId,
+            output:      event.output,
+            completedAt: event.timestamp,
+          });
+          // Push output to chat if in workflow chat mode
+          if (workflowChatMode.value && event.output) {
+            const outputStr = typeof event.output === 'string' ? event.output : JSON.stringify(event.output);
+            if (outputStr && outputStr !== '{}' && outputStr !== 'null') {
+              chatMessages.value = [
+                ...chatMessages.value,
+                {
+                  id:        `wf-node-${Date.now()}-${nodeId}`,
+                  channelId: 'workflow',
+                  role:      'assistant' as const,
+                  content:   `**${event.nodeLabel || nodeId}:** ${outputStr}`,
+                },
+              ];
+            }
+          }
+          break;
+
+        case 'node_failed':
+          workflowEditorRef.value.updateNodeExecution(nodeId, {
+            status:      'failed',
+            error:       event.error,
+            completedAt: event.timestamp,
+          });
+          if (workflowChatMode.value && event.error) {
+            chatMessages.value = [
+              ...chatMessages.value,
+              {
+                id:        `wf-err-${Date.now()}-${nodeId}`,
+                channelId: 'workflow',
+                role:      'error' as const,
+                content:   `**${event.nodeLabel || nodeId}** failed: ${event.error}`,
+              },
+            ];
+          }
+          break;
+
+        case 'node_skipped':
+          workflowEditorRef.value.updateNodeExecution(nodeId, { status: 'skipped' });
+          break;
+
+        case 'node_waiting':
+          workflowEditorRef.value.updateNodeExecution(nodeId, {
+            status: 'waiting',
+            output: event.output,
+          });
+          break;
+
+        case 'workflow_completed':
+          workflowExecutionId.value = null;
+          if (workflowExecUnsubscribe) { workflowExecUnsubscribe(); workflowExecUnsubscribe = null; }
+          if (workflowChatMode.value) {
+            chatMessages.value = [
+              ...chatMessages.value,
+              { id: `wf-done-${Date.now()}`, channelId: 'workflow', role: 'system' as const, content: 'Workflow completed.' },
+            ];
+          }
+          break;
+
+        case 'workflow_failed':
+          workflowExecutionId.value = null;
+          if (workflowExecUnsubscribe) { workflowExecUnsubscribe(); workflowExecUnsubscribe = null; }
+          if (workflowChatMode.value) {
+            chatMessages.value = [
+              ...chatMessages.value,
+              { id: `wf-fail-${Date.now()}`, channelId: 'workflow', role: 'error' as const, content: `Workflow failed: ${event.error || 'Unknown error'}` },
+            ];
+          }
+          break;
+
+        case 'workflow_aborted':
+          workflowExecutionId.value = null;
+          if (workflowExecUnsubscribe) { workflowExecUnsubscribe(); workflowExecUnsubscribe = null; }
+          if (workflowChatMode.value) {
+            chatMessages.value = [
+              ...chatMessages.value,
+              { id: `wf-abort-${Date.now()}`, channelId: 'workflow', role: 'system' as const, content: 'Workflow aborted.' },
+            ];
+          }
+          break;
+      }
+    }
+
     async function onWorkflowActivated(workflowId: string) {
       workflowSaveStatus.value = 'idle';
       try {
@@ -935,9 +1203,13 @@ export default defineComponent({
     }
 
     function onWorkflowClosed(_workflowId: string) {
+      if (workflowExecutionId.value) {
+        stopWorkflow();
+      }
       activeWorkflowData.value = null;
       selectedWorkflowNode.value = null;
       workflowSettingsOpen.value = false;
+      workflowChatMode.value = false;
       workflowSaveStatus.value = 'idle';
       rightPaneVisible.value = false;
     }
@@ -1091,6 +1363,10 @@ export default defineComponent({
       const existing = openTabs.value.find(t => `${t.path}-${t.editorType || 'code'}` === key);
       if (existing) {
         activeTabKey.value = key;
+        // Reload content from disk if the tab isn't dirty
+        if (!existing.dirty) {
+          await loadTabContent(existing);
+        }
         return;
       }
 
@@ -1446,6 +1722,14 @@ export default defineComponent({
           content = editorRef.value.getContent();
         }
 
+        // Agent-form tabs save via their own handler; skip filesystem write
+        if (tab.path.startsWith('agent-form://')) {
+          if (editorRef.value?.save) {
+            await editorRef.value.save();
+          }
+          return;
+        }
+
         // Untitled files need a save dialog
         if (tab.path.startsWith('untitled://')) {
           const savePath: string | null = await ipcRenderer.invoke(
@@ -1467,7 +1751,16 @@ export default defineComponent({
         await ipcRenderer.invoke('filesystem-write-file', tab.path, content);
         tab.dirty = false;
         tab.content = content;
+        tab.originalContent = content;
         fileTreeRef.value?.refresh();
+
+        // Update other open tabs showing the same file
+        for (const other of openTabs.value) {
+          if (other !== tab && other.path === tab.path && !other.dirty) {
+            other.content = content;
+            other.originalContent = content;
+          }
+        }
       } catch (err: any) {
         console.error('Save failed:', err);
       }
@@ -1592,9 +1885,15 @@ export default defineComponent({
       workflowSettingsOpen,
       activeWorkflowData,
       toggleWorkflowSettings,
+      toggleWorkflowEnabled,
       onWorkflowSettingsClose,
       onWorkflowNameUpdate,
       onWorkflowDescriptionUpdate,
+      workflowExecutionId,
+      workflowChatMode,
+      runWorkflow,
+      stopWorkflow,
+      workflowChatSend,
       toggleAgent,
       toggleWorkflow,
       openContainerPort,
@@ -2355,6 +2654,123 @@ export default defineComponent({
   background: #33334e;
   border-color: #6366f1;
   color: #818cf8;
+}
+
+.workflow-save-divider {
+  width: 1px;
+  height: 18px;
+  background: #e2e8f0;
+  margin: 0 2px;
+}
+
+.workflow-save-divider.dark {
+  background: #3c3c5c;
+}
+
+.workflow-enable-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  border: 1px solid #94a3b8;
+  background: transparent;
+  color: #64748b;
+  transition: all 0.15s;
+}
+
+.workflow-enable-btn:hover {
+  background: rgba(0,0,0,0.04);
+  color: #475569;
+}
+
+.workflow-enable-btn.dark {
+  border-color: #475569;
+  color: #94a3b8;
+}
+
+.workflow-enable-btn.dark:hover {
+  background: rgba(255,255,255,0.06);
+  color: #cbd5e1;
+}
+
+.workflow-enable-btn.enabled {
+  background: #22c55e;
+  color: #fff;
+  border-color: #16a34a;
+}
+
+.workflow-enable-btn.enabled:hover {
+  background: #16a34a;
+}
+
+.workflow-enable-btn.enabled.dark {
+  background: #166534;
+  border-color: #22c55e;
+  color: #bbf7d0;
+}
+
+.workflow-enable-btn.enabled.dark:hover {
+  background: #15803d;
+}
+
+.workflow-run-btn,
+.workflow-stop-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  border: 1px solid transparent;
+  transition: all 0.15s;
+}
+
+.workflow-run-btn {
+  background: #22c55e;
+  color: #fff;
+  border-color: #16a34a;
+}
+
+.workflow-run-btn:hover {
+  background: #16a34a;
+}
+
+.workflow-run-btn.dark {
+  background: #166534;
+  border-color: #22c55e;
+  color: #bbf7d0;
+}
+
+.workflow-run-btn.dark:hover {
+  background: #15803d;
+}
+
+.workflow-stop-btn {
+  background: #ef4444;
+  color: #fff;
+  border-color: #dc2626;
+}
+
+.workflow-stop-btn:hover {
+  background: #dc2626;
+}
+
+.workflow-stop-btn.dark {
+  background: #7f1d1d;
+  border-color: #ef4444;
+  color: #fecaca;
+}
+
+.workflow-stop-btn.dark:hover {
+  background: #991b1b;
 }
 
 .workflow-settings-panel {

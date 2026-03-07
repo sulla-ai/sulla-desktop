@@ -123,7 +123,28 @@ export class FrontendGraphWebSocketService {
       });
     }
 
+    // Try workflow dispatch first (skip for scheduler-originated messages — they have their own dispatch)
+    if (metadata?.origin !== 'scheduler') {
+      const handled = await this.tryWorkflowDispatch(content);
+      if (handled) {
+        console.log('[FrontendGraphWS] Message handled by workflow');
+        return;
+      }
+    }
+
     await this.processUserInput(content, threadIdFromMsg);
+  }
+
+  private async tryWorkflowDispatch(message: string): Promise<boolean> {
+    try {
+      const { getWorkflowRegistry } = await import('../workflow/WorkflowRegistry');
+      const registry = getWorkflowRegistry();
+      const result = await registry.dispatch({ triggerType: 'sulla-desktop', message });
+      return result !== null;
+    } catch (err) {
+      console.warn('[FrontendGraphWS] Workflow dispatch failed, falling back:', err);
+      return false;
+    }
   }
 
   private async processUserInput(userText: string, threadIdFromMsg?: string): Promise<void> {

@@ -378,7 +378,35 @@ function serialize(): { nodes: any[]; edges: any[]; viewport: any } {
   };
 }
 
-defineExpose({ updateNodeLabel, updateNodeConfig, serialize });
+import type { WorkflowNodeExecutionState } from './workflow/types';
+
+function updateNodeExecution(nodeId: string, execution: WorkflowNodeExecutionState | undefined) {
+  const node = nodes.value.find(n => n.id === nodeId);
+  if (node && node.data) {
+    (node.data as WorkflowNodeData).execution = execution;
+  }
+}
+
+function clearAllExecution() {
+  for (const node of nodes.value) {
+    if (node.data) {
+      (node.data as WorkflowNodeData).execution = undefined;
+    }
+  }
+  // Animate edges back to static
+  for (const edge of edges.value) {
+    edge.animated = false;
+  }
+}
+
+function setEdgeAnimated(sourceId: string, targetId: string, animated: boolean) {
+  const edge = edges.value.find(e => e.source === sourceId && e.target === targetId);
+  if (edge) {
+    edge.animated = animated;
+  }
+}
+
+defineExpose({ updateNodeLabel, updateNodeConfig, serialize, updateNodeExecution, clearAllExecution, setEdgeAnimated });
 </script>
 
 <style scoped>

@@ -23,8 +23,16 @@
       </div>
 
       <!-- Type-specific config panels -->
+      <TriggerNodeConfig
+        v-if="node.data?.category === 'trigger'"
+        :is-dark="isDark"
+        :node-id="node.id"
+        :config="node.data.config"
+        @update-config="(nodeId, config) => $emit('update-node-config', nodeId, config)"
+      />
+
       <AgentNodeConfig
-        v-if="node.data?.category === 'agent'"
+        v-else-if="node.data?.category === 'agent'"
         :is-dark="isDark"
         :node-id="node.id"
         :config="node.data.config"
@@ -71,6 +79,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import type { WorkflowNodeData } from './workflow/types';
+import TriggerNodeConfig from './workflow/TriggerNodeConfig.vue';
 import AgentNodeConfig from './workflow/AgentNodeConfig.vue';
 import RouterNodeConfig from './workflow/RouterNodeConfig.vue';
 import ConditionNodeConfig from './workflow/ConditionNodeConfig.vue';

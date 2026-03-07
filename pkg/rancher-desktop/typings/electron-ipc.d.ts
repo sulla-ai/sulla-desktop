@@ -164,6 +164,15 @@ export interface IpcMainInvokeEvents {
   'workflow-save':   (workflow: any) => boolean;
   'workflow-delete': (workflowId: string) => boolean;
 
+  // Workflow execution
+  'workflow-execute':          (workflowId: string, triggerPayload: unknown) => { executionId: string };
+  'workflow-execution-status': (executionId: string) => { executionId: string; status: string; startedAt?: string; completedAt?: string; error?: string } | null;
+  'workflow-execution-abort':  (executionId: string) => boolean;
+  'workflow-execution-resume': (executionId: string, nodeId: string, userData: unknown) => boolean;
+
+  // Workflow registry dispatch (used by external trigger sources)
+  'workflow-dispatch': (triggerType: string, message: string, workflowId?: string) => { executionId: string; workflowId: string; workflowName: string } | null;
+
   'git-commit':       (dirPath: string, message: string) => boolean;
   'git-pull':         (dirPath: string) => { success: boolean; output: string };
   'git-push':         (dirPath: string) => { success: boolean; output: string };

@@ -56,7 +56,7 @@ export const NODE_REGISTRY: NodeTypeDefinition[] = [
     description:   'Triggered by a calendar event or schedule',
     iconSvg:       ICONS.calendar,
     defaultLabel:  'Calendar Trigger',
-    defaultConfig: () => ({ triggerType: 'calendar' }),
+    defaultConfig: () => ({ triggerType: 'calendar', triggerDescription: '' }),
   },
   {
     subtype:       'chat-app',
@@ -65,7 +65,7 @@ export const NODE_REGISTRY: NodeTypeDefinition[] = [
     description:   'Slack, Telegram, or other messaging',
     iconSvg:       ICONS.chatApp,
     defaultLabel:  'Chat App Trigger',
-    defaultConfig: () => ({ triggerType: 'chat-app' }),
+    defaultConfig: () => ({ triggerType: 'chat-app', triggerDescription: '' }),
   },
   {
     subtype:       'heartbeat',
@@ -74,7 +74,7 @@ export const NODE_REGISTRY: NodeTypeDefinition[] = [
     description:   'Periodic interval trigger',
     iconSvg:       ICONS.heartbeat,
     defaultLabel:  'Heartbeat Trigger',
-    defaultConfig: () => ({ triggerType: 'heartbeat' }),
+    defaultConfig: () => ({ triggerType: 'heartbeat', triggerDescription: '' }),
   },
   {
     subtype:       'sulla-desktop',
@@ -83,7 +83,7 @@ export const NODE_REGISTRY: NodeTypeDefinition[] = [
     description:   'Direct chat in the desktop app',
     iconSvg:       ICONS.sullaDesktop,
     defaultLabel:  'Desktop Trigger',
-    defaultConfig: () => ({ triggerType: 'sulla-desktop' }),
+    defaultConfig: () => ({ triggerType: 'sulla-desktop', triggerDescription: '' }),
   },
   {
     subtype:       'chat-completions',
@@ -92,7 +92,7 @@ export const NODE_REGISTRY: NodeTypeDefinition[] = [
     description:   'OpenAI-compatible endpoint',
     iconSvg:       ICONS.chatCompletions,
     defaultLabel:  'API Trigger',
-    defaultConfig: () => ({ triggerType: 'chat-completions' }),
+    defaultConfig: () => ({ triggerType: 'chat-completions', triggerDescription: '' }),
   },
 
   // ── Agent ──

@@ -19,6 +19,8 @@ export type WorkflowNodeSubtype =
 
 export interface TriggerNodeConfig {
   triggerType: TriggerNodeSubtype;
+  /** Used by the WorkflowRegistry to determine if this workflow should handle a given message */
+  triggerDescription: string;
 }
 
 export interface AgentNodeConfig {
@@ -72,6 +74,25 @@ export interface TransferNodeConfig {
   targetWorkflowId: string | null;
 }
 
+// ── Runtime execution state (never serialized to JSON) ──
+
+export type WorkflowNodeStatus =
+  | 'pending'
+  | 'running'
+  | 'completed'
+  | 'failed'
+  | 'skipped'
+  | 'waiting';
+
+export interface WorkflowNodeExecutionState {
+  status: WorkflowNodeStatus;
+  threadId?: string;
+  output?: unknown;
+  error?: string;
+  startedAt?: string;
+  completedAt?: string;
+}
+
 // ── Node data (stored in vue-flow node.data) ──
 
 export interface WorkflowNodeData {
@@ -79,6 +100,8 @@ export interface WorkflowNodeData {
   category: WorkflowNodeCategory;
   label: string;
   config: Record<string, any>;
+  /** Runtime-only — present during/after workflow execution */
+  execution?: WorkflowNodeExecutionState;
 }
 
 // ── Serialized structures for persistence ──
@@ -107,6 +130,8 @@ export interface WorkflowDefinition {
   name: string;
   description: string;
   version: 1;
+  /** When true, the workflow is active and will be triggered by the WorkflowRegistry in production */
+  enabled?: boolean;
   createdAt: string;
   updatedAt: string;
   nodes: WorkflowNodeSerialized[];

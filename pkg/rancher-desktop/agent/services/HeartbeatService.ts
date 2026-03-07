@@ -75,6 +75,13 @@ export class HeartbeatService {
 
       console.log(`[HeartbeatService] Building heartbeat prompt (provider=${providerSetting})`);
 
+      // Try workflow dispatch first
+      const handled = await this.tryWorkflowDispatch(fullPrompt);
+      if (handled) {
+        console.log('[HeartbeatService] ✅ Heartbeat handled by workflow');
+        return;
+      }
+
       const { graph, state } = await GraphRegistry.getOrCreateOverlordGraph(
         'dreaming-protocol',
         fullPrompt
@@ -89,6 +96,18 @@ export class HeartbeatService {
       console.error('[HeartbeatService] ❌ Heartbeat execution failed:', err);
     } finally {
       this.isExecuting = false;
+    }
+  }
+
+  private async tryWorkflowDispatch(message: string): Promise<boolean> {
+    try {
+      const { getWorkflowRegistry } = await import('../workflow/WorkflowRegistry');
+      const registry = getWorkflowRegistry();
+      const result = await registry.dispatch({ triggerType: 'heartbeat', message });
+      return result !== null;
+    } catch (err) {
+      console.warn('[HeartbeatService] Workflow dispatch failed, falling back:', err);
+      return false;
     }
   }
 
