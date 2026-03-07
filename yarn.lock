@@ -2103,13 +2103,12 @@
     uuid "^10.0.0"
     zod "^3.25.76 || ^4"
 
-"@langchain/core@^1.1.19":
-  version "1.1.30"
-  resolved "https://registry.yarnpkg.com/@langchain/core/-/core-1.1.30.tgz#e3d1f6ec3639ae6c7614a266e3e275c795667fcc"
-  integrity sha512-tPjY7TUI/w5Jby93TBCENH3QlcuUi0cuq2hpQ3WO1rd3x3WULvdmtfDzLcLQC427oPMlOFuDI1NIvR89jxD6Ng==
+"@langchain/core@^1.1.29":
+  version "1.1.29"
+  resolved "https://registry.yarnpkg.com/@langchain/core/-/core-1.1.29.tgz#4ea7594c325ca2debdec5c1349819fa01abbb194"
+  integrity sha512-BPoegTtIdZX4gl2kxcSXAlLrrJFl1cxeRsk9DM/wlIuvyPrFwjWqrEK5NwF5diDt5XSArhQxIFaifGAl4F7fgw==
   dependencies:
     "@cfworker/json-schema" "^4.0.2"
-    "@standard-schema/spec" "^1.1.0"
     ansi-styles "^5.0.0"
     camelcase "6"
     decamelize "1.2.0"
@@ -3165,7 +3164,7 @@
   resolved "https://registry.npmjs.org/@soda/get-current-script/-/get-current-script-1.0.2.tgz"
   integrity sha512-T7VNNlYVM1SgQ+VsMYhnDkcGmWhQdL0bDyGm5TlQ3GBXnJscEClUUOKduWTmm2zCnvNLC1hc3JpuXjs/nFOc5w==
 
-"@standard-schema/spec@1.1.0", "@standard-schema/spec@^1.1.0":
+"@standard-schema/spec@1.1.0":
   version "1.1.0"
   resolved "https://registry.yarnpkg.com/@standard-schema/spec/-/spec-1.1.0.tgz#a79b55dbaf8604812f52d140b2c9ab41bc150bb8"
   integrity sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==
