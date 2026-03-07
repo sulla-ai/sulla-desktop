@@ -4049,7 +4049,7 @@
     tinyglobby "^0.2.15"
     ts-api-utils "^2.4.0"
 
-"@typescript-eslint/utils@8.56.1", "@typescript-eslint/utils@^8.32.1", "@typescript-eslint/utils@^8.35.1":
+"@typescript-eslint/utils@8.56.1", "@typescript-eslint/utils@^8.32.1", "@typescript-eslint/utils@^8.56.0":
   version "8.56.1"
   resolved "https://registry.yarnpkg.com/@typescript-eslint/utils/-/utils-8.56.1.tgz#5a86acaf9f1b4c4a85a42effb217f73059f6deb7"
   integrity sha512-HPAVNIME3tABJ61siYlHzSWCGtOoeP2RTIaHXFMPqjrQKCGB9OgUVdiNgH7TJS2JNIQ5qQ4RsAUDuGaGme/KOA==
@@ -4567,15 +4567,15 @@
     eslint-plugin-promise "^7.2.1"
     globals "^16.0.0"
 
-"@vue/eslint-config-typescript@14.6.0":
-  version "14.6.0"
-  resolved "https://registry.npmjs.org/@vue/eslint-config-typescript/-/eslint-config-typescript-14.6.0.tgz"
-  integrity sha512-UpiRY/7go4Yps4mYCjkvlIbVWmn9YvPGQDxTAlcKLphyaD77LjIu3plH4Y9zNT0GB4f3K5tMmhhtRhPOgrQ/bQ==
+"@vue/eslint-config-typescript@14.7.0":
+  version "14.7.0"
+  resolved "https://registry.yarnpkg.com/@vue/eslint-config-typescript/-/eslint-config-typescript-14.7.0.tgz#76f0122f39447e8596ef83a771ce54ee0bd51380"
+  integrity sha512-iegbMINVc+seZ/QxtzWiOBozctrHiF2WvGedruu2EbLujg9VuU0FQiNcN2z1ycuaoKKpF4m2qzB5HDEMKbxtIg==
   dependencies:
-    "@typescript-eslint/utils" "^8.35.1"
+    "@typescript-eslint/utils" "^8.56.0"
     fast-glob "^3.3.3"
-    typescript-eslint "^8.35.1"
-    vue-eslint-parser "^10.2.0"
+    typescript-eslint "^8.56.0"
+    vue-eslint-parser "^10.4.0"
 
 "@vue/reactivity@3.5.27":
   version "3.5.27"
@@ -14451,7 +14451,7 @@ type-is@~1.6.18:
     media-typer "0.3.0"
     mime-types "~2.1.24"
 
-typescript-eslint@^8.35.1:
+typescript-eslint@^8.56.0:
   version "8.56.1"
   resolved "https://registry.yarnpkg.com/typescript-eslint/-/typescript-eslint-8.56.1.tgz#15a9fcc5d2150a0d981772bb36f127a816fe103f"
   integrity sha512-U4lM6pjmBX7J5wk4szltF7I1cGBHXZopnAXCMXb3+fZ3B/0Z3hq3wS/CCUB2NZBNAExK92mCU2tEohWuwVMsDQ==
@@ -14792,9 +14792,9 @@ vue-demi@>=0.14.8:
   resolved "https://registry.yarnpkg.com/vue-demi/-/vue-demi-0.14.10.tgz#afc78de3d6f9e11bf78c55e8510ee12814522f04"
   integrity sha512-nMZBOwuzabUO0nLgIcc6rycZEebF6eeUfaiQx9+WSk8e29IbLvPU9feI6tqW4kTo3hvoYAJkMh8n8D0fuISphg==
 
-vue-eslint-parser@^10.2.0:
+vue-eslint-parser@^10.4.0:
   version "10.4.0"
-  resolved "https://registry.npmjs.org/vue-eslint-parser/-/vue-eslint-parser-10.4.0.tgz"
+  resolved "https://registry.yarnpkg.com/vue-eslint-parser/-/vue-eslint-parser-10.4.0.tgz#fd7251d0e710a88a6618f50e8a27973bc3c8d69c"
   integrity sha512-Vxi9pJdbN3ZnVGLODVtZ7y4Y2kzAAE2Cm0CZ3ZDRvydVYxZ6VrnBhLikBsRS+dpwj4Jv4UCv21PTEwF5rQ9WXg==
   dependencies:
     debug "^4.4.0"
